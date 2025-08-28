@@ -108,6 +108,159 @@ impl Message {
 		self.cached = true;
 		self
 	}
+
+	/// Create a new message builder
+	pub fn builder() -> MessageBuilder {
+		MessageBuilder::new()
+	}
+}
+
+/// Builder pattern for creating messages with validation
+#[derive(Debug, Default)]
+pub struct MessageBuilder {
+	role: Option<String>,
+	content: Option<String>,
+	timestamp: Option<u64>,
+	cached: bool,
+	tool_call_id: Option<String>,
+	name: Option<String>,
+	tool_calls: Option<serde_json::Value>,
+	images: Option<Vec<ImageAttachment>>,
+}
+
+impl MessageBuilder {
+	/// Create a new message builder
+	pub fn new() -> Self {
+		Self {
+			timestamp: Some(current_timestamp()),
+			..Default::default()
+		}
+	}
+
+	/// Set the role
+	pub fn role<S: Into<String>>(mut self, role: S) -> Self {
+		self.role = Some(role.into());
+		self
+	}
+
+	/// Set the content
+	pub fn content<S: Into<String>>(mut self, content: S) -> Self {
+		self.content = Some(content.into());
+		self
+	}
+
+	/// Set the timestamp
+	pub fn timestamp(mut self, timestamp: u64) -> Self {
+		self.timestamp = Some(timestamp);
+		self
+	}
+
+	/// Mark as cached
+	pub fn cached(mut self) -> Self {
+		self.cached = true;
+		self
+	}
+
+	/// Set tool call ID (for tool messages)
+	pub fn tool_call_id<S: Into<String>>(mut self, id: S) -> Self {
+		self.tool_call_id = Some(id.into());
+		self
+	}
+
+	/// Set name (for tool messages)
+	pub fn name<S: Into<String>>(mut self, name: S) -> Self {
+		self.name = Some(name.into());
+		self
+	}
+
+	/// Set tool calls (for assistant messages)
+	pub fn with_tool_calls(mut self, tool_calls: serde_json::Value) -> Self {
+		self.tool_calls = Some(tool_calls);
+		self
+	}
+
+	/// Add images
+	pub fn with_images(mut self, images: Vec<ImageAttachment>) -> Self {
+		self.images = Some(images);
+		self
+	}
+
+	/// Add a single image
+	pub fn with_image(mut self, image: ImageAttachment) -> Self {
+		match self.images {
+			Some(ref mut images) => images.push(image),
+			None => self.images = Some(vec![image]),
+		}
+		self
+	}
+
+	/// Build the message with validation
+	pub fn build(self) -> Result<Message, crate::errors::MessageError> {
+		let role = self
+			.role
+			.ok_or(crate::errors::MessageError::MissingToolField {
+				field: "role".to_string(),
+			})?;
+
+		let content = self
+			.content
+			.ok_or(crate::errors::MessageError::MissingContent)?;
+
+		// Validate role
+		match role.as_str() {
+			"user" | "assistant" | "system" | "tool" => {}
+			_ => return Err(crate::errors::MessageError::InvalidRole { role }),
+		}
+
+		// Validate tool messages have required fields
+		if role == "tool" {
+			if self.tool_call_id.is_none() {
+				return Err(crate::errors::MessageError::MissingToolField {
+					field: "tool_call_id".to_string(),
+				});
+			}
+			if self.name.is_none() {
+				return Err(crate::errors::MessageError::MissingToolField {
+					field: "name".to_string(),
+				});
+			}
+		}
+
+		Ok(Message {
+			role,
+			content,
+			timestamp: self.timestamp.unwrap_or_else(current_timestamp),
+			cached: self.cached,
+			tool_call_id: self.tool_call_id,
+			name: self.name,
+			tool_calls: self.tool_calls,
+			images: self.images,
+		})
+	}
+
+	/// Convenience method to build a user message
+	pub fn user<S: Into<String>>(content: S) -> Self {
+		Self::new().role("user").content(content)
+	}
+
+	/// Convenience method to build an assistant message
+	pub fn assistant<S: Into<String>>(content: S) -> Self {
+		Self::new().role("assistant").content(content)
+	}
+
+	/// Convenience method to build a system message
+	pub fn system<S: Into<String>>(content: S) -> Self {
+		Self::new().role("system").content(content)
+	}
+
+	/// Convenience method to build a tool message
+	pub fn tool<S: Into<String>>(content: S, tool_call_id: S, name: S) -> Self {
+		Self::new()
+			.role("tool")
+			.content(content)
+			.tool_call_id(tool_call_id)
+			.name(name)
+	}
 }
 
 fn current_timestamp() -> u64 {

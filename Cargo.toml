@@ -5,8 +5,8 @@ edition = "2021"
 authors = ["Muvon Un Limited <contact@muvon.io>"]
 license = "Apache-2.0"
 description = "Self-sufficient AI provider library with multi-provider support, model validation, and cost tracking"
-homepage = "https://octomind.muvon.io"
-repository = "https://github.com/muvon/octomind"
+homepage = "https://octolib.muvon.io"
+repository = "https://github.com/muvon/octolib"
 keywords = ["ai", "llm", "providers", "openai", "anthropic"]
 categories = ["api-bindings", "development-tools"]
 
@@ -19,3 +19,4 @@ reqwest = { version = "0.12.18", features = ["json", "rustls-tls", "gzip"], defa
 tokio = { version = "1.45.1", features = ["time", "sync"] }
 base64 = "0.22"
 url = "2.5.4"
+thiserror = "2.0.9"

@@ -36,34 +36,46 @@
 //! async fn example() -> anyhow::Result<()> {
 //!     // Parse model and get provider
 //!     let (provider, model) = ProviderFactory::get_provider_for_model("openai:gpt-4o")?;
-//!     
+//!
 //!     // Create messages
 //!     let messages = vec![
 //!         Message::user("Hello, how are you?"),
 //!     ];
-//!     
+//!
 //!     // Create completion parameters
 //!     let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000);
-//!     
+//!
 //!     // Get completion (requires OPENAI_API_KEY environment variable)
 //!     let response = provider.chat_completion(params).await?;
 //!     println!("Response: {}", response.content);
-//!     
+//!
 //!     Ok(())
 //! }
 //! ```
 
+pub mod config;
+pub mod errors;
 pub mod factory;
 pub mod providers;
 pub mod retry;
+pub mod tool_calls;
 pub mod traits;
 pub mod types;
 
+pub mod strategies;
+
 // Re-export main types and traits for easy access
+pub use config::{CacheConfig, CacheTTL, CacheType};
+pub use errors::{
+	ConfigError, ConfigResult, MessageError, MessageResult, ProviderError, ProviderResult,
+	ToolCallError, ToolCallResult,
+};
 pub use factory::ProviderFactory;
+pub use strategies::{ModelLimits, ProviderStrategy, StrategyFactory, ToolResult};
+pub use tool_calls::ProviderToolCalls;
 pub use traits::AiProvider;
 pub use types::{
-	ChatCompletionParams, FunctionDefinition, ImageAttachment, ImageData, Message,
+	ChatCompletionParams, FunctionDefinition, ImageAttachment, ImageData, Message, MessageBuilder,
 	ProviderExchange, ProviderResponse, SourceType, TokenUsage, ToolCall,
 };
 

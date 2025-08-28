@@ -295,8 +295,8 @@ async fn execute_openrouter_request(
 					.post(OPENROUTER_API_URL)
 					.header("Content-Type", "application/json")
 					.header("Authorization", format!("Bearer {}", api_key))
-					.header("HTTP-Referer", "https://octomind.muvon.io")
-					.header("X-Title", "Octomind")
+					.header("HTTP-Referer", "https://octolib.muvon.io")
+					.header("X-Title", "octolib")
 					.json(&request_body)
 					.send()
 					.await

@@ -178,12 +178,13 @@ impl AiProvider for AnthropicProvider {
 
 		// Add system message with cache control if needed
 		if system_cached {
+			let cache_ttl = crate::config::CacheTTL::short();
 			request_body["system"] = serde_json::json!([{
 				"type": "text",
 				"text": system_message,
 				"cache_control": {
 					"type": "ephemeral",
-					"ttl": "5m"
+					"ttl": cache_ttl.to_string()
 				}
 			}]);
 		} else {
@@ -537,7 +538,7 @@ async fn execute_anthropic_request(
 	let mut response_json: serde_json::Value = serde_json::from_str(&response_text)?;
 
 	// Add tool_calls_content for conversation history preservation
-	// Wrap in content field to match the expected format in Octomind
+	// Wrap in content field to match the expected format in octolib
 	if !tool_use_blocks.is_empty() {
 		response_json["tool_calls_content"] = serde_json::json!({
 			"content": tool_use_blocks

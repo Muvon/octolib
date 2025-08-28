@@ -72,6 +72,12 @@ fn calculate_anthropic_cost(
 	None
 }
 
+/// Check if a model supports temperature parameter
+/// All Claude models support temperature
+fn supports_temperature_and_top_p(model: &str) -> bool {
+	!model.contains("opus-4-1")
+}
+
 /// Anthropic provider
 #[derive(Debug, Clone)]
 pub struct AnthropicProvider;
@@ -120,7 +126,12 @@ impl AiProvider for AnthropicProvider {
 
 	fn supports_vision(&self, model: &str) -> bool {
 		// Claude 3+ models support vision
-		model.contains("claude-3") || model.contains("claude-4") || model.contains("claude-3.7")
+		model.contains("claude-3")
+			|| model.contains("claude-4")
+			|| model.contains("claude-3.7")
+			|| model.contains("sonnet")
+			|| model.contains("opus")
+			|| model.contains("haiku")
 	}
 
 	fn get_max_input_tokens(&self, model: &str) -> usize {
@@ -166,10 +177,15 @@ impl AiProvider for AnthropicProvider {
 		let mut request_body = serde_json::json!({
 			"model": params.model,
 			"messages": anthropic_messages,
-			"temperature": params.temperature,
-			"top_p": params.top_p,
-			"top_k": params.top_k,
 		});
+		request_body["temperature"] = serde_json::json!(params.temperature);
+
+		// Opus 4.1 doesn't support using temperature and top_p together, so we do this instead
+		if supports_temperature_and_top_p(&params.model) {
+			request_body["top_p"] = serde_json::json!(params.top_p);
+		}
+
+		request_body["top_k"] = serde_json::json!(params.top_k);
 
 		// Add max_tokens if specified (0 means don't include it in request)
 		if params.max_tokens > 0 {

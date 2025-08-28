@@ -155,6 +155,12 @@ impl AiProvider for OpenRouterProvider {
 struct OpenRouterMessage {
 	role: String,
 	content: serde_json::Value,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	tool_call_id: Option<String>, // For tool messages: the ID of the tool call
+	#[serde(skip_serializing_if = "Option::is_none")]
+	name: Option<String>, // For tool messages: the name of the tool
+	#[serde(skip_serializing_if = "Option::is_none")]
+	tool_calls: Option<serde_json::Value>, // For assistant messages: array of tool calls
 }
 
 #[derive(Deserialize, Debug)]
@@ -203,9 +209,9 @@ fn convert_messages(messages: &[Message]) -> Vec<OpenRouterMessage> {
 	for message in messages {
 		match message.role.as_str() {
 			"tool" => {
-				// Tool messages in OpenRouter format
-				let _tool_call_id = message.tool_call_id.as_deref().unwrap_or("");
-				let _name = message.name.as_deref().unwrap_or("");
+				// Tool messages in OpenRouter format - MUST include tool_call_id and name
+				let tool_call_id = message.tool_call_id.clone();
+				let name = message.name.clone();
 
 				let content = if message.cached {
 					let mut text_content = serde_json::json!({
@@ -223,6 +229,48 @@ fn convert_messages(messages: &[Message]) -> Vec<OpenRouterMessage> {
 				result.push(OpenRouterMessage {
 					role: message.role.clone(),
 					content,
+					tool_call_id,
+					name,
+					tool_calls: None,
+				});
+			}
+			"assistant" if message.tool_calls.is_some() => {
+				// Assistant message with tool calls - preserve original tool_calls
+				let mut content_parts = Vec::new();
+
+				// Add text content if not empty
+				if !message.content.trim().is_empty() {
+					let mut text_content = serde_json::json!({
+						"type": "text",
+						"text": message.content
+					});
+
+					if message.cached {
+						text_content["cache_control"] = serde_json::json!({
+							"type": "ephemeral"
+						});
+					}
+
+					content_parts.push(text_content);
+				}
+
+				let content = if content_parts.len() == 1 && !message.cached {
+					content_parts[0]["text"].clone()
+				} else if content_parts.is_empty() {
+					serde_json::Value::Null
+				} else {
+					serde_json::json!(content_parts)
+				};
+
+				// Extract original tool_calls from stored data
+				let tool_calls = message.tool_calls.clone();
+
+				result.push(OpenRouterMessage {
+					role: message.role.clone(),
+					content,
+					tool_call_id: None,
+					name: None,
+					tool_calls,
 				});
 			}
 			_ => {
@@ -266,6 +314,9 @@ fn convert_messages(messages: &[Message]) -> Vec<OpenRouterMessage> {
 				result.push(OpenRouterMessage {
 					role: message.role.clone(),
 					content,
+					tool_call_id: None,
+					name: None,
+					tool_calls: None,
 				});
 			}
 		}

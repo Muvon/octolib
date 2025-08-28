@@ -170,7 +170,11 @@ struct OpenAiMessage {
 	role: String,
 	content: serde_json::Value,
 	#[serde(skip_serializing_if = "Option::is_none")]
-	tool_calls: Option<serde_json::Value>,
+	tool_call_id: Option<String>, // For tool messages: the ID of the tool call
+	#[serde(skip_serializing_if = "Option::is_none")]
+	name: Option<String>, // For tool messages: the name of the tool
+	#[serde(skip_serializing_if = "Option::is_none")]
+	tool_calls: Option<serde_json::Value>, // For assistant messages: array of tool calls
 }
 
 #[derive(Deserialize, Debug)]
@@ -217,86 +221,118 @@ fn convert_messages(messages: &[Message]) -> Vec<OpenAiMessage> {
 	let mut result = Vec::new();
 
 	for message in messages {
-		// Handle assistant messages with tool_calls specially
-		if message.role == "assistant" && message.tool_calls.is_some() {
-			// Assistant message with tool calls - preserve original tool_calls
-			let mut content_parts = Vec::new();
+		match message.role.as_str() {
+			"tool" => {
+				// Tool messages MUST include tool_call_id and name
+				let tool_call_id = message.tool_call_id.clone();
+				let name = message.name.clone();
 
-			// Add text content if not empty
-			if !message.content.trim().is_empty() {
-				let mut text_content = serde_json::json!({
-					"type": "text",
-					"text": message.content
-				});
-
-				if message.cached {
+				let content = if message.cached {
+					let mut text_content = serde_json::json!({
+						"type": "text",
+						"text": message.content
+					});
 					text_content["cache_control"] = serde_json::json!({
 						"type": "ephemeral"
 					});
-				}
+					serde_json::json!([text_content])
+				} else {
+					serde_json::json!(message.content)
+				};
 
-				content_parts.push(text_content);
+				result.push(OpenAiMessage {
+					role: message.role.clone(),
+					content,
+					tool_call_id,
+					name,
+					tool_calls: None,
+				});
 			}
+			"assistant" if message.tool_calls.is_some() => {
+				// Assistant message with tool calls - preserve original tool_calls
+				let mut content_parts = Vec::new();
 
-			let content = if content_parts.len() == 1 && !message.cached {
-				content_parts[0]["text"].clone()
-			} else if content_parts.is_empty() {
-				serde_json::Value::Null
-			} else {
-				serde_json::json!(content_parts)
-			};
-
-			// Extract original tool_calls from stored data
-			let tool_calls = message.tool_calls.clone();
-
-			result.push(OpenAiMessage {
-				role: message.role.clone(),
-				content,
-				tool_calls,
-			});
-		} else {
-			// Handle regular messages (user, system, tool)
-			let mut content_parts = vec![{
-				let mut text_content = serde_json::json!({
-					"type": "text",
-					"text": message.content
-				});
-
-				// Add cache_control if needed (OpenAI format - currently not supported but prepared)
-				if message.cached {
-					text_content["cache_control"] = serde_json::json!({
-						"type": "ephemeral"
+				// Add text content if not empty
+				if !message.content.trim().is_empty() {
+					let mut text_content = serde_json::json!({
+						"type": "text",
+						"text": message.content
 					});
+
+					if message.cached {
+						text_content["cache_control"] = serde_json::json!({
+							"type": "ephemeral"
+						});
+					}
+
+					content_parts.push(text_content);
 				}
 
-				text_content
-			}];
+				let content = if content_parts.len() == 1 && !message.cached {
+					content_parts[0]["text"].clone()
+				} else if content_parts.is_empty() {
+					serde_json::Value::Null
+				} else {
+					serde_json::json!(content_parts)
+				};
 
-			// Add images if present
-			if let Some(images) = &message.images {
-				for image in images {
-					if let crate::types::ImageData::Base64(data) = &image.data {
-						content_parts.push(serde_json::json!({
-							"type": "image_url",
-							"image_url": {
-								"url": format!("data:{};base64,{}", image.media_type, data)
-							}
-						}));
+				// Extract original tool_calls from stored data
+				let tool_calls = message.tool_calls.clone();
+
+				result.push(OpenAiMessage {
+					role: message.role.clone(),
+					content,
+					tool_call_id: None,
+					name: None,
+					tool_calls,
+				});
+			}
+			_ => {
+				// Handle regular messages (user, system)
+				let mut content_parts = vec![{
+					let mut text_content = serde_json::json!({
+						"type": "text",
+						"text": message.content
+					});
+
+					// Add cache_control if needed (OpenAI format - currently not supported but prepared)
+					if message.cached {
+						text_content["cache_control"] = serde_json::json!({
+							"type": "ephemeral"
+						});
+					}
+
+					text_content
+				}];
+
+				// Add images if present
+				if let Some(images) = &message.images {
+					for image in images {
+						if let crate::types::ImageData::Base64(data) = &image.data {
+							content_parts.push(serde_json::json!({
+								"type": "image_url",
+								"image_url": {
+									"url": format!("data:{};base64,{}", image.media_type, data)
+								}
+							}));
+						}
 					}
 				}
+
+				let content = if content_parts.len() == 1 && !message.cached {
+					content_parts[0]["text"].clone()
+				} else {
+					serde_json::json!(content_parts)
+				};
+
+				result.push(OpenAiMessage {
+					role: message.role.clone(),
+					content,
+					tool_call_id: None,
+					name: None,
+					tool_calls: None,
+				});
 			}
-
-			let content = if content_parts.len() == 1 && !message.cached {
-				content_parts[0]["text"].clone()
-			} else {
-				serde_json::json!(content_parts)
-			};
-
-			result.push(OpenAiMessage {
-				role: message.role.clone(),
-				content,
-				tool_calls: None,
-			});
 		}
 	}
 

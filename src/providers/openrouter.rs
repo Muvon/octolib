@@ -103,7 +103,29 @@ impl AiProvider for OpenRouterProvider {
 			"messages": messages,
 			"temperature": params.temperature,
 			"top_p": params.top_p,
+			"top_k": params.top_k,
+			"repetition_penalty": 1.1,
+			"usage": {
+				"include": true  // Always enable usage tracking for all requests
+			},
+			"provider": {
+				"order": [
+					"Anthropic",
+					"OpenAI",
+					"Amazon Bedrock",
+					"Azure",
+					"Cloudflare",
+					"Google Vertex",
+					"xAI",
+				],
+				"allow_fallbacks": true,
+			},
 		});
+
+		// Add max_tokens if specified (0 means don't include it in request)
+		if params.max_tokens > 0 {
+			request_body["max_tokens"] = serde_json::json!(params.max_tokens);
+		}
 
 		// Add max_tokens if specified
 		if params.max_tokens > 0 {

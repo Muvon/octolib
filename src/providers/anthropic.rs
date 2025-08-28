@@ -477,6 +477,60 @@ async fn execute_anthropic_request(
 
 	let request_time_ms = start_time.elapsed().as_millis() as u64;
 
+	// Extract rate limit headers before consuming response
+	let mut rate_limit_headers = std::collections::HashMap::new();
+	let headers = response.headers();
+
+	// Anthropic rate limit headers
+	if let Some(tokens_limit) = headers
+		.get("anthropic-ratelimit-tokens-limit")
+		.and_then(|h| h.to_str().ok())
+	{
+		rate_limit_headers.insert("tokens_limit".to_string(), tokens_limit.to_string());
+	}
+	if let Some(tokens_remaining) = headers
+		.get("anthropic-ratelimit-tokens-remaining")
+		.and_then(|h| h.to_str().ok())
+	{
+		rate_limit_headers.insert("tokens_remaining".to_string(), tokens_remaining.to_string());
+	}
+	if let Some(input_tokens_limit) = headers
+		.get("anthropic-ratelimit-input-tokens-limit")
+		.and_then(|h| h.to_str().ok())
+	{
+		rate_limit_headers.insert(
+			"input_tokens_limit".to_string(),
+			input_tokens_limit.to_string(),
+		);
+	}
+	if let Some(input_tokens_remaining) = headers
+		.get("anthropic-ratelimit-input-tokens-remaining")
+		.and_then(|h| h.to_str().ok())
+	{
+		rate_limit_headers.insert(
+			"input_tokens_remaining".to_string(),
+			input_tokens_remaining.to_string(),
+		);
+	}
+	if let Some(output_tokens_limit) = headers
+		.get("anthropic-ratelimit-output-tokens-limit")
+		.and_then(|h| h.to_str().ok())
+	{
+		rate_limit_headers.insert(
+			"output_tokens_limit".to_string(),
+			output_tokens_limit.to_string(),
+		);
+	}
+	if let Some(output_tokens_remaining) = headers
+		.get("anthropic-ratelimit-output-tokens-remaining")
+		.and_then(|h| h.to_str().ok())
+	{
+		rate_limit_headers.insert(
+			"output_tokens_remaining".to_string(),
+			output_tokens_remaining.to_string(),
+		);
+	}
+
 	if !response.status().is_success() {
 		let status = response.status();
 		let error_text = response.text().await.unwrap_or_default();
@@ -561,7 +615,17 @@ async fn execute_anthropic_request(
 		});
 	}
 
-	let exchange = ProviderExchange::new(request_body, response_json, Some(usage), "anthropic");
+	let exchange = if rate_limit_headers.is_empty() {
+		ProviderExchange::new(request_body, response_json, Some(usage), "anthropic")
+	} else {
+		ProviderExchange::with_rate_limit_headers(
+			request_body,
+			response_json,
+			Some(usage),
+			"anthropic",
+			rate_limit_headers,
+		)
+	};
 
 	Ok(ProviderResponse {
 		content,

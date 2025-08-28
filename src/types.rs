@@ -317,6 +317,7 @@ pub struct ProviderExchange {
 	pub timestamp: u64,
 	pub usage: Option<TokenUsage>,
 	pub provider: String, // Which provider was used
+	pub rate_limit_headers: Option<std::collections::HashMap<String, String>>, // Rate limit headers from API response
 }
 
 impl ProviderExchange {
@@ -332,6 +333,25 @@ impl ProviderExchange {
 			timestamp: current_timestamp(),
 			usage,
 			provider: provider.to_string(),
+			rate_limit_headers: None,
+		}
+	}
+
+	/// Create a new ProviderExchange with rate limit headers
+	pub fn with_rate_limit_headers(
+		request: serde_json::Value,
+		response: serde_json::Value,
+		usage: Option<TokenUsage>,
+		provider: &str,
+		rate_limit_headers: std::collections::HashMap<String, String>,
+	) -> Self {
+		Self {
+			request,
+			response,
+			timestamp: current_timestamp(),
+			usage,
+			provider: provider.to_string(),
+			rate_limit_headers: Some(rate_limit_headers),
 		}
 	}
 }

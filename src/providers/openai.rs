@@ -373,6 +373,45 @@ async fn execute_openai_request(
 
 	let request_time_ms = start_time.elapsed().as_millis() as u64;
 
+	// Extract rate limit headers before consuming response
+	let mut rate_limit_headers = std::collections::HashMap::new();
+	let headers = response.headers();
+
+	// OpenAI rate limit headers
+	if let Some(requests_limit) = headers
+		.get("x-ratelimit-limit-requests")
+		.and_then(|h| h.to_str().ok())
+	{
+		rate_limit_headers.insert("requests_limit".to_string(), requests_limit.to_string());
+	}
+	if let Some(requests_remaining) = headers
+		.get("x-ratelimit-remaining-requests")
+		.and_then(|h| h.to_str().ok())
+	{
+		rate_limit_headers.insert(
+			"requests_remaining".to_string(),
+			requests_remaining.to_string(),
+		);
+	}
+	if let Some(tokens_limit) = headers
+		.get("x-ratelimit-limit-tokens")
+		.and_then(|h| h.to_str().ok())
+	{
+		rate_limit_headers.insert("tokens_limit".to_string(), tokens_limit.to_string());
+	}
+	if let Some(tokens_remaining) = headers
+		.get("x-ratelimit-remaining-tokens")
+		.and_then(|h| h.to_str().ok())
+	{
+		rate_limit_headers.insert("tokens_remaining".to_string(), tokens_remaining.to_string());
+	}
+	if let Some(request_reset) = headers
+		.get("x-ratelimit-reset-requests")
+		.and_then(|h| h.to_str().ok())
+	{
+		rate_limit_headers.insert("request_reset".to_string(), request_reset.to_string());
+	}
+
 	if !response.status().is_success() {
 		let status = response.status();
 		let error_text = response.text().await.unwrap_or_default();
@@ -436,12 +475,22 @@ async fn execute_openai_request(
 		request_time_ms: Some(request_time_ms),
 	};
 
-	let exchange = ProviderExchange::new(
-		request_body,
-		serde_json::from_str(&response_text)?,
-		Some(usage),
-		"openai",
-	);
+	let exchange = if rate_limit_headers.is_empty() {
+		ProviderExchange::new(
+			request_body,
+			serde_json::from_str(&response_text)?,
+			Some(usage),
+			"openai",
+		)
+	} else {
+		ProviderExchange::with_rate_limit_headers(
+			request_body,
+			serde_json::from_str(&response_text)?,
+			Some(usage),
+			"openai",
+			rate_limit_headers,
+		)
+	};
 
 	Ok(ProviderResponse {
 		content,

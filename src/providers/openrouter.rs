@@ -290,13 +290,18 @@ async fn execute_openrouter_request(
 			let client = client.clone();
 			let api_key = api_key.clone();
 			let request_body = request_body.clone();
+			let openrouter_app_title =
+				std::env::var("OPENROUTER_APP_TITLE").unwrap_or_else(|_| "octolib".to_string());
+			let openrouter_http_referer = std::env::var("OPENROUTER_HTTP_REFERER")
+				.unwrap_or_else(|_| "https://octolib.muvon.io".to_string());
+
 			Box::pin(async move {
 				client
 					.post(OPENROUTER_API_URL)
 					.header("Content-Type", "application/json")
 					.header("Authorization", format!("Bearer {}", api_key))
-					.header("HTTP-Referer", "https://octolib.muvon.io")
-					.header("X-Title", "octolib")
+					.header("HTTP-Referer", openrouter_http_referer)
+					.header("X-Title", openrouter_app_title)
 					.json(&request_body)
 					.send()
 					.await

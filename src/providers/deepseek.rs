@@ -199,6 +199,9 @@ impl AiProvider for DeepSeekProvider {
 
         let deepseek_response: DeepSeekResponse = response.json().await?;
 
+        // Clone the response for exchange logging before moving parts of it
+        let response_for_exchange = serde_json::to_value(&deepseek_response)?;
+
         let choice = deepseek_response
             .choices
             .into_iter()
@@ -208,7 +211,7 @@ impl AiProvider for DeepSeekProvider {
         // Create exchange record for logging
         let exchange = ProviderExchange {
             request: serde_json::to_value(&request)?,
-            response: serde_json::to_value(&deepseek_response)?,
+            response: response_for_exchange,
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()

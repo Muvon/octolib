@@ -24,54 +24,54 @@ use std::env;
 pub struct AmazonBedrockProvider;
 
 impl Default for AmazonBedrockProvider {
-	fn default() -> Self {
-		Self::new()
-	}
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AmazonBedrockProvider {
-	pub fn new() -> Self {
-		Self
-	}
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 const AMAZON_ACCESS_KEY_ID_ENV: &str = "AMAZON_ACCESS_KEY_ID";
 
 #[async_trait::async_trait]
 impl AiProvider for AmazonBedrockProvider {
-	fn name(&self) -> &str {
-		"amazon"
-	}
+    fn name(&self) -> &str {
+        "amazon"
+    }
 
-	fn supports_model(&self, model: &str) -> bool {
-		model.contains("claude") || model.contains("titan") || model.contains("llama")
-	}
+    fn supports_model(&self, model: &str) -> bool {
+        model.contains("claude") || model.contains("titan") || model.contains("llama")
+    }
 
-	fn get_api_key(&self) -> Result<String> {
-		match env::var(AMAZON_ACCESS_KEY_ID_ENV) {
-			Ok(key) => Ok(key),
-			Err(_) => Err(anyhow::anyhow!(
-				"Amazon access key not found in environment variable: {}",
-				AMAZON_ACCESS_KEY_ID_ENV
-			)),
-		}
-	}
+    fn get_api_key(&self) -> Result<String> {
+        match env::var(AMAZON_ACCESS_KEY_ID_ENV) {
+            Ok(key) => Ok(key),
+            Err(_) => Err(anyhow::anyhow!(
+                "Amazon access key not found in environment variable: {}",
+                AMAZON_ACCESS_KEY_ID_ENV
+            )),
+        }
+    }
 
-	fn supports_caching(&self, _model: &str) -> bool {
-		false
-	}
+    fn supports_caching(&self, _model: &str) -> bool {
+        false
+    }
 
-	fn supports_vision(&self, model: &str) -> bool {
-		model.contains("claude")
-	}
+    fn supports_vision(&self, model: &str) -> bool {
+        model.contains("claude")
+    }
 
-	fn get_max_input_tokens(&self, _model: &str) -> usize {
-		200_000
-	}
+    fn get_max_input_tokens(&self, _model: &str) -> usize {
+        200_000
+    }
 
-	async fn chat_completion(&self, _params: ChatCompletionParams) -> Result<ProviderResponse> {
-		Err(anyhow::anyhow!(
-			"Amazon Bedrock provider not fully implemented in octolib"
-		))
-	}
+    async fn chat_completion(&self, _params: ChatCompletionParams) -> Result<ProviderResponse> {
+        Err(anyhow::anyhow!(
+            "Amazon Bedrock provider not fully implemented in octolib"
+        ))
+    }
 }

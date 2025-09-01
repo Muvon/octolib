@@ -24,54 +24,54 @@ use std::env;
 pub struct CloudflareWorkersAiProvider;
 
 impl Default for CloudflareWorkersAiProvider {
-	fn default() -> Self {
-		Self::new()
-	}
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CloudflareWorkersAiProvider {
-	pub fn new() -> Self {
-		Self
-	}
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 const CLOUDFLARE_API_TOKEN_ENV: &str = "CLOUDFLARE_API_TOKEN";
 
 #[async_trait::async_trait]
 impl AiProvider for CloudflareWorkersAiProvider {
-	fn name(&self) -> &str {
-		"cloudflare"
-	}
+    fn name(&self) -> &str {
+        "cloudflare"
+    }
 
-	fn supports_model(&self, model: &str) -> bool {
-		model.contains("llama") || model.contains("mistral") || model.contains("qwen")
-	}
+    fn supports_model(&self, model: &str) -> bool {
+        model.contains("llama") || model.contains("mistral") || model.contains("qwen")
+    }
 
-	fn get_api_key(&self) -> Result<String> {
-		match env::var(CLOUDFLARE_API_TOKEN_ENV) {
-			Ok(key) => Ok(key),
-			Err(_) => Err(anyhow::anyhow!(
-				"Cloudflare API token not found in environment variable: {}",
-				CLOUDFLARE_API_TOKEN_ENV
-			)),
-		}
-	}
+    fn get_api_key(&self) -> Result<String> {
+        match env::var(CLOUDFLARE_API_TOKEN_ENV) {
+            Ok(key) => Ok(key),
+            Err(_) => Err(anyhow::anyhow!(
+                "Cloudflare API token not found in environment variable: {}",
+                CLOUDFLARE_API_TOKEN_ENV
+            )),
+        }
+    }
 
-	fn supports_caching(&self, _model: &str) -> bool {
-		false
-	}
+    fn supports_caching(&self, _model: &str) -> bool {
+        false
+    }
 
-	fn supports_vision(&self, _model: &str) -> bool {
-		false
-	}
+    fn supports_vision(&self, _model: &str) -> bool {
+        false
+    }
 
-	fn get_max_input_tokens(&self, _model: &str) -> usize {
-		32_768
-	}
+    fn get_max_input_tokens(&self, _model: &str) -> usize {
+        32_768
+    }
 
-	async fn chat_completion(&self, _params: ChatCompletionParams) -> Result<ProviderResponse> {
-		Err(anyhow::anyhow!(
-			"Cloudflare Workers AI provider not fully implemented in octolib"
-		))
-	}
+    async fn chat_completion(&self, _params: ChatCompletionParams) -> Result<ProviderResponse> {
+        Err(anyhow::anyhow!(
+            "Cloudflare Workers AI provider not fully implemented in octolib"
+        ))
+    }
 }

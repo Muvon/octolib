@@ -36,57 +36,57 @@ use tokio::time::sleep;
 /// * `Ok(T)` - Success result from the operation
 /// * `Err(E)` - The last error encountered after all retries exhausted
 pub async fn retry_with_exponential_backoff<F, T, E>(
-	mut operation: F,
-	max_retries: u32,
-	base_timeout: Duration,
-	cancellation_token: Option<&watch::Receiver<bool>>,
+    mut operation: F,
+    max_retries: u32,
+    base_timeout: Duration,
+    cancellation_token: Option<&watch::Receiver<bool>>,
 ) -> Result<T, E>
 where
-	F: FnMut() -> Pin<Box<dyn Future<Output = Result<T, E>> + Send>>,
-	E: std::fmt::Display,
+    F: FnMut() -> Pin<Box<dyn Future<Output = Result<T, E>> + Send>>,
+    E: std::fmt::Display,
 {
-	let mut last_error = None;
+    let mut last_error = None;
 
-	for attempt in 0..=max_retries {
-		// Check for cancellation before each attempt
-		if let Some(token) = cancellation_token {
-			if *token.borrow() {
-				return Err(last_error.unwrap_or_else(|| {
-					// This is a bit tricky since we need to return E, but we know it's cancelled
-					// In practice, this shouldn't happen since we check cancellation first
-					panic!("Request cancelled before any attempt")
-				}));
-			}
-		}
+    for attempt in 0..=max_retries {
+        // Check for cancellation before each attempt
+        if let Some(token) = cancellation_token {
+            if *token.borrow() {
+                return Err(last_error.unwrap_or_else(|| {
+                    // This is a bit tricky since we need to return E, but we know it's cancelled
+                    // In practice, this shouldn't happen since we check cancellation first
+                    panic!("Request cancelled before any attempt")
+                }));
+            }
+        }
 
-		match operation().await {
-			Ok(result) => return Ok(result),
-			Err(e) => {
-				// Simple debug logging without external dependencies
-				eprintln!("🔄 API request attempt {} failed: {}", attempt + 1, e);
+        match operation().await {
+            Ok(result) => return Ok(result),
+            Err(e) => {
+                // Simple debug logging without external dependencies
+                eprintln!("🔄 API request attempt {} failed: {}", attempt + 1, e);
 
-				last_error = Some(e);
+                last_error = Some(e);
 
-				// Don't sleep after the last attempt
-				if attempt < max_retries {
-					// Exponential backoff: base_timeout * 2^attempt
-					let delay = base_timeout * 2_u32.pow(attempt);
-					// Cap at 5 minutes for safety
-					let delay = std::cmp::min(delay, Duration::from_secs(300));
+                // Don't sleep after the last attempt
+                if attempt < max_retries {
+                    // Exponential backoff: base_timeout * 2^attempt
+                    let delay = base_timeout * 2_u32.pow(attempt);
+                    // Cap at 5 minutes for safety
+                    let delay = std::cmp::min(delay, Duration::from_secs(300));
 
-					eprintln!(
-						"🔄 Waiting {:?} before retry attempt {}",
-						delay,
-						attempt + 2
-					);
+                    eprintln!(
+                        "🔄 Waiting {:?} before retry attempt {}",
+                        delay,
+                        attempt + 2
+                    );
 
-					sleep(delay).await;
-				}
-			}
-		}
-	}
+                    sleep(delay).await;
+                }
+            }
+        }
+    }
 
-	Err(last_error.unwrap())
+    Err(last_error.unwrap())
 }
 
 /// Helper to wrap HTTP requests in retry logic
@@ -94,19 +94,19 @@ where
 /// This is a convenience wrapper that creates the appropriate closure for HTTP requests.
 /// It handles cloning of necessary data for each retry attempt.
 pub async fn retry_http_request<T, E>(
-	max_retries: u32,
-	base_timeout: Duration,
-	cancellation_token: Option<&watch::Receiver<bool>>,
-	request_builder: impl Fn() -> Pin<Box<dyn Future<Output = Result<T, E>> + Send>>,
+    max_retries: u32,
+    base_timeout: Duration,
+    cancellation_token: Option<&watch::Receiver<bool>>,
+    request_builder: impl Fn() -> Pin<Box<dyn Future<Output = Result<T, E>> + Send>>,
 ) -> Result<T, E>
 where
-	E: std::fmt::Display,
+    E: std::fmt::Display,
 {
-	retry_with_exponential_backoff(
-		|| request_builder(),
-		max_retries,
-		base_timeout,
-		cancellation_token,
-	)
-	.await
+    retry_with_exponential_backoff(
+        || request_builder(),
+        max_retries,
+        base_timeout,
+        cancellation_token,
+    )
+    .await
 }

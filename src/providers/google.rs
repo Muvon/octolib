@@ -24,60 +24,60 @@ use std::env;
 pub struct GoogleVertexProvider;
 
 impl Default for GoogleVertexProvider {
-	fn default() -> Self {
-		Self::new()
-	}
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl GoogleVertexProvider {
-	pub fn new() -> Self {
-		Self
-	}
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 const GOOGLE_API_KEY_ENV: &str = "GOOGLE_API_KEY";
 
 #[async_trait::async_trait]
 impl AiProvider for GoogleVertexProvider {
-	fn name(&self) -> &str {
-		"google"
-	}
+    fn name(&self) -> &str {
+        "google"
+    }
 
-	fn supports_model(&self, model: &str) -> bool {
-		model.contains("gemini") || model.contains("palm") || model.starts_with("text-")
-	}
+    fn supports_model(&self, model: &str) -> bool {
+        model.contains("gemini") || model.contains("palm") || model.starts_with("text-")
+    }
 
-	fn get_api_key(&self) -> Result<String> {
-		match env::var(GOOGLE_API_KEY_ENV) {
-			Ok(key) => Ok(key),
-			Err(_) => Err(anyhow::anyhow!(
-				"Google API key not found in environment variable: {}",
-				GOOGLE_API_KEY_ENV
-			)),
-		}
-	}
+    fn get_api_key(&self) -> Result<String> {
+        match env::var(GOOGLE_API_KEY_ENV) {
+            Ok(key) => Ok(key),
+            Err(_) => Err(anyhow::anyhow!(
+                "Google API key not found in environment variable: {}",
+                GOOGLE_API_KEY_ENV
+            )),
+        }
+    }
 
-	fn supports_caching(&self, model: &str) -> bool {
-		model.contains("gemini-1.5") || model.contains("gemini-2")
-	}
+    fn supports_caching(&self, model: &str) -> bool {
+        model.contains("gemini-1.5") || model.contains("gemini-2")
+    }
 
-	fn supports_vision(&self, model: &str) -> bool {
-		model.contains("gemini")
-	}
+    fn supports_vision(&self, model: &str) -> bool {
+        model.contains("gemini")
+    }
 
-	fn get_max_input_tokens(&self, model: &str) -> usize {
-		if model.contains("gemini-2") {
-			2_000_000
-		} else if model.contains("gemini-1.5") {
-			1_000_000
-		} else {
-			32_768
-		}
-	}
+    fn get_max_input_tokens(&self, model: &str) -> usize {
+        if model.contains("gemini-2") {
+            2_000_000
+        } else if model.contains("gemini-1.5") {
+            1_000_000
+        } else {
+            32_768
+        }
+    }
 
-	async fn chat_completion(&self, _params: ChatCompletionParams) -> Result<ProviderResponse> {
-		Err(anyhow::anyhow!(
-			"Google Vertex AI provider not fully implemented in octolib"
-		))
-	}
+    async fn chat_completion(&self, _params: ChatCompletionParams) -> Result<ProviderResponse> {
+        Err(anyhow::anyhow!(
+            "Google Vertex AI provider not fully implemented in octolib"
+        ))
+    }
 }

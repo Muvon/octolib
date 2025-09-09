@@ -72,7 +72,7 @@ pub use errors::{
 };
 pub use factory::ProviderFactory;
 pub use strategies::{ModelLimits, ProviderStrategy, StrategyFactory, ToolResult};
-pub use tool_calls::ProviderToolCalls;
+pub use tool_calls::{GenericToolCall, ProviderToolCalls};
 pub use traits::AiProvider;
 pub use types::{
     ChatCompletionParams, FunctionDefinition, ImageAttachment, ImageData, Message, MessageBuilder,

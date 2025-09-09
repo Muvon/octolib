@@ -374,26 +374,20 @@ fn convert_messages(messages: &[Message]) -> Vec<AnthropicMessage> {
                         });
                     }
 
-                    // Add tool_use blocks from stored tool_calls
+                    // Add tool_use blocks from stored tool_calls in unified GenericToolCall format
                     if let Some(ref tool_calls_data) = message.tool_calls {
-                        if let Some(content_blocks) =
-                            tool_calls_data.get("content").and_then(|c| c.as_array())
+                        // Parse as unified GenericToolCall format
+                        if let Ok(generic_calls) = serde_json::from_value::<
+                            Vec<crate::tool_calls::GenericToolCall>,
+                        >(tool_calls_data.clone())
                         {
-                            // Extract tool_use blocks from stored data
-                            for block in content_blocks {
-                                if block.get("type").and_then(|t| t.as_str()) == Some("tool_use") {
-                                    if let (Some(id), Some(name), Some(input)) = (
-                                        block.get("id").and_then(|v| v.as_str()),
-                                        block.get("name").and_then(|v| v.as_str()),
-                                        block.get("input"),
-                                    ) {
-                                        content.push(AnthropicContent::ToolUse {
-                                            id: id.to_string(),
-                                            name: name.to_string(),
-                                            input: input.clone(),
-                                        });
-                                    }
-                                }
+                            // Convert GenericToolCall to Anthropic format
+                            for call in generic_calls {
+                                content.push(AnthropicContent::ToolUse {
+                                    id: call.id,
+                                    name: call.name,
+                                    input: call.arguments,
+                                });
                             }
                         }
                     }
@@ -547,7 +541,6 @@ async fn execute_anthropic_request(
     // Extract content and tool calls
     let mut content_parts = Vec::new();
     let mut tool_calls = Vec::new();
-    let mut tool_use_blocks = Vec::new(); // Store original tool_use blocks for Anthropic
 
     for content in anthropic_response.content {
         match content {
@@ -555,18 +548,10 @@ async fn execute_anthropic_request(
                 content_parts.push(text);
             }
             AnthropicResponseContent::ToolUse { id, name, input } => {
-                // Store the original tool_use block for conversation history
-                tool_use_blocks.push(serde_json::json!({
-                    "type": "tool_use",
-                    "id": id,
-                    "name": name,
-                    "input": input
-                }));
-
                 // Create generic ToolCall for processing
                 tool_calls.push(ToolCall {
-                    id,
-                    name,
+                    id: id.clone(),
+                    name: name.clone(),
                     arguments: input,
                 });
             }
@@ -604,15 +589,22 @@ async fn execute_anthropic_request(
         request_time_ms: Some(request_time_ms),
     };
 
-    // Create response JSON that includes original tool_use blocks for conversation history
+    // Create response JSON that stores tool_calls in unified GenericToolCall format
     let mut response_json: serde_json::Value = serde_json::from_str(&response_text)?;
 
-    // Add tool_calls_content for conversation history preservation
-    // Wrap in content field to match the expected format in octolib
-    if !tool_use_blocks.is_empty() {
-        response_json["tool_calls_content"] = serde_json::json!({
-            "content": tool_use_blocks
-        });
+    // Store tool_calls in unified GenericToolCall format for conversation history
+    if !tool_calls.is_empty() {
+        let generic_calls: Vec<crate::tool_calls::GenericToolCall> = tool_calls
+            .iter()
+            .map(|tc| crate::tool_calls::GenericToolCall {
+                id: tc.id.clone(),
+                name: tc.name.clone(),
+                arguments: tc.arguments.clone(),
+            })
+            .collect();
+
+        response_json["tool_calls_unified"] =
+            serde_json::to_value(&generic_calls).unwrap_or_default();
     }
 
     let exchange = if rate_limit_headers.is_empty() {

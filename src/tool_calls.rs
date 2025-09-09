@@ -83,19 +83,21 @@ impl ProviderToolCalls {
         }
     }
 
-    /// Extract Anthropic tool calls from tool_calls_content
+    /// Extract Anthropic tool calls from unified format
     fn extract_anthropic_calls(exchange: &ProviderExchange) -> ToolCallResult<Option<Self>> {
-        if let Some(content_data) = exchange.response.get("tool_calls_content") {
-            if let Some(content_array) = content_data.get("content").and_then(|c| c.as_array()) {
-                let mut tool_uses = Vec::new();
-
-                for block in content_array {
-                    if block.get("type").and_then(|t| t.as_str()) == Some("tool_use") {
-                        let tool_use: AnthropicToolUse = serde_json::from_value(block.clone())
-                            .map_err(ToolCallError::DeserializationError)?;
-                        tool_uses.push(tool_use);
-                    }
-                }
+        // Check for unified format first
+        if let Some(unified_calls) = exchange.response.get("tool_calls_unified") {
+            if let Ok(generic_calls) =
+                serde_json::from_value::<Vec<GenericToolCall>>(unified_calls.clone())
+            {
+                let tool_uses: Vec<AnthropicToolUse> = generic_calls
+                    .into_iter()
+                    .map(|call| AnthropicToolUse {
+                        id: call.id,
+                        name: call.name,
+                        input: call.arguments,
+                    })
+                    .collect();
 
                 if !tool_uses.is_empty() {
                     return Ok(Some(ProviderToolCalls::Anthropic { content: tool_uses }));
@@ -105,68 +107,54 @@ impl ProviderToolCalls {
         Ok(None)
     }
 
-    /// Extract OpenAI-compatible tool calls (OpenAI, OpenRouter, DeepSeek)
+    /// Extract OpenAI-compatible tool calls from unified format (OpenAI, OpenRouter, DeepSeek)
     fn extract_openai_calls(
         exchange: &ProviderExchange,
         provider: &str,
     ) -> ToolCallResult<Option<Self>> {
-        if let Some(tool_calls) = exchange
-            .response
-            .get("choices")
-            .and_then(|choices| choices.get(0))
-            .and_then(|choice| choice.get("message"))
-            .and_then(|message| message.get("tool_calls"))
-            .and_then(|calls| calls.as_array())
-        {
-            let parsed_calls: Result<Vec<OpenAIToolCall>, _> = tool_calls
-                .iter()
-                .map(|call| serde_json::from_value(call.clone()))
-                .collect();
+        // Check for unified format first
+        if let Some(unified_calls) = exchange.response.get("tool_calls_unified") {
+            if let Ok(generic_calls) =
+                serde_json::from_value::<Vec<GenericToolCall>>(unified_calls.clone())
+            {
+                let openai_calls: Vec<OpenAIToolCall> = generic_calls
+                    .into_iter()
+                    .map(|call| OpenAIToolCall {
+                        id: call.id,
+                        call_type: "function".to_string(),
+                        function: OpenAIFunction {
+                            name: call.name,
+                            arguments: serde_json::to_string(&call.arguments).unwrap_or_default(),
+                        },
+                    })
+                    .collect();
 
-            let calls = parsed_calls.map_err(ToolCallError::DeserializationError)?;
-
-            if !calls.is_empty() {
-                return Ok(Some(match provider {
-                    "openai" => ProviderToolCalls::OpenAI { tool_calls: calls },
-                    "openrouter" => ProviderToolCalls::OpenRouter { tool_calls: calls },
-                    "deepseek" => ProviderToolCalls::DeepSeek { tool_calls: calls },
-                    _ => unreachable!(),
-                }));
+                if !openai_calls.is_empty() {
+                    return Ok(Some(match provider {
+                        "openai" => ProviderToolCalls::OpenAI {
+                            tool_calls: openai_calls,
+                        },
+                        "openrouter" => ProviderToolCalls::OpenRouter {
+                            tool_calls: openai_calls,
+                        },
+                        "deepseek" => ProviderToolCalls::DeepSeek {
+                            tool_calls: openai_calls,
+                        },
+                        _ => unreachable!(),
+                    }));
+                }
             }
         }
         Ok(None)
     }
 
-    /// Extract generic tool calls (fallback for unknown providers)
+    /// Extract generic tool calls from unified format (fallback for unknown providers)
     fn extract_generic_calls(exchange: &ProviderExchange) -> ToolCallResult<Option<Self>> {
-        // Try to find any tool call-like structure
-        if let Some(calls_value) = exchange.response.get("tool_calls") {
-            if let Some(calls_array) = calls_value.as_array() {
-                let mut generic_calls = Vec::new();
-
-                for call in calls_array {
-                    if let (Some(id), Some(name)) = (
-                        call.get("id").and_then(|v| v.as_str()),
-                        call.get("name").and_then(|v| v.as_str()).or_else(|| {
-                            call.get("function")
-                                .and_then(|f| f.get("name"))
-                                .and_then(|n| n.as_str())
-                        }),
-                    ) {
-                        let arguments = call
-                            .get("arguments")
-                            .or_else(|| call.get("function").and_then(|f| f.get("arguments")))
-                            .unwrap_or(&serde_json::Value::Null)
-                            .clone();
-
-                        generic_calls.push(GenericToolCall {
-                            id: id.to_string(),
-                            name: name.to_string(),
-                            arguments,
-                        });
-                    }
-                }
-
+        // Check for unified format
+        if let Some(unified_calls) = exchange.response.get("tool_calls_unified") {
+            if let Ok(generic_calls) =
+                serde_json::from_value::<Vec<GenericToolCall>>(unified_calls.clone())
+            {
                 if !generic_calls.is_empty() {
                     return Ok(Some(ProviderToolCalls::Generic {
                         calls: generic_calls,
@@ -324,16 +312,13 @@ mod tests {
         let exchange = ProviderExchange::new(
             json!({}),
             json!({
-                "tool_calls_content": {
-                    "content": [
-                        {
-                            "type": "tool_use",
-                            "id": "toolu_123",
-                            "name": "test_tool",
-                            "input": {"param": "value"}
-                        }
-                    ]
-                }
+                "tool_calls_unified": [
+                    {
+                        "id": "toolu_123",
+                        "name": "test_tool",
+                        "arguments": {"param": "value"}
+                    }
+                ]
             }),
             Some(TokenUsage {
                 prompt_tokens: 100,
@@ -407,14 +392,12 @@ mod tests {
         let exchange = ProviderExchange::new(
             json!({}),
             json!({
-                "tool_calls_content": {
-                    "content": [
-                        {
-                            "type": "tool_use",
-                            // Missing required fields
-                        }
-                    ]
-                }
+                "tool_calls_unified": [
+                    {
+                        // Missing required fields
+                        "name": "test_tool"
+                    }
+                ]
             }),
             None,
             "anthropic",

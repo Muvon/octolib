@@ -249,7 +249,7 @@ fn convert_messages(messages: &[Message]) -> Vec<OpenAiMessage> {
                 });
             }
             "assistant" if message.tool_calls.is_some() => {
-                // Assistant message with tool calls - preserve original tool_calls
+                // Assistant message with tool calls - convert from unified GenericToolCall format
                 let mut content_parts = Vec::new();
 
                 // Add text content if not empty
@@ -276,8 +276,29 @@ fn convert_messages(messages: &[Message]) -> Vec<OpenAiMessage> {
                     serde_json::json!(content_parts)
                 };
 
-                // Extract original tool_calls from stored data
-                let tool_calls = message.tool_calls.clone();
+                // Convert unified GenericToolCall format to OpenAI format
+                let tool_calls = if let Ok(generic_calls) =
+                    serde_json::from_value::<Vec<crate::tool_calls::GenericToolCall>>(
+                        message.tool_calls.clone().unwrap(),
+                    ) {
+                    // Convert GenericToolCall to OpenAI format
+                    let openai_calls: Vec<serde_json::Value> = generic_calls
+                        .into_iter()
+                        .map(|call| {
+                            serde_json::json!({
+                                "id": call.id,
+                                "type": "function",
+                                "function": {
+                                    "name": call.name,
+                                    "arguments": serde_json::to_string(&call.arguments).unwrap_or_default()
+                                }
+                            })
+                        })
+                        .collect();
+                    Some(serde_json::Value::Array(openai_calls))
+                } else {
+                    panic!("Invalid tool_calls format - must be Vec<GenericToolCall>");
+                };
 
                 result.push(OpenAiMessage {
                     role: message.role.clone(),
@@ -434,7 +455,7 @@ async fn execute_openai_request(
     let content = choice.message.content.unwrap_or_default();
 
     // Convert tool calls if present
-    let tool_calls = choice.message.tool_calls.map(|calls| {
+    let tool_calls: Option<Vec<ToolCall>> = choice.message.tool_calls.map(|calls| {
         calls
             .into_iter()
             .filter_map(|call| {
@@ -475,17 +496,30 @@ async fn execute_openai_request(
         request_time_ms: Some(request_time_ms),
     };
 
+    // Create response JSON and store tool_calls in unified format
+    let mut response_json: serde_json::Value = serde_json::from_str(&response_text)?;
+
+    // Store tool_calls in unified GenericToolCall format for conversation history
+    if let Some(ref tc) = tool_calls {
+        let generic_calls: Vec<crate::tool_calls::GenericToolCall> = tc
+            .iter()
+            .map(|call| crate::tool_calls::GenericToolCall {
+                id: call.id.clone(),
+                name: call.name.clone(),
+                arguments: call.arguments.clone(),
+            })
+            .collect();
+
+        response_json["tool_calls_unified"] =
+            serde_json::to_value(&generic_calls).unwrap_or_default();
+    }
+
     let exchange = if rate_limit_headers.is_empty() {
-        ProviderExchange::new(
-            request_body,
-            serde_json::from_str(&response_text)?,
-            Some(usage),
-            "openai",
-        )
+        ProviderExchange::new(request_body, response_json, Some(usage), "openai")
     } else {
         ProviderExchange::with_rate_limit_headers(
             request_body,
-            serde_json::from_str(&response_text)?,
+            response_json,
             Some(usage),
             "openai",
             rate_limit_headers,

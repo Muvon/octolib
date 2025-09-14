@@ -48,4 +48,10 @@ pub trait AiProvider: Send + Sync {
         // Default implementation - providers can override
         false
     }
+
+    /// Check if the provider supports structured output
+    fn supports_structured_output(&self, _model: &str) -> bool {
+        // Default implementation - providers can override
+        false
+    }
 }

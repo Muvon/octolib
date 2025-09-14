@@ -232,6 +232,11 @@ impl AiProvider for OpenAiProvider {
             || model.starts_with("gpt-5-")
     }
 
+    fn supports_structured_output(&self, _model: &str) -> bool {
+        // All OpenAI models support structured output as requested
+        true
+    }
+
     fn get_max_input_tokens(&self, model: &str) -> usize {
         // OpenAI model context window limits (what we can send as input)
         // These are the actual context windows - API handles output limits
@@ -318,6 +323,37 @@ impl AiProvider for OpenAiProvider {
 
                 request_body["tools"] = serde_json::json!(openai_tools);
                 request_body["tool_choice"] = serde_json::json!("auto");
+            }
+        }
+
+        // Add structured output format if specified
+        if let Some(response_format) = &params.response_format {
+            match &response_format.format {
+                crate::llm::types::OutputFormat::Json => {
+                    request_body["response_format"] = serde_json::json!({
+                        "type": "json_object"
+                    });
+                }
+                crate::llm::types::OutputFormat::JsonSchema => {
+                    if let Some(schema) = &response_format.schema {
+                        let mut format_obj = serde_json::json!({
+                            "type": "json_schema",
+                            "json_schema": {
+                                "schema": schema
+                            }
+                        });
+
+                        // Add strict mode if specified
+                        if matches!(
+                            response_format.mode,
+                            crate::llm::types::ResponseMode::Strict
+                        ) {
+                            format_obj["json_schema"]["strict"] = serde_json::json!(true);
+                        }
+
+                        request_body["response_format"] = format_obj;
+                    }
+                }
             }
         }
 
@@ -756,11 +792,19 @@ async fn execute_openai_request(
         )
     };
 
+    // Try to parse structured output if it was requested
+    let structured_output = if content.trim().starts_with('{') || content.trim().starts_with('[') {
+        serde_json::from_str(&content).ok()
+    } else {
+        None
+    };
+
     Ok(ProviderResponse {
         content,
         exchange,
         tool_calls,
         finish_reason: choice.finish_reason,
+        structured_output,
     })
 }
 

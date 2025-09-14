@@ -94,6 +94,8 @@ struct DeepSeekRequest {
     max_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stream: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response_format: Option<serde_json::Value>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -153,6 +155,11 @@ impl AiProvider for DeepSeekProvider {
         false // DeepSeek doesn't support vision yet
     }
 
+    fn supports_structured_output(&self, _model: &str) -> bool {
+        // DeepSeek supports JSON mode as per their API documentation
+        true
+    }
+
     fn get_max_input_tokens(&self, _model: &str) -> usize {
         64_000 // DeepSeek context window
     }
@@ -170,13 +177,32 @@ impl AiProvider for DeepSeekProvider {
             })
             .collect();
 
-        let request = DeepSeekRequest {
+        let mut request = DeepSeekRequest {
             model: params.model.clone(),
             messages,
             temperature: Some(params.temperature),
             max_tokens: Some(params.max_tokens),
             stream: Some(false), // We don't support streaming in octolib yet
+            response_format: None,
         };
+
+        // Add structured output format if specified
+        if let Some(response_format) = &params.response_format {
+            match &response_format.format {
+                crate::llm::types::OutputFormat::Json => {
+                    request.response_format = Some(serde_json::json!({
+                        "type": "json_object"
+                    }));
+                }
+                crate::llm::types::OutputFormat::JsonSchema => {
+                    // DeepSeek supports JSON mode but not full JSON schema validation
+                    // Fall back to json_object mode
+                    request.response_format = Some(serde_json::json!({
+                        "type": "json_object"
+                    }));
+                }
+            }
+        }
 
         let response = self
             .client
@@ -260,11 +286,22 @@ impl AiProvider for DeepSeekProvider {
         let mut final_exchange = exchange;
         final_exchange.usage = token_usage.clone();
 
+        let content = &choice.message.content;
+
+        // Try to parse structured output if it was requested
+        let structured_output =
+            if content.trim().starts_with('{') || content.trim().starts_with('[') {
+                serde_json::from_str(content).ok()
+            } else {
+                None
+            };
+
         Ok(ProviderResponse {
             content: choice.message.content,
             exchange: final_exchange,
             tool_calls: None, // DeepSeek doesn't support tool calls in octolib yet
             finish_reason: choice.finish_reason,
+            structured_output,
         })
     }
 }

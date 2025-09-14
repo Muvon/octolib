@@ -380,6 +380,61 @@ pub struct FunctionDefinition {
     pub cache_control: Option<serde_json::Value>,
 }
 
+/// Output format for structured responses
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum OutputFormat {
+    /// Standard JSON output
+    Json,
+    /// JSON with schema validation
+    JsonSchema,
+}
+
+/// Response mode for structured output
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum ResponseMode {
+    /// Automatic mode (provider decides)
+    Auto,
+    /// Strict schema adherence
+    Strict,
+}
+
+/// Structured output request configuration
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct StructuredOutputRequest {
+    /// Output format type
+    pub format: OutputFormat,
+    /// Response mode
+    pub mode: ResponseMode,
+    /// JSON schema for validation (when using JsonSchema format)
+    pub schema: Option<serde_json::Value>,
+}
+
+impl StructuredOutputRequest {
+    /// Create a new structured output request with JSON format
+    pub fn json() -> Self {
+        Self {
+            format: OutputFormat::Json,
+            mode: ResponseMode::Auto,
+            schema: None,
+        }
+    }
+
+    /// Create a new structured output request with JSON schema
+    pub fn json_schema(schema: serde_json::Value) -> Self {
+        Self {
+            format: OutputFormat::JsonSchema,
+            mode: ResponseMode::Auto,
+            schema: Some(schema),
+        }
+    }
+
+    /// Set response mode to strict
+    pub fn with_strict_mode(mut self) -> Self {
+        self.mode = ResponseMode::Strict;
+        self
+    }
+}
+
 /// Provider response containing the AI completion
 #[derive(Debug, Clone)]
 pub struct ProviderResponse {
@@ -387,6 +442,8 @@ pub struct ProviderResponse {
     pub exchange: ProviderExchange,
     pub tool_calls: Option<Vec<ToolCall>>,
     pub finish_reason: Option<String>,
+    /// Parsed structured output (if requested)
+    pub structured_output: Option<serde_json::Value>,
 }
 
 /// Parameters for chat completion requests
@@ -415,6 +472,8 @@ pub struct ChatCompletionParams {
     pub cancellation_token: Option<tokio::sync::watch::Receiver<bool>>,
     /// Available tools for function calling
     pub tools: Option<Vec<FunctionDefinition>>,
+    /// Structured output configuration
+    pub response_format: Option<StructuredOutputRequest>,
 }
 
 impl ChatCompletionParams {
@@ -438,6 +497,7 @@ impl ChatCompletionParams {
             retry_timeout: std::time::Duration::from_secs(1), // Default 1 second base timeout
             cancellation_token: None,
             tools: None,
+            response_format: None,
         }
     }
 
@@ -462,6 +522,12 @@ impl ChatCompletionParams {
     /// Set available tools
     pub fn with_tools(mut self, tools: Vec<FunctionDefinition>) -> Self {
         self.tools = Some(tools);
+        self
+    }
+
+    /// Set structured output format
+    pub fn with_structured_output(mut self, response_format: StructuredOutputRequest) -> Self {
+        self.response_format = Some(response_format);
         self
     }
 }

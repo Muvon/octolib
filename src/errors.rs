@@ -39,6 +39,9 @@ pub enum MessageError {
 
     #[error("Tool calls deserialization failed: {0}")]
     ToolCallsError(#[from] serde_json::Error),
+
+    #[error("Structured output error: {0}")]
+    StructuredOutputError(#[from] StructuredOutputError),
 }
 
 /// Errors that can occur during tool call operations
@@ -111,6 +114,31 @@ pub enum ProviderError {
 
     #[error("Response parsing failed: {0}")]
     ResponseParsingError(#[from] serde_json::Error),
+
+    #[error("Structured output error: {0}")]
+    StructuredOutputError(#[from] StructuredOutputError),
+}
+
+/// Errors that can occur during structured output operations
+#[derive(Debug, Error)]
+pub enum StructuredOutputError {
+    #[error("Provider {provider} does not support structured output")]
+    UnsupportedProvider { provider: String },
+
+    #[error("Invalid JSON schema: {reason}")]
+    InvalidSchema { reason: String },
+
+    #[error("Schema validation failed: {reason}")]
+    ValidationFailed { reason: String },
+
+    #[error("Failed to parse structured output: {reason}")]
+    ParsingFailed { reason: String },
+
+    #[error("Model {model} does not support structured output")]
+    UnsupportedModel { model: String },
+
+    #[error("JSON schema serialization failed: {0}")]
+    SchemaSerializationError(#[from] serde_json::Error),
 }
 
 /// Errors that can occur during configuration operations
@@ -143,6 +171,9 @@ pub type ToolCallResult<T> = Result<T, ToolCallError>;
 
 /// Result type for configuration operations
 pub type ConfigResult<T> = Result<T, ConfigError>;
+
+/// Result type for structured output operations
+pub type StructuredOutputResult<T> = Result<T, StructuredOutputError>;
 
 /// Extension trait for adding context to errors
 pub trait ErrorContext<T> {

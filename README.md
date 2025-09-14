@@ -14,6 +14,7 @@ Octolib is a comprehensive, self-sufficient AI provider library that provides a 
 - **🔌 Multi-Provider Support**: OpenAI, Anthropic, OpenRouter, Google, Amazon, Cloudflare, DeepSeek
 - **🛡️ Unified Interface**: Consistent API across different providers
 - **🔍 Intelligent Model Validation**: Strict `provider:model` format parsing
+- **📋 Structured Output**: JSON and JSON Schema support for OpenAI, OpenRouter, and DeepSeek
 - **💰 Cost Tracking**: Automatic token usage and cost calculation
 - **🖼️ Vision Support**: Image attachment handling for compatible models
 - **🧰 Tool Calling**: Cross-provider tool call standardization
@@ -52,6 +53,67 @@ async fn example() -> anyhow::Result<()> {
 }
 ```
 
+### 📋 Structured Output
+
+Get structured JSON responses with schema validation:
+
+```rust
+use octolib::{ProviderFactory, ChatCompletionParams, Message, StructuredOutputRequest};
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize)]
+struct PersonInfo {
+    name: String,
+    age: u32,
+    skills: Vec<String>,
+}
+
+async fn structured_example() -> anyhow::Result<()> {
+    let (provider, model) = ProviderFactory::get_provider_for_model("openai:gpt-4o")?;
+    
+    // Check if provider supports structured output
+    if !provider.supports_structured_output(&model) {
+        return Err(anyhow::anyhow!("Provider does not support structured output"));
+    }
+
+    let messages = vec![
+        Message::user("Tell me about a software engineer in JSON format"),
+    ];
+
+    // Request structured JSON output
+    let structured_request = StructuredOutputRequest::json();
+    let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000)
+        .with_structured_output(structured_request);
+
+    let response = provider.chat_completion(params).await?;
+    
+    if let Some(structured) = response.structured_output {
+        let person: PersonInfo = serde_json::from_value(structured)?;
+        println!("Person: {:?}", person);
+    }
+
+    Ok(())
+}
+```
+
+## 🎯 Provider Support Matrix
+
+| Provider | Structured Output | Vision | Tool Calls | Caching |
+|----------|------------------|--------|------------|---------|
+| **OpenAI** | ✅ JSON + Schema | ✅ Yes | ✅ Yes | ✅ Yes |
+| **OpenRouter** | ✅ JSON + Schema | ✅ Yes | ✅ Yes | ✅ Yes |
+| **DeepSeek** | ✅ JSON Mode | ❌ No | ❌ No | ✅ Yes |
+| **Anthropic** | ❌ No | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Google Vertex** | ❌ No | ✅ Yes | ✅ Yes | ❌ No |
+| **Amazon Bedrock** | ❌ No | ✅ Yes | ✅ Yes | ❌ No |
+| **Cloudflare** | ❌ No | ❌ No | ❌ No | ❌ No |
+
+### Structured Output Details
+
+- **JSON Mode**: Basic JSON object output
+- **JSON Schema**: Full schema validation with strict mode
+- **Provider Detection**: Use `provider.supports_structured_output(&model)` to check capability
+
 ## 📚 Complete Documentation
 
 📖 **Quick Navigation**
@@ -65,13 +127,13 @@ async fn example() -> anyhow::Result<()> {
 
 | Provider | Status | Capabilities |
 |----------|--------|--------------|
-| OpenAI | ✅ Full Support | Chat, Vision, Tools |
+| OpenAI | ✅ Full Support | Chat, Vision, Tools, Structured Output |
 | Anthropic | ✅ Full Support | Claude Models, Vision, Tools, Caching |
-| OpenRouter | ✅ Full Support | Multi-Provider Proxy, Vision, Caching |
+| OpenRouter | ✅ Full Support | Multi-Provider Proxy, Vision, Caching, Structured Output |
+| DeepSeek | ✅ Full Support | Open-Source AI Models, Structured Output |
 | Google Vertex AI | ✅ Supported | Enterprise AI Integration |
 | Amazon Bedrock | ✅ Supported | Cloud AI Services |
 | Cloudflare Workers AI | ✅ Supported | Edge AI Compute |
-| DeepSeek | ✅ Supported | Open-Source AI Models |
 
 ## 🔒 Privacy & Security
 

@@ -110,6 +110,95 @@ match provider.chat_completion(params).await {
 }
 ```
 
+## 📋 Structured Output
+
+Get structured JSON responses with schema validation:
+
+```rust
+use octolib::{ProviderFactory, ChatCompletionParams, Message, StructuredOutputRequest};
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize, Debug)]
+struct PersonInfo {
+    name: String,
+    age: u32,
+    occupation: String,
+    skills: Vec<String>,
+}
+
+async fn structured_output_example() -> anyhow::Result<()> {
+    let (provider, model) = ProviderFactory::get_provider_for_model("openai:gpt-4o")?;
+    
+    // Check if provider supports structured output
+    if !provider.supports_structured_output(&model) {
+        println!("Provider {} does not support structured output", provider.name());
+        return Ok(());
+    }
+
+    let messages = vec![
+        Message::system("You are a helpful assistant that responds with valid JSON."),
+        Message::user("Tell me about a fictional software engineer. Respond with JSON containing name, age, occupation, and skills array."),
+    ];
+
+    // Basic JSON output
+    let structured_request = StructuredOutputRequest::json();
+    let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000)
+        .with_structured_output(structured_request);
+
+    let response = provider.chat_completion(params).await?;
+    
+    if let Some(structured) = response.structured_output {
+        let person: PersonInfo = serde_json::from_value(structured)?;
+        println!("Parsed person: {:?}", person);
+    }
+
+    // JSON Schema with strict validation (OpenAI/OpenRouter only)
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "age": {"type": "integer", "minimum": 18, "maximum": 100},
+            "occupation": {"type": "string"},
+            "skills": {
+                "type": "array",
+                "items": {"type": "string"},
+                "minItems": 1
+            }
+        },
+        "required": ["name", "age", "occupation", "skills"],
+        "additionalProperties": false
+    });
+    
+    let structured_request = StructuredOutputRequest::json_schema(schema)
+        .with_strict_mode();
+    
+    let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000)
+        .with_structured_output(structured_request);
+    
+    let response = provider.chat_completion(params).await?;
+    
+    if let Some(structured) = response.structured_output {
+        match serde_json::from_value::<PersonInfo>(structured) {
+            Ok(person) => println!("✅ Schema-validated person: {:?}", person),
+            Err(e) => println!("❌ Schema validation failed: {}", e),
+        }
+    }
+
+    Ok(())
+}
+```
+
+### Provider Support for Structured Output
+
+| Provider | JSON Mode | JSON Schema | Strict Mode |
+|----------|-----------|-------------|-------------|
+| OpenAI | ✅ Yes | ✅ Yes | ✅ Yes |
+| OpenRouter | ✅ Yes | ✅ Yes | ✅ Yes |
+| DeepSeek | ✅ Yes | ❌ No* | ❌ No |
+| Others | ❌ No | ❌ No | ❌ No |
+
+*DeepSeek falls back to JSON mode when JSON Schema is requested.
+
 ## 📊 Token Usage & Tracking
 
 ```rust

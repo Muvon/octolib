@@ -673,5 +673,6 @@ async fn execute_anthropic_request(
             Some(tool_calls)
         },
         finish_reason: anthropic_response.stop_reason,
+        structured_output: None, // Anthropic doesn't support structured output
     })
 }

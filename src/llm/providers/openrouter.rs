@@ -49,9 +49,22 @@ impl AiProvider for OpenRouterProvider {
         "openrouter"
     }
 
-    fn supports_model(&self, _model: &str) -> bool {
-        // OpenRouter supports many models, so we accept any model string
-        true
+    fn supports_model(&self, model: &str) -> bool {
+        // OpenRouter supports many models from different providers
+        // Accept models with provider prefixes (anthropic/, openai/, meta/, google/, etc.)
+        // or direct model names
+        model.contains("anthropic/")
+            || model.contains("openai/")
+            || model.contains("meta/")
+            || model.contains("google/")
+            || model.contains("mistral/")
+            || model.contains("cohere/")
+            || model.contains("claude")
+            || model.contains("gpt-")
+            || model.contains("llama")
+            || model.contains("gemini")
+            || model.contains("mistral")
+            || !model.is_empty() // Accept any non-empty model string as fallback
     }
 
     fn get_api_key(&self) -> Result<String> {
@@ -70,24 +83,39 @@ impl AiProvider for OpenRouterProvider {
     }
 
     fn supports_vision(&self, model: &str) -> bool {
-        // Vision support depends on the underlying model
+        // Vision support depends on the underlying model through OpenRouter
         model.contains("gpt-4o")
             || model.contains("gpt-4-turbo")
+            || model.contains("gpt-4-vision")
             || model.contains("claude-3")
             || model.contains("claude-4")
+            || model.contains("claude-3.5")
+            || model.contains("claude-3.7")
             || model.contains("gemini")
+            || model.contains("llava")
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {
-        // Context windows vary by model - use conservative defaults
+        // Context windows vary by model - match octomind's logic
         if model.contains("claude") {
-            200_000
+            200_000 // Claude models have 200K context
+        } else if model.contains("gpt-5")
+            || model.contains("gpt-4o")
+            || model.contains("gpt-4-turbo")
+            || model.contains("gpt-4.1")
+            || model.contains("gpt-4.5")
+            || model.contains("o1")
+            || model.contains("o3")
+        {
+            128_000 // Modern GPT models and O-series have 128K context
         } else if model.contains("gpt-4") {
-            128_000
+            8_192 // Old GPT-4 has 8K context
+        } else if model.contains("gpt-3.5") {
+            16_384 // GPT-3.5 has 16K context
         } else if model.contains("gemini") {
-            1_000_000
+            1_000_000 // Gemini has 1M context
         } else {
-            32_768 // Conservative default
+            32_768 // Conservative default for Llama and other models
         }
     }
 
@@ -479,8 +507,7 @@ async fn execute_openrouter_request(
             })
             .collect();
 
-        response_json["tool_calls_unified"] =
-            serde_json::to_value(&generic_calls).unwrap_or_default();
+        response_json["tool_calls"] = serde_json::to_value(&generic_calls).unwrap_or_default();
     }
 
     let exchange = ProviderExchange::new(request_body, response_json, Some(usage), "openrouter");

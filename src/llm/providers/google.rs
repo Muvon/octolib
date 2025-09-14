@@ -35,6 +35,7 @@ impl GoogleVertexProvider {
     }
 }
 
+const GOOGLE_APPLICATION_CREDENTIALS_ENV: &str = "GOOGLE_APPLICATION_CREDENTIALS";
 const GOOGLE_API_KEY_ENV: &str = "GOOGLE_API_KEY";
 
 #[async_trait::async_trait]
@@ -44,16 +45,29 @@ impl AiProvider for GoogleVertexProvider {
     }
 
     fn supports_model(&self, model: &str) -> bool {
-        model.contains("gemini") || model.contains("palm") || model.starts_with("text-")
+        // Google Vertex AI models
+        model.contains("gemini")
+            || model.contains("palm")
+            || model.contains("text-bison")
+            || model.contains("chat-bison")
+            || model.starts_with("text-")
+            || model.starts_with("chat-")
     }
 
     fn get_api_key(&self) -> Result<String> {
-        match env::var(GOOGLE_API_KEY_ENV) {
-            Ok(key) => Ok(key),
-            Err(_) => Err(anyhow::anyhow!(
-                "Google API key not found in environment variable: {}",
-                GOOGLE_API_KEY_ENV
-            )),
+        // Google Vertex AI can use either API key or service account credentials
+        if let Ok(key) = env::var(GOOGLE_API_KEY_ENV) {
+            Ok(key)
+        } else if let Ok(_credentials) = env::var(GOOGLE_APPLICATION_CREDENTIALS_ENV) {
+            // Service account credentials file path is available
+            // In a full implementation, we would use this to authenticate
+            Ok("service_account_auth".to_string()) // Placeholder
+        } else {
+            Err(anyhow::anyhow!(
+                "Google authentication not found. Set either {} or {}",
+                GOOGLE_API_KEY_ENV,
+                GOOGLE_APPLICATION_CREDENTIALS_ENV
+            ))
         }
     }
 
@@ -66,12 +80,17 @@ impl AiProvider for GoogleVertexProvider {
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {
+        // Google Vertex AI model context window limits
         if model.contains("gemini-2") {
-            2_000_000
+            2_000_000 // Gemini 2.0 has 2M context
         } else if model.contains("gemini-1.5") {
-            1_000_000
+            1_000_000 // Gemini 1.5 has 1M context
+        } else if model.contains("gemini-1.0") || model.contains("bison-32k") {
+            32_768 // Gemini 1.0 and 32K variants have 32K context
+        } else if model.contains("bison") {
+            8_192 // Standard Bison models
         } else {
-            32_768
+            32_768 // Conservative default
         }
     }
 

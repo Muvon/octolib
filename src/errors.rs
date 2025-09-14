@@ -250,7 +250,7 @@ mod tests {
     }
 
     #[test]
-    fn test_api_error_helper() {
+    fn test_api_error() {
         let error = api_error("anthropic", 400, "Bad Request");
 
         if let ProviderError::ApiError {

@@ -25,22 +25,137 @@ use serde::{Deserialize, Serialize};
 use std::env;
 
 /// OpenAI pricing constants (per 1M tokens in USD)
+/// Source: https://platform.openai.com/docs/pricing (as of January 2025)
 const PRICING: &[(&str, f64, f64)] = &[
     // Model, Input price per 1M tokens, Output price per 1M tokens
+    // Latest models (2025)
+    // GPT-4.1 and variants
+    ("gpt-4.1", 2.00, 8.00),
+    ("gpt-4.1-2025-04-14", 2.00, 8.00),
+    ("gpt-4.1-mini", 0.40, 1.60),
+    ("gpt-4.1-mini-2025-04-14", 0.40, 1.60),
+    ("gpt-4.1-nano", 0.10, 0.40),
+    ("gpt-4.1-nano-2025-04-14", 0.10, 0.40),
+    // GPT-4.5
+    ("gpt-4.5-preview", 75.00, 150.00),
+    ("gpt-4.5-preview-2025-02-27", 75.00, 150.00),
+    // GPT-5
+    ("gpt-5", 1.25, 10.00),
+    ("gpt-5-2025-08-07", 1.25, 10.00),
+    ("gpt-5-mini", 0.25, 2.0),
+    ("gpt-5-mini-2025-08-07", 0.25, 2.0),
+    ("gpt-5-nano", 0.05, 0.40),
+    ("gpt-5-nano-2025-08-07", 0.05, 0.40),
+    // GPT-4o series
     ("gpt-4o", 2.50, 10.00),
+    ("gpt-4o-2024-08-06", 2.50, 10.00),
+    ("gpt-4o-realtime-preview", 5.00, 20.00),
+    ("gpt-4o-realtime-preview-2025-06-03", 5.00, 20.00),
     ("gpt-4o-mini", 0.15, 0.60),
+    ("gpt-4o-mini-2024-07-18", 0.15, 0.60),
+    ("gpt-4o-mini-realtime-preview", 0.60, 2.40),
+    ("gpt-4o-mini-realtime-preview-2024-12-17", 0.60, 2.40),
+    ("gpt-4o-mini-search-preview", 0.15, 0.60),
+    ("gpt-4o-mini-search-preview-2025-03-11", 0.15, 0.60),
+    ("gpt-4o-search-preview", 2.50, 10.00),
+    ("gpt-4o-search-preview-2025-03-11", 2.50, 10.00),
+    // O-series and variants
+    ("o1", 15.00, 60.00),
+    ("o1-2024-12-17", 15.00, 60.00),
+    ("o1-pro", 150.00, 600.00),
+    ("o1-pro-2025-03-19", 150.00, 600.00),
+    ("o1-mini", 1.10, 4.40),
+    ("o1-mini-2024-09-12", 1.10, 4.40),
+    ("o3", 2.00, 8.00),
+    ("o3-2025-04-16", 2.00, 8.00),
+    ("o3-pro", 20.00, 80.00),
+    ("o3-pro-2025-06-10", 20.00, 80.00),
+    ("o3-mini", 1.10, 4.40),
+    ("o3-mini-2025-01-31", 1.10, 4.40),
+    ("o3-deep-research", 10.00, 40.00),
+    ("o3-deep-research-2025-06-26", 10.00, 40.00),
+    ("o4-mini", 1.10, 4.40),
+    ("o4-mini-2025-04-16", 1.10, 4.40),
+    ("o4-mini-deep-research", 2.00, 8.00),
+    ("o4-mini-deep-research-2025-06-26", 2.00, 8.00),
+    // GPT-4 Turbo
     ("gpt-4-turbo", 10.00, 30.00),
+    ("gpt-4-turbo-2024-04-09", 10.00, 30.00),
+    // GPT-4
     ("gpt-4", 30.00, 60.00),
+    ("gpt-4-0613", 30.00, 60.00),
+    ("gpt-4-32k", 60.00, 120.00),
+    // GPT-3.5 Turbo
     ("gpt-3.5-turbo", 0.50, 1.50),
+    ("gpt-3.5-turbo-0125", 0.50, 1.50),
+    ("gpt-3.5-turbo-instruct", 1.50, 2.00),
+    ("gpt-3.5-turbo-16k-0613", 3.00, 4.00),
 ];
 
-/// Calculate cost for OpenAI models
-fn calculate_openai_cost(model: &str, prompt_tokens: u64, completion_tokens: u64) -> Option<f64> {
+/// Calculate cost for OpenAI models with basic pricing
+fn calculate_cost(model: &str, prompt_tokens: u64, completion_tokens: u64) -> Option<f64> {
     for (pricing_model, input_price, output_price) in PRICING {
         if model.contains(pricing_model) {
             let input_cost = (prompt_tokens as f64 / 1_000_000.0) * input_price;
             let output_cost = (completion_tokens as f64 / 1_000_000.0) * output_price;
             return Some(input_cost + output_cost);
+        }
+    }
+    None
+}
+
+/// Check if a model supports the temperature parameter
+/// O1, O2, O3, O4 and GPT-5 series models don't support temperature
+fn supports_temperature(model: &str) -> bool {
+    !model.starts_with("o1")
+        && !model.starts_with("o2")
+        && !model.starts_with("o3")
+        && !model.starts_with("o4")
+        && !model.starts_with("gpt-5")
+}
+
+/// Check if a model uses max_completion_tokens instead of max_tokens
+/// GPT-5 models use the new max_completion_tokens parameter
+fn uses_max_completion_tokens(model: &str) -> bool {
+    model.starts_with("gpt-5")
+}
+
+/// Get cache pricing multiplier based on model
+/// GPT-5 models have 0.1x cache pricing (90% cheaper)
+/// Other models have 0.25x cache pricing (75% cheaper)
+fn get_cache_multiplier(model: &str) -> f64 {
+    if model.starts_with("gpt-5") {
+        0.1 // GPT-5 models: 10% of normal price for cache reads
+    } else {
+        0.25 // Other models: 25% of normal price for cache reads
+    }
+}
+
+/// Calculate cost with cache-aware pricing
+/// This function handles the different pricing tiers for cached vs non-cached tokens:
+/// - cache_read_tokens: charged at model-specific multiplier (GPT-5: 0.1x, others: 0.25x)
+/// - regular_input_tokens: charged at normal price (includes cache write tokens)
+/// - output_tokens: charged at normal price
+fn calculate_cost_with_cache(
+    model: &str,
+    regular_input_tokens: u64,
+    cache_read_tokens: u64,
+    completion_tokens: u64,
+) -> Option<f64> {
+    for (pricing_model, input_price, output_price) in PRICING {
+        if model.contains(pricing_model) {
+            // Regular input tokens at normal price (includes cache write - no additional cost)
+            let regular_input_cost = (regular_input_tokens as f64 / 1_000_000.0) * input_price;
+
+            // Cache read tokens at model-specific multiplier
+            let cache_multiplier = get_cache_multiplier(model);
+            let cache_read_cost =
+                (cache_read_tokens as f64 / 1_000_000.0) * input_price * cache_multiplier;
+
+            // Output tokens at normal price (never cached)
+            let output_cost = (completion_tokens as f64 / 1_000_000.0) * output_price;
+
+            return Some(regular_input_cost + cache_read_cost + output_cost);
         }
     }
     None
@@ -72,7 +187,17 @@ impl AiProvider for OpenAiProvider {
     }
 
     fn supports_model(&self, model: &str) -> bool {
-        model.starts_with("gpt-") || model.contains("gpt")
+        // OpenAI models - current lineup
+        model.starts_with("gpt-5")
+            || model.starts_with("gpt-4o")
+            || model.starts_with("gpt-4.5")
+            || model.starts_with("gpt-4.1")
+            || model.starts_with("gpt-4")
+            || model.starts_with("gpt-3.5")
+            || model.starts_with("o1")
+            || model.starts_with("o3")
+            || model.starts_with("o4")
+            || model == "chatgpt-4o-latest"
     }
 
     fn get_api_key(&self) -> Result<String> {
@@ -85,24 +210,57 @@ impl AiProvider for OpenAiProvider {
         }
     }
 
-    fn supports_caching(&self, _model: &str) -> bool {
-        false // OpenAI doesn't support caching yet
+    fn supports_caching(&self, model: &str) -> bool {
+        // OpenAI supports automatic prompt caching for these models (as of Oct 2024)
+        model.contains("gpt-4o")
+            || model.contains("gpt-4.1")
+            || model.contains("gpt-5")
+            || model.contains("o1-preview")
+            || model.contains("o1-mini")
+            || model.contains("o1")
+            || model.contains("o3")
+            || model.contains("o4")
     }
 
     fn supports_vision(&self, model: &str) -> bool {
-        model.contains("gpt-4o") || model.contains("gpt-4-turbo") || model.contains("gpt-4-vision")
+        // OpenAI vision-capable models
+        model.contains("gpt-4o")
+            || model.contains("gpt-4.1")
+            || model.contains("gpt-4-turbo")
+            || model.contains("gpt-4-vision-preview")
+            || model.starts_with("gpt-4o-")
+            || model.starts_with("gpt-5-")
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {
-        if model.contains("gpt-4o") || model.contains("gpt-4-turbo") {
-            128_000
-        } else if model.contains("gpt-4") {
-            8_192
-        } else if model.contains("gpt-3.5-turbo") {
-            16_385
-        } else {
-            4_096
+        // OpenAI model context window limits (what we can send as input)
+        // These are the actual context windows - API handles output limits
+
+        // GPT-5 models: 128K context window
+        if model.starts_with("gpt-5") {
+            return 128_000;
         }
+        // GPT-4o models: 128K context window
+        if model.contains("gpt-4o") {
+            return 128_000;
+        }
+        // GPT-4 models: varies by version
+        if model.contains("gpt-4-turbo") || model.contains("gpt-4.5") || model.contains("gpt-4.1") {
+            return 128_000;
+        }
+        if model.contains("gpt-4") && !model.contains("gpt-4o") {
+            return 8_192; // Old GPT-4: 8K context window
+        }
+        // O-series models: 128K context window
+        if model.starts_with("o1") || model.starts_with("o2") || model.starts_with("o3") {
+            return 128_000;
+        }
+        // GPT-3.5: 16K context window
+        if model.contains("gpt-3.5") {
+            return 16_384;
+        }
+        // Default conservative limit
+        8_192
     }
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
@@ -115,13 +273,26 @@ impl AiProvider for OpenAiProvider {
         let mut request_body = serde_json::json!({
             "model": params.model,
             "messages": openai_messages,
-            "temperature": params.temperature,
-            "top_p": params.top_p,
         });
 
-        // Add max_tokens if specified
+        // Only add temperature for models that support it
+        // O1/O2/O3/O4 and GPT-5 series models don't support temperature parameter
+        if supports_temperature(&params.model) {
+            request_body["temperature"] = serde_json::json!(params.temperature);
+            request_body["top_p"] = serde_json::json!(params.top_p);
+            // Note: OpenAI doesn't have top_k parameter, but has similar "top_logprobs"
+            // We'll skip top_k for OpenAI as it's not directly supported
+        }
+
+        // Add max_tokens if specified (0 means don't include it in request)
         if params.max_tokens > 0 {
-            request_body["max_tokens"] = serde_json::json!(params.max_tokens);
+            if uses_max_completion_tokens(&params.model) {
+                // GPT-5 models use max_completion_tokens
+                request_body["max_completion_tokens"] = serde_json::json!(params.max_tokens);
+            } else {
+                // Other models use max_tokens
+                request_body["max_tokens"] = serde_json::json!(params.max_tokens);
+            }
         }
 
         // Add tools if available
@@ -398,6 +569,19 @@ async fn execute_openai_request(
     let mut rate_limit_headers = std::collections::HashMap::new();
     let headers = response.headers();
 
+    // Check for cache hit headers first
+    let cache_creation_input_tokens = headers
+        .get("x-cache-creation-input-tokens")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(0);
+
+    let cache_read_input_tokens = headers
+        .get("x-cache-read-input-tokens")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(0);
+
     // OpenAI rate limit headers
     if let Some(requests_limit) = headers
         .get("x-ratelimit-limit-requests")
@@ -480,18 +664,38 @@ async fn execute_openai_request(
             .collect()
     });
 
-    // Calculate cost
-    let cost = calculate_openai_cost(
-        request_body["model"].as_str().unwrap_or(""),
-        openai_response.usage.prompt_tokens,
-        openai_response.usage.completion_tokens,
-    );
+    // Calculate cost using local pricing tables if model is available
+    let cost = request_body
+        .get("model")
+        .and_then(|m| m.as_str())
+        .and_then(|model| {
+            if cache_creation_input_tokens > 0 || cache_read_input_tokens > 0 {
+                // Use cache-aware pricing when cache tokens are present
+                let regular_input_tokens = openai_response
+                    .usage
+                    .prompt_tokens
+                    .saturating_sub(cache_read_input_tokens as u64);
+                calculate_cost_with_cache(
+                    model,
+                    regular_input_tokens,
+                    cache_read_input_tokens as u64,
+                    openai_response.usage.completion_tokens,
+                )
+            } else {
+                // Use basic pricing when no cache tokens
+                calculate_cost(
+                    model,
+                    openai_response.usage.prompt_tokens,
+                    openai_response.usage.completion_tokens,
+                )
+            }
+        });
 
     let usage = TokenUsage {
         prompt_tokens: openai_response.usage.prompt_tokens,
         output_tokens: openai_response.usage.completion_tokens,
         total_tokens: openai_response.usage.total_tokens,
-        cached_tokens: 0, // OpenAI doesn't support caching
+        cached_tokens: cache_read_input_tokens as u64,
         cost,
         request_time_ms: Some(request_time_ms),
     };
@@ -510,8 +714,7 @@ async fn execute_openai_request(
             })
             .collect();
 
-        response_json["tool_calls_unified"] =
-            serde_json::to_value(&generic_calls).unwrap_or_default();
+        response_json["tool_calls"] = serde_json::to_value(&generic_calls).unwrap_or_default();
     }
 
     let exchange = if rate_limit_headers.is_empty() {
@@ -532,4 +735,154 @@ async fn execute_openai_request(
         tool_calls,
         finish_reason: choice.finish_reason,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_cache_multiplier() {
+        // GPT-5 models should have 0.1x cache multiplier (10% of normal price)
+        assert_eq!(get_cache_multiplier("gpt-5"), 0.1);
+        assert_eq!(get_cache_multiplier("gpt-5-2025-08-07"), 0.1);
+        assert_eq!(get_cache_multiplier("gpt-5-mini"), 0.1);
+        assert_eq!(get_cache_multiplier("gpt-5-mini-2025-08-07"), 0.1);
+        assert_eq!(get_cache_multiplier("gpt-5-nano"), 0.1);
+        assert_eq!(get_cache_multiplier("gpt-5-nano-2025-08-07"), 0.1);
+
+        // Other models should have 0.25x cache multiplier (25% of normal price)
+        assert_eq!(get_cache_multiplier("gpt-4o"), 0.25);
+        assert_eq!(get_cache_multiplier("gpt-4o-mini"), 0.25);
+        assert_eq!(get_cache_multiplier("gpt-4.1"), 0.25);
+        assert_eq!(get_cache_multiplier("gpt-4"), 0.25);
+        assert_eq!(get_cache_multiplier("gpt-3.5-turbo"), 0.25);
+        assert_eq!(get_cache_multiplier("o1"), 0.25);
+        assert_eq!(get_cache_multiplier("o3"), 0.25);
+    }
+
+    #[test]
+    fn test_calculate_cost_with_cache() {
+        // Test GPT-5 model with cache (0.1x multiplier)
+        let cost = calculate_cost_with_cache("gpt-5", 1000, 500, 200);
+        assert!(cost.is_some());
+        let cost_value = cost.unwrap();
+        // Expected: (1000/1M * 1.25) + (500/1M * 1.25 * 0.1) + (200/1M * 10.0)
+        // = 0.00125 + 0.0000625 + 0.002 = 0.0033125
+        assert!((cost_value - 0.0033125).abs() < 0.0000001);
+
+        // Test GPT-4o model with cache (0.25x multiplier)
+        let cost = calculate_cost_with_cache("gpt-4o", 1000, 500, 200);
+        assert!(cost.is_some());
+        let cost_value = cost.unwrap();
+        // Expected: (1000/1M * 2.50) + (500/1M * 2.50 * 0.25) + (200/1M * 10.0)
+        // = 0.0025 + 0.0003125 + 0.002 = 0.0048125
+        assert!((cost_value - 0.0048125).abs() < 0.0000001);
+
+        // Test unknown model
+        let cost = calculate_cost_with_cache("unknown-model", 1000, 500, 200);
+        assert!(cost.is_none());
+    }
+
+    #[test]
+    fn test_supports_temperature() {
+        // Models that should support temperature
+        assert!(supports_temperature("gpt-4"));
+        assert!(supports_temperature("gpt-4o"));
+        assert!(supports_temperature("gpt-4o-mini"));
+        assert!(supports_temperature("gpt-3.5-turbo"));
+        assert!(supports_temperature("chatgpt-4o-latest"));
+
+        // Models that should NOT support temperature (o1/o2/o3/o4 and gpt-5 series)
+        assert!(!supports_temperature("o1"));
+        assert!(!supports_temperature("o1-preview"));
+        assert!(!supports_temperature("o1-mini"));
+        assert!(!supports_temperature("o2"));
+        assert!(!supports_temperature("o3"));
+        assert!(!supports_temperature("o3-mini"));
+        assert!(!supports_temperature("o4"));
+        assert!(!supports_temperature("gpt-5"));
+        assert!(!supports_temperature("gpt-5-mini"));
+        assert!(!supports_temperature("gpt-5-nano"));
+    }
+
+    #[test]
+    fn test_uses_max_completion_tokens() {
+        // GPT-5 models should use max_completion_tokens
+        assert!(uses_max_completion_tokens("gpt-5"));
+        assert!(uses_max_completion_tokens("gpt-5-2025-08-07"));
+        assert!(uses_max_completion_tokens("gpt-5-mini"));
+        assert!(uses_max_completion_tokens("gpt-5-mini-2025-08-07"));
+        assert!(uses_max_completion_tokens("gpt-5-nano"));
+        assert!(uses_max_completion_tokens("gpt-5-nano-2025-08-07"));
+
+        // Other models should use max_tokens (return false)
+        assert!(!uses_max_completion_tokens("gpt-4o"));
+        assert!(!uses_max_completion_tokens("gpt-4o-mini"));
+        assert!(!uses_max_completion_tokens("gpt-4.1"));
+        assert!(!uses_max_completion_tokens("gpt-4"));
+        assert!(!uses_max_completion_tokens("gpt-3.5-turbo"));
+        assert!(!uses_max_completion_tokens("o1"));
+        assert!(!uses_max_completion_tokens("o3"));
+    }
+
+    #[test]
+    fn test_supports_model_gpt5() {
+        let provider = OpenAiProvider::new();
+
+        // GPT-5 models should be supported
+        assert!(provider.supports_model("gpt-5"));
+        assert!(provider.supports_model("gpt-5-2025-08-07"));
+        assert!(provider.supports_model("gpt-5-mini"));
+        assert!(provider.supports_model("gpt-5-mini-2025-08-07"));
+        assert!(provider.supports_model("gpt-5-nano"));
+        assert!(provider.supports_model("gpt-5-nano-2025-08-07"));
+
+        // Other models should still be supported
+        assert!(provider.supports_model("gpt-4o"));
+        assert!(provider.supports_model("gpt-4"));
+        assert!(provider.supports_model("gpt-3.5-turbo"));
+        assert!(provider.supports_model("o1"));
+
+        // Unsupported models
+        assert!(!provider.supports_model("claude-3"));
+        assert!(!provider.supports_model("llama-2"));
+    }
+
+    #[test]
+    fn test_get_max_input_tokens_gpt5() {
+        let provider = OpenAiProvider::new();
+
+        // GPT-5 models should have 128K context window
+        assert_eq!(provider.get_max_input_tokens("gpt-5"), 128_000);
+        assert_eq!(provider.get_max_input_tokens("gpt-5-2025-08-07"), 128_000);
+        assert_eq!(provider.get_max_input_tokens("gpt-5-mini"), 128_000);
+        assert_eq!(provider.get_max_input_tokens("gpt-5-nano"), 128_000);
+
+        // Other models should maintain their existing limits
+        assert_eq!(provider.get_max_input_tokens("gpt-4o"), 128_000);
+        assert_eq!(provider.get_max_input_tokens("gpt-4"), 8_192);
+        assert_eq!(provider.get_max_input_tokens("gpt-3.5-turbo"), 16_384);
+    }
+
+    #[test]
+    fn test_supports_vision() {
+        let provider = OpenAiProvider::new();
+
+        // Models that should support vision
+        assert!(provider.supports_vision("gpt-4o"));
+        assert!(provider.supports_vision("gpt-4o-mini"));
+        assert!(provider.supports_vision("gpt-4o-2024-05-13"));
+        assert!(provider.supports_vision("gpt-4-turbo"));
+        assert!(provider.supports_vision("gpt-4-vision-preview"));
+        assert!(provider.supports_vision("gpt-4.1"));
+        assert!(provider.supports_vision("gpt-5-mini"));
+
+        // Models that should NOT support vision
+        assert!(!provider.supports_vision("gpt-3.5-turbo"));
+        assert!(!provider.supports_vision("gpt-4"));
+        assert!(!provider.supports_vision("o1-preview"));
+        assert!(!provider.supports_vision("o1-mini"));
+        assert!(!provider.supports_vision("text-davinci-003"));
+    }
 }

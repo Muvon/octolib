@@ -33,9 +33,22 @@ impl AmazonBedrockProvider {
     pub fn new() -> Self {
         Self
     }
+
+    /// Get AWS access key ID
+    fn get_aws_access_key_id(&self) -> Result<String> {
+        env::var(AWS_ACCESS_KEY_ID_ENV)
+            .map_err(|_| anyhow::anyhow!("AWS_ACCESS_KEY_ID not found in environment"))
+    }
+
+    /// Get AWS secret access key
+    fn get_aws_secret_access_key(&self) -> Result<String> {
+        env::var(AWS_SECRET_ACCESS_KEY_ENV)
+            .map_err(|_| anyhow::anyhow!("AWS_SECRET_ACCESS_KEY not found in environment"))
+    }
 }
 
-const AMAZON_ACCESS_KEY_ID_ENV: &str = "AMAZON_ACCESS_KEY_ID";
+const AWS_ACCESS_KEY_ID_ENV: &str = "AWS_ACCESS_KEY_ID";
+const AWS_SECRET_ACCESS_KEY_ENV: &str = "AWS_SECRET_ACCESS_KEY";
 
 #[async_trait::async_trait]
 impl AiProvider for AmazonBedrockProvider {
@@ -44,17 +57,23 @@ impl AiProvider for AmazonBedrockProvider {
     }
 
     fn supports_model(&self, model: &str) -> bool {
-        model.contains("claude") || model.contains("titan") || model.contains("llama")
+        // Amazon Bedrock supported models
+        model.contains("claude")
+            || model.contains("titan")
+            || model.contains("llama")
+            || model.contains("anthropic.")
+            || model.contains("meta.")
+            || model.contains("amazon.")
+            || model.contains("ai21.")
+            || model.contains("cohere.")
+            || model.contains("mistral.")
     }
 
     fn get_api_key(&self) -> Result<String> {
-        match env::var(AMAZON_ACCESS_KEY_ID_ENV) {
-            Ok(key) => Ok(key),
-            Err(_) => Err(anyhow::anyhow!(
-                "Amazon access key not found in environment variable: {}",
-                AMAZON_ACCESS_KEY_ID_ENV
-            )),
-        }
+        // Amazon Bedrock requires both access key ID and secret access key
+        let access_key_id = self.get_aws_access_key_id()?;
+        let _secret_access_key = self.get_aws_secret_access_key()?; // Validate it exists
+        Ok(access_key_id) // Return access key ID as the "API key"
     }
 
     fn supports_caching(&self, _model: &str) -> bool {
@@ -62,11 +81,25 @@ impl AiProvider for AmazonBedrockProvider {
     }
 
     fn supports_vision(&self, model: &str) -> bool {
-        model.contains("claude")
+        // Claude models on Bedrock support vision
+        model.contains("claude-3")
+            || model.contains("claude-4")
+            || model.contains("anthropic.claude")
     }
 
-    fn get_max_input_tokens(&self, _model: &str) -> usize {
-        200_000
+    fn get_max_input_tokens(&self, model: &str) -> usize {
+        // Amazon Bedrock model context window limits
+        if model.contains("claude") || model.contains("anthropic.claude") {
+            200_000 // Claude models have 200K context
+        } else if model.contains("llama3-2-90b") || model.contains("meta.llama3-2-90b") {
+            128_000 // Llama 3.2 90B has 128K context
+        } else if model.contains("llama") || model.contains("meta.llama") {
+            32_768 // Other Llama models typically 32K
+        } else if model.contains("titan") || model.contains("amazon.titan") {
+            32_000 // Titan models have 32K context
+        } else {
+            32_768 // Conservative default
+        }
     }
 
     async fn chat_completion(&self, _params: ChatCompletionParams) -> Result<ProviderResponse> {

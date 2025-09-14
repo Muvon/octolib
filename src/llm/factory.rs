@@ -181,7 +181,7 @@ mod tests {
         assert_eq!(openai.name(), "openai");
         assert!(openai.supports_model("gpt-4o"));
         assert!(openai.supports_vision("gpt-4o"));
-        assert!(!openai.supports_caching("gpt-4o"));
+        assert!(openai.supports_caching("gpt-4o")); // OpenAI now supports caching
 
         let anthropic = ProviderFactory::create_provider("anthropic").unwrap();
         assert_eq!(anthropic.name(), "anthropic");

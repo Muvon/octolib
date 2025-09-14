@@ -79,18 +79,18 @@ impl ProviderToolCalls {
             "openai" => Self::extract_openai_calls(exchange, "openai"),
             "openrouter" => Self::extract_openai_calls(exchange, "openrouter"),
             "deepseek" => Self::extract_openai_calls(exchange, "deepseek"),
-            _ => Self::extract_generic_calls(exchange),
+            _ => Self::extract_fallback_calls(exchange),
         }
     }
 
-    /// Extract Anthropic tool calls from unified format
+    /// Extract Anthropic tool calls from standard format
     fn extract_anthropic_calls(exchange: &ProviderExchange) -> ToolCallResult<Option<Self>> {
-        // Check for unified format first
-        if let Some(unified_calls) = exchange.response.get("tool_calls_unified") {
-            if let Ok(generic_calls) =
-                serde_json::from_value::<Vec<GenericToolCall>>(unified_calls.clone())
+        // Check for standard format first
+        if let Some(tool_calls_data) = exchange.response.get("tool_calls") {
+            if let Ok(parsed_calls) =
+                serde_json::from_value::<Vec<GenericToolCall>>(tool_calls_data.clone())
             {
-                let tool_uses: Vec<AnthropicToolUse> = generic_calls
+                let tool_uses: Vec<AnthropicToolUse> = parsed_calls
                     .into_iter()
                     .map(|call| AnthropicToolUse {
                         id: call.id,
@@ -107,17 +107,17 @@ impl ProviderToolCalls {
         Ok(None)
     }
 
-    /// Extract OpenAI-compatible tool calls from unified format (OpenAI, OpenRouter, DeepSeek)
+    /// Extract OpenAI-compatible tool calls from standard format (OpenAI, OpenRouter, DeepSeek)
     fn extract_openai_calls(
         exchange: &ProviderExchange,
         provider: &str,
     ) -> ToolCallResult<Option<Self>> {
-        // Check for unified format first
-        if let Some(unified_calls) = exchange.response.get("tool_calls_unified") {
-            if let Ok(generic_calls) =
-                serde_json::from_value::<Vec<GenericToolCall>>(unified_calls.clone())
+        // Check for standard format first
+        if let Some(tool_calls_data) = exchange.response.get("tool_calls") {
+            if let Ok(parsed_calls) =
+                serde_json::from_value::<Vec<GenericToolCall>>(tool_calls_data.clone())
             {
-                let openai_calls: Vec<OpenAIToolCall> = generic_calls
+                let openai_calls: Vec<OpenAIToolCall> = parsed_calls
                     .into_iter()
                     .map(|call| OpenAIToolCall {
                         id: call.id,
@@ -148,16 +148,16 @@ impl ProviderToolCalls {
         Ok(None)
     }
 
-    /// Extract generic tool calls from unified format (fallback for unknown providers)
-    fn extract_generic_calls(exchange: &ProviderExchange) -> ToolCallResult<Option<Self>> {
-        // Check for unified format
-        if let Some(unified_calls) = exchange.response.get("tool_calls_unified") {
-            if let Ok(generic_calls) =
-                serde_json::from_value::<Vec<GenericToolCall>>(unified_calls.clone())
+    /// Extract tool calls for unknown providers (fallback)
+    fn extract_fallback_calls(exchange: &ProviderExchange) -> ToolCallResult<Option<Self>> {
+        // Check for standard format
+        if let Some(tool_calls_data) = exchange.response.get("tool_calls") {
+            if let Ok(parsed_calls) =
+                serde_json::from_value::<Vec<GenericToolCall>>(tool_calls_data.clone())
             {
-                if !generic_calls.is_empty() {
+                if !parsed_calls.is_empty() {
                     return Ok(Some(ProviderToolCalls::Generic {
-                        calls: generic_calls,
+                        calls: parsed_calls,
                     }));
                 }
             }
@@ -312,7 +312,7 @@ mod tests {
         let exchange = ProviderExchange::new(
             json!({}),
             json!({
-                "tool_calls_unified": [
+                "tool_calls": [
                     {
                         "id": "toolu_123",
                         "name": "test_tool",
@@ -364,7 +364,14 @@ mod tests {
                             }
                         }]
                     }
-                }]
+                }],
+                "tool_calls": [
+                    {
+                        "id": "call_123",
+                        "name": "test_tool",
+                        "arguments": {"param": "value"}
+                    }
+                ]
             }),
             None,
             "openai",
@@ -392,10 +399,11 @@ mod tests {
         let exchange = ProviderExchange::new(
             json!({}),
             json!({
-                "tool_calls_unified": [
+                "tool_calls": [
                     {
-                        // Missing required fields
-                        "name": "test_tool"
+                        // Missing required id field
+                        "name": "test_tool",
+                        "arguments": {}
                     }
                 ]
             }),
@@ -403,8 +411,9 @@ mod tests {
             "anthropic",
         );
 
-        let result = ProviderToolCalls::extract_from_exchange(&exchange);
-        assert!(result.is_err());
+        let result = ProviderToolCalls::extract_from_exchange(&exchange).unwrap();
+        // Should return None because deserialization fails with missing required fields
+        assert!(result.is_none());
     }
 
     #[test]

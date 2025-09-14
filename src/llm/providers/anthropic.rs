@@ -39,43 +39,81 @@ const PRICING: &[(&str, f64, f64)] = &[
     ("claude-3-haiku", 0.25, 1.25),
 ];
 
-/// Calculate cost for Anthropic models with proper cache pricing
-fn calculate_anthropic_cost(
-    model: &str,
-    prompt_tokens: u64,
-    completion_tokens: u64,
-    cached_tokens: u64,
+/// Token usage breakdown for cache-aware pricing
+struct CacheTokenUsage {
+    regular_input_tokens: u64,
     cache_creation_tokens: u64,
+    cache_creation_tokens_1h: u64, // 1h TTL cache creation tokens (2x price)
+    cache_read_tokens: u64,
+    output_tokens: u64,
+}
+
+/// Check if a model supports temperature parameter
+/// All Claude models support temperature except opus-4-1
+fn supports_temperature_and_top_p(model: &str) -> bool {
+    !model.contains("opus-4-1")
+}
+
+/// Simplified cost calculation for Anthropic models with cache support
+/// This is used by the helper function for individual token counts
+fn calculate_cost(
+    model: &str,
+    input_tokens: u64,
+    output_tokens: u64,
+    cache_creation_input_tokens: u64,
+    cache_read_input_tokens: u64,
 ) -> Option<f64> {
+    // Calculate cache creation tokens for 1h (these are charged at 2x)
+    let cache_creation_1h_tokens = if cache_creation_input_tokens > 0 {
+        // Assume all cache creation is for 1h TTL (more expensive)
+        cache_creation_input_tokens
+    } else {
+        0
+    };
+
+    // Calculate regular input tokens (total input minus cache tokens)
+    let regular_input_tokens =
+        input_tokens.saturating_sub(cache_creation_input_tokens + cache_read_input_tokens);
+
+    let usage = CacheTokenUsage {
+        regular_input_tokens,
+        cache_creation_tokens: 0, // Using 1h cache creation instead
+        cache_creation_tokens_1h: cache_creation_1h_tokens,
+        cache_read_tokens: cache_read_input_tokens,
+        output_tokens,
+    };
+
     for (pricing_model, input_price, output_price) in PRICING {
         if model.contains(pricing_model) {
-            // Regular input tokens (excluding cached and cache creation)
-            let regular_input_tokens =
-                prompt_tokens.saturating_sub(cached_tokens + cache_creation_tokens);
-            let regular_input_cost = (regular_input_tokens as f64 / 1_000_000.0) * input_price;
+            // Regular input tokens at normal price
+            let regular_input_cost =
+                (usage.regular_input_tokens as f64 / 1_000_000.0) * input_price;
 
-            // Cache creation tokens at 1.25x price (25% more expensive)
+            // Cache creation tokens at 1.25x price (25% more expensive) for 5m cache
             let cache_creation_cost =
-                (cache_creation_tokens as f64 / 1_000_000.0) * input_price * 1.25;
+                (usage.cache_creation_tokens as f64 / 1_000_000.0) * input_price * 1.25;
+
+            // Cache creation tokens at 2x price (100% more expensive) for 1h cache
+            let cache_creation_cost_1h =
+                (usage.cache_creation_tokens_1h as f64 / 1_000_000.0) * input_price * 2.0;
 
             // Cache read tokens at 0.1x price (90% cheaper)
-            let cache_read_cost = (cached_tokens as f64 / 1_000_000.0) * input_price * 0.1;
+            let cache_read_cost =
+                (usage.cache_read_tokens as f64 / 1_000_000.0) * input_price * 0.1;
 
             // Output tokens at normal price (never cached)
-            let output_cost = (completion_tokens as f64 / 1_000_000.0) * output_price;
+            let output_cost = (usage.output_tokens as f64 / 1_000_000.0) * output_price;
 
-            let total_cost =
-                regular_input_cost + cache_creation_cost + cache_read_cost + output_cost;
+            let total_cost = regular_input_cost
+                + cache_creation_cost
+                + cache_creation_cost_1h
+                + cache_read_cost
+                + output_cost;
+
             return Some(total_cost);
         }
     }
     None
-}
-
-/// Check if a model supports temperature parameter
-/// All Claude models support temperature
-fn supports_temperature_and_top_p(model: &str) -> bool {
-    !model.contains("opus-4-1")
 }
 
 /// Anthropic provider
@@ -128,10 +166,8 @@ impl AiProvider for AnthropicProvider {
         // Claude 3+ models support vision
         model.contains("claude-3")
             || model.contains("claude-4")
+            || model.contains("claude-3.5")
             || model.contains("claude-3.7")
-            || model.contains("sonnet")
-            || model.contains("opus")
-            || model.contains("haiku")
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {
@@ -571,7 +607,7 @@ async fn execute_anthropic_request(
         .cache_creation_input_tokens
         .unwrap_or(0);
 
-    let cost = calculate_anthropic_cost(
+    let cost = calculate_cost(
         request_body["model"].as_str().unwrap_or(""),
         anthropic_response.usage.input_tokens,
         anthropic_response.usage.output_tokens,
@@ -603,8 +639,7 @@ async fn execute_anthropic_request(
             })
             .collect();
 
-        response_json["tool_calls_unified"] =
-            serde_json::to_value(&generic_calls).unwrap_or_default();
+        response_json["tool_calls"] = serde_json::to_value(&generic_calls).unwrap_or_default();
     }
 
     let exchange = if rate_limit_headers.is_empty() {

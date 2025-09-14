@@ -14,9 +14,9 @@
 
 //! Anthropic provider implementation
 
-use crate::retry;
-use crate::traits::AiProvider;
-use crate::types::{
+use crate::llm::retry;
+use crate::llm::traits::AiProvider;
+use crate::llm::types::{
     ChatCompletionParams, Message, ProviderExchange, ProviderResponse, TokenUsage, ToolCall,
 };
 use anyhow::Result;
@@ -194,7 +194,7 @@ impl AiProvider for AnthropicProvider {
 
         // Add system message with cache control if needed
         if system_cached {
-            let cache_ttl = crate::config::CacheTTL::short();
+            let cache_ttl = crate::llm::config::CacheTTL::short();
             request_body["system"] = serde_json::json!([{
                 "type": "text",
                 "text": system_message,
@@ -378,7 +378,7 @@ fn convert_messages(messages: &[Message]) -> Vec<AnthropicMessage> {
                     if let Some(ref tool_calls_data) = message.tool_calls {
                         // Parse as unified GenericToolCall format
                         if let Ok(generic_calls) = serde_json::from_value::<
-                            Vec<crate::tool_calls::GenericToolCall>,
+                            Vec<crate::llm::tool_calls::GenericToolCall>,
                         >(tool_calls_data.clone())
                         {
                             // Convert GenericToolCall to Anthropic format
@@ -410,7 +410,7 @@ fn convert_messages(messages: &[Message]) -> Vec<AnthropicMessage> {
                     // Add images if present
                     if let Some(images) = &message.images {
                         for image in images {
-                            if let crate::types::ImageData::Base64(data) = &image.data {
+                            if let crate::llm::types::ImageData::Base64(data) = &image.data {
                                 content.push(AnthropicContent::Image {
                                     source: ImageSource {
                                         source_type: "base64".to_string(),
@@ -594,9 +594,9 @@ async fn execute_anthropic_request(
 
     // Store tool_calls in unified GenericToolCall format for conversation history
     if !tool_calls.is_empty() {
-        let generic_calls: Vec<crate::tool_calls::GenericToolCall> = tool_calls
+        let generic_calls: Vec<crate::llm::tool_calls::GenericToolCall> = tool_calls
             .iter()
-            .map(|tc| crate::tool_calls::GenericToolCall {
+            .map(|tc| crate::llm::tool_calls::GenericToolCall {
                 id: tc.id.clone(),
                 name: tc.name.clone(),
                 arguments: tc.arguments.clone(),

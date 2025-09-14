@@ -15,7 +15,7 @@
 //! Type-safe tool call handling system for octolib
 
 use crate::errors::{ToolCallError, ToolCallResult};
-use crate::types::{ProviderExchange, ToolCall};
+use crate::llm::types::{ProviderExchange, ToolCall};
 use serde::{Deserialize, Serialize};
 
 /// Anthropic-specific tool use block
@@ -304,7 +304,7 @@ impl ProviderToolCalls {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::TokenUsage;
+    use crate::llm::types::TokenUsage;
     use serde_json::json;
 
     #[test]

@@ -174,7 +174,10 @@ impl MessageBuilder {
     }
 
     /// Set tool calls (for assistant messages) using unified GenericToolCall format
-    pub fn with_tool_calls(mut self, tool_calls: Vec<crate::tool_calls::GenericToolCall>) -> Self {
+    pub fn with_tool_calls(
+        mut self,
+        tool_calls: Vec<crate::llm::tool_calls::GenericToolCall>,
+    ) -> Self {
         // Convert to JSON for storage - providers will convert back to their specific formats
         let tool_calls_json = serde_json::to_value(&tool_calls).unwrap_or_default();
         self.tool_calls = Some(tool_calls_json);

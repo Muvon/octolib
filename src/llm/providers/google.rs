@@ -12,66 +12,72 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Cloudflare Workers AI provider implementation
+//! Google Vertex AI provider implementation
 
-use crate::traits::AiProvider;
-use crate::types::{ChatCompletionParams, ProviderResponse};
+use crate::llm::traits::AiProvider;
+use crate::llm::types::{ChatCompletionParams, ProviderResponse};
 use anyhow::Result;
 use std::env;
 
-/// Cloudflare Workers AI provider
+/// Google Vertex AI provider
 #[derive(Debug, Clone)]
-pub struct CloudflareWorkersAiProvider;
+pub struct GoogleVertexProvider;
 
-impl Default for CloudflareWorkersAiProvider {
+impl Default for GoogleVertexProvider {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl CloudflareWorkersAiProvider {
+impl GoogleVertexProvider {
     pub fn new() -> Self {
         Self
     }
 }
 
-const CLOUDFLARE_API_TOKEN_ENV: &str = "CLOUDFLARE_API_TOKEN";
+const GOOGLE_API_KEY_ENV: &str = "GOOGLE_API_KEY";
 
 #[async_trait::async_trait]
-impl AiProvider for CloudflareWorkersAiProvider {
+impl AiProvider for GoogleVertexProvider {
     fn name(&self) -> &str {
-        "cloudflare"
+        "google"
     }
 
     fn supports_model(&self, model: &str) -> bool {
-        model.contains("llama") || model.contains("mistral") || model.contains("qwen")
+        model.contains("gemini") || model.contains("palm") || model.starts_with("text-")
     }
 
     fn get_api_key(&self) -> Result<String> {
-        match env::var(CLOUDFLARE_API_TOKEN_ENV) {
+        match env::var(GOOGLE_API_KEY_ENV) {
             Ok(key) => Ok(key),
             Err(_) => Err(anyhow::anyhow!(
-                "Cloudflare API token not found in environment variable: {}",
-                CLOUDFLARE_API_TOKEN_ENV
+                "Google API key not found in environment variable: {}",
+                GOOGLE_API_KEY_ENV
             )),
         }
     }
 
-    fn supports_caching(&self, _model: &str) -> bool {
-        false
+    fn supports_caching(&self, model: &str) -> bool {
+        model.contains("gemini-1.5") || model.contains("gemini-2")
     }
 
-    fn supports_vision(&self, _model: &str) -> bool {
-        false
+    fn supports_vision(&self, model: &str) -> bool {
+        model.contains("gemini")
     }
 
-    fn get_max_input_tokens(&self, _model: &str) -> usize {
-        32_768
+    fn get_max_input_tokens(&self, model: &str) -> usize {
+        if model.contains("gemini-2") {
+            2_000_000
+        } else if model.contains("gemini-1.5") {
+            1_000_000
+        } else {
+            32_768
+        }
     }
 
     async fn chat_completion(&self, _params: ChatCompletionParams) -> Result<ProviderResponse> {
         Err(anyhow::anyhow!(
-            "Cloudflare Workers AI provider not fully implemented in octolib"
+            "Google Vertex AI provider not fully implemented in octolib"
         ))
     }
 }

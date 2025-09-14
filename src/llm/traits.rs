@@ -14,7 +14,7 @@
 
 //! AI Provider trait definition
 
-use crate::types::{ChatCompletionParams, ProviderResponse};
+use crate::llm::types::{ChatCompletionParams, ProviderResponse};
 use anyhow::Result;
 
 /// Trait that all AI providers must implement

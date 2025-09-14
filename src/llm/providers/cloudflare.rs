@@ -12,47 +12,47 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Amazon Bedrock provider implementation
+//! Cloudflare Workers AI provider implementation
 
-use crate::traits::AiProvider;
-use crate::types::{ChatCompletionParams, ProviderResponse};
+use crate::llm::traits::AiProvider;
+use crate::llm::types::{ChatCompletionParams, ProviderResponse};
 use anyhow::Result;
 use std::env;
 
-/// Amazon Bedrock provider
+/// Cloudflare Workers AI provider
 #[derive(Debug, Clone)]
-pub struct AmazonBedrockProvider;
+pub struct CloudflareWorkersAiProvider;
 
-impl Default for AmazonBedrockProvider {
+impl Default for CloudflareWorkersAiProvider {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl AmazonBedrockProvider {
+impl CloudflareWorkersAiProvider {
     pub fn new() -> Self {
         Self
     }
 }
 
-const AMAZON_ACCESS_KEY_ID_ENV: &str = "AMAZON_ACCESS_KEY_ID";
+const CLOUDFLARE_API_TOKEN_ENV: &str = "CLOUDFLARE_API_TOKEN";
 
 #[async_trait::async_trait]
-impl AiProvider for AmazonBedrockProvider {
+impl AiProvider for CloudflareWorkersAiProvider {
     fn name(&self) -> &str {
-        "amazon"
+        "cloudflare"
     }
 
     fn supports_model(&self, model: &str) -> bool {
-        model.contains("claude") || model.contains("titan") || model.contains("llama")
+        model.contains("llama") || model.contains("mistral") || model.contains("qwen")
     }
 
     fn get_api_key(&self) -> Result<String> {
-        match env::var(AMAZON_ACCESS_KEY_ID_ENV) {
+        match env::var(CLOUDFLARE_API_TOKEN_ENV) {
             Ok(key) => Ok(key),
             Err(_) => Err(anyhow::anyhow!(
-                "Amazon access key not found in environment variable: {}",
-                AMAZON_ACCESS_KEY_ID_ENV
+                "Cloudflare API token not found in environment variable: {}",
+                CLOUDFLARE_API_TOKEN_ENV
             )),
         }
     }
@@ -61,17 +61,17 @@ impl AiProvider for AmazonBedrockProvider {
         false
     }
 
-    fn supports_vision(&self, model: &str) -> bool {
-        model.contains("claude")
+    fn supports_vision(&self, _model: &str) -> bool {
+        false
     }
 
     fn get_max_input_tokens(&self, _model: &str) -> usize {
-        200_000
+        32_768
     }
 
     async fn chat_completion(&self, _params: ChatCompletionParams) -> Result<ProviderResponse> {
         Err(anyhow::anyhow!(
-            "Amazon Bedrock provider not fully implemented in octolib"
+            "Cloudflare Workers AI provider not fully implemented in octolib"
         ))
     }
 }

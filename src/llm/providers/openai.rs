@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! OpenRouter provider implementation
+//! OpenAI provider implementation
 
-use crate::retry;
-use crate::traits::AiProvider;
-use crate::types::{
+use crate::llm::retry;
+use crate::llm::traits::AiProvider;
+use crate::llm::types::{
     ChatCompletionParams, Message, ProviderExchange, ProviderResponse, TokenUsage, ToolCall,
 };
 use anyhow::Result;
@@ -24,115 +24,107 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::env;
 
-/// OpenRouter provider (uses OpenAI-compatible API)
-#[derive(Debug, Clone)]
-pub struct OpenRouterProvider;
+/// OpenAI pricing constants (per 1M tokens in USD)
+const PRICING: &[(&str, f64, f64)] = &[
+    // Model, Input price per 1M tokens, Output price per 1M tokens
+    ("gpt-4o", 2.50, 10.00),
+    ("gpt-4o-mini", 0.15, 0.60),
+    ("gpt-4-turbo", 10.00, 30.00),
+    ("gpt-4", 30.00, 60.00),
+    ("gpt-3.5-turbo", 0.50, 1.50),
+];
 
-impl Default for OpenRouterProvider {
+/// Calculate cost for OpenAI models
+fn calculate_openai_cost(model: &str, prompt_tokens: u64, completion_tokens: u64) -> Option<f64> {
+    for (pricing_model, input_price, output_price) in PRICING {
+        if model.contains(pricing_model) {
+            let input_cost = (prompt_tokens as f64 / 1_000_000.0) * input_price;
+            let output_cost = (completion_tokens as f64 / 1_000_000.0) * output_price;
+            return Some(input_cost + output_cost);
+        }
+    }
+    None
+}
+
+/// OpenAI provider
+#[derive(Debug, Clone)]
+pub struct OpenAiProvider;
+
+impl Default for OpenAiProvider {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl OpenRouterProvider {
+impl OpenAiProvider {
     pub fn new() -> Self {
         Self
     }
 }
 
-const OPENROUTER_API_KEY_ENV: &str = "OPENROUTER_API_KEY";
-const OPENROUTER_API_URL: &str = "https://openrouter.ai/api/v1/chat/completions";
+const OPENAI_API_KEY_ENV: &str = "OPENAI_API_KEY";
+const OPENAI_API_URL: &str = "https://api.openai.com/v1/chat/completions";
 
 #[async_trait::async_trait]
-impl AiProvider for OpenRouterProvider {
+impl AiProvider for OpenAiProvider {
     fn name(&self) -> &str {
-        "openrouter"
+        "openai"
     }
 
-    fn supports_model(&self, _model: &str) -> bool {
-        // OpenRouter supports many models, so we accept any model string
-        true
+    fn supports_model(&self, model: &str) -> bool {
+        model.starts_with("gpt-") || model.contains("gpt")
     }
 
     fn get_api_key(&self) -> Result<String> {
-        match env::var(OPENROUTER_API_KEY_ENV) {
+        match env::var(OPENAI_API_KEY_ENV) {
             Ok(key) => Ok(key),
             Err(_) => Err(anyhow::anyhow!(
-                "OpenRouter API key not found in environment variable: {}",
-                OPENROUTER_API_KEY_ENV
+                "OpenAI API key not found in environment variable: {}",
+                OPENAI_API_KEY_ENV
             )),
         }
     }
 
-    fn supports_caching(&self, model: &str) -> bool {
-        // OpenRouter supports caching for Anthropic models
-        model.contains("anthropic") || model.contains("claude")
+    fn supports_caching(&self, _model: &str) -> bool {
+        false // OpenAI doesn't support caching yet
     }
 
     fn supports_vision(&self, model: &str) -> bool {
-        // Vision support depends on the underlying model
-        model.contains("gpt-4o")
-            || model.contains("gpt-4-turbo")
-            || model.contains("claude-3")
-            || model.contains("claude-4")
-            || model.contains("gemini")
+        model.contains("gpt-4o") || model.contains("gpt-4-turbo") || model.contains("gpt-4-vision")
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {
-        // Context windows vary by model - use conservative defaults
-        if model.contains("claude") {
-            200_000
-        } else if model.contains("gpt-4") {
+        if model.contains("gpt-4o") || model.contains("gpt-4-turbo") {
             128_000
-        } else if model.contains("gemini") {
-            1_000_000
+        } else if model.contains("gpt-4") {
+            8_192
+        } else if model.contains("gpt-3.5-turbo") {
+            16_385
         } else {
-            32_768 // Conservative default
+            4_096
         }
     }
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
         let api_key = self.get_api_key()?;
 
-        // Convert messages to OpenAI-compatible format (OpenRouter uses OpenAI API)
-        let messages = convert_messages(&params.messages);
+        // Convert messages to OpenAI format
+        let openai_messages = convert_messages(&params.messages);
 
         // Create the request body
         let mut request_body = serde_json::json!({
             "model": params.model,
-            "messages": messages,
+            "messages": openai_messages,
             "temperature": params.temperature,
             "top_p": params.top_p,
-            "top_k": params.top_k,
-            "repetition_penalty": 1.1,
-            "usage": {
-                "include": true  // Always enable usage tracking for all requests
-            },
-            "provider": {
-                "order": [
-                    "Anthropic",
-                    "OpenAI",
-                    "Amazon Bedrock",
-                    "Azure",
-                    "Cloudflare",
-                    "Google Vertex",
-                    "xAI",
-                ],
-                "allow_fallbacks": true,
-            },
         });
-
-        // Add max_tokens if specified (0 means don't include it in request)
-        if params.max_tokens > 0 {
-            request_body["max_tokens"] = serde_json::json!(params.max_tokens);
-        }
 
         // Add max_tokens if specified
         if params.max_tokens > 0 {
             request_body["max_tokens"] = serde_json::json!(params.max_tokens);
         }
 
-        // Add tools if available (OpenRouter supports OpenAI-compatible tools)
+        // Add tools if available
         if let Some(tools) = &params.tools {
             if !tools.is_empty() {
                 // Sort tools by name for consistent ordering
@@ -158,8 +150,8 @@ impl AiProvider for OpenRouterProvider {
             }
         }
 
-        // Execute the request
-        let response = execute_openrouter_request(
+        // Execute the request with retry logic
+        let response = execute_openai_request(
             api_key,
             request_body,
             params.max_retries,
@@ -172,9 +164,9 @@ impl AiProvider for OpenRouterProvider {
     }
 }
 
-// Reuse OpenAI structures since OpenRouter is compatible
+// OpenAI API structures
 #[derive(Serialize, Deserialize, Debug)]
-struct OpenRouterMessage {
+struct OpenAiMessage {
     role: String,
     content: serde_json::Value,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -186,52 +178,52 @@ struct OpenRouterMessage {
 }
 
 #[derive(Deserialize, Debug)]
-struct OpenRouterResponse {
-    choices: Vec<OpenRouterChoice>,
-    usage: OpenRouterUsage,
+struct OpenAiResponse {
+    choices: Vec<OpenAiChoice>,
+    usage: OpenAiUsage,
 }
 
 #[derive(Deserialize, Debug)]
-struct OpenRouterChoice {
-    message: OpenRouterResponseMessage,
+struct OpenAiChoice {
+    message: OpenAiResponseMessage,
     finish_reason: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
-struct OpenRouterResponseMessage {
+struct OpenAiResponseMessage {
     content: Option<String>,
-    tool_calls: Option<Vec<OpenRouterToolCall>>,
+    tool_calls: Option<Vec<OpenAiToolCall>>,
 }
 
 #[derive(Deserialize, Debug)]
-struct OpenRouterToolCall {
+struct OpenAiToolCall {
     id: String,
     #[serde(rename = "type")]
     tool_type: String,
-    function: OpenRouterFunction,
+    function: OpenAiFunction,
 }
 
 #[derive(Deserialize, Debug)]
-struct OpenRouterFunction {
+struct OpenAiFunction {
     name: String,
     arguments: String,
 }
 
 #[derive(Deserialize, Debug)]
-struct OpenRouterUsage {
+struct OpenAiUsage {
     prompt_tokens: u64,
     completion_tokens: u64,
     total_tokens: u64,
 }
 
-// Convert messages to OpenRouter format (same as OpenAI)
-fn convert_messages(messages: &[Message]) -> Vec<OpenRouterMessage> {
+// Convert our session messages to OpenAI format
+fn convert_messages(messages: &[Message]) -> Vec<OpenAiMessage> {
     let mut result = Vec::new();
 
     for message in messages {
         match message.role.as_str() {
             "tool" => {
-                // Tool messages in OpenRouter format - MUST include tool_call_id and name
+                // Tool messages MUST include tool_call_id and name
                 let tool_call_id = message.tool_call_id.clone();
                 let name = message.name.clone();
 
@@ -248,7 +240,7 @@ fn convert_messages(messages: &[Message]) -> Vec<OpenRouterMessage> {
                     serde_json::json!(message.content)
                 };
 
-                result.push(OpenRouterMessage {
+                result.push(OpenAiMessage {
                     role: message.role.clone(),
                     content,
                     tool_call_id,
@@ -284,13 +276,13 @@ fn convert_messages(messages: &[Message]) -> Vec<OpenRouterMessage> {
                     serde_json::json!(content_parts)
                 };
 
-                // Convert unified GenericToolCall format to OpenRouter format
+                // Convert unified GenericToolCall format to OpenAI format
                 let tool_calls = if let Ok(generic_calls) =
-                    serde_json::from_value::<Vec<crate::tool_calls::GenericToolCall>>(
+                    serde_json::from_value::<Vec<crate::llm::tool_calls::GenericToolCall>>(
                         message.tool_calls.clone().unwrap(),
                     ) {
-                    // Convert GenericToolCall to OpenRouter format
-                    let openrouter_calls: Vec<serde_json::Value> = generic_calls
+                    // Convert GenericToolCall to OpenAI format
+                    let openai_calls: Vec<serde_json::Value> = generic_calls
                         .into_iter()
                         .map(|call| {
                             serde_json::json!({
@@ -303,12 +295,12 @@ fn convert_messages(messages: &[Message]) -> Vec<OpenRouterMessage> {
                             })
                         })
                         .collect();
-                    Some(serde_json::Value::Array(openrouter_calls))
+                    Some(serde_json::Value::Array(openai_calls))
                 } else {
                     panic!("Invalid tool_calls format - must be Vec<GenericToolCall>");
                 };
 
-                result.push(OpenRouterMessage {
+                result.push(OpenAiMessage {
                     role: message.role.clone(),
                     content,
                     tool_call_id: None,
@@ -317,14 +309,14 @@ fn convert_messages(messages: &[Message]) -> Vec<OpenRouterMessage> {
                 });
             }
             _ => {
-                // Handle other message types with cache support
+                // Handle regular messages (user, system)
                 let mut content_parts = vec![{
                     let mut text_content = serde_json::json!({
                         "type": "text",
                         "text": message.content
                     });
 
-                    // Add cache_control if needed
+                    // Add cache_control if needed (OpenAI format - currently not supported but prepared)
                     if message.cached {
                         text_content["cache_control"] = serde_json::json!({
                             "type": "ephemeral"
@@ -337,7 +329,7 @@ fn convert_messages(messages: &[Message]) -> Vec<OpenRouterMessage> {
                 // Add images if present
                 if let Some(images) = &message.images {
                     for image in images {
-                        if let crate::types::ImageData::Base64(data) = &image.data {
+                        if let crate::llm::types::ImageData::Base64(data) = &image.data {
                             content_parts.push(serde_json::json!({
                                 "type": "image_url",
                                 "image_url": {
@@ -354,7 +346,7 @@ fn convert_messages(messages: &[Message]) -> Vec<OpenRouterMessage> {
                     serde_json::json!(content_parts)
                 };
 
-                result.push(OpenRouterMessage {
+                result.push(OpenAiMessage {
                     role: message.role.clone(),
                     content,
                     tool_call_id: None,
@@ -368,8 +360,8 @@ fn convert_messages(messages: &[Message]) -> Vec<OpenRouterMessage> {
     result
 }
 
-// Execute OpenRouter HTTP request
-async fn execute_openrouter_request(
+// Execute OpenAI HTTP request
+async fn execute_openai_request(
     api_key: String,
     request_body: serde_json::Value,
     max_retries: u32,
@@ -384,18 +376,11 @@ async fn execute_openrouter_request(
             let client = client.clone();
             let api_key = api_key.clone();
             let request_body = request_body.clone();
-            let openrouter_app_title =
-                std::env::var("OPENROUTER_APP_TITLE").unwrap_or_else(|_| "octolib".to_string());
-            let openrouter_http_referer = std::env::var("OPENROUTER_HTTP_REFERER")
-                .unwrap_or_else(|_| "https://octolib.muvon.io".to_string());
-
             Box::pin(async move {
                 client
-                    .post(OPENROUTER_API_URL)
+                    .post(OPENAI_API_URL)
                     .header("Content-Type", "application/json")
                     .header("Authorization", format!("Bearer {}", api_key))
-                    .header("HTTP-Referer", openrouter_http_referer)
-                    .header("X-Title", openrouter_app_title)
                     .json(&request_body)
                     .send()
                     .await
@@ -409,24 +394,63 @@ async fn execute_openrouter_request(
 
     let request_time_ms = start_time.elapsed().as_millis() as u64;
 
+    // Extract rate limit headers before consuming response
+    let mut rate_limit_headers = std::collections::HashMap::new();
+    let headers = response.headers();
+
+    // OpenAI rate limit headers
+    if let Some(requests_limit) = headers
+        .get("x-ratelimit-limit-requests")
+        .and_then(|h| h.to_str().ok())
+    {
+        rate_limit_headers.insert("requests_limit".to_string(), requests_limit.to_string());
+    }
+    if let Some(requests_remaining) = headers
+        .get("x-ratelimit-remaining-requests")
+        .and_then(|h| h.to_str().ok())
+    {
+        rate_limit_headers.insert(
+            "requests_remaining".to_string(),
+            requests_remaining.to_string(),
+        );
+    }
+    if let Some(tokens_limit) = headers
+        .get("x-ratelimit-limit-tokens")
+        .and_then(|h| h.to_str().ok())
+    {
+        rate_limit_headers.insert("tokens_limit".to_string(), tokens_limit.to_string());
+    }
+    if let Some(tokens_remaining) = headers
+        .get("x-ratelimit-remaining-tokens")
+        .and_then(|h| h.to_str().ok())
+    {
+        rate_limit_headers.insert("tokens_remaining".to_string(), tokens_remaining.to_string());
+    }
+    if let Some(request_reset) = headers
+        .get("x-ratelimit-reset-requests")
+        .and_then(|h| h.to_str().ok())
+    {
+        rate_limit_headers.insert("request_reset".to_string(), request_reset.to_string());
+    }
+
     if !response.status().is_success() {
         let status = response.status();
         let error_text = response.text().await.unwrap_or_default();
         return Err(anyhow::anyhow!(
-            "OpenRouter API error {}: {}",
+            "OpenAI API error {}: {}",
             status,
             error_text
         ));
     }
 
     let response_text = response.text().await?;
-    let openrouter_response: OpenRouterResponse = serde_json::from_str(&response_text)?;
+    let openai_response: OpenAiResponse = serde_json::from_str(&response_text)?;
 
-    let choice = openrouter_response
+    let choice = openai_response
         .choices
         .into_iter()
         .next()
-        .ok_or_else(|| anyhow::anyhow!("No choices in OpenRouter response"))?;
+        .ok_or_else(|| anyhow::anyhow!("No choices in OpenAI response"))?;
 
     let content = choice.message.content.unwrap_or_default();
 
@@ -435,10 +459,10 @@ async fn execute_openrouter_request(
         calls
             .into_iter()
             .filter_map(|call| {
-                // Validate tool type - OpenRouter should only have "function" type
+                // Validate tool type - OpenAI should only have "function" type
                 if call.tool_type != "function" {
                     eprintln!(
-                        "Warning: Unexpected tool type '{}' from OpenRouter API",
+                        "Warning: Unexpected tool type '{}' from OpenAI API",
                         call.tool_type
                     );
                     return None;
@@ -456,12 +480,19 @@ async fn execute_openrouter_request(
             .collect()
     });
 
+    // Calculate cost
+    let cost = calculate_openai_cost(
+        request_body["model"].as_str().unwrap_or(""),
+        openai_response.usage.prompt_tokens,
+        openai_response.usage.completion_tokens,
+    );
+
     let usage = TokenUsage {
-        prompt_tokens: openrouter_response.usage.prompt_tokens,
-        output_tokens: openrouter_response.usage.completion_tokens,
-        total_tokens: openrouter_response.usage.total_tokens,
-        cached_tokens: 0, // OpenRouter doesn't provide cache info in usage
-        cost: None,       // OpenRouter doesn't provide cost info directly
+        prompt_tokens: openai_response.usage.prompt_tokens,
+        output_tokens: openai_response.usage.completion_tokens,
+        total_tokens: openai_response.usage.total_tokens,
+        cached_tokens: 0, // OpenAI doesn't support caching
+        cost,
         request_time_ms: Some(request_time_ms),
     };
 
@@ -470,9 +501,9 @@ async fn execute_openrouter_request(
 
     // Store tool_calls in unified GenericToolCall format for conversation history
     if let Some(ref tc) = tool_calls {
-        let generic_calls: Vec<crate::tool_calls::GenericToolCall> = tc
+        let generic_calls: Vec<crate::llm::tool_calls::GenericToolCall> = tc
             .iter()
-            .map(|call| crate::tool_calls::GenericToolCall {
+            .map(|call| crate::llm::tool_calls::GenericToolCall {
                 id: call.id.clone(),
                 name: call.name.clone(),
                 arguments: call.arguments.clone(),
@@ -483,7 +514,17 @@ async fn execute_openrouter_request(
             serde_json::to_value(&generic_calls).unwrap_or_default();
     }
 
-    let exchange = ProviderExchange::new(request_body, response_json, Some(usage), "openrouter");
+    let exchange = if rate_limit_headers.is_empty() {
+        ProviderExchange::new(request_body, response_json, Some(usage), "openai")
+    } else {
+        ProviderExchange::with_rate_limit_headers(
+            request_body,
+            response_json,
+            Some(usage),
+            "openai",
+            rate_limit_headers,
+        )
+    };
 
     Ok(ProviderResponse {
         content,

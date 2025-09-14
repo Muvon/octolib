@@ -14,11 +14,11 @@
 
 //! Provider factory for creating AI provider instances
 
-use crate::providers::{
+use crate::llm::providers::{
     AmazonBedrockProvider, AnthropicProvider, CloudflareWorkersAiProvider, DeepSeekProvider,
     GoogleVertexProvider, OpenAiProvider, OpenRouterProvider,
 };
-use crate::traits::AiProvider;
+use crate::llm::traits::AiProvider;
 use anyhow::Result;
 
 /// Provider factory to create the appropriate provider based on model string

@@ -14,10 +14,10 @@
 
 //! Provider strategy pattern for handling provider-specific logic
 
-use crate::config::CacheConfig;
 use crate::errors::{ProviderError, ProviderResult};
-use crate::tool_calls::ProviderToolCalls;
-use crate::types::{Message, ProviderExchange, ToolCall};
+use crate::llm::config::CacheConfig;
+use crate::llm::tool_calls::ProviderToolCalls;
+use crate::llm::types::{Message, ProviderExchange, ToolCall};
 use std::collections::HashMap;
 
 /// Strategy trait for provider-specific operations

@@ -20,8 +20,8 @@
 //! - Cache Miss (Input): $0.56 per 1M tokens
 //! - Output: $1.68 per 1M tokens
 
-use crate::traits::AiProvider;
-use crate::types::{ChatCompletionParams, ProviderExchange, ProviderResponse, TokenUsage};
+use crate::llm::traits::AiProvider;
+use crate::llm::types::{ChatCompletionParams, ProviderExchange, ProviderResponse, TokenUsage};
 use anyhow::Result;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};

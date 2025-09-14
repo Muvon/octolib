@@ -30,7 +30,7 @@
 //! ## Usage
 //!
 //! ```rust,no_run
-//! use octolib::{ProviderFactory, ChatCompletionParams, Message};
+//! use octolib::llm::{ProviderFactory, ChatCompletionParams, Message};
 //!
 //! // This example shows basic usage but requires API keys to run
 //! async fn example() -> anyhow::Result<()> {
@@ -53,34 +53,19 @@
 //! }
 //! ```
 
-pub mod config;
 pub mod errors;
-pub mod factory;
-pub mod providers;
-pub mod retry;
-pub mod tool_calls;
-pub mod traits;
-pub mod types;
+pub mod llm;
 
-pub mod strategies;
-
-// Re-export main types and traits for easy access
-pub use config::{CacheConfig, CacheTTL, CacheType};
+// Re-export main types and traits for easy access (backward compatibility)
 pub use errors::{
     ConfigError, ConfigResult, MessageError, MessageResult, ProviderError, ProviderResult,
     ToolCallError, ToolCallResult,
 };
-pub use factory::ProviderFactory;
-pub use strategies::{ModelLimits, ProviderStrategy, StrategyFactory, ToolResult};
-pub use tool_calls::{GenericToolCall, ProviderToolCalls};
-pub use traits::AiProvider;
-pub use types::{
-    ChatCompletionParams, FunctionDefinition, ImageAttachment, ImageData, Message, MessageBuilder,
-    ProviderExchange, ProviderResponse, SourceType, TokenUsage, ToolCall,
-};
-
-// Re-export all provider implementations
-pub use providers::{
-    AmazonBedrockProvider, AnthropicProvider, CloudflareWorkersAiProvider, DeepSeekProvider,
-    GoogleVertexProvider, OpenAiProvider, OpenRouterProvider,
+pub use llm::{
+    AiProvider, AmazonBedrockProvider, AnthropicProvider, CacheConfig, CacheTTL, CacheType,
+    ChatCompletionParams, CloudflareWorkersAiProvider, DeepSeekProvider, FunctionDefinition,
+    GenericToolCall, GoogleVertexProvider, ImageAttachment, ImageData, Message, MessageBuilder,
+    ModelLimits, OpenAiProvider, OpenRouterProvider, ProviderExchange, ProviderFactory,
+    ProviderResponse, ProviderStrategy, ProviderToolCalls, SourceType, StrategyFactory, TokenUsage,
+    ToolCall, ToolResult,
 };

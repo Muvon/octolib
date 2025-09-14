@@ -54,35 +54,13 @@ fn supports_temperature_and_top_p(model: &str) -> bool {
     !model.contains("opus-4-1")
 }
 
-/// Simplified cost calculation for Anthropic models with cache support
-/// This is used by the helper function for individual token counts
-fn calculate_cost(
-    model: &str,
-    input_tokens: u64,
-    output_tokens: u64,
-    cache_creation_input_tokens: u64,
-    cache_read_input_tokens: u64,
-) -> Option<f64> {
-    // Calculate cache creation tokens for 1h (these are charged at 2x)
-    let cache_creation_1h_tokens = if cache_creation_input_tokens > 0 {
-        // Assume all cache creation is for 1h TTL (more expensive)
-        cache_creation_input_tokens
-    } else {
-        0
-    };
-
-    // Calculate regular input tokens (total input minus cache tokens)
-    let regular_input_tokens =
-        input_tokens.saturating_sub(cache_creation_input_tokens + cache_read_input_tokens);
-
-    let usage = CacheTokenUsage {
-        regular_input_tokens,
-        cache_creation_tokens: 0, // Using 1h cache creation instead
-        cache_creation_tokens_1h: cache_creation_1h_tokens,
-        cache_read_tokens: cache_read_input_tokens,
-        output_tokens,
-    };
-
+/// Calculate cost for Anthropic models with cache-aware pricing
+/// - cache_creation_tokens: charged at 1.25x normal price (5m cache)
+/// - cache_creation_tokens_1h: charged at 2x normal price (1h cache)
+/// - cache_read_tokens: charged at 0.1x normal price
+/// - regular_input_tokens: charged at normal price
+/// - output_tokens: charged at normal price
+fn calculate_cost_with_cache(model: &str, usage: CacheTokenUsage) -> Option<f64> {
     for (pricing_model, input_price, output_price) in PRICING {
         if model.contains(pricing_model) {
             // Regular input tokens at normal price
@@ -114,6 +92,38 @@ fn calculate_cost(
         }
     }
     None
+}
+
+/// Simplified cost calculation for Anthropic models with cache support
+/// This is used by the helper function for individual token counts
+fn calculate_anthropic_cost(
+    model: &str,
+    input_tokens: u32,
+    output_tokens: u32,
+    cache_creation_input_tokens: u32,
+    cache_read_input_tokens: u32,
+) -> Option<f64> {
+    // Calculate cache creation tokens for 1h (these are charged at 2x)
+    let cache_creation_1h_tokens = if cache_creation_input_tokens > 0 {
+        // Assume all cache creation is for 1h TTL (more expensive)
+        cache_creation_input_tokens
+    } else {
+        0
+    };
+
+    // Calculate regular input tokens (total input minus cache tokens)
+    let regular_input_tokens =
+        input_tokens.saturating_sub(cache_creation_input_tokens + cache_read_input_tokens);
+
+    let usage = CacheTokenUsage {
+        regular_input_tokens: regular_input_tokens as u64,
+        cache_creation_tokens: 0, // Using 1h cache creation instead
+        cache_creation_tokens_1h: cache_creation_1h_tokens as u64,
+        cache_read_tokens: cache_read_input_tokens as u64,
+        output_tokens: output_tokens as u64,
+    };
+
+    calculate_cost_with_cache(model, usage)
 }
 
 /// Anthropic provider
@@ -607,12 +617,12 @@ async fn execute_anthropic_request(
         .cache_creation_input_tokens
         .unwrap_or(0);
 
-    let cost = calculate_cost(
+    let cost = calculate_anthropic_cost(
         request_body["model"].as_str().unwrap_or(""),
-        anthropic_response.usage.input_tokens,
-        anthropic_response.usage.output_tokens,
-        cached_tokens,
-        cache_creation_tokens,
+        anthropic_response.usage.input_tokens as u32,
+        anthropic_response.usage.output_tokens as u32,
+        cache_creation_tokens as u32,
+        cached_tokens as u32,
     );
 
     let usage = TokenUsage {

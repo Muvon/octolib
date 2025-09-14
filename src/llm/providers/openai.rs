@@ -385,6 +385,14 @@ struct OpenAiUsage {
     prompt_tokens: u64,
     completion_tokens: u64,
     total_tokens: u64,
+    #[serde(default)]
+    input_tokens_details: Option<OpenAiInputTokensDetails>,
+}
+
+#[derive(Deserialize, Debug)]
+struct OpenAiInputTokensDetails {
+    #[serde(default)]
+    cached_tokens: u64,
 }
 
 // Convert our session messages to OpenAI format
@@ -569,7 +577,7 @@ async fn execute_openai_request(
     let mut rate_limit_headers = std::collections::HashMap::new();
     let headers = response.headers();
 
-    // Check for cache hit headers first
+    // Check for cache hit headers first (fallback for older API versions)
     let cache_creation_input_tokens = headers
         .get("x-cache-creation-input-tokens")
         .and_then(|h| h.to_str().ok())
@@ -669,16 +677,30 @@ async fn execute_openai_request(
         .get("model")
         .and_then(|m| m.as_str())
         .and_then(|model| {
-            if cache_creation_input_tokens > 0 || cache_read_input_tokens > 0 {
+            // Get cached tokens from response body (preferred) or headers (fallback)
+            let cached_tokens_from_response = openai_response
+                .usage
+                .input_tokens_details
+                .as_ref()
+                .map(|details| details.cached_tokens)
+                .unwrap_or(0);
+
+            let effective_cached_tokens = if cached_tokens_from_response > 0 {
+                cached_tokens_from_response
+            } else {
+                cache_read_input_tokens as u64
+            };
+
+            if effective_cached_tokens > 0 || cache_creation_input_tokens > 0 {
                 // Use cache-aware pricing when cache tokens are present
                 let regular_input_tokens = openai_response
                     .usage
                     .prompt_tokens
-                    .saturating_sub(cache_read_input_tokens as u64);
+                    .saturating_sub(effective_cached_tokens);
                 calculate_cost_with_cache(
                     model,
                     regular_input_tokens,
-                    cache_read_input_tokens as u64,
+                    effective_cached_tokens,
                     openai_response.usage.completion_tokens,
                 )
             } else {
@@ -695,7 +717,12 @@ async fn execute_openai_request(
         prompt_tokens: openai_response.usage.prompt_tokens,
         output_tokens: openai_response.usage.completion_tokens,
         total_tokens: openai_response.usage.total_tokens,
-        cached_tokens: cache_read_input_tokens as u64,
+        cached_tokens: openai_response
+            .usage
+            .input_tokens_details
+            .as_ref()
+            .map(|details| details.cached_tokens)
+            .unwrap_or(cache_read_input_tokens as u64),
         cost,
         request_time_ms: Some(request_time_ms),
     };

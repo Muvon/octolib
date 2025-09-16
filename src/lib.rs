@@ -72,7 +72,7 @@
 //! async fn structured_example() -> anyhow::Result<()> {
 //!     // Works with OpenAI, OpenRouter, and DeepSeek
 //!     let (provider, model) = ProviderFactory::get_provider_for_model("deepseek:deepseek-chat")?;
-//!     
+//!
 //!     // Check if provider supports structured output
 //!     if !provider.supports_structured_output(&model) {
 //!         return Err(anyhow::anyhow!("Provider does not support structured output"));
@@ -88,7 +88,7 @@
 //!         .with_structured_output(structured_request);
 //!
 //!     let response = provider.chat_completion(params).await?;
-//!     
+//!
 //!     if let Some(structured) = response.structured_output {
 //!         let person: PersonInfo = serde_json::from_value(structured)?;
 //!         println!("Person: {:?}", person);
@@ -98,10 +98,19 @@
 //! }
 //! ```
 
+pub mod embedding;
 pub mod errors;
 pub mod llm;
+pub mod storage;
 
 // Re-export main types and traits for easy access (backward compatibility)
+pub use embedding::{
+    calculate_content_hash, calculate_content_hash_with_lines, calculate_unique_content_hash,
+    count_tokens, create_embedding_provider_from_parts, generate_embeddings,
+    generate_embeddings_batch, generate_search_embeddings, parse_provider_model,
+    split_texts_into_token_limited_batches, truncate_output, EmbeddingGenerationConfig,
+    EmbeddingProvider, EmbeddingProviderType, InputType, SearchModeEmbeddings,
+};
 pub use errors::{
     ConfigError, ConfigResult, MessageError, MessageResult, ProviderError, ProviderResult,
     StructuredOutputError, StructuredOutputResult, ToolCallError, ToolCallResult,

@@ -4,11 +4,16 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Muvon Un Limited <contact@muvon.io>"]
 license = "Apache-2.0"
-description = "Self-sufficient AI provider library with multi-provider support, model validation, and cost tracking"
+description = "Self-sufficient AI provider library with multi-provider support, embedding models, model validation, and cost tracking"
 homepage = "https://octolib.muvon.io"
 repository = "https://github.com/muvon/octolib"
-keywords = ["ai", "llm", "providers", "openai", "anthropic"]
+keywords = ["ai", "llm", "embeddings", "providers", "openai"]
 categories = ["api-bindings", "development-tools"]
+
+[features]
+default = ["fastembed", "huggingface"]
+fastembed = ["dep:fastembed"]
+huggingface = ["dep:candle-core", "dep:candle-nn", "dep:candle-transformers", "dep:tokenizers", "dep:hf-hub"]
 
 [dependencies]
 async-trait = "0.1.88"
@@ -21,3 +26,18 @@ base64 = "0.22"
 url = "2.5.4"
 thiserror = "2.0.9"
 lazy_static = "1.5.0"
+tracing = "0.1.41"
+dirs = "6.0.0"
+
+# Embedding dependencies
+tiktoken-rs = "0.7.0"
+sha2 = "0.10.9"
+
+# Optional embedding provider dependencies
+fastembed = { version = "5.0.2", optional = true }
+# Candle dependencies for HuggingFace support (optional)
+candle-core = { version = "0.9.1", optional = true }
+candle-nn = { version = "0.9.1", optional = true }
+candle-transformers = { version = "0.9.1", optional = true }
+tokenizers = { version = "0.21.4", optional = true }
+hf-hub = { version = "0.4.3", features = ["tokio"], optional = true }

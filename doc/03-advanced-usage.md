@@ -12,7 +12,7 @@ let tools = vec![FunctionDefinition {
         "type": "object",
         "properties": {
             "location": {
-                "type": "string", 
+                "type": "string",
                 "description": "City name"
             }
         },
@@ -34,11 +34,11 @@ if let Some(tool_calls) = response.tool_calls {
             "get_weather" => {
                 let location = tool_call.arguments["location"].as_str().unwrap();
                 let weather_result = fetch_weather(location);
-                
+
                 // Prepare tool result
                 let tool_result = Message::tool(
-                    &weather_result, 
-                    &tool_call.id, 
+                    &weather_result,
+                    &tool_call.id,
                     "get_weather"
                 );
             }
@@ -73,7 +73,7 @@ let message = Message::user("Describe this image")
 match provider.chat_completion(params).await {
     Ok(response) => {
         println!("Response: {}", response.content);
-        
+
         // Token usage tracking
         if let Some(usage) = response.exchange.usage {
             println!("Prompt Tokens: {}", usage.prompt_tokens);

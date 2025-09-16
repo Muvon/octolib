@@ -19,14 +19,8 @@
 
 pub mod constants;
 #[cfg(test)]
-mod high_level_test;
-#[cfg(test)]
-mod integration_test;
+mod mod_test;
 pub mod provider;
-#[cfg(test)]
-mod provider_test;
-#[cfg(test)]
-mod tests;
 pub mod types;
 
 use anyhow::Result;
@@ -35,47 +29,12 @@ use tiktoken_rs::cl100k_base;
 pub use provider::{create_embedding_provider_from_parts, EmbeddingProvider};
 pub use types::*;
 
-/// Configuration for embedding generation
-#[derive(Debug, Clone)]
-pub struct EmbeddingGenerationConfig {
-    /// Code embedding model (format: "provider:model")
-    pub code_model: String,
-    /// Text embedding model (format: "provider:model")
-    pub text_model: String,
-    /// Batch size for embedding generation
-    pub batch_size: usize,
-    /// Maximum tokens per batch
-    pub max_tokens_per_batch: usize,
-}
-
-impl Default for EmbeddingGenerationConfig {
-    fn default() -> Self {
-        Self {
-            code_model: "voyage:voyage-code-3".to_string(),
-            text_model: "voyage:voyage-3.5-lite".to_string(),
-            batch_size: 16,
-            max_tokens_per_batch: 100_000,
-        }
-    }
-}
-
-/// Generate embeddings based on configured provider (supports provider:model format)
-pub async fn generate_embeddings(
-    contents: &str,
-    is_code: bool,
-    config: &EmbeddingGenerationConfig,
-) -> Result<Vec<f32>> {
-    // Get the model string from config
-    let model_string = if is_code {
-        &config.code_model
-    } else {
-        &config.text_model
-    };
-
+/// Generate embeddings using specified provider and model
+pub async fn generate_embeddings(contents: &str, provider: &str, model: &str) -> Result<Vec<f32>> {
     // Parse provider and model from the string
-    let (provider, model) = parse_provider_model(model_string);
+    let (provider_type, model_name) = parse_provider_model(&format!("{}:{}", provider, model));
 
-    let provider_impl = create_embedding_provider_from_parts(&provider, &model).await?;
+    let provider_impl = create_embedding_provider_from_parts(&provider_type, &model_name).await?;
     provider_impl.generate_embedding(contents).await
 }
 
@@ -153,32 +112,23 @@ pub fn split_texts_into_token_limited_batches(
     batches
 }
 
-/// Generate batch embeddings based on configured provider (supports provider:model format)
-/// Now includes token-aware batching and input_type support
+/// Generate batch embeddings using specified provider and model
+/// Includes token-aware batching and input_type support
 pub async fn generate_embeddings_batch(
     texts: Vec<String>,
-    is_code: bool,
-    config: &EmbeddingGenerationConfig,
+    provider: &str,
+    model: &str,
     input_type: types::InputType,
+    batch_size: usize,
+    max_tokens_per_batch: usize,
 ) -> Result<Vec<Vec<f32>>> {
-    // Get the model string from config
-    let model_string = if is_code {
-        &config.code_model
-    } else {
-        &config.text_model
-    };
-
     // Parse provider and model from the string
-    let (provider, model) = parse_provider_model(model_string);
+    let (provider_type, model_name) = parse_provider_model(&format!("{}:{}", provider, model));
 
-    let provider_impl = create_embedding_provider_from_parts(&provider, &model).await?;
+    let provider_impl = create_embedding_provider_from_parts(&provider_type, &model_name).await?;
 
     // Split texts into token-limited batches
-    let batches = split_texts_into_token_limited_batches(
-        texts,
-        config.batch_size,
-        config.max_tokens_per_batch,
-    );
+    let batches = split_texts_into_token_limited_batches(texts, batch_size, max_tokens_per_batch);
 
     let mut all_embeddings = Vec::new();
 
@@ -191,99 +141,4 @@ pub async fn generate_embeddings_batch(
     }
 
     Ok(all_embeddings)
-}
-
-/// Calculate a unique hash for content including file path
-pub fn calculate_unique_content_hash(contents: &str, file_path: &str) -> String {
-    use sha2::{Digest, Sha256};
-    let mut hasher = Sha256::new();
-    hasher.update(contents.as_bytes());
-    hasher.update(file_path.as_bytes());
-    format!("{:x}", hasher.finalize())
-}
-
-/// Calculate a unique hash for content including file path and line ranges
-/// This ensures blocks are reindexed when their position changes in the file
-pub fn calculate_content_hash_with_lines(
-    contents: &str,
-    file_path: &str,
-    start_line: usize,
-    end_line: usize,
-) -> String {
-    use sha2::{Digest, Sha256};
-    let mut hasher = Sha256::new();
-    hasher.update(contents.as_bytes());
-    hasher.update(file_path.as_bytes());
-    hasher.update(start_line.to_string().as_bytes());
-    hasher.update(end_line.to_string().as_bytes());
-    format!("{:x}", hasher.finalize())
-}
-
-/// Calculate content hash without file path
-pub fn calculate_content_hash(contents: &str) -> String {
-    use sha2::{Digest, Sha256};
-    let mut hasher = Sha256::new();
-    hasher.update(contents.as_bytes());
-    format!("{:x}", hasher.finalize())
-}
-
-/// Search mode embeddings result
-#[derive(Debug, Clone)]
-pub struct SearchModeEmbeddings {
-    pub code_embeddings: Option<Vec<f32>>,
-    pub text_embeddings: Option<Vec<f32>>,
-}
-
-/// Generate embeddings for search based on mode - centralized logic to avoid duplication
-/// This ensures consistent behavior across CLI and MCP interfaces
-pub async fn generate_search_embeddings(
-    query: &str,
-    mode: &str,
-    config: &EmbeddingGenerationConfig,
-) -> Result<SearchModeEmbeddings> {
-    match mode {
-        "code" => {
-            // Use code model for code searches only
-            let embeddings = generate_embeddings(query, true, config).await?;
-            Ok(SearchModeEmbeddings {
-                code_embeddings: Some(embeddings),
-                text_embeddings: None,
-            })
-        }
-        "docs" | "text" => {
-            // Use text model for documents and text searches only
-            let embeddings = generate_embeddings(query, false, config).await?;
-            Ok(SearchModeEmbeddings {
-                code_embeddings: None,
-                text_embeddings: Some(embeddings),
-            })
-        }
-        "all" => {
-            // For "all" mode, check if code and text models are different
-            // If different, generate separate embeddings; if same, use one set
-            let code_model = &config.code_model;
-            let text_model = &config.text_model;
-
-            if code_model == text_model {
-                // Same model for both - generate once and reuse
-                let embeddings = generate_embeddings(query, true, config).await?;
-                Ok(SearchModeEmbeddings {
-                    code_embeddings: Some(embeddings.clone()),
-                    text_embeddings: Some(embeddings),
-                })
-            } else {
-                // Different models - generate separate embeddings
-                let code_embeddings = generate_embeddings(query, true, config).await?;
-                let text_embeddings = generate_embeddings(query, false, config).await?;
-                Ok(SearchModeEmbeddings {
-                    code_embeddings: Some(code_embeddings),
-                    text_embeddings: Some(text_embeddings),
-                })
-            }
-        }
-        _ => Err(anyhow::anyhow!(
-            "Invalid search mode '{}'. Use 'all', 'code', 'docs', or 'text'.",
-            mode
-        )),
-    }
 }

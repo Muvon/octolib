@@ -110,3 +110,6 @@ pub async fn create_embedding_provider_from_parts(
         }
     }
 }
+
+#[cfg(test)]
+mod mod_test;

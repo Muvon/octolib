@@ -128,7 +128,7 @@ struct PersonInfo {
 
 async fn structured_output_example() -> anyhow::Result<()> {
     let (provider, model) = ProviderFactory::get_provider_for_model("openai:gpt-4o")?;
-    
+
     // Check if provider supports structured output
     if !provider.supports_structured_output(&model) {
         println!("Provider {} does not support structured output", provider.name());
@@ -146,7 +146,7 @@ async fn structured_output_example() -> anyhow::Result<()> {
         .with_structured_output(structured_request);
 
     let response = provider.chat_completion(params).await?;
-    
+
     if let Some(structured) = response.structured_output {
         let person: PersonInfo = serde_json::from_value(structured)?;
         println!("Parsed person: {:?}", person);
@@ -168,15 +168,15 @@ async fn structured_output_example() -> anyhow::Result<()> {
         "required": ["name", "age", "occupation", "skills"],
         "additionalProperties": false
     });
-    
+
     let structured_request = StructuredOutputRequest::json_schema(schema)
         .with_strict_mode();
-    
+
     let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000)
         .with_structured_output(structured_request);
-    
+
     let response = provider.chat_completion(params).await?;
-    
+
     if let Some(structured) = response.structured_output {
         match serde_json::from_value::<PersonInfo>(structured) {
             Ok(person) => println!("✅ Schema-validated person: {:?}", person),

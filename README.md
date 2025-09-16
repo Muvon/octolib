@@ -20,6 +20,7 @@ Octolib is a comprehensive, self-sufficient AI provider library that provides a 
 - **🧰 Tool Calling**: Cross-provider tool call standardization
 - **⏱️ Retry Management**: Configurable exponential backoff
 - **🔒 Secure Design**: Environment-based API key management
+- **🎯 Embedding Support**: Multi-provider embedding generation with Jina, Voyage, Google, OpenAI, FastEmbed, and HuggingFace
 
 ## 📦 Quick Installation
 
@@ -61,7 +62,7 @@ Get structured JSON responses with schema validation:
 use octolib::{ProviderFactory, ChatCompletionParams, Message, StructuredOutputRequest};
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 struct PersonInfo {
     name: String,
     age: u32,
@@ -70,7 +71,7 @@ struct PersonInfo {
 
 async fn structured_example() -> anyhow::Result<()> {
     let (provider, model) = ProviderFactory::get_provider_for_model("openai:gpt-4o")?;
-    
+
     // Check if provider supports structured output
     if !provider.supports_structured_output(&model) {
         return Err(anyhow::anyhow!("Provider does not support structured output"));
@@ -86,7 +87,7 @@ async fn structured_example() -> anyhow::Result<()> {
         .with_structured_output(structured_request);
 
     let response = provider.chat_completion(params).await?;
-    
+
     if let Some(structured) = response.structured_output {
         let person: PersonInfo = serde_json::from_value(structured)?;
         println!("Person: {:?}", person);
@@ -94,6 +95,52 @@ async fn structured_example() -> anyhow::Result<()> {
 
     Ok(())
 }
+```
+
+### 🎯 Embedding Generation
+
+Generate embeddings using multiple providers:
+
+```rust
+use octolib::embedding::{generate_embeddings, generate_embeddings_batch, InputType};
+
+async fn embedding_example() -> anyhow::Result<()> {
+    // Single embedding generation
+    let embedding = generate_embeddings(
+        "Hello, world!",
+        "voyage",  // provider
+        "voyage-3.5-lite"  // model
+    ).await?;
+
+    println!("Embedding dimension: {}", embedding.len());
+
+    // Batch embedding generation
+    let texts = vec![
+        "First document".to_string(),
+        "Second document".to_string(),
+    ];
+
+    let embeddings = generate_embeddings_batch(
+        texts,
+        "jina",  // provider
+        "jina-embeddings-v4",  // model
+        InputType::Document,  // input type for better embeddings
+        16,  // batch size
+        100_000,  // max tokens per batch
+    ).await?;
+
+    println!("Generated {} embeddings", embeddings.len());
+
+    Ok(())
+}
+
+// Supported embedding providers:
+// - Jina: jina-embeddings-v4, jina-clip-v2, etc.
+// - Voyage: voyage-3.5, voyage-code-2, etc.
+// - Google: gemini-embedding-001, text-embedding-005
+// - OpenAI: text-embedding-3-small, text-embedding-3-large
+// - FastEmbed: Local models (feature-gated)
+// - HuggingFace: sentence-transformers models
 ```
 
 ## 🎯 Provider Support Matrix
@@ -122,6 +169,7 @@ async fn structured_example() -> anyhow::Result<()> {
 - **[Installation Guide](doc/02-installation.md)** - Setup and configuration
 - **[Advanced Usage](doc/03-advanced-usage.md)** - Advanced features and customization
 - **[Advanced Guide](doc/04-advanced-guide.md)** - Comprehensive usage patterns
+- **[Embedding Guide](doc/05-embedding.md)** - Embedding generation with multiple providers
 
 ## 🌐 Supported Providers
 

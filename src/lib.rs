@@ -62,7 +62,7 @@
 //! use octolib::llm::{ProviderFactory, ChatCompletionParams, Message, StructuredOutputRequest};
 //! use serde::{Deserialize, Serialize};
 //!
-//! #[derive(Serialize, Deserialize)]
+//! #[derive(Serialize, Deserialize, Debug)]
 //! struct PersonInfo {
 //!     name: String,
 //!     age: u32,
@@ -105,11 +105,9 @@ pub mod storage;
 
 // Re-export main types and traits for easy access (backward compatibility)
 pub use embedding::{
-    calculate_content_hash, calculate_content_hash_with_lines, calculate_unique_content_hash,
     count_tokens, create_embedding_provider_from_parts, generate_embeddings,
-    generate_embeddings_batch, generate_search_embeddings, parse_provider_model,
-    split_texts_into_token_limited_batches, truncate_output, EmbeddingGenerationConfig,
-    EmbeddingProvider, EmbeddingProviderType, InputType, SearchModeEmbeddings,
+    generate_embeddings_batch, split_texts_into_token_limited_batches, truncate_output,
+    EmbeddingProvider, EmbeddingProviderType, InputType,
 };
 pub use errors::{
     ConfigError, ConfigResult, MessageError, MessageResult, ProviderError, ProviderResult,

@@ -31,6 +31,7 @@ const PRICING: &[(&str, f64, f64)] = &[
     ("claude-opus-4-0", 15.00, 75.00),
     ("claude-opus-4-1", 15.00, 75.00),
     ("claude-sonnet-4-0", 3.00, 15.00),
+    ("claude-sonnet-4-5", 3.00, 15.00),
     ("claude-3-7-sonnet", 3.00, 15.00),
     ("claude-3-5-sonnet", 3.00, 15.00),
     ("claude-3-5-haiku", 0.80, 4.00),
@@ -51,7 +52,7 @@ struct CacheTokenUsage {
 /// Check if a model supports temperature parameter
 /// All Claude models support temperature except opus-4-1
 fn supports_temperature_and_top_p(model: &str) -> bool {
-    !model.contains("opus-4-1")
+    !model.contains("opus-4-1") && !model.contains("sonnet-4-5")
 }
 
 /// Calculate cost for Anthropic models with cache-aware pricing

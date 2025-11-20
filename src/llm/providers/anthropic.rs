@@ -25,16 +25,24 @@ use serde::{Deserialize, Serialize};
 use std::env;
 
 /// Anthropic pricing constants (per 1M tokens in USD)
-/// Source: https://docs.anthropic.com/en/docs/about-claude/pricing (as of June 2025)
+/// Source: https://docs.anthropic.com/en/docs/about-claude/pricing (as of Nov 2025)
 const PRICING: &[(&str, f64, f64)] = &[
     // Model, Input price per 1M tokens, Output price per 1M tokens
-    ("claude-opus-4-0", 15.00, 75.00),
+    // Claude 4.5 (Latest - Nov 2025)
+    ("claude-haiku-4-5", 1.00, 5.00),
+    ("claude-sonnet-4-5", 3.00, 15.00), // Extended context: $6/$15 for >200K, $22.50 for >200K output
+    // Claude 4 (Released May 22, 2025)
     ("claude-opus-4-1", 15.00, 75.00),
+    ("claude-opus-4-0", 15.00, 75.00),
+    ("claude-opus-4", 15.00, 75.00),
     ("claude-sonnet-4-0", 3.00, 15.00),
-    ("claude-sonnet-4-5", 3.00, 15.00),
+    ("claude-sonnet-4", 3.00, 15.00),
+    // Claude 3.7
     ("claude-3-7-sonnet", 3.00, 15.00),
+    // Claude 3.5
     ("claude-3-5-sonnet", 3.00, 15.00),
     ("claude-3-5-haiku", 0.80, 4.00),
+    // Claude 3
     ("claude-3-opus", 15.00, 75.00),
     ("claude-3-sonnet", 3.00, 15.00),
     ("claude-3-haiku", 0.25, 1.25),

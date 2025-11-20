@@ -38,15 +38,19 @@ impl GoogleVertexProvider {
 const GOOGLE_APPLICATION_CREDENTIALS_ENV: &str = "GOOGLE_APPLICATION_CREDENTIALS";
 const GOOGLE_API_KEY_ENV: &str = "GOOGLE_API_KEY";
 
+#[allow(dead_code)] // Pricing table ready for when implementation is completed
 const PRICING: &[(&str, f64, f64)] = &[
     // Model, Input price per 1M tokens, Output price per 1M tokens
-    // Gemini 3
+    // Gemini 3 (Released Nov 18, 2025)
+    ("gemini-3-pro", 2.00, 12.00),
     ("gemini-3-pro-preview", 2.00, 12.00),
     // Gemini 2.5
     ("gemini-2.5-pro", 1.25, 5.00),
     ("gemini-2.5-flash", 0.075, 0.30),
+    ("gemini-2.5-flash-lite", 0.10, 0.30),
     // Gemini 2.0
     ("gemini-2.0-flash", 0.075, 0.30),
+    ("gemini-2.0-flash-live", 0.35, 1.50), // Text pricing, audio/video higher
     // Gemini 1.5
     ("gemini-1.5-pro", 1.25, 5.00),
     ("gemini-1.5-flash", 0.075, 0.30),

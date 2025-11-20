@@ -14,11 +14,11 @@
 
 //! DeepSeek provider implementation
 //!
-//! PRICING UPDATE: September 5, 2025 at 16:00 UTC
+//! PRICING UPDATE: November 2025 (V3.2-Exp)
 //! New unified pricing for ALL models (no time-based discounts):
-//! - Cache Hit: $0.07 per 1M tokens
-//! - Cache Miss (Input): $0.56 per 1M tokens
-//! - Output: $1.68 per 1M tokens
+//! - Cache Hit: $0.028 per 1M tokens
+//! - Cache Miss (Input): $0.28 per 1M tokens
+//! - Output: $0.42 per 1M tokens
 
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderExchange, ProviderResponse, TokenUsage};
@@ -28,19 +28,20 @@ use serde::{Deserialize, Serialize};
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-// Model pricing (per 1M tokens in USD) - Updated Sept 5, 2025
+// Model pricing (per 1M tokens in USD) - Updated Nov 2025 for V3.2-Exp
 // New unified pricing for ALL models (no time-based discounts)
 lazy_static::lazy_static! {
-    /// Input pricing (cache miss): $0.56 per 1M tokens for all models
-    static ref INPUT_PRICING: f64 = 0.56;
-    /// Output pricing: $1.68 per 1M tokens for all models
-    static ref OUTPUT_PRICING: f64 = 1.68;
-    /// Cache hit pricing: $0.07 per 1M tokens for all models
-    static ref CACHE_HIT_PRICING: f64 = 0.07;
+    /// Input pricing (cache miss): $0.28 per 1M tokens for all models (V3.2-Exp)
+    static ref INPUT_PRICING: f64 = 0.28;
+    /// Output pricing: $0.42 per 1M tokens for all models (V3.2-Exp)
+    static ref OUTPUT_PRICING: f64 = 0.42;
+    /// Cache hit pricing: $0.028 per 1M tokens for all models (V3.2-Exp)
+    static ref CACHE_HIT_PRICING: f64 = 0.028;
 }
 
 // Time-based discount system removed as of Sept 5, 2025
 // All models now use unified pricing regardless of time
+// V3.2-Exp pricing updated Nov 2025: $0.28 input, $0.42 output, $0.028 cache hit
 
 /// Calculate cost for DeepSeek models with unified pricing (Sept 5, 2025+)
 fn calculate_cost_with_cache(
@@ -321,14 +322,14 @@ mod tests {
 
     #[test]
     fn test_calculate_cost() {
-        // Test basic cost calculation with new unified pricing (Sept 5, 2025+)
-        // Input: $0.56/1M, Output: $1.68/1M
+        // Test basic cost calculation with V3.2-Exp pricing (Nov 2025)
+        // Input: $0.28/1M, Output: $0.42/1M
         let cost = calculate_cost("deepseek-chat", 1_000_000, 500_000);
         assert!(cost.is_some());
         let cost_value = cost.unwrap();
 
-        // Expected: (1M * $0.56) + (0.5M * $1.68) = $0.56 + $0.84 = $1.40
-        let expected = 0.56 + (0.5 * 1.68);
+        // Expected: (1M * $0.28) + (0.5M * $0.42) = $0.28 + $0.21 = $0.49
+        let expected = 0.28 + (0.5 * 0.42);
         assert!((cost_value - expected).abs() < 0.01); // Allow small floating point differences
 
         // Test with different model - should be same price now
@@ -339,15 +340,15 @@ mod tests {
 
     #[test]
     fn test_calculate_cost_with_cache() {
-        // Test cache-aware cost calculation with new unified pricing
-        // Cache hit: $0.07/1M, Cache miss: $0.56/1M, Output: $1.68/1M
+        // Test cache-aware cost calculation with V3.2-Exp pricing (Nov 2025)
+        // Cache hit: $0.028/1M, Cache miss: $0.28/1M, Output: $0.42/1M
         let cost = calculate_cost_with_cache("deepseek-chat", 500_000, 500_000, 250_000);
         assert!(cost.is_some());
         let cost_value = cost.unwrap();
 
-        // Expected: (0.5M * $0.56) + (0.5M * $0.07) + (0.25M * $1.68)
-        //         = $0.28 + $0.035 + $0.42 = $0.735
-        let expected = (0.5 * 0.56) + (0.5 * 0.07) + (0.25 * 1.68);
+        // Expected: (0.5M * $0.28) + (0.5M * $0.028) + (0.25M * $0.42)
+        //         = $0.14 + $0.014 + $0.105 = $0.259
+        let expected = (0.5 * 0.28) + (0.5 * 0.028) + (0.25 * 0.42);
         assert!((cost_value - expected).abs() < 0.01);
 
         // Cost with cache should be less than without cache for same total input

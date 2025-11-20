@@ -16,15 +16,15 @@ fastembed = ["dep:fastembed"]
 huggingface = ["dep:candle-core", "dep:candle-nn", "dep:candle-transformers", "dep:tokenizers", "dep:hf-hub"]
 
 [dependencies]
-async-trait = "0.1.88"
-anyhow = "1.0.98"
-serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.140"
-reqwest = { version = "0.12.18", features = ["json", "rustls-tls", "gzip"], default-features = false }
-tokio = { version = "1.45.1", features = ["time", "sync", "macros", "rt-multi-thread"] }
+async-trait = "0.1.89"
+anyhow = "1.0.100"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+reqwest = { version = "0.12.24", features = ["json", "rustls-tls", "gzip"], default-features = false }
+tokio = { version = "1.48.0", features = ["time", "sync", "macros", "rt-multi-thread"] }
 base64 = "0.22"
-url = "2.5.4"
-thiserror = "2.0.9"
+url = "2.5.7"
+thiserror = "2.0.17"
 lazy_static = "1.5.0"
 tracing = "0.1.41"
 dirs = "6.0.0"
@@ -34,7 +34,7 @@ tiktoken-rs = "0.7.0"
 sha2 = "0.10.9"
 
 # Optional embedding provider dependencies
-fastembed = { version = "5.0.2", optional = true }
+fastembed = { version = "5.2.1", optional = true }
 # Candle dependencies for HuggingFace support (optional)
 candle-core = { version = "0.9.1", optional = true }
 candle-nn = { version = "0.9.1", optional = true }

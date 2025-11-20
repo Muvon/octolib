@@ -38,6 +38,22 @@ impl GoogleVertexProvider {
 const GOOGLE_APPLICATION_CREDENTIALS_ENV: &str = "GOOGLE_APPLICATION_CREDENTIALS";
 const GOOGLE_API_KEY_ENV: &str = "GOOGLE_API_KEY";
 
+const PRICING: &[(&str, f64, f64)] = &[
+    // Model, Input price per 1M tokens, Output price per 1M tokens
+    // Gemini 3
+    ("gemini-3-pro-preview", 2.00, 12.00),
+    // Gemini 2.5
+    ("gemini-2.5-pro", 1.25, 5.00),
+    ("gemini-2.5-flash", 0.075, 0.30),
+    // Gemini 2.0
+    ("gemini-2.0-flash", 0.075, 0.30),
+    // Gemini 1.5
+    ("gemini-1.5-pro", 1.25, 5.00),
+    ("gemini-1.5-flash", 0.075, 0.30),
+    // Gemini 1.0
+    ("gemini-1.0-pro", 0.50, 1.50),
+];
+
 #[async_trait::async_trait]
 impl AiProvider for GoogleVertexProvider {
     fn name(&self) -> &str {
@@ -72,7 +88,7 @@ impl AiProvider for GoogleVertexProvider {
     }
 
     fn supports_caching(&self, model: &str) -> bool {
-        model.contains("gemini-1.5") || model.contains("gemini-2")
+        model.contains("gemini-1.5") || model.contains("gemini-2") || model.contains("gemini-3")
     }
 
     fn supports_vision(&self, model: &str) -> bool {
@@ -81,7 +97,9 @@ impl AiProvider for GoogleVertexProvider {
 
     fn get_max_input_tokens(&self, model: &str) -> usize {
         // Google Vertex AI model context window limits
-        if model.contains("gemini-2") {
+        if model.contains("gemini-3") {
+            1_048_576 // Gemini 3.0 has ~1M context
+        } else if model.contains("gemini-2") {
             2_000_000 // Gemini 2.0 has 2M context
         } else if model.contains("gemini-1.5") {
             1_000_000 // Gemini 1.5 has 1M context

@@ -47,6 +47,13 @@ const PRICING: &[(&str, f64, f64)] = &[
     ("gpt-5-mini-2025-08-07", 0.25, 2.0),
     ("gpt-5-nano", 0.05, 0.40),
     ("gpt-5-nano-2025-08-07", 0.05, 0.40),
+    // GPT-5.1
+    ("gpt-5.1", 1.25, 10.00),
+    ("gpt-5.1-2025-11-20", 1.25, 10.00),
+    ("gpt-5.1-mini", 1.25, 10.00),
+    ("gpt-5.1-mini-2025-11-20", 1.25, 10.00),
+    ("gpt-5.1-nano", 1.25, 10.00),
+    ("gpt-5.1-nano-2025-11-20", 1.25, 10.00),
     // GPT-4o series
     ("gpt-4o", 2.50, 10.00),
     ("gpt-4o-2024-08-06", 2.50, 10.00),
@@ -106,7 +113,7 @@ fn calculate_cost(model: &str, prompt_tokens: u64, completion_tokens: u64) -> Op
 }
 
 /// Check if a model supports the temperature parameter
-/// O1, O2, O3, O4 and GPT-5 series models don't support temperature
+/// O1, O2, O3, O4 and GPT-5/5.1 series models don't support temperature
 fn supports_temperature(model: &str) -> bool {
     !model.starts_with("o1")
         && !model.starts_with("o2")
@@ -116,17 +123,17 @@ fn supports_temperature(model: &str) -> bool {
 }
 
 /// Check if a model uses max_completion_tokens instead of max_tokens
-/// GPT-5 models use the new max_completion_tokens parameter
+/// GPT-5/5.1 models use the new max_completion_tokens parameter
 fn uses_max_completion_tokens(model: &str) -> bool {
     model.starts_with("gpt-5")
 }
 
 /// Get cache pricing multiplier based on model
-/// GPT-5 models have 0.1x cache pricing (90% cheaper)
+/// GPT-5/5.1 models have 0.1x cache pricing (90% cheaper)
 /// Other models have 0.25x cache pricing (75% cheaper)
 fn get_cache_multiplier(model: &str) -> f64 {
     if model.starts_with("gpt-5") {
-        0.1 // GPT-5 models: 10% of normal price for cache reads
+        0.1 // GPT-5/5.1 models: 10% of normal price for cache reads
     } else {
         0.25 // Other models: 25% of normal price for cache reads
     }
@@ -134,7 +141,7 @@ fn get_cache_multiplier(model: &str) -> f64 {
 
 /// Calculate cost with cache-aware pricing
 /// This function handles the different pricing tiers for cached vs non-cached tokens:
-/// - cache_read_tokens: charged at model-specific multiplier (GPT-5: 0.1x, others: 0.25x)
+/// - cache_read_tokens: charged at model-specific multiplier (GPT-5/5.1: 0.1x, others: 0.25x)
 /// - regular_input_tokens: charged at normal price (includes cache write tokens)
 /// - output_tokens: charged at normal price
 fn calculate_cost_with_cache(
@@ -242,6 +249,10 @@ impl AiProvider for OpenAiProvider {
         // OpenAI model context window limits (what we can send as input)
         // These are the actual context windows - API handles output limits
 
+        // GPT-5.1 models: 400K context window
+        if model.starts_with("gpt-5.1") {
+            return 400_000;
+        }
         // GPT-5 models: 128K context window
         if model.starts_with("gpt-5") {
             return 128_000;

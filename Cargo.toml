@@ -35,9 +35,9 @@ sha2 = "0.10.9"
 
 # Optional embedding provider dependencies
 fastembed = { version = "5.2.1", optional = true }
-# Candle dependencies for HuggingFace support (optional)
-candle-core = { version = "0.9.1", optional = true }
-candle-nn = { version = "0.9.1", optional = true }
-candle-transformers = { version = "0.9.1", optional = true }
+# Candle dependencies for HuggingFace support (optional) - using alpha to get pulp 0.21+
+candle-core = { version = "0.9.2-alpha.1", optional = true }
+candle-nn = { version = "0.9.2-alpha.1", optional = true }
+candle-transformers = { version = "0.9.2-alpha.1", optional = true }
 tokenizers = { version = "0.21.4", optional = true }
 hf-hub = { version = "0.4.3", features = ["tokio"], optional = true }

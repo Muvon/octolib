@@ -114,38 +114,25 @@ impl Default for EmbeddingConfig {
 
 /// Parse provider and model from a string in format "provider:model"
 pub fn parse_provider_model(input: &str) -> (EmbeddingProviderType, String) {
-    if let Some((provider_str, model)) = input.split_once(':') {
-        let provider = match provider_str.to_lowercase().as_str() {
-            "fastembed" => EmbeddingProviderType::FastEmbed,
-            "jinaai" | "jina" => EmbeddingProviderType::Jina,
-            "voyageai" | "voyage" => EmbeddingProviderType::Voyage,
-            "google" => EmbeddingProviderType::Google,
-            "huggingface" | "hf" => EmbeddingProviderType::HuggingFace,
-            "openai" => EmbeddingProviderType::OpenAI,
-            _ => {
-                // Default fallback - use FastEmbed if available, otherwise Voyage
-                #[cfg(feature = "fastembed")]
-                {
-                    EmbeddingProviderType::FastEmbed
-                }
-                #[cfg(not(feature = "fastembed"))]
-                {
-                    EmbeddingProviderType::Voyage
-                }
-            }
-        };
-        (provider, model.to_string())
-    } else {
-        // Legacy format - assume FastEmbed if available, otherwise Voyage
-        #[cfg(feature = "fastembed")]
-        {
-            (EmbeddingProviderType::FastEmbed, input.to_string())
-        }
-        #[cfg(not(feature = "fastembed"))]
-        {
-            (EmbeddingProviderType::Voyage, input.to_string())
-        }
-    }
+    let (provider_str, model) = input
+        .split_once(':')
+        .expect("Model format must be 'provider:model' (e.g., 'jina:jina-embeddings-v4')");
+
+    let provider = match provider_str.to_lowercase().as_str() {
+        "fastembed" => EmbeddingProviderType::FastEmbed,
+        "jinaai" | "jina" => EmbeddingProviderType::Jina,
+        "voyageai" | "voyage" => EmbeddingProviderType::Voyage,
+        "google" => EmbeddingProviderType::Google,
+        "huggingface" | "hf" => EmbeddingProviderType::HuggingFace,
+        "openai" => EmbeddingProviderType::OpenAI,
+        unknown => panic!(
+            "Unknown embedding provider '{}'. Supported: fastembed, jina, voyage, google, huggingface, openai. \
+             This is a programming error - the provider should be validated before calling parse_provider_model.",
+            unknown
+        ),
+    };
+
+    (provider, model.to_string())
 }
 
 impl EmbeddingConfig {
@@ -257,14 +244,6 @@ mod tests {
         let (provider, model) = parse_provider_model("openai:text-embedding-3-small");
         assert_eq!(provider, EmbeddingProviderType::OpenAI);
         assert_eq!(model, "text-embedding-3-small");
-    }
-
-    #[test]
-    fn test_parse_provider_model_legacy() {
-        // Test legacy format without provider (should default to FastEmbed)
-        let (provider, model) = parse_provider_model("all-MiniLM-L6-v2");
-        assert_eq!(provider, EmbeddingProviderType::FastEmbed);
-        assert_eq!(model, "all-MiniLM-L6-v2");
     }
 
     #[test]

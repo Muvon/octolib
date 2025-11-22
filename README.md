@@ -97,6 +97,130 @@ async fn structured_example() -> anyhow::Result<()> {
 }
 ```
 
+### 🧰 Tool Calling
+
+Use AI models to call functions with automatic parameter extraction:
+
+```rust
+use octolib::{ProviderFactory, ChatCompletionParams, Message, FunctionDefinition, ToolCall};
+use serde_json::json;
+
+async fn tool_calling_example() -> anyhow::Result<()> {
+    let (provider, model) = ProviderFactory::get_provider_for_model("openai:gpt-4o")?;
+
+    // Define available tools/functions
+    let tools = vec![
+        FunctionDefinition {
+            name: "get_weather".to_string(),
+            description: "Get the current weather for a location".to_string(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "location": {
+                        "type": "string",
+                        "description": "The city and state, e.g. San Francisco, CA"
+                    },
+                    "unit": {
+                        "type": "string",
+                        "enum": ["celsius", "fahrenheit"],
+                        "description": "Temperature unit"
+                    }
+                },
+                "required": ["location"]
+            }),
+            cache_control: None,
+        },
+        FunctionDefinition {
+            name: "calculate".to_string(),
+            description: "Perform a mathematical calculation".to_string(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "expression": {
+                        "type": "string",
+                        "description": "Mathematical expression to evaluate"
+                    }
+                },
+                "required": ["expression"]
+            }),
+            cache_control: None,
+        },
+    ];
+
+    let mut messages = vec![
+        Message::user("What's the weather in Tokyo and calculate 15 * 23?"),
+    ];
+
+    // Initial request with tools
+    let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000)
+        .with_tools(tools.clone());
+
+    let response = provider.chat_completion(params).await?;
+
+    // Check if model wants to call tools
+    if let Some(tool_calls) = response.tool_calls {
+        println!("Model requested {} tool calls", tool_calls.len());
+
+        // Add assistant's response with tool calls to conversation
+        let mut assistant_msg = Message::assistant(&response.content);
+        assistant_msg.tool_calls = Some(serde_json::to_value(&tool_calls)?);
+        messages.push(assistant_msg);
+
+        // Execute each tool call and add results
+        for tool_call in tool_calls {
+            println!("Calling tool: {} with args: {}", tool_call.name, tool_call.arguments);
+
+            // Execute the tool (your implementation)
+            let result = match tool_call.name.as_str() {
+                "get_weather" => {
+                    let location = tool_call.arguments["location"].as_str().unwrap_or("Unknown");
+                    json!({
+                        "location": location,
+                        "temperature": 22,
+                        "unit": "celsius",
+                        "condition": "sunny"
+                    })
+                }
+                "calculate" => {
+                    let expr = tool_call.arguments["expression"].as_str().unwrap_or("0");
+                    // Simple calculation (in real app, use proper eval)
+                    json!({
+                        "expression": expr,
+                        "result": 345  // 15 * 23
+                    })
+                }
+                _ => json!({"error": "Unknown tool"}),
+            };
+
+            // Add tool result to conversation
+            messages.push(Message::tool(
+                &serde_json::to_string(&result)?,
+                &tool_call.id,
+                &tool_call.name,
+            ));
+        }
+
+        // Get final response with tool results
+        let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000)
+            .with_tools(tools);
+
+        let final_response = provider.chat_completion(params).await?;
+        println!("Final response: {}", final_response.content);
+    } else {
+        println!("Direct response: {}", response.content);
+    }
+
+    Ok(())
+}
+```
+
+**Tool Calling Features:**
+- ✅ Cross-provider support (OpenAI, Anthropic, Google, Amazon, OpenRouter)
+- ✅ Automatic parameter validation via JSON Schema
+- ✅ Multi-turn conversations with tool results
+- ✅ Parallel tool execution support
+- ✅ Standardized `ToolCall` format across all providers
+
 ### 🎯 Embedding Generation
 
 Generate embeddings using multiple providers:

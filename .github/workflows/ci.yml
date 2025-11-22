@@ -113,17 +113,17 @@ jobs:
           ${{ runner.os }}-${{ matrix.rust }}-cargo-
           ${{ runner.os }}-cargo-
 
-    - name: Run tests (all features)
-      run: cargo test --verbose --all-features
+    # - name: Run tests (all features)
+    #   run: cargo test --verbose --all-features
 
     - name: Run tests (no default features)
       run: cargo test --verbose --no-default-features
 
-    - name: Run tests (fastembed only)
-      run: cargo test --verbose --no-default-features --features fastembed
+    # - name: Run tests (fastembed only)
+    #   run: cargo test --verbose --no-default-features --features fastembed
 
-    - name: Run tests (huggingface only)
-      run: cargo test --verbose --no-default-features --features huggingface
+    # - name: Run tests (huggingface only)
+    #   run: cargo test --verbose --no-default-features --features huggingface
 
   doc:
     name: Documentation

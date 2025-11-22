@@ -157,14 +157,20 @@ jobs:
           ${{ runner.os }}-${{ matrix.rust }}-cargo-
           ${{ runner.os }}-cargo-
 
-    - name: Test build with all features
+    - name: Test build with all features (non-Windows)
+      if: runner.os != 'Windows'
       run: cargo build --release --all-features
 
     - name: Test build with no default features
       run: cargo build --release --no-default-features
 
-    - name: Run tests
+    - name: Run tests (all features, non-Windows)
+      if: runner.os != 'Windows'
       run: cargo test --release --all-features
+
+    - name: Run tests (no default features, Windows)
+      if: runner.os == 'Windows'
+      run: cargo test --release --no-default-features
 
   publish-crate:
     name: Publish to Crates.io

@@ -16,20 +16,15 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 /// Input type for embedding generation
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum InputType {
     /// Default - no input_type (existing behavior)
+    #[default]
     None,
     /// For search operations
     Query,
     /// For indexing operations
     Document,
-}
-
-impl Default for InputType {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 impl InputType {
@@ -72,6 +67,7 @@ pub enum EmbeddingProviderType {
     OpenAI,
 }
 
+#[allow(clippy::derivable_impls)]
 impl Default for EmbeddingProviderType {
     fn default() -> Self {
         #[cfg(feature = "fastembed")]

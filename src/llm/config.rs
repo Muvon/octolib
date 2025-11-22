@@ -43,9 +43,9 @@ impl CacheTTL {
     pub fn from_duration(duration: Duration) -> Self {
         let total_seconds = duration.as_secs();
 
-        if total_seconds % 3600 == 0 && total_seconds >= 3600 {
+        if total_seconds.is_multiple_of(3600) && total_seconds >= 3600 {
             CacheTTL::Hours((total_seconds / 3600) as u32)
-        } else if total_seconds % 60 == 0 && total_seconds >= 60 {
+        } else if total_seconds.is_multiple_of(60) && total_seconds >= 60 {
             CacheTTL::Minutes((total_seconds / 60) as u32)
         } else {
             CacheTTL::Seconds(total_seconds as u32)

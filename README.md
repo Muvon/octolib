@@ -219,7 +219,9 @@ async fn tool_calling_example() -> anyhow::Result<()> {
 - ✅ Automatic parameter validation via JSON Schema
 - ✅ Multi-turn conversations with tool results
 - ✅ Parallel tool execution support
-- ✅ Standardized `ToolCall` format across all providers
+- ✅ Standardized `ToolCall` and `GenericToolCall` formats across all providers
+- ✅ Provider-specific metadata preservation (e.g., Gemini thought signatures)
+- ✅ Clean conversion API with `to_generic_tool_calls()` method
 
 ### 🎯 Embedding Generation
 
@@ -294,6 +296,7 @@ async fn embedding_example() -> anyhow::Result<()> {
 - **[Advanced Usage](doc/03-advanced-usage.md)** - Advanced features and customization
 - **[Advanced Guide](doc/04-advanced-guide.md)** - Comprehensive usage patterns
 - **[Embedding Guide](doc/05-embedding.md)** - Embedding generation with multiple providers
+- **[Tool Calling Guide](doc/06-tool-calling.md)** - Tool calling architecture and metadata handling
 
 ## 🌐 Supported Providers
 

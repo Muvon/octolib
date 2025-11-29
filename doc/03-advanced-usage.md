@@ -48,6 +48,56 @@ if let Some(tool_calls) = response.tool_calls {
 }
 ```
 
+### Tool Call Format Conversion
+
+Octolib provides two types for tool calls:
+
+- **`ToolCall`**: Runtime execution type (minimal, fast)
+- **`GenericToolCall`**: Storage/serialization type (with metadata support)
+
+```rust
+use octolib::{ProviderToolCalls, GenericToolCall};
+
+// Extract provider-specific tool calls from response
+let provider_calls = ProviderToolCalls::extract_from_exchange(&exchange)?;
+
+// Convert to runtime format for execution
+let tool_calls = provider_calls.to_tool_calls()?;
+for tool_call in tool_calls {
+    // Execute tool...
+}
+
+// Convert to storage format for conversation history
+let generic_calls = provider_calls.to_generic_tool_calls();
+// Store in messages for multi-turn conversations
+```
+
+**Why two types?**
+- `ToolCall`: Clean runtime type without provider-specific baggage
+- `GenericToolCall`: Preserves metadata like Gemini thought signatures
+
+### Provider-Specific Metadata
+
+Some providers return additional metadata with tool calls (e.g., Gemini 3 thought signatures). Octolib automatically preserves this in the `meta` field:
+
+```rust
+// GenericToolCall structure
+pub struct GenericToolCall {
+    pub id: String,
+    pub name: String,
+    pub arguments: serde_json::Value,
+    pub meta: Option<serde_json::Map<String, serde_json::Value>>, // Provider metadata
+}
+
+// Metadata is automatically handled by providers
+// For OpenRouter with Gemini 3, reasoning_details are preserved
+// For direct Google API, thought signatures are preserved
+```
+
+**Supported metadata:**
+- **OpenRouter + Gemini**: `reasoning_details` array (thought signatures)
+- **Future providers**: Extensible for any provider-specific data
+
 ## Vision Support
 
 ### Image Attachment

@@ -218,6 +218,64 @@ impl ProviderToolCalls {
         }
     }
 
+    /// Convert to GenericToolCall format for storage/serialization
+    ///
+    /// This method converts provider-specific tool call formats to the unified
+    /// GenericToolCall format, which is used for storing tool calls in conversation
+    /// history and preserving provider-specific metadata (like Gemini thought signatures).
+    ///
+    /// # Returns
+    ///
+    /// A vector of GenericToolCall instances with proper argument parsing and
+    /// metadata preservation.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let provider_calls = ProviderToolCalls::extract_from_exchange(&exchange)?;
+    /// let generic_calls = provider_calls.to_generic_tool_calls();
+    /// // Store in conversation history
+    /// ```
+    pub fn to_generic_tool_calls(&self) -> Vec<GenericToolCall> {
+        match self {
+            ProviderToolCalls::Anthropic { content } => content
+                .iter()
+                .map(|tool_use| GenericToolCall {
+                    id: tool_use.id.clone(),
+                    name: tool_use.name.clone(),
+                    arguments: tool_use.input.clone(),
+                    meta: None, // Anthropic doesn't use meta fields
+                })
+                .collect(),
+
+            ProviderToolCalls::OpenAI { tool_calls }
+            | ProviderToolCalls::OpenRouter { tool_calls }
+            | ProviderToolCalls::DeepSeek { tool_calls } => tool_calls
+                .iter()
+                .map(|call| {
+                    // Parse arguments with fallback for invalid JSON
+                    let arguments = if call.function.arguments.trim().is_empty() {
+                        serde_json::json!({})
+                    } else {
+                        serde_json::from_str(&call.function.arguments).unwrap_or_else(|_| {
+                            // Fallback: wrap unparseable arguments
+                            serde_json::json!({"raw_arguments": call.function.arguments})
+                        })
+                    };
+
+                    GenericToolCall {
+                        id: call.id.clone(),
+                        name: call.function.name.clone(),
+                        arguments,
+                        meta: None, // Meta is handled at message level in providers
+                    }
+                })
+                .collect(),
+
+            ProviderToolCalls::Generic { calls } => calls.clone(),
+        }
+    }
+
     /// Get the provider name
     pub fn provider(&self) -> &'static str {
         match self {

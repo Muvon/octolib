@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.2.0] - 2025-11-29
+
+### 📋 Release Summary
+
+This release enhances LLM interoperability and reasoning traceability by converting model calls to a generic tool format and preserving Gemini thought signatures (7646e363, 620667c4). Core and documentation updates improve multi-provider workflows, making integration and debugging smoother for users.
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: add conversion to GenericToolCall `7646e363`
+- **llm**: preserve Gemini thought signatures `620667c4`
+
+### 📊 Release Summary
+
+**Total commits**: 2 across 1 categories
+
+✨ **2** new features - *Enhanced functionality*
+
 All notable changes to this project will be documented in this file.
 
 ## [0.1.0] - 2025-11-22

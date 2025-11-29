@@ -655,6 +655,7 @@ async fn execute_anthropic_request(
                 id: tc.id.clone(),
                 name: tc.name.clone(),
                 arguments: tc.arguments.clone(),
+                meta: None, // Anthropic doesn't use meta fields
             })
             .collect();
 

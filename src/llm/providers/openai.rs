@@ -786,6 +786,7 @@ async fn execute_openai_request(
                 id: call.id.clone(),
                 name: call.name.clone(),
                 arguments: call.arguments.clone(),
+                meta: None, // OpenAI doesn't use meta fields
             })
             .collect();
 

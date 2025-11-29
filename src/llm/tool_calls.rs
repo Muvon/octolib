@@ -47,6 +47,9 @@ pub struct GenericToolCall {
     pub id: String,
     pub name: String,
     pub arguments: serde_json::Value,
+    /// Generic metadata for provider-specific fields (e.g., Gemini reasoning_details)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub meta: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
 /// Provider-specific tool call formats with type safety

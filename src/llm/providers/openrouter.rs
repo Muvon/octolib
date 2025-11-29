@@ -247,6 +247,8 @@ struct OpenRouterMessage {
     name: Option<String>, // For tool messages: the name of the tool
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_calls: Option<serde_json::Value>, // For assistant messages: array of tool calls
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_details: Option<serde_json::Value>, // For Gemini thought signatures preservation
 }
 
 #[derive(Deserialize, Debug)]
@@ -265,6 +267,7 @@ struct OpenRouterChoice {
 struct OpenRouterResponseMessage {
     content: Option<String>,
     tool_calls: Option<Vec<OpenRouterToolCall>>,
+    reasoning_details: Option<serde_json::Value>, // Gemini thought signatures
 }
 
 #[derive(Deserialize, Debug)]
@@ -318,6 +321,7 @@ fn convert_messages(messages: &[Message]) -> Vec<OpenRouterMessage> {
                     tool_call_id,
                     name,
                     tool_calls: None,
+                    reasoning_details: None,
                 });
             }
             "assistant" if message.tool_calls.is_some() => {
@@ -349,10 +353,17 @@ fn convert_messages(messages: &[Message]) -> Vec<OpenRouterMessage> {
                 };
 
                 // Convert unified GenericToolCall format to OpenRouter format
-                let tool_calls = if let Ok(generic_calls) =
+                let (tool_calls, reasoning_details) = if let Ok(generic_calls) =
                     serde_json::from_value::<Vec<crate::llm::tool_calls::GenericToolCall>>(
                         message.tool_calls.clone().unwrap(),
                     ) {
+                    // Extract reasoning_details from first tool call's meta (Gemini thought signatures)
+                    let reasoning_details = generic_calls
+                        .first()
+                        .and_then(|call| call.meta.as_ref())
+                        .and_then(|meta| meta.get("reasoning_details"))
+                        .cloned();
+
                     // Convert GenericToolCall to OpenRouter format
                     let openrouter_calls: Vec<serde_json::Value> = generic_calls
                         .into_iter()
@@ -367,7 +378,10 @@ fn convert_messages(messages: &[Message]) -> Vec<OpenRouterMessage> {
                             })
                         })
                         .collect();
-                    Some(serde_json::Value::Array(openrouter_calls))
+                    (
+                        Some(serde_json::Value::Array(openrouter_calls)),
+                        reasoning_details,
+                    )
                 } else {
                     panic!("Invalid tool_calls format - must be Vec<GenericToolCall>");
                 };
@@ -378,6 +392,7 @@ fn convert_messages(messages: &[Message]) -> Vec<OpenRouterMessage> {
                     tool_call_id: None,
                     name: None,
                     tool_calls,
+                    reasoning_details, // Add reasoning_details at message level
                 });
             }
             _ => {
@@ -424,6 +439,7 @@ fn convert_messages(messages: &[Message]) -> Vec<OpenRouterMessage> {
                     tool_call_id: None,
                     name: None,
                     tool_calls: None,
+                    reasoning_details: None,
                 });
             }
         }
@@ -533,13 +549,26 @@ async fn execute_openrouter_request(
     let mut response_json: serde_json::Value = serde_json::from_str(&response_text)?;
 
     // Store tool_calls in unified GenericToolCall format for conversation history
+    // Extract reasoning_details from response for Gemini thought signatures
     if let Some(ref tc) = tool_calls {
+        let reasoning_details = choice.message.reasoning_details.clone();
+
         let generic_calls: Vec<crate::llm::tool_calls::GenericToolCall> = tc
             .iter()
-            .map(|call| crate::llm::tool_calls::GenericToolCall {
-                id: call.id.clone(),
-                name: call.name.clone(),
-                arguments: call.arguments.clone(),
+            .map(|call| {
+                // Store reasoning_details in meta if present (for Gemini thought signatures)
+                let meta = reasoning_details.as_ref().map(|rd| {
+                    let mut meta_map = serde_json::Map::new();
+                    meta_map.insert("reasoning_details".to_string(), rd.clone());
+                    meta_map
+                });
+
+                crate::llm::tool_calls::GenericToolCall {
+                    id: call.id.clone(),
+                    name: call.name.clone(),
+                    arguments: call.arguments.clone(),
+                    meta,
+                }
             })
             .collect();
 

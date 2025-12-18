@@ -213,8 +213,8 @@ impl HuggingFaceModel {
             // Normalize embeddings
             let normalized = self.normalize(&embeddings)?;
 
-            // Convert to Vec<f32>
-            let embedding_vec = normalized.to_vec1::<f32>()?;
+            // Convert to Vec<f32> - squeeze batch dimension first
+            let embedding_vec = normalized.squeeze(0)?.to_vec1::<f32>()?;
             all_embeddings.push(embedding_vec);
         }
 
@@ -227,8 +227,8 @@ impl HuggingFaceModel {
         let attention_mask = attention_mask.to_dtype(DType::F32)?;
         let attention_mask = attention_mask.unsqueeze(2)?; // (batch_size, seq_len, 1)
 
-        // Apply attention mask to hidden states
-        let masked_hidden_states = hidden_states.mul(&attention_mask)?;
+        // Apply attention mask to hidden states (use broadcast_mul for Metal backend compatibility)
+        let masked_hidden_states = hidden_states.broadcast_mul(&attention_mask)?;
 
         // Sum along sequence dimension
         let sum_hidden_states = masked_hidden_states.sum(1)?; // (batch_size, hidden_size)
@@ -236,8 +236,8 @@ impl HuggingFaceModel {
         // Sum attention mask to get actual sequence lengths
         let sum_mask = attention_mask.sum(1)?; // (batch_size, 1)
 
-        // Compute mean
-        let mean_pooled = sum_hidden_states.div(&sum_mask)?;
+        // Compute mean (use broadcast_div for Metal backend compatibility)
+        let mean_pooled = sum_hidden_states.broadcast_div(&sum_mask)?;
 
         Ok(mean_pooled)
     }
@@ -245,7 +245,7 @@ impl HuggingFaceModel {
     /// Normalize embeddings to unit vectors
     fn normalize(&self, embeddings: &Tensor) -> Result<Tensor> {
         let norm = embeddings.sqr()?.sum_keepdim(1)?.sqrt()?;
-        Ok(embeddings.div(&norm)?)
+        Ok(embeddings.broadcast_div(&norm)?)
     }
 }
 

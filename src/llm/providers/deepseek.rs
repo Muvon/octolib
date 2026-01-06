@@ -14,11 +14,18 @@
 
 //! DeepSeek provider implementation
 //!
-//! PRICING UPDATE: November 2025 (V3.2-Exp)
-//! New unified pricing for ALL models (no time-based discounts):
-//! - Cache Hit: $0.028 per 1M tokens
-//! - Cache Miss (Input): $0.28 per 1M tokens
-//! - Output: $0.42 per 1M tokens
+//! PRICING UPDATE: January 2026
+//! Model-specific pricing (per 1M tokens in USD):
+//!
+//! deepseek-chat (V3):
+//! - Cache Hit: $0.07
+//! - Cache Miss (Input): $0.27
+//! - Output: $1.10
+//!
+//! deepseek-reasoner (R1):
+//! - Cache Hit: $0.14
+//! - Cache Miss (Input): $0.55
+//! - Output: $2.19
 
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderExchange, ProviderResponse, TokenUsage};
@@ -28,38 +35,44 @@ use serde::{Deserialize, Serialize};
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-// Model pricing (per 1M tokens in USD) - Updated Nov 2025 for V3.2-Exp
-// New unified pricing for ALL models (no time-based discounts)
-lazy_static::lazy_static! {
-    /// Input pricing (cache miss): $0.28 per 1M tokens for all models (V3.2-Exp)
-    static ref INPUT_PRICING: f64 = 0.28;
-    /// Output pricing: $0.42 per 1M tokens for all models (V3.2-Exp)
-    static ref OUTPUT_PRICING: f64 = 0.42;
-    /// Cache hit pricing: $0.028 per 1M tokens for all models (V3.2-Exp)
-    static ref CACHE_HIT_PRICING: f64 = 0.028;
+// Model pricing (per 1M tokens in USD) - Updated Jan 2026
+// Source: https://api-docs.deepseek.com/quick_start/pricing
+const PRICING: &[(&str, f64, f64, f64)] = &[
+    // Model, Cache Hit price, Cache Miss (Input) price, Output price per 1M tokens
+    ("deepseek-chat", 0.07, 0.27, 1.10),     // V3 model
+    ("deepseek-reasoner", 0.14, 0.55, 2.19), // R1 model
+];
+
+/// Get pricing for a specific model
+fn get_model_pricing(model: &str) -> (f64, f64, f64) {
+    for (pricing_model, cache_hit, cache_miss, output) in PRICING {
+        if model.contains(pricing_model) {
+            return (*cache_hit, *cache_miss, *output);
+        }
+    }
+    // Default to deepseek-chat pricing if model not found
+    (0.07, 0.27, 1.10)
 }
 
-// Time-based discount system removed as of Sept 5, 2025
-// All models now use unified pricing regardless of time
-// V3.2-Exp pricing updated Nov 2025: $0.28 input, $0.42 output, $0.028 cache hit
-
-/// Calculate cost for DeepSeek models with unified pricing (Sept 5, 2025+)
+/// Calculate cost for DeepSeek models with cache-aware pricing (Jan 2026)
 fn calculate_cost_with_cache(
-    _model: &str, // Model parameter kept for API compatibility but not used
+    model: &str,
     regular_input_tokens: u64,
     cache_hit_tokens: u64,
     completion_tokens: u64,
 ) -> Option<f64> {
-    // New unified pricing for all models
-    let regular_input_cost = (regular_input_tokens as f64 / 1_000_000.0) * *INPUT_PRICING;
-    let cache_hit_cost = (cache_hit_tokens as f64 / 1_000_000.0) * *CACHE_HIT_PRICING;
-    let output_cost = (completion_tokens as f64 / 1_000_000.0) * *OUTPUT_PRICING;
+    let (cache_hit_price, cache_miss_price, output_price) = get_model_pricing(model);
+
+    let regular_input_cost = (regular_input_tokens as f64 / 1_000_000.0) * cache_miss_price;
+    let cache_hit_cost = (cache_hit_tokens as f64 / 1_000_000.0) * cache_hit_price;
+    let output_cost = (completion_tokens as f64 / 1_000_000.0) * output_price;
+
     Some(regular_input_cost + cache_hit_cost + output_cost)
 }
 
-/// Calculate cost for DeepSeek models with unified pricing (no cache)
-fn calculate_cost(_model: &str, prompt_tokens: u64, completion_tokens: u64) -> Option<f64> {
-    calculate_cost_with_cache(_model, prompt_tokens, 0, completion_tokens)
+/// Calculate cost for DeepSeek models without cache
+fn calculate_cost(model: &str, prompt_tokens: u64, completion_tokens: u64) -> Option<f64> {
+    calculate_cost_with_cache(model, prompt_tokens, 0, completion_tokens)
 }
 
 /// DeepSeek provider
@@ -322,33 +335,35 @@ mod tests {
 
     #[test]
     fn test_calculate_cost() {
-        // Test basic cost calculation with V3.2-Exp pricing (Nov 2025)
-        // Input: $0.28/1M, Output: $0.42/1M
+        // Test basic cost calculation with Jan 2026 pricing
+        // deepseek-chat: Input: $0.27/1M, Output: $1.10/1M
         let cost = calculate_cost("deepseek-chat", 1_000_000, 500_000);
         assert!(cost.is_some());
         let cost_value = cost.unwrap();
 
-        // Expected: (1M * $0.28) + (0.5M * $0.42) = $0.28 + $0.21 = $0.49
-        let expected = 0.28 + (0.5 * 0.42);
+        // Expected: (1M * $0.27) + (0.5M * $1.10) = $0.27 + $0.55 = $0.82
+        let expected = 0.27 + (0.5 * 1.10);
         assert!((cost_value - expected).abs() < 0.01); // Allow small floating point differences
 
-        // Test with different model - should be same price now
+        // Test with reasoner model - different pricing
+        // deepseek-reasoner: Input: $0.55/1M, Output: $2.19/1M
         let cost2 = calculate_cost("deepseek-reasoner", 1_000_000, 500_000);
         assert!(cost2.is_some());
-        assert!((cost2.unwrap() - expected).abs() < 0.01); // Same pricing for all models
+        let expected2 = 0.55 + (0.5 * 2.19);
+        assert!((cost2.unwrap() - expected2).abs() < 0.01);
     }
 
     #[test]
     fn test_calculate_cost_with_cache() {
-        // Test cache-aware cost calculation with V3.2-Exp pricing (Nov 2025)
-        // Cache hit: $0.028/1M, Cache miss: $0.28/1M, Output: $0.42/1M
+        // Test cache-aware cost calculation with Jan 2026 pricing
+        // deepseek-chat: Cache hit: $0.07/1M, Cache miss: $0.27/1M, Output: $1.10/1M
         let cost = calculate_cost_with_cache("deepseek-chat", 500_000, 500_000, 250_000);
         assert!(cost.is_some());
         let cost_value = cost.unwrap();
 
-        // Expected: (0.5M * $0.28) + (0.5M * $0.028) + (0.25M * $0.42)
-        //         = $0.14 + $0.014 + $0.105 = $0.259
-        let expected = (0.5 * 0.28) + (0.5 * 0.028) + (0.25 * 0.42);
+        // Expected: (0.5M * $0.27) + (0.5M * $0.07) + (0.25M * $1.10)
+        //         = $0.135 + $0.035 + $0.275 = $0.445
+        let expected = (0.5 * 0.27) + (0.5 * 0.07) + (0.25 * 1.10);
         assert!((cost_value - expected).abs() < 0.01);
 
         // Cost with cache should be less than without cache for same total input

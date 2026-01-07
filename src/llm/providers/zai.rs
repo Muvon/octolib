@@ -84,7 +84,7 @@ impl ZaiProvider {
 
 // Constants
 const ZAI_API_KEY_ENV: &str = "ZAI_API_KEY";
-const ZAI_API_URL: &str = "https://api.z.ai/v1/llm/chat/completions";
+const ZAI_API_URL: &str = "https://api.z.ai/api/paas/v4/chat/completions";
 
 // Z.ai API request/response structures
 #[derive(Serialize, Debug)]

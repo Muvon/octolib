@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.3.0] - 2026-01-07
+
+### 📋 Release Summary
+
+This release introduces enhanced model support with improved authentication and updated pricing for better cost tracking (8b3f2d93, 4904e94e, b08c6eb3). Several bug fixes and optimizations improve system stability, model compatibility, and test reliability (bd22c3fd, 013e5421, 0bb87c1f).
+
+
+### ✨ New Features & Enhancements
+
+- **openrouter**: add model catalog and mappings `8b3f2d93`
+- **llm/auth**: prefer OAuth over API keys `4904e94e`
+
+### 🐛 Bug Fixes & Stability
+
+- **anthropic**: disable temp for haiku/opus `bd22c3fd`
+- **pricing**: update model pricing & context `b08c6eb3`
+
+### 🔄 Other Changes
+
+- add serial test annotations to provider tests `013e5421`
+- **openai**: update model list and pricing `0bb87c1f`
+
+### 📊 Release Summary
+
+**Total commits**: 6 across 3 categories
+
+✨ **2** new features - *Enhanced functionality*
+🐛 **2** bug fixes - *Improved stability*
+🔄 **2** other changes - *Maintenance & tooling*
+
 ## [0.2.0] - 2025-11-29
 
 ### 📋 Release Summary

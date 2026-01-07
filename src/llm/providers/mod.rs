@@ -19,6 +19,7 @@ pub mod anthropic;
 pub mod cloudflare;
 pub mod deepseek;
 pub mod google;
+pub mod minimax;
 pub mod openai;
 pub mod openrouter;
 
@@ -28,5 +29,6 @@ pub use anthropic::AnthropicProvider;
 pub use cloudflare::CloudflareWorkersAiProvider;
 pub use deepseek::DeepSeekProvider;
 pub use google::GoogleVertexProvider;
+pub use minimax::MinimaxProvider;
 pub use openai::OpenAiProvider;
 pub use openrouter::OpenRouterProvider;

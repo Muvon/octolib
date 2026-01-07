@@ -51,6 +51,9 @@ export ANTHROPIC_API_KEY="your_anthropic_api_key"
 # OpenRouter
 export OPENROUTER_API_KEY="your_openrouter_api_key"
 
+# MiniMax
+export MINIMAX_API_KEY="your_minimax_api_key"
+
 # Google Vertex AI
 export GOOGLE_APPLICATION_CREDENTIALS="/path/to/credentials.json"
 

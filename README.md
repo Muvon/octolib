@@ -11,7 +11,7 @@ Octolib is a comprehensive, self-sufficient AI provider library that provides a 
 
 ## ✨ Key Features
 
-- **🔌 Multi-Provider Support**: OpenAI, Anthropic, OpenRouter, Google, Amazon, Cloudflare, DeepSeek
+- **🔌 Multi-Provider Support**: OpenAI, Anthropic, OpenRouter, Google, Amazon, Cloudflare, DeepSeek, MiniMax
 - **🛡️ Unified Interface**: Consistent API across different providers
 - **🔍 Intelligent Model Validation**: Strict `provider:model` format parsing
 - **📋 Structured Output**: JSON and JSON Schema support for OpenAI, OpenRouter, and DeepSeek
@@ -277,9 +277,11 @@ async fn embedding_example() -> anyhow::Result<()> {
 | **OpenRouter** | ✅ JSON + Schema | ✅ Yes | ✅ Yes | ✅ Yes |
 | **DeepSeek** | ✅ JSON Mode | ❌ No | ❌ No | ✅ Yes |
 | **Anthropic** | ❌ No | ✅ Yes | ✅ Yes | ✅ Yes |
+| **MiniMax** | ❌ No | ❌ No | ✅ Yes | ✅ Yes |
 | **Google Vertex** | ❌ No | ✅ Yes | ✅ Yes | ❌ No |
 | **Amazon Bedrock** | ❌ No | ✅ Yes | ✅ Yes | ❌ No |
 | **Cloudflare** | ❌ No | ❌ No | ❌ No | ❌ No |
+
 
 ### Structured Output Details
 
@@ -296,8 +298,6 @@ async fn embedding_example() -> anyhow::Result<()> {
 - **[Advanced Usage](doc/03-advanced-usage.md)** - Advanced features and customization
 - **[Advanced Guide](doc/04-advanced-guide.md)** - Comprehensive usage patterns
 - **[Embedding Guide](doc/05-embedding.md)** - Embedding generation with multiple providers
-- **[Tool Calling Guide](doc/06-tool-calling.md)** - Tool calling architecture and metadata handling
-
 ## 🌐 Supported Providers
 
 | Provider | Status | Capabilities |
@@ -306,7 +306,11 @@ async fn embedding_example() -> anyhow::Result<()> {
 | Anthropic | ✅ Full Support | Claude Models, Vision, Tools, Caching |
 | OpenRouter | ✅ Full Support | Multi-Provider Proxy, Vision, Caching, Structured Output |
 | DeepSeek | ✅ Full Support | Open-Source AI Models, Structured Output |
+| MiniMax | ✅ Full Support | Anthropic-Compatible API, Tools, Caching, Thinking Blocks |
 | Google Vertex AI | ✅ Supported | Enterprise AI Integration |
+| Amazon Bedrock | ✅ Supported | Cloud AI Services |
+| Cloudflare Workers AI | ✅ Supported | Edge AI Compute |
+
 | Amazon Bedrock | ✅ Supported | Cloud AI Services |
 | Cloudflare Workers AI | ✅ Supported | Edge AI Compute |
 

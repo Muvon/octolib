@@ -117,7 +117,8 @@ pub use llm::{
     AiProvider, AmazonBedrockProvider, AnthropicProvider, CacheConfig, CacheTTL, CacheType,
     ChatCompletionParams, CloudflareWorkersAiProvider, DeepSeekProvider, FunctionDefinition,
     GenericToolCall, GoogleVertexProvider, ImageAttachment, ImageData, Message, MessageBuilder,
-    ModelLimits, OpenAiProvider, OpenRouterProvider, OutputFormat, ProviderExchange,
-    ProviderFactory, ProviderResponse, ProviderStrategy, ProviderToolCalls, ResponseMode,
-    SourceType, StrategyFactory, StructuredOutputRequest, TokenUsage, ToolCall, ToolResult,
+    MinimaxProvider, ModelLimits, OpenAiProvider, OpenRouterProvider, OutputFormat,
+    ProviderExchange, ProviderFactory, ProviderResponse, ProviderStrategy, ProviderToolCalls,
+    ResponseMode, SourceType, StrategyFactory, StructuredOutputRequest, TokenUsage, ToolCall,
+    ToolResult,
 };

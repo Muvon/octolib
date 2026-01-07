@@ -16,7 +16,7 @@
 
 use crate::llm::providers::{
     AmazonBedrockProvider, AnthropicProvider, CloudflareWorkersAiProvider, DeepSeekProvider,
-    GoogleVertexProvider, OpenAiProvider, OpenRouterProvider,
+    GoogleVertexProvider, MinimaxProvider, OpenAiProvider, OpenRouterProvider,
 };
 use crate::llm::traits::AiProvider;
 use anyhow::Result;
@@ -54,7 +54,8 @@ impl ProviderFactory {
             "amazon" => Ok(Box::new(AmazonBedrockProvider::new())),
             "cloudflare" => Ok(Box::new(CloudflareWorkersAiProvider::new())),
             "deepseek" => Ok(Box::new(DeepSeekProvider::new())),
-            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported providers: openrouter, openai, anthropic, google, amazon, cloudflare, deepseek", provider_name)),
+            "minimax" => Ok(Box::new(MinimaxProvider::new())),
+            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported providers: openrouter, openai, anthropic, google, amazon, cloudflare, deepseek, minimax", provider_name)),
         }
     }
 
@@ -85,6 +86,7 @@ impl ProviderFactory {
             "amazon",
             "cloudflare",
             "deepseek",
+            "minimax",
         ]
     }
 
@@ -145,6 +147,7 @@ mod tests {
         assert!(providers.contains(&"amazon"));
         assert!(providers.contains(&"cloudflare"));
         assert!(providers.contains(&"deepseek"));
+        assert!(providers.contains(&"minimax"));
     }
 
     #[test]
@@ -166,10 +169,12 @@ mod tests {
         assert!(ProviderFactory::create_provider("amazon").is_ok());
         assert!(ProviderFactory::create_provider("cloudflare").is_ok());
         assert!(ProviderFactory::create_provider("deepseek").is_ok());
+        assert!(ProviderFactory::create_provider("minimax").is_ok());
 
         // Test case insensitive
         assert!(ProviderFactory::create_provider("OpenAI").is_ok());
         assert!(ProviderFactory::create_provider("ANTHROPIC").is_ok());
+        assert!(ProviderFactory::create_provider("MiniMax").is_ok());
 
         // Test invalid provider
         assert!(ProviderFactory::create_provider("invalid").is_err());
@@ -210,6 +215,15 @@ mod tests {
         let (provider, model) = result.unwrap();
         assert_eq!(provider.name(), "anthropic");
         assert_eq!(model, "claude-3.5-sonnet");
+
+        // Test MiniMax provider
+        let result = ProviderFactory::get_provider_for_model("minimax:MiniMax-M2.1");
+        assert!(result.is_ok());
+        let (provider, model) = result.unwrap();
+        assert_eq!(provider.name(), "minimax");
+        assert_eq!(model, "MiniMax-M2.1");
+        assert!(provider.supports_caching(&model));
+        assert!(provider.supports_model(&model));
 
         // Test invalid format
         let result = ProviderFactory::get_provider_for_model("gpt-4o");

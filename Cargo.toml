@@ -10,6 +10,9 @@ repository = "https://github.com/muvon/octolib"
 keywords = ["ai", "llm", "embeddings", "providers", "openai"]
 categories = ["api-bindings", "development-tools"]
 
+# Exclude scripts folder from crate publishing
+exclude = ["scripts/"]
+
 [features]
 default = ["fastembed", "huggingface"]
 fastembed = ["dep:fastembed"]

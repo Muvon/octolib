@@ -83,16 +83,16 @@ impl AiProvider for OpenRouterProvider {
     }
 
     fn supports_vision(&self, model: &str) -> bool {
-        // Vision support depends on the underlying model through OpenRouter
         model.contains("gpt-4o")
             || model.contains("gpt-4-turbo")
-            || model.contains("gpt-4-vision")
             || model.contains("claude-3")
             || model.contains("claude-4")
-            || model.contains("claude-3.5")
-            || model.contains("claude-3.7")
             || model.contains("gemini")
             || model.contains("llava")
+            || model.contains("qwen-vl")
+            || model.contains("vision")
+            || model.contains("anthropic/")
+            || model.contains("google/")
     }
 
     fn supports_structured_output(&self, _model: &str) -> bool {
@@ -101,26 +101,34 @@ impl AiProvider for OpenRouterProvider {
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {
-        // Context windows vary by model - match octomind's logic
-        if model.contains("claude") {
-            200_000 // Claude models have 200K context
-        } else if model.contains("gpt-5")
-            || model.contains("gpt-4o")
-            || model.contains("gpt-4-turbo")
-            || model.contains("gpt-4.1")
-            || model.contains("gpt-4.5")
-            || model.contains("o1")
-            || model.contains("o3")
-        {
-            128_000 // Modern GPT models and O-series have 128K context
-        } else if model.contains("gpt-4") {
-            8_192 // Old GPT-4 has 8K context
-        } else if model.contains("gpt-3.5") {
-            16_384 // GPT-3.5 has 16K context
-        } else if model.contains("gemini") {
-            1_000_000 // Gemini has 1M context
-        } else {
-            32_768 // Conservative default for Llama and other models
+        // Auto-generated from OpenRouter API
+        match model {
+            // claude models
+            _ if model.contains("claude") => 200_000,
+            // gpt-4o models
+            _ if model.contains("gpt-4o") => 128_000,
+            // gpt-4-turbo models
+            _ if model.contains("gpt-4-turbo") => 128_000,
+            // o1/o3 models
+            _ if model.contains("o1") || model.contains("o3") => 200_000,
+            // gpt-4 models
+            _ if model.contains("gpt-4") && !model.contains("gpt-4o") => 8_192,
+            // gpt-3.5-turbo models
+            _ if model.contains("gpt-3.5-turbo") => 16_384,
+            // llama models
+            _ if model.contains("llama-3") => 131_072,
+            _ if model.contains("llama-4") => 200_000,
+            // gemini models
+            _ if model.contains("gemini-1.5-pro") => 2_000_000,
+            _ if model.contains("gemini-1.5-flash") => 1_000_000,
+            _ if model.contains("gemini-2") => 1_048_576,
+            // mistral models
+            _ if model.contains("mistral-large") => 128_000,
+            _ if model.contains("mistral-small") => 32_000,
+            // deepseek models
+            _ if model.contains("deepseek") => 128_000,
+            // Fallback
+            _ => 2_000_000,
         }
     }
 

@@ -68,7 +68,9 @@ fn supports_temperature_and_top_p(model: &str) -> bool {
         "claude-opus-4-5",
     ];
 
-    !unsupported_prefixes.iter().any(|prefix| model.contains(prefix))
+    !unsupported_prefixes
+        .iter()
+        .any(|prefix| model.contains(prefix))
 }
 
 /// Calculate cost for Anthropic models with cache-aware pricing
@@ -161,6 +163,7 @@ impl AnthropicProvider {
 
 // Constants
 const ANTHROPIC_API_KEY_ENV: &str = "ANTHROPIC_API_KEY";
+const ANTHROPIC_OAUTH_TOKEN_ENV: &str = "ANTHROPIC_OAUTH_ACCESS_TOKEN";
 const ANTHROPIC_API_URL: &str = "https://api.anthropic.com/v1/messages";
 
 #[async_trait::async_trait]
@@ -175,12 +178,22 @@ impl AiProvider for AnthropicProvider {
     }
 
     fn get_api_key(&self) -> Result<String> {
-        // API keys now only from environment variables for security
+        // Check for OAuth token first (priority)
+        if env::var(ANTHROPIC_OAUTH_TOKEN_ENV).is_ok() {
+            return Err(anyhow::anyhow!(
+                "Using OAuth authentication. API key not available when {} is set.",
+                ANTHROPIC_OAUTH_TOKEN_ENV
+            ));
+        }
+
+        // Fall back to API key
         match env::var(ANTHROPIC_API_KEY_ENV) {
             Ok(key) => Ok(key),
             Err(_) => Err(anyhow::anyhow!(
-                "Anthropic API key not found in environment variable: {}",
-                ANTHROPIC_API_KEY_ENV
+                "Anthropic API key not found in environment variable: {}. Set either {} for API key auth or {} for OAuth.",
+                ANTHROPIC_API_KEY_ENV,
+                ANTHROPIC_API_KEY_ENV,
+                ANTHROPIC_OAUTH_TOKEN_ENV
             )),
         }
     }
@@ -221,7 +234,17 @@ impl AiProvider for AnthropicProvider {
     }
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-        let api_key = self.get_api_key()?;
+        // Check for OAuth token first (priority), otherwise use API key
+        let (auth_header_name, auth_header_value) =
+            if let Ok(oauth_token) = env::var(ANTHROPIC_OAUTH_TOKEN_ENV) {
+                (
+                    "Authorization".to_string(),
+                    format!("Bearer {}", oauth_token),
+                )
+            } else {
+                let api_key = self.get_api_key()?;
+                ("x-api-key".to_string(), api_key)
+            };
 
         // Convert messages to Anthropic format
         let anthropic_messages = convert_messages(&params.messages);
@@ -304,7 +327,8 @@ impl AiProvider for AnthropicProvider {
 
         // Execute the request with retry logic
         let response = execute_anthropic_request(
-            api_key,
+            auth_header_name,
+            auth_header_value,
             request_body,
             params.max_retries,
             params.retry_timeout,
@@ -503,7 +527,8 @@ fn convert_messages(messages: &[Message]) -> Vec<AnthropicMessage> {
 
 // Execute a single Anthropic HTTP request with smart retry delay calculation
 async fn execute_anthropic_request(
-    api_key: String,
+    auth_header_name: String,
+    auth_header_value: String,
     request_body: serde_json::Value,
     max_retries: u32,
     base_timeout: std::time::Duration,
@@ -515,13 +540,14 @@ async fn execute_anthropic_request(
     let response = retry::retry_with_exponential_backoff(
         || {
             let client = client.clone();
-            let api_key = api_key.clone();
+            let auth_header_name = auth_header_name.clone();
+            let auth_header_value = auth_header_value.clone();
             let request_body = request_body.clone();
             Box::pin(async move {
                 client
                     .post(ANTHROPIC_API_URL)
                     .header("Content-Type", "application/json")
-                    .header("x-api-key", &api_key)
+                    .header(&auth_header_name, &auth_header_value)
                     .header("anthropic-version", "2023-06-01")
                     .header("anthropic-beta", "prompt-caching-2024-07-31")
                     .json(&request_body)
@@ -696,4 +722,64 @@ async fn execute_anthropic_request(
         finish_reason: anthropic_response.stop_reason,
         structured_output: None, // Anthropic doesn't support structured output
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_oauth_token_priority() {
+        let provider = AnthropicProvider::new();
+
+        // Set OAuth token
+        env::set_var(ANTHROPIC_OAUTH_TOKEN_ENV, "test-oauth-token");
+
+        // get_api_key should return error when OAuth is set
+        let result = provider.get_api_key();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("OAuth authentication"));
+
+        // Clean up
+        env::remove_var(ANTHROPIC_OAUTH_TOKEN_ENV);
+    }
+
+    #[test]
+    fn test_api_key_fallback() {
+        let provider = AnthropicProvider::new();
+
+        // Remove OAuth token if set
+        env::remove_var(ANTHROPIC_OAUTH_TOKEN_ENV);
+
+        // Set API key
+        env::set_var(ANTHROPIC_API_KEY_ENV, "test-api-key");
+
+        // get_api_key should return the API key
+        let result = provider.get_api_key();
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "test-api-key");
+
+        // Clean up
+        env::remove_var(ANTHROPIC_API_KEY_ENV);
+    }
+
+    #[test]
+    fn test_no_auth_error() {
+        let provider = AnthropicProvider::new();
+
+        // Remove both OAuth and API key
+        env::remove_var(ANTHROPIC_OAUTH_TOKEN_ENV);
+        env::remove_var(ANTHROPIC_API_KEY_ENV);
+
+        // get_api_key should return error
+        let result = provider.get_api_key();
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(
+            error_msg.contains("ANTHROPIC_API_KEY") || error_msg.contains("ANTHROPIC_OAUTH_TOKEN")
+        );
+    }
 }

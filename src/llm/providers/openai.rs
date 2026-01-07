@@ -192,6 +192,8 @@ impl OpenAiProvider {
 }
 
 const OPENAI_API_KEY_ENV: &str = "OPENAI_API_KEY";
+const OPENAI_OAUTH_ACCESS_TOKEN_ENV: &str = "OPENAI_OAUTH_ACCESS_TOKEN";
+const OPENAI_OAUTH_ACCOUNT_ID_ENV: &str = "OPENAI_OAUTH_ACCOUNT_ID";
 const OPENAI_API_URL: &str = "https://api.openai.com/v1/chat/completions";
 
 #[async_trait::async_trait]
@@ -215,11 +217,23 @@ impl AiProvider for OpenAiProvider {
     }
 
     fn get_api_key(&self) -> Result<String> {
+        // Check for OAuth tokens first (priority)
+        if env::var(OPENAI_OAUTH_ACCESS_TOKEN_ENV).is_ok() {
+            return Err(anyhow::anyhow!(
+                "Using OAuth authentication. API key not available when {} is set.",
+                OPENAI_OAUTH_ACCESS_TOKEN_ENV
+            ));
+        }
+
+        // Fall back to API key
         match env::var(OPENAI_API_KEY_ENV) {
             Ok(key) => Ok(key),
             Err(_) => Err(anyhow::anyhow!(
-                "OpenAI API key not found in environment variable: {}",
-                OPENAI_API_KEY_ENV
+                "OpenAI API key not found in environment variable: {}. Set either {} for API key auth or {} + {} for OAuth.",
+                OPENAI_API_KEY_ENV,
+                OPENAI_API_KEY_ENV,
+                OPENAI_OAUTH_ACCESS_TOKEN_ENV,
+                OPENAI_OAUTH_ACCOUNT_ID_ENV
             )),
         }
     }
@@ -287,7 +301,21 @@ impl AiProvider for OpenAiProvider {
     }
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-        let api_key = self.get_api_key()?;
+        // Check for OAuth tokens first (priority), otherwise use API key
+        let (use_oauth, oauth_account_id) = if let (Ok(access_token), Ok(account_id)) = (
+            env::var(OPENAI_OAUTH_ACCESS_TOKEN_ENV),
+            env::var(OPENAI_OAUTH_ACCOUNT_ID_ENV),
+        ) {
+            (true, Some((access_token, account_id)))
+        } else {
+            (false, None)
+        };
+
+        let auth_token = if use_oauth {
+            oauth_account_id.as_ref().unwrap().0.clone()
+        } else {
+            self.get_api_key()?
+        };
 
         // Convert messages to OpenAI format
         let openai_messages = convert_messages(&params.messages);
@@ -376,8 +404,10 @@ impl AiProvider for OpenAiProvider {
         }
 
         // Execute the request with retry logic
+        let account_id_header = oauth_account_id.as_ref().map(|(_, id)| id.clone());
         let response = execute_openai_request(
-            api_key,
+            auth_token,
+            account_id_header,
             request_body,
             params.max_retries,
             params.retry_timeout,
@@ -595,7 +625,8 @@ fn convert_messages(messages: &[Message]) -> Vec<OpenAiMessage> {
 
 // Execute OpenAI HTTP request
 async fn execute_openai_request(
-    api_key: String,
+    auth_token: String,
+    account_id: Option<String>,
     request_body: serde_json::Value,
     max_retries: u32,
     base_timeout: std::time::Duration,
@@ -607,16 +638,21 @@ async fn execute_openai_request(
     let response = retry::retry_with_exponential_backoff(
         || {
             let client = client.clone();
-            let api_key = api_key.clone();
+            let auth_token = auth_token.clone();
+            let account_id = account_id.clone();
             let request_body = request_body.clone();
             Box::pin(async move {
-                client
+                let mut req = client
                     .post(OPENAI_API_URL)
                     .header("Content-Type", "application/json")
-                    .header("Authorization", format!("Bearer {}", api_key))
-                    .json(&request_body)
-                    .send()
-                    .await
+                    .header("Authorization", format!("Bearer {}", auth_token));
+
+                // Add ChatGPT-Account-ID header if using OAuth
+                if let Some(id) = account_id {
+                    req = req.header("ChatGPT-Account-ID", id);
+                }
+
+                req.json(&request_body).send().await
             })
         },
         max_retries,
@@ -974,5 +1010,62 @@ mod tests {
         assert!(!provider.supports_vision("o1-preview"));
         assert!(!provider.supports_vision("o1-mini"));
         assert!(!provider.supports_vision("text-davinci-003"));
+    }
+
+    #[test]
+    fn test_oauth_token_priority() {
+        let provider = OpenAiProvider::new();
+
+        // Set OAuth tokens
+        env::set_var(OPENAI_OAUTH_ACCESS_TOKEN_ENV, "test-oauth-token");
+        env::set_var(OPENAI_OAUTH_ACCOUNT_ID_ENV, "test-account-id");
+
+        // get_api_key should return error when OAuth is set
+        let result = provider.get_api_key();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("OAuth authentication"));
+
+        // Clean up
+        env::remove_var(OPENAI_OAUTH_ACCESS_TOKEN_ENV);
+        env::remove_var(OPENAI_OAUTH_ACCOUNT_ID_ENV);
+    }
+
+    #[test]
+    fn test_api_key_fallback() {
+        let provider = OpenAiProvider::new();
+
+        // Remove OAuth tokens if set
+        env::remove_var(OPENAI_OAUTH_ACCESS_TOKEN_ENV);
+        env::remove_var(OPENAI_OAUTH_ACCOUNT_ID_ENV);
+
+        // Set API key
+        env::set_var(OPENAI_API_KEY_ENV, "test-api-key");
+
+        // get_api_key should return the API key
+        let result = provider.get_api_key();
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "test-api-key");
+
+        // Clean up
+        env::remove_var(OPENAI_API_KEY_ENV);
+    }
+
+    #[test]
+    fn test_no_auth_error() {
+        let provider = OpenAiProvider::new();
+
+        // Remove all auth env vars
+        env::remove_var(OPENAI_OAUTH_ACCESS_TOKEN_ENV);
+        env::remove_var(OPENAI_OAUTH_ACCOUNT_ID_ENV);
+        env::remove_var(OPENAI_API_KEY_ENV);
+
+        // get_api_key should return error
+        let result = provider.get_api_key();
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("OPENAI_API_KEY") || error_msg.contains("OPENAI_OAUTH"));
     }
 }

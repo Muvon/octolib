@@ -67,6 +67,26 @@ Each provider requires its specific API key:
 - `GOOGLE_APPLICATION_CREDENTIALS`: Google Vertex AI credentials
 - `AWS_ACCESS_KEY_ID` & `AWS_SECRET_ACCESS_KEY`: Amazon Bedrock credentials
 
+### OAuth Authentication (Optional)
+
+For ChatGPT subscriptions and Anthropic OAuth:
+
+**OpenAI OAuth** (ChatGPT Plus/Pro/Team/Enterprise):
+- `OPENAI_OAUTH_ACCESS_TOKEN`: OAuth access token
+- `OPENAI_OAUTH_ACCOUNT_ID`: ChatGPT account ID
+- Both required; library automatically uses OAuth if both are set, falls back to API key otherwise
+
+**Anthropic OAuth**:
+- `ANTHROPIC_OAUTH_TOKEN`: OAuth bearer token
+- Library automatically uses OAuth if set, falls back to API key otherwise
+
+**Note**: The library only handles authentication detection and request sending. Your application must implement:
+- OAuth flow (authorization, token exchange)
+- Token refresh (OpenAI tokens expire ~8 days)
+- Token storage and security
+
+See `examples/openai_oauth.rs` and `examples/anthropic_oauth.rs` for usage examples.
+
 ## 🛠️ Advanced Features
 
 ### Provider Selection

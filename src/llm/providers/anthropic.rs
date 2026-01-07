@@ -61,7 +61,14 @@ struct CacheTokenUsage {
 /// Check if a model supports temperature parameter
 /// All Claude models support temperature except opus-4-1
 fn supports_temperature_and_top_p(model: &str) -> bool {
-    !model.contains("opus-4-1") && !model.contains("sonnet-4-5")
+    let unsupported_prefixes = [
+        "opus-4-1",
+        "sonnet-4-5",
+        "claude-haiku-4-5",
+        "claude-opus-4-5",
+    ];
+
+    !unsupported_prefixes.iter().any(|prefix| model.contains(prefix))
 }
 
 /// Calculate cost for Anthropic models with cache-aware pricing

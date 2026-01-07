@@ -18,10 +18,10 @@
 //!
 //! ## Features
 //!
-//! - **Multi-provider support**: OpenAI, Anthropic, OpenRouter, Google Vertex AI, Amazon Bedrock, Cloudflare Workers AI, DeepSeek
+//! - **Multi-provider support**: OpenAI, Anthropic, OpenRouter, Google Vertex AI, Amazon Bedrock, Cloudflare Workers AI, DeepSeek, Z.ai
 //! - **Unified interface**: Single trait for all providers with consistent API
 //! - **Model validation**: Strict `provider:model` format validation
-//! - **Structured output**: JSON and JSON Schema support for OpenAI, OpenRouter, and DeepSeek
+//! - **Structured output**: JSON and JSON Schema support for OpenAI, OpenRouter, DeepSeek, and Z.ai
 //! - **Cost tracking**: Automatic token usage and cost calculation
 //! - **Vision support**: Image attachment support for compatible models
 //! - **Caching support**: Automatic detection of caching-capable models
@@ -120,5 +120,5 @@ pub use llm::{
     MinimaxProvider, ModelLimits, OpenAiProvider, OpenRouterProvider, OutputFormat,
     ProviderExchange, ProviderFactory, ProviderResponse, ProviderStrategy, ProviderToolCalls,
     ResponseMode, SourceType, StrategyFactory, StructuredOutputRequest, TokenUsage, ToolCall,
-    ToolResult,
+    ToolResult, ZaiProvider,
 };

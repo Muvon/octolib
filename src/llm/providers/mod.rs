@@ -22,6 +22,7 @@ pub mod google;
 pub mod minimax;
 pub mod openai;
 pub mod openrouter;
+pub mod zai;
 
 // Re-export provider implementations
 pub use amazon::AmazonBedrockProvider;
@@ -32,3 +33,4 @@ pub use google::GoogleVertexProvider;
 pub use minimax::MinimaxProvider;
 pub use openai::OpenAiProvider;
 pub use openrouter::OpenRouterProvider;
+pub use zai::ZaiProvider;

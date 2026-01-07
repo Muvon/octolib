@@ -145,7 +145,7 @@ pub struct GenericToolCall {
 
 ```rust
 use octolib::{
-    ProviderFactory, ChatCompletionParams, Message, 
+    ProviderFactory, ChatCompletionParams, Message,
     FunctionDefinition, ProviderToolCalls
 };
 use serde_json::json;
@@ -185,7 +185,7 @@ async fn tool_calling_example() -> anyhow::Result<()> {
     if let Some(provider_calls) = ProviderToolCalls::extract_from_exchange(&response.exchange)? {
         // Convert to storage format (preserves metadata)
         let generic_calls = provider_calls.to_generic_tool_calls();
-        
+
         // Add assistant message with tool calls
         let mut assistant_msg = Message::assistant(&response.content);
         assistant_msg.tool_calls = Some(serde_json::to_value(&generic_calls)?);
@@ -193,7 +193,7 @@ async fn tool_calling_example() -> anyhow::Result<()> {
 
         // Convert to runtime format for execution
         let tool_calls = provider_calls.to_tool_calls()?;
-        
+
         // Execute tools
         for tool_call in tool_calls {
             let result = match tool_call.name.as_str() {

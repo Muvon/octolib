@@ -199,16 +199,16 @@ impl NewProvider {
 #[async_trait]
 impl AiProvider for NewProvider {
     fn name(&self) -> &str { "newprovider" }
-    
+
     fn supports_model(&self, model: &str) -> bool {
         model.starts_with("prefix-")
     }
-    
+
     fn get_api_key(&self) -> Result<String> {
         std::env::var("NEWPROVIDER_API_KEY")
             .map_err(|_| ProviderError::MissingApiKey("NEWPROVIDER_API_KEY".to_string()).into())
     }
-    
+
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
         // 1. Get API key
         // 2. Build request

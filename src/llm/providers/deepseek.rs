@@ -139,6 +139,14 @@ struct DeepSeekUsage {
     prompt_cache_hit_tokens: u64,
     #[serde(default)]
     prompt_cache_miss_tokens: u64,
+    #[serde(default)]
+    completion_tokens_details: Option<DeepSeekCompletionTokensDetails>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
+struct DeepSeekCompletionTokensDetails {
+    #[serde(default)]
+    reasoning_tokens: u64,
 }
 
 #[async_trait::async_trait]
@@ -284,14 +292,20 @@ impl AiProvider for DeepSeekProvider {
                 calculate_cost(&params.model, prompt_tokens, completion_tokens)
             };
 
+            let reasoning_tokens = usage
+                .completion_tokens_details
+                .as_ref()
+                .map(|details| details.reasoning_tokens)
+                .unwrap_or(0);
+
             Some(TokenUsage {
                 prompt_tokens,
                 output_tokens: completion_tokens,
-                reasoning_tokens: 0, // DeepSeek doesn't provide reasoning token count separately
+                reasoning_tokens, // From completion_tokens_details (may be 0 for non-reasoning models)
                 total_tokens,
-                cached_tokens: cache_hit_tokens, // Simple: total tokens that came from cache
-                cost,                  // Pre-calculated with unified pricing (Sept 5, 2025+)
-                request_time_ms: None, // Not tracked in octolib
+                cached_tokens: cache_hit_tokens,
+                cost,
+                request_time_ms: None,
             })
         } else {
             None

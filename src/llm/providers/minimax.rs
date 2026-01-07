@@ -467,13 +467,19 @@ async fn execute_minimax_request(
     let final_content = content_parts.join("\n");
 
     // Extract thinking as a separate ThinkingBlock
-    let thinking = if thinking_parts.is_empty() {
-        None
+    let (thinking, reasoning_tokens) = if thinking_parts.is_empty() {
+        (None, 0)
     } else {
-        Some(ThinkingBlock {
-            content: thinking_parts.join("\n\n"),
-            tokens: 0, // MiniMax doesn't provide thinking token count in response
-        })
+        let thinking_content = thinking_parts.join("\n\n");
+        // Estimate reasoning tokens from content length (4 chars per token)
+        let estimated = (thinking_content.len() / 4) as u64;
+        (
+            Some(ThinkingBlock {
+                content: thinking_content,
+                tokens: estimated,
+            }),
+            estimated,
+        )
     };
 
     // Calculate cost with proper cache pricing
@@ -495,7 +501,7 @@ async fn execute_minimax_request(
     let usage = TokenUsage {
         prompt_tokens: minimax_response.usage.input_tokens,
         output_tokens: minimax_response.usage.output_tokens,
-        reasoning_tokens: 0, // MiniMax doesn't provide separate thinking token count
+        reasoning_tokens, // Estimated from thinking content
         total_tokens: minimax_response.usage.input_tokens + minimax_response.usage.output_tokens,
         cached_tokens,
         cost,

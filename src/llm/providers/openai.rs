@@ -866,6 +866,7 @@ async fn execute_openai_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
     fn test_get_cache_multiplier() {
@@ -1013,6 +1014,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_oauth_token_priority() {
         let provider = OpenAiProvider::new();
 
@@ -1034,6 +1036,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_api_key_fallback() {
         let provider = OpenAiProvider::new();
 
@@ -1054,6 +1057,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_no_auth_error() {
         let provider = OpenAiProvider::new();
 

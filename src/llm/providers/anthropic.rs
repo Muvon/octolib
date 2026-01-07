@@ -727,8 +727,10 @@ async fn execute_anthropic_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
+    #[serial]
     fn test_oauth_token_priority() {
         let provider = AnthropicProvider::new();
 
@@ -748,6 +750,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_api_key_fallback() {
         let provider = AnthropicProvider::new();
 
@@ -767,6 +770,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_no_auth_error() {
         let provider = AnthropicProvider::new();
 

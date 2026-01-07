@@ -120,6 +120,7 @@ async fn main() -> anyhow::Result<()> {
             images: None,
             cached: false,
             timestamp: 0,
+            thinking: None,
         }],
         temperature: 0.7,
         max_tokens: 100,

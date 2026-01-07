@@ -17,7 +17,8 @@
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, TokenUsage, ToolCall,
+    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, ThinkingBlock, TokenUsage,
+    ToolCall,
 };
 use anyhow::Result;
 use reqwest::Client;
@@ -447,6 +448,9 @@ struct OpenAiChoice {
 #[derive(Deserialize, Debug)]
 struct OpenAiResponseMessage {
     content: Option<String>,
+    /// Reasoning content from o-series models (o1, o3, o4)
+    #[serde(default)]
+    reasoning_content: Option<String>,
     tool_calls: Option<Vec<OpenAiToolCall>>,
 }
 
@@ -471,12 +475,21 @@ struct OpenAiUsage {
     total_tokens: u64,
     #[serde(default)]
     input_tokens_details: Option<OpenAiInputTokensDetails>,
+    #[serde(default)]
+    completion_tokens_details: Option<OpenAiCompletionTokensDetails>,
 }
 
 #[derive(Deserialize, Debug)]
 struct OpenAiInputTokensDetails {
     #[serde(default)]
     cached_tokens: u64,
+}
+
+#[derive(Deserialize, Debug)]
+struct OpenAiCompletionTokensDetails {
+    /// Reasoning tokens from o-series models (o1, o3, o4)
+    #[serde(default)]
+    reasoning_tokens: Option<u64>,
 }
 
 // Convert our session messages to OpenAI format
@@ -736,6 +749,21 @@ async fn execute_openai_request(
 
     let content = choice.message.content.unwrap_or_default();
 
+    // Extract reasoning_tokens from usage details if available (must be before thinking)
+    let reasoning_tokens = openai_response
+        .usage
+        .completion_tokens_details
+        .as_ref()
+        .and_then(|details| details.reasoning_tokens)
+        .unwrap_or(0);
+
+    // Extract reasoning_content from o-series models (o1, o3, o4)
+    let reasoning_content = choice.message.reasoning_content;
+    let thinking = reasoning_content.as_ref().map(|rc| ThinkingBlock {
+        content: rc.clone(),
+        tokens: reasoning_tokens, // Include token count
+    });
+
     // Convert tool calls if present
     let tool_calls: Option<Vec<ToolCall>> = choice.message.tool_calls.map(|calls| {
         calls
@@ -806,7 +834,8 @@ async fn execute_openai_request(
     let usage = TokenUsage {
         prompt_tokens: openai_response.usage.prompt_tokens,
         output_tokens: openai_response.usage.completion_tokens,
-        total_tokens: openai_response.usage.total_tokens,
+        reasoning_tokens, // Reasoning tokens from o-series models
+        total_tokens: openai_response.usage.total_tokens + reasoning_tokens,
         cached_tokens: openai_response
             .usage
             .input_tokens_details
@@ -856,6 +885,7 @@ async fn execute_openai_request(
 
     Ok(ProviderResponse {
         content,
+        thinking, // Add thinking from o-series models
         exchange,
         tool_calls,
         finish_reason: choice.finish_reason,

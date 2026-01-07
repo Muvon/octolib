@@ -17,7 +17,8 @@
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, TokenUsage, ToolCall,
+    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, ThinkingBlock, TokenUsage,
+    ToolCall,
 };
 use anyhow::Result;
 use async_trait::async_trait;
@@ -462,14 +463,18 @@ async fn execute_minimax_request(
         }
     }
 
-    // Combine thinking and text content
-    let mut final_content = String::new();
-    if !thinking_parts.is_empty() {
-        final_content.push_str(&format!("[Thinking]\n{}\n\n", thinking_parts.join("\n")));
-    }
-    if !content_parts.is_empty() {
-        final_content.push_str(&content_parts.join("\n"));
-    }
+    // Final content is only the text parts (thinking is separate)
+    let final_content = content_parts.join("\n");
+
+    // Extract thinking as a separate ThinkingBlock
+    let thinking = if thinking_parts.is_empty() {
+        None
+    } else {
+        Some(ThinkingBlock {
+            content: thinking_parts.join("\n\n"),
+            tokens: 0, // MiniMax doesn't provide thinking token count in response
+        })
+    };
 
     // Calculate cost with proper cache pricing
     let cached_tokens = minimax_response.usage.cache_read_input_tokens.unwrap_or(0);
@@ -490,6 +495,7 @@ async fn execute_minimax_request(
     let usage = TokenUsage {
         prompt_tokens: minimax_response.usage.input_tokens,
         output_tokens: minimax_response.usage.output_tokens,
+        reasoning_tokens: 0, // MiniMax doesn't provide separate thinking token count
         total_tokens: minimax_response.usage.input_tokens + minimax_response.usage.output_tokens,
         cached_tokens,
         cost,
@@ -518,6 +524,7 @@ async fn execute_minimax_request(
 
     Ok(ProviderResponse {
         content: final_content,
+        thinking, // Extract thinking separately
         exchange,
         tool_calls: if tool_calls.is_empty() {
             None

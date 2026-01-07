@@ -35,7 +35,7 @@ pub use traits::AiProvider;
 pub use types::{
     ChatCompletionParams, FunctionDefinition, ImageAttachment, ImageData, Message, MessageBuilder,
     OutputFormat, ProviderExchange, ProviderResponse, ResponseMode, SourceType,
-    StructuredOutputRequest, TokenUsage, ToolCall,
+    StructuredOutputRequest, ThinkingBlock, TokenUsage, ToolCall,
 };
 
 // Re-export all provider implementations

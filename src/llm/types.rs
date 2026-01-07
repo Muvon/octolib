@@ -19,6 +19,11 @@ use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Message in a conversation
+///
+/// Messages can contain:
+/// - **content**: What was said (text response)
+/// - **thinking**: Internal reasoning (separate from content, like tool_calls)
+/// - **tool_calls**: Function invocations (separate from content)
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Message {
     pub role: String,
@@ -34,6 +39,8 @@ pub struct Message {
     pub tool_calls: Option<serde_json::Value>, // For assistant messages: original tool calls from API response
     #[serde(skip_serializing_if = "Option::is_none")]
     pub images: Option<Vec<ImageAttachment>>, // For messages with image attachments
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<ThinkingBlock>, // Internal reasoning (separate from content)
 }
 
 fn default_cache_marker() -> bool {
@@ -52,6 +59,7 @@ impl Message {
             name: None,
             tool_calls: None,
             images: None,
+            thinking: None,
         }
     }
 
@@ -66,6 +74,7 @@ impl Message {
             name: None,
             tool_calls: None,
             images: None,
+            thinking: None,
         }
     }
 
@@ -80,6 +89,7 @@ impl Message {
             name: None,
             tool_calls: None,
             images: None,
+            thinking: None,
         }
     }
 
@@ -94,7 +104,14 @@ impl Message {
             name: Some(name.to_string()),
             tool_calls: None,
             images: None,
+            thinking: None,
         }
+    }
+
+    /// Add thinking block to message (for assistant responses with reasoning)
+    pub fn with_thinking(mut self, thinking: ThinkingBlock) -> Self {
+        self.thinking = Some(thinking);
+        self
     }
 
     /// Add image attachment to message
@@ -126,6 +143,7 @@ pub struct MessageBuilder {
     name: Option<String>,
     tool_calls: Option<serde_json::Value>,
     images: Option<Vec<ImageAttachment>>,
+    thinking: Option<ThinkingBlock>,
 }
 
 impl MessageBuilder {
@@ -199,6 +217,12 @@ impl MessageBuilder {
         self
     }
 
+    /// Set thinking block (for assistant messages with reasoning)
+    pub fn thinking(mut self, thinking: ThinkingBlock) -> Self {
+        self.thinking = Some(thinking);
+        self
+    }
+
     /// Build the message with validation
     pub fn build(self) -> Result<Message, crate::errors::MessageError> {
         let role = self
@@ -240,6 +264,7 @@ impl MessageBuilder {
             name: self.name,
             tool_calls: self.tool_calls,
             images: self.images,
+            thinking: self.thinking,
         })
     }
 
@@ -300,12 +325,52 @@ pub enum SourceType {
     Url,
 }
 
+/// Thinking/reasoning block from models that support extended reasoning
+///
+/// Thinking is stored separately from content, similar to how tool_calls are separate.
+/// This allows for clean semantic separation between what the model said (content)
+/// and how it reasoned (thinking).
+///
+/// **Example usage:**
+/// ```rust
+/// use octolib::ThinkingBlock;
+///
+/// let thinking = ThinkingBlock::new("First, I need to solve for x...");
+/// ```
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ThinkingBlock {
+    /// The thinking/reasoning text content
+    pub content: String,
+    /// Token count for cost tracking (may not be available from all providers)
+    #[serde(default)]
+    pub tokens: u64,
+}
+
+impl ThinkingBlock {
+    /// Create a new thinking block with the given content
+    pub fn new(content: &str) -> Self {
+        Self {
+            content: content.to_string(),
+            tokens: 0,
+        }
+    }
+
+    /// Create a thinking block with token count
+    pub fn with_tokens(content: &str, tokens: u64) -> Self {
+        Self {
+            content: content.to_string(),
+            tokens,
+        }
+    }
+}
+
 /// Common token usage structure across all providers
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TokenUsage {
     pub prompt_tokens: u64, // ALL input tokens (user messages, system prompts, tool definitions, tool responses)
-    pub output_tokens: u64, // AI-generated response tokens only
-    pub total_tokens: u64,  // prompt_tokens + output_tokens
+    pub output_tokens: u64, // AI-generated response tokens only (excludes thinking tokens)
+    pub reasoning_tokens: u64, // Tokens used for thinking/reasoning (separate from output)
+    pub total_tokens: u64,  // prompt_tokens + output_tokens + reasoning_tokens
     pub cached_tokens: u64, // Subset of prompt_tokens that came from cache (discounted)
     #[serde(default)]
     pub cost: Option<f64>, // Pre-calculated total cost (provider handles cache pricing)
@@ -436,9 +501,17 @@ impl StructuredOutputRequest {
 }
 
 /// Provider response containing the AI completion
+///
+/// Response contains:
+/// - **content**: The final text response
+/// - **thinking**: Internal reasoning (if available from provider, separate from content)
+/// - **tool_calls**: Any function calls made
 #[derive(Debug, Clone)]
 pub struct ProviderResponse {
     pub content: String,
+    /// Thinking/reasoning content extracted from provider response
+    /// This is separate from content, similar to how tool_calls are separate
+    pub thinking: Option<ThinkingBlock>,
     pub exchange: ProviderExchange,
     pub tool_calls: Option<Vec<ToolCall>>,
     pub finish_reason: Option<String>,
@@ -600,7 +673,8 @@ mod tests {
         let usage = TokenUsage {
             prompt_tokens: 100,
             output_tokens: 50,
-            total_tokens: 150,
+            reasoning_tokens: 30,
+            total_tokens: 180,
             cached_tokens: 20,
             cost: Some(0.01),
             request_time_ms: Some(1500),
@@ -608,7 +682,8 @@ mod tests {
 
         assert_eq!(usage.prompt_tokens, 100);
         assert_eq!(usage.output_tokens, 50);
-        assert_eq!(usage.total_tokens, 150);
+        assert_eq!(usage.reasoning_tokens, 30);
+        assert_eq!(usage.total_tokens, 180);
         assert_eq!(usage.cached_tokens, 20);
         assert_eq!(usage.cost, Some(0.01));
         assert_eq!(usage.request_time_ms, Some(1500));
@@ -621,7 +696,8 @@ mod tests {
         let usage = TokenUsage {
             prompt_tokens: 10,
             output_tokens: 5,
-            total_tokens: 15,
+            reasoning_tokens: 3,
+            total_tokens: 18,
             cached_tokens: 0,
             cost: None,
             request_time_ms: None,
@@ -718,5 +794,47 @@ mod tests {
             }
             _ => panic!("Expected File source type"),
         }
+    }
+
+    #[test]
+    fn test_thinking_block() {
+        let thinking = ThinkingBlock::new("Let me solve this step by step...");
+        assert_eq!(thinking.content, "Let me solve this step by step...");
+        assert_eq!(thinking.tokens, 0);
+
+        let thinking_with_tokens = ThinkingBlock::with_tokens("Reasoning...", 42);
+        assert_eq!(thinking_with_tokens.content, "Reasoning...");
+        assert_eq!(thinking_with_tokens.tokens, 42);
+    }
+
+    #[test]
+    fn test_message_with_thinking() {
+        let thinking = ThinkingBlock::with_tokens("Let me solve this step by step...", 50);
+        let msg = Message::assistant("The answer is 42.").with_thinking(thinking);
+
+        assert!(msg.thinking.is_some());
+        assert_eq!(
+            msg.thinking.as_ref().unwrap().content,
+            "Let me solve this step by step..."
+        );
+        assert_eq!(msg.thinking.as_ref().unwrap().tokens, 50);
+        assert_eq!(msg.content, "The answer is 42.");
+    }
+
+    #[test]
+    fn test_message_builder_with_thinking() {
+        let thinking = ThinkingBlock::new("First, I'll analyze the problem...");
+        let msg = Message::builder()
+            .role("assistant")
+            .content("The answer is 42.")
+            .thinking(thinking)
+            .build()
+            .unwrap();
+
+        assert!(msg.thinking.is_some());
+        assert_eq!(
+            msg.thinking.unwrap().content,
+            "First, I'll analyze the problem..."
+        );
     }
 }

@@ -289,6 +289,66 @@ async fn embedding_example() -> anyhow::Result<()> {
 - **JSON Schema**: Full schema validation with strict mode
 - **Provider Detection**: Use `provider.supports_structured_output(&model)` to check capability
 
+### 🧠 Thinking/Reasoning Support
+
+Octolib provides first-class support for models that produce thinking/reasoning content. Thinking is stored **separately** from the main response content, similar to how `tool_calls` are separate from content.
+
+```rust
+use octolib::{ProviderFactory, ChatCompletionParams, Message, ThinkingBlock};
+
+async fn thinking_example() -> anyhow::Result<()> {
+    // MiniMax and OpenAI o-series models support thinking
+    let (provider, model) = ProviderFactory::get_provider_for_model("minimax:MiniMax-M2")?;
+
+    let messages = vec![
+        Message::user("Solve this complex math problem step by step"),
+    ];
+
+    let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000);
+    let response = provider.chat_completion(params).await?;
+
+    // Access thinking content (separate from response.content)
+    if let Some(ref thinking) = response.thinking {
+        println!("=== MODEL THINKING ({}) ===", thinking.tokens);
+        println!("{}", thinking.content);
+        println!("==========================");
+    }
+
+    // Final response (clean, no thinking prefix)
+    println!("Response: {}", response.content);
+
+    // Token usage breakdown
+    if let Some(usage) = &response.exchange.usage {
+        println!("Prompt tokens: {}", usage.prompt_tokens);
+        println!("Output tokens: {}", usage.output_tokens);
+        println!("Reasoning tokens: {}", usage.reasoning_tokens);
+    }
+
+    Ok(())
+}
+```
+
+#### Supported Providers
+
+| Provider | Thinking Format | Notes |
+|----------|----------------|-------|
+| **MiniMax** | Content blocks (`{"type": "thinking"}`) | Full thinking block extraction |
+| **OpenAI o-series** | `reasoning_content` field | o1, o3, o4 models |
+| **OpenRouter** | `reasoning_details` | Gemini and other providers |
+
+#### Token Tracking
+
+Thinking tokens are tracked separately in `TokenUsage.reasoning_tokens`:
+
+```rust
+if let Some(usage) = &response.exchange.usage {
+    println!("Total tokens: {}", usage.total_tokens);
+    println!("  - Prompt: {}", usage.prompt_tokens);
+    println!("  - Output: {}", usage.output_tokens);
+    println!("  - Reasoning: {}", usage.reasoning_tokens);
+}
+```
+
 ## 📚 Complete Documentation
 
 📖 **Quick Navigation**
@@ -308,9 +368,6 @@ async fn embedding_example() -> anyhow::Result<()> {
 | DeepSeek | ✅ Full Support | Open-Source AI Models, Structured Output |
 | MiniMax | ✅ Full Support | Anthropic-Compatible API, Tools, Caching, Thinking Blocks |
 | Google Vertex AI | ✅ Supported | Enterprise AI Integration |
-| Amazon Bedrock | ✅ Supported | Cloud AI Services |
-| Cloudflare Workers AI | ✅ Supported | Edge AI Compute |
-
 | Amazon Bedrock | ✅ Supported | Cloud AI Services |
 | Cloudflare Workers AI | ✅ Supported | Edge AI Compute |
 

@@ -17,7 +17,8 @@
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, TokenUsage, ToolCall,
+    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, ThinkingBlock, TokenUsage,
+    ToolCall,
 };
 use anyhow::Result;
 use reqwest::Client;
@@ -518,6 +519,35 @@ async fn execute_openrouter_request(
 
     let content = choice.message.content.unwrap_or_default();
 
+    // Extract reasoning_details as thinking (for Gemini and other providers)
+    let reasoning_details = &choice.message.reasoning_details;
+    let thinking = reasoning_details.as_ref().map(|rd| {
+        // Extract text content from reasoning_details array
+        let thinking_text = rd
+            .as_array()
+            .and_then(|arr| {
+                let texts: Vec<String> = arr
+                    .iter()
+                    .filter_map(|item| {
+                        item.get("text")
+                            .and_then(|t| t.as_str().map(|s| s.to_string()))
+                    })
+                    .collect();
+                if texts.is_empty() {
+                    None
+                } else {
+                    Some(texts)
+                }
+            })
+            .map(|texts| texts.join("\n\n"))
+            .unwrap_or_else(|| rd.to_string());
+
+        ThinkingBlock {
+            content: thinking_text,
+            tokens: 0, // OpenRouter doesn't provide reasoning token count
+        }
+    });
+
     // Convert tool calls if present
     let tool_calls: Option<Vec<ToolCall>> = choice.message.tool_calls.map(|calls| {
         calls
@@ -547,6 +577,7 @@ async fn execute_openrouter_request(
     let usage = TokenUsage {
         prompt_tokens: openrouter_response.usage.prompt_tokens,
         output_tokens: openrouter_response.usage.completion_tokens,
+        reasoning_tokens: 0, // OpenRouter doesn't provide reasoning token count in usage
         total_tokens: openrouter_response.usage.total_tokens,
         cached_tokens: 0, // OpenRouter doesn't provide cache info in usage
         cost: None,       // OpenRouter doesn't provide cost info directly
@@ -594,6 +625,7 @@ async fn execute_openrouter_request(
 
     Ok(ProviderResponse {
         content,
+        thinking, // Add thinking from reasoning_details
         exchange,
         tool_calls,
         finish_reason: choice.finish_reason,

@@ -119,6 +119,6 @@ pub use llm::{
     GenericToolCall, GoogleVertexProvider, ImageAttachment, ImageData, Message, MessageBuilder,
     MinimaxProvider, ModelLimits, OpenAiProvider, OpenRouterProvider, OutputFormat,
     ProviderExchange, ProviderFactory, ProviderResponse, ProviderStrategy, ProviderToolCalls,
-    ResponseMode, SourceType, StrategyFactory, StructuredOutputRequest, TokenUsage, ToolCall,
-    ToolResult, ZaiProvider,
+    ResponseMode, SourceType, StrategyFactory, StructuredOutputRequest, ThinkingBlock, TokenUsage,
+    ToolCall, ToolResult, ZaiProvider,
 };

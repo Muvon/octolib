@@ -384,6 +384,7 @@ mod tests {
             Some(TokenUsage {
                 prompt_tokens: 100,
                 output_tokens: 50,
+                reasoning_tokens: 0,
                 total_tokens: 150,
                 cached_tokens: 0,
                 cost: Some(0.01),

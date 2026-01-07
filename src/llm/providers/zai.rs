@@ -412,6 +412,7 @@ async fn execute_zai_request(
     let token_usage = TokenUsage {
         prompt_tokens,
         output_tokens: completion_tokens,
+        reasoning_tokens: 0, // Z.ai doesn't provide reasoning token count
         total_tokens: usage.map(|u| u.total_tokens).unwrap_or(0),
         cached_tokens,
         cost,
@@ -448,6 +449,7 @@ async fn execute_zai_request(
 
     Ok(ProviderResponse {
         content,
+        thinking: None, // Z.ai doesn't support thinking
         exchange,
         tool_calls,
         finish_reason,

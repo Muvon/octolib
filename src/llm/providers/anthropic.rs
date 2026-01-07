@@ -674,6 +674,7 @@ async fn execute_anthropic_request(
     let usage = TokenUsage {
         prompt_tokens: anthropic_response.usage.input_tokens,
         output_tokens: anthropic_response.usage.output_tokens,
+        reasoning_tokens: 0, // Anthropic doesn't provide reasoning token count
         total_tokens: anthropic_response.usage.input_tokens
             + anthropic_response.usage.output_tokens,
         cached_tokens,
@@ -713,6 +714,7 @@ async fn execute_anthropic_request(
 
     Ok(ProviderResponse {
         content,
+        thinking: None, // Anthropic doesn't support thinking
         exchange,
         tool_calls: if tool_calls.is_empty() {
             None

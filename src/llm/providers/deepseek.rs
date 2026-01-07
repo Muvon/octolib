@@ -287,6 +287,7 @@ impl AiProvider for DeepSeekProvider {
             Some(TokenUsage {
                 prompt_tokens,
                 output_tokens: completion_tokens,
+                reasoning_tokens: 0, // DeepSeek doesn't provide reasoning token count separately
                 total_tokens,
                 cached_tokens: cache_hit_tokens, // Simple: total tokens that came from cache
                 cost,                  // Pre-calculated with unified pricing (Sept 5, 2025+)
@@ -312,6 +313,7 @@ impl AiProvider for DeepSeekProvider {
 
         Ok(ProviderResponse {
             content: choice.message.content,
+            thinking: None, // DeepSeek doesn't support thinking in octolib yet
             exchange: final_exchange,
             tool_calls: None, // DeepSeek doesn't support tool calls in octolib yet
             finish_reason: choice.finish_reason,

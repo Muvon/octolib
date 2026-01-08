@@ -103,6 +103,7 @@ impl MinimaxProvider {
 
 // Constants
 const MINIMAX_API_KEY_ENV: &str = "MINIMAX_API_KEY";
+const MINIMAX_API_URL_ENV: &str = "MINIMAX_API_URL";
 const MINIMAX_API_URL: &str = "https://api.minimax.io/anthropic/v1/messages";
 
 #[async_trait]
@@ -221,8 +222,11 @@ impl AiProvider for MinimaxProvider {
         }
 
         // Execute the request with retry logic
+        let api_url = env::var(MINIMAX_API_URL_ENV).unwrap_or_else(|_| MINIMAX_API_URL.to_string());
+
         let response = execute_minimax_request(
             api_key,
+            api_url,
             request_body,
             params.max_retries,
             params.retry_timeout,
@@ -394,6 +398,7 @@ fn convert_messages(messages: &[Message]) -> Vec<MinimaxMessage> {
 // Execute a single MiniMax HTTP request with smart retry delay calculation
 async fn execute_minimax_request(
     api_key: String,
+    api_url: String,
     request_body: serde_json::Value,
     max_retries: u32,
     base_timeout: std::time::Duration,
@@ -406,10 +411,11 @@ async fn execute_minimax_request(
         || {
             let client = client.clone();
             let api_key = api_key.clone();
+            let api_url = api_url.clone();
             let request_body = request_body.clone();
             Box::pin(async move {
                 client
-                    .post(MINIMAX_API_URL)
+                    .post(&api_url)
                     .header("Content-Type", "application/json")
                     .header("Authorization", format!("Bearer {}", api_key))
                     .header("anthropic-version", "2023-06-01")

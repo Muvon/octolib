@@ -42,8 +42,8 @@ impl OpenRouterProvider {
 }
 
 const OPENROUTER_API_KEY_ENV: &str = "OPENROUTER_API_KEY";
+const OPENROUTER_API_URL_ENV: &str = "OPENROUTER_API_URL";
 const OPENROUTER_API_URL: &str = "https://openrouter.ai/api/v1/chat/completions";
-
 #[async_trait::async_trait]
 impl AiProvider for OpenRouterProvider {
     fn name(&self) -> &str {
@@ -232,8 +232,12 @@ impl AiProvider for OpenRouterProvider {
         }
 
         // Execute the request
+        let api_url =
+            env::var(OPENROUTER_API_URL_ENV).unwrap_or_else(|_| OPENROUTER_API_URL.to_string());
+
         let response = execute_openrouter_request(
             api_key,
+            api_url,
             request_body,
             params.max_retries,
             params.retry_timeout,
@@ -460,6 +464,7 @@ fn convert_messages(messages: &[Message]) -> Vec<OpenRouterMessage> {
 // Execute OpenRouter HTTP request
 async fn execute_openrouter_request(
     api_key: String,
+    api_url: String,
     request_body: serde_json::Value,
     max_retries: u32,
     base_timeout: std::time::Duration,
@@ -472,6 +477,7 @@ async fn execute_openrouter_request(
         || {
             let client = client.clone();
             let api_key = api_key.clone();
+            let api_url = api_url.clone();
             let request_body = request_body.clone();
             let openrouter_app_title =
                 std::env::var("OPENROUTER_APP_TITLE").unwrap_or_else(|_| "octolib".to_string());
@@ -480,7 +486,7 @@ async fn execute_openrouter_request(
 
             Box::pin(async move {
                 client
-                    .post(OPENROUTER_API_URL)
+                    .post(&api_url)
                     .header("Content-Type", "application/json")
                     .header("Authorization", format!("Bearer {}", api_key))
                     .header("HTTP-Referer", openrouter_http_referer)

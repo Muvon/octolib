@@ -59,6 +59,8 @@ async fn example() -> anyhow::Result<()> {
 
 ## 🔑 Environment Variables
 
+### API Keys
+
 Each provider requires its specific API key:
 
 - `OPENAI_API_KEY`: OpenAI API key
@@ -66,6 +68,28 @@ Each provider requires its specific API key:
 - `OPENROUTER_API_KEY`: OpenRouter API key
 - `GOOGLE_APPLICATION_CREDENTIALS`: Google Vertex AI credentials
 - `AWS_ACCESS_KEY_ID` & `AWS_SECRET_ACCESS_KEY`: Amazon Bedrock credentials
+
+### Custom API Endpoints (Optional)
+
+All providers support custom API URLs via environment variables. If not set, default provider URLs are used:
+
+| Provider | API Key Env | API URL Env | Default URL |
+|----------|-------------|-------------|-------------|
+| OpenAI | `OPENAI_API_KEY` | `OPENAI_API_URL` | `https://api.openai.com/v1/chat/completions` |
+| Anthropic | `ANTHROPIC_API_KEY` | `ANTHROPIC_API_URL` | `https://api.anthropic.com/v1/messages` |
+| OpenRouter | `OPENROUTER_API_KEY` | `OPENROUTER_API_URL` | `https://openrouter.ai/api/v1/chat/completions` |
+| MiniMax | `MINIMAX_API_KEY` | `MINIMAX_API_URL` | `https://api.minimax.io/anthropic/v1/messages` |
+| ZAI | `ZAI_API_KEY` | `ZAI_API_URL` | `https://api.z.ai/api/paas/v4/chat/completions` |
+
+Example usage with custom endpoints:
+
+```bash
+# Use OpenAI with custom proxy
+export OPENAI_API_URL="https://custom-proxy.example.com/v1/chat/completions"
+
+# Use Anthropic with enterprise endpoint
+export ANTHROPIC_API_URL="https://enterprise.anthropic.com/v1/messages"
+```
 
 ### OAuth Authentication (Optional)
 

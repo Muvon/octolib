@@ -195,8 +195,8 @@ impl OpenAiProvider {
 const OPENAI_API_KEY_ENV: &str = "OPENAI_API_KEY";
 const OPENAI_OAUTH_ACCESS_TOKEN_ENV: &str = "OPENAI_OAUTH_ACCESS_TOKEN";
 const OPENAI_OAUTH_ACCOUNT_ID_ENV: &str = "OPENAI_OAUTH_ACCOUNT_ID";
+const OPENAI_API_URL_ENV: &str = "OPENAI_API_URL";
 const OPENAI_API_URL: &str = "https://api.openai.com/v1/chat/completions";
-
 #[async_trait::async_trait]
 impl AiProvider for OpenAiProvider {
     fn name(&self) -> &str {
@@ -406,9 +406,12 @@ impl AiProvider for OpenAiProvider {
 
         // Execute the request with retry logic
         let account_id_header = oauth_account_id.as_ref().map(|(_, id)| id.clone());
+        let api_url = env::var(OPENAI_API_URL_ENV).unwrap_or_else(|_| OPENAI_API_URL.to_string());
+
         let response = execute_openai_request(
             auth_token,
             account_id_header,
+            api_url,
             request_body,
             params.max_retries,
             params.retry_timeout,
@@ -640,6 +643,7 @@ fn convert_messages(messages: &[Message]) -> Vec<OpenAiMessage> {
 async fn execute_openai_request(
     auth_token: String,
     account_id: Option<String>,
+    api_url: String,
     request_body: serde_json::Value,
     max_retries: u32,
     base_timeout: std::time::Duration,
@@ -653,10 +657,11 @@ async fn execute_openai_request(
             let client = client.clone();
             let auth_token = auth_token.clone();
             let account_id = account_id.clone();
+            let api_url = api_url.clone();
             let request_body = request_body.clone();
             Box::pin(async move {
                 let mut req = client
-                    .post(OPENAI_API_URL)
+                    .post(&api_url)
                     .header("Content-Type", "application/json")
                     .header("Authorization", format!("Bearer {}", auth_token));
 

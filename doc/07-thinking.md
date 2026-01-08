@@ -153,7 +153,7 @@ if let Some(usage) = &response.exchange.usage {
     println!("  - Prompt: {}", usage.prompt_tokens);
     println!("  - Output: {}", usage.output_tokens);
     println!("  - Reasoning: {}", usage.reasoning_tokens);
-    
+
     // Cost calculation includes reasoning tokens
     if let Some(cost) = usage.cost {
         println!("Cost: ${:.4}", cost);
@@ -206,7 +206,7 @@ async fn thinking_example() -> anyhow::Result<()> {
         println!("  Output: {} tokens", usage.output_tokens);
         println!("  Reasoning: {} tokens", usage.reasoning_tokens);
         println!("  Total: {} tokens", usage.total_tokens);
-        
+
         if let Some(cost) = usage.cost {
             println!("  Cost: ${:.4}", cost);
         }
@@ -243,8 +243,8 @@ Use `AiProvider` trait methods to check thinking support:
 let (provider, model) = ProviderFactory::get_provider_for_model("minimax:MiniMax-M2")?;
 
 // Check if model supports thinking (this is provider-specific)
-let supports_thinking = model.starts_with("MiniMax") || 
-                        model.starts_with("o1") || 
+let supports_thinking = model.starts_with("MiniMax") ||
+                        model.starts_with("o1") ||
                         model.starts_with("o3") ||
                         model.starts_with("o4");
 
@@ -300,7 +300,7 @@ let total_budget = max_thinking_tokens + max_output_tokens;
 
 if let Some(ref thinking) = response.thinking {
     if thinking.tokens > max_thinking_tokens {
-        println!("Warning: Thinking exceeded budget by {} tokens", 
+        println!("Warning: Thinking exceeded budget by {} tokens",
             thinking.tokens - max_thinking_tokens);
     }
 }

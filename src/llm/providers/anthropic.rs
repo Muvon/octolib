@@ -164,6 +164,7 @@ impl AnthropicProvider {
 // Constants
 const ANTHROPIC_API_KEY_ENV: &str = "ANTHROPIC_API_KEY";
 const ANTHROPIC_OAUTH_TOKEN_ENV: &str = "ANTHROPIC_OAUTH_ACCESS_TOKEN";
+const ANTHROPIC_API_URL_ENV: &str = "ANTHROPIC_API_URL";
 const ANTHROPIC_API_URL: &str = "https://api.anthropic.com/v1/messages";
 
 #[async_trait::async_trait]
@@ -326,9 +327,13 @@ impl AiProvider for AnthropicProvider {
         }
 
         // Execute the request with retry logic
+        let api_url =
+            env::var(ANTHROPIC_API_URL_ENV).unwrap_or_else(|_| ANTHROPIC_API_URL.to_string());
+
         let response = execute_anthropic_request(
             auth_header_name,
             auth_header_value,
+            api_url,
             request_body,
             params.max_retries,
             params.retry_timeout,
@@ -529,6 +534,7 @@ fn convert_messages(messages: &[Message]) -> Vec<AnthropicMessage> {
 async fn execute_anthropic_request(
     auth_header_name: String,
     auth_header_value: String,
+    api_url: String,
     request_body: serde_json::Value,
     max_retries: u32,
     base_timeout: std::time::Duration,
@@ -542,10 +548,11 @@ async fn execute_anthropic_request(
             let client = client.clone();
             let auth_header_name = auth_header_name.clone();
             let auth_header_value = auth_header_value.clone();
+            let api_url = api_url.clone();
             let request_body = request_body.clone();
             Box::pin(async move {
                 client
-                    .post(ANTHROPIC_API_URL)
+                    .post(&api_url)
                     .header("Content-Type", "application/json")
                     .header(&auth_header_name, &auth_header_value)
                     .header("anthropic-version", "2023-06-01")

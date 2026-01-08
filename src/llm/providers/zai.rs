@@ -84,8 +84,8 @@ impl ZaiProvider {
 
 // Constants
 const ZAI_API_KEY_ENV: &str = "ZAI_API_KEY";
+const ZAI_API_URL_ENV: &str = "ZAI_API_URL";
 const ZAI_API_URL: &str = "https://api.z.ai/api/paas/v4/chat/completions";
-
 // Z.ai API request/response structures
 #[derive(Serialize, Debug)]
 struct ZaiRequest {
@@ -198,12 +198,10 @@ impl AiProvider for ZaiProvider {
         // Z.ai GLM models
         model.starts_with("glm-")
     }
-
     fn get_api_key(&self) -> Result<String> {
         env::var(ZAI_API_KEY_ENV)
-            .map_err(|_| anyhow::anyhow!("ZAI_API_KEY not found in environment"))
+            .map_err(|_| anyhow::anyhow!("{} not found in environment", ZAI_API_KEY_ENV))
     }
-
     fn supports_caching(&self, _model: &str) -> bool {
         true // Z.ai supports prompt caching
     }
@@ -231,7 +229,7 @@ impl AiProvider for ZaiProvider {
     }
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-        let api_key = self.get_api_key()?;
+        let (api_key, api_url) = get_api_key_and_url()?;
 
         // Convert messages to Z.ai format
         let messages: Vec<ZaiMessage> = params
@@ -275,6 +273,7 @@ impl AiProvider for ZaiProvider {
         // Execute request with retry logic
         let response = execute_zai_request(
             api_key,
+            api_url,
             request,
             params.max_retries,
             params.retry_timeout,
@@ -325,9 +324,22 @@ fn convert_tools(tools: &[crate::llm::types::FunctionDefinition]) -> serde_json:
         .collect::<Vec<_>>())
 }
 
+/// Get API key and endpoint URL based on available configuration
+/// Returns (api_key, api_url) tuple
+fn get_api_key_and_url() -> Result<(String, String)> {
+    let api_key = env::var(ZAI_API_KEY_ENV)
+        .map_err(|_| anyhow::anyhow!("{} not found in environment", ZAI_API_KEY_ENV))?;
+
+    // Use custom URL if configured, otherwise use default
+    let api_url = env::var(ZAI_API_URL_ENV).unwrap_or_else(|_| ZAI_API_URL.to_string());
+
+    Ok((api_key, api_url))
+}
+
 /// Execute a single Z.ai HTTP request with retry logic
 async fn execute_zai_request(
     api_key: String,
+    api_url: String,
     request: ZaiRequest,
     max_retries: u32,
     base_timeout: std::time::Duration,
@@ -340,11 +352,12 @@ async fn execute_zai_request(
         || {
             let client = client.clone();
             let api_key = api_key.clone();
+            let api_url = api_url.clone();
             let request_body = serde_json::to_value(&request).unwrap();
 
             Box::pin(async move {
                 client
-                    .post(ZAI_API_URL)
+                    .post(&api_url)
                     .header("Content-Type", "application/json")
                     .header("Authorization", format!("Bearer {}", api_key))
                     .json(&request_body)

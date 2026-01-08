@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.4.0] - 2026-01-08
+
+### 📋 Release Summary
+
+This release adds support for Z.ai and MiniMax providers, enhances reasoning token tracking, and introduces configurable API URLs for improved flexibility. Several optimizations improve model performance and stability, including fixes for Z.ai endpoint updates and enhanced thinking extraction for o-series models.
+
+
+### ✨ New Features & Enhancements
+
+- **openrouter**: support configurable API URL `eceec284`
+- **zai**: add configurable API URL support `7ec4b35d`
+- **llm**: add reasoning token tracking for providers `588ca7b1`
+- **llm**: add thinking extraction for o-series models `cb49d0fd`
+- **llm**: add Z.ai provider support `5e4d5899`
+- **minimax**: add MiniMax provider support `fe749cef`
+
+### 🐛 Bug Fixes & Stability
+
+- **zai**: update api url endpoint `50f7b28e`
+
+### 📊 Release Summary
+
+**Total commits**: 7 across 2 categories
+
+✨ **6** new features - *Enhanced functionality*
+🐛 **1** bug fix - *Improved stability*
+
 ## [0.3.0] - 2026-01-07
 
 ### 📋 Release Summary

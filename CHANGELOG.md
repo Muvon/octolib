@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.4.1] - 2026-01-13
+
+### 📋 Release Summary
+
+This release improves temperature and top_p parameter accuracy for consistent model inference (a7a9bac3) and updates reqwest to 0.13.1 for enhanced security and performance (c015ac94).
+
+
+### 🐛 Bug Fixes & Stability
+
+- **zai**: fix temperature and top_p precision `a7a9bac3`
+
+### 🔄 Other Changes
+
+- **deps**: update reqwest to 0.13.1 `c015ac94`
+
+### 📊 Release Summary
+
+**Total commits**: 2 across 2 categories
+
+🐛 **1** bug fix - *Improved stability*
+🔄 **1** other change - *Maintenance & tooling*
+
 ## [0.4.0] - 2026-01-08
 
 ### 📋 Release Summary

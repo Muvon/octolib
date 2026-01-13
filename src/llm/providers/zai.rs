@@ -94,9 +94,9 @@ struct ZaiRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     do_sample: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    temperature: Option<f32>,
+    temperature: Option<f64>, // Changed to f64 for better precision control
     #[serde(skip_serializing_if = "Option::is_none")]
-    top_p: Option<f32>,
+    top_p: Option<f64>, // Changed to f64 for better precision control
     #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -244,12 +244,16 @@ impl AiProvider for ZaiProvider {
             .collect();
 
         // Build request
+        // Z.ai API is strict about floating point precision - convert f32 to f64 and round to 2 decimal places
+        let temperature = (params.temperature as f64 * 100.0).round() / 100.0;
+        let top_p = (params.top_p as f64 * 100.0).round() / 100.0;
+
         let request = ZaiRequest {
             model: params.model.clone(),
             messages,
             do_sample: Some(params.temperature > 0.0),
-            temperature: Some(params.temperature),
-            top_p: Some(params.top_p),
+            temperature: Some(temperature),
+            top_p: Some(top_p),
             max_tokens: Some(params.max_tokens),
             stream: Some(false),
             stop: None,

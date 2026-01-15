@@ -130,6 +130,9 @@ impl AiProvider for MinimaxProvider {
         false // MiniMax doesn't support vision yet according to docs
     }
 
+    fn supports_structured_output(&self, _model: &str) -> bool {
+        true // MiniMax supports structured output via response_format
+    }
     fn get_max_input_tokens(&self, model: &str) -> usize {
         // MiniMax model context window limits
         if model.contains("MiniMax-M2.1") || model.contains("MiniMax-M2") {
@@ -190,6 +193,37 @@ impl AiProvider for MinimaxProvider {
             }]);
         } else {
             request_body["system"] = serde_json::json!(system_message);
+        }
+
+        // Add structured output format if specified
+        if let Some(response_format) = &params.response_format {
+            match &response_format.format {
+                crate::llm::types::OutputFormat::Json => {
+                    request_body["response_format"] = serde_json::json!({
+                        "type": "json_object"
+                    });
+                }
+                crate::llm::types::OutputFormat::JsonSchema => {
+                    if let Some(schema) = &response_format.schema {
+                        let mut format_obj = serde_json::json!({
+                            "type": "json_schema",
+                            "json_schema": {
+                                "schema": schema
+                            }
+                        });
+
+                        // Add strict mode if specified
+                        if matches!(
+                            response_format.mode,
+                            crate::llm::types::ResponseMode::Strict
+                        ) {
+                            format_obj["json_schema"]["strict"] = serde_json::json!(true);
+                        }
+
+                        request_body["response_format"] = format_obj;
+                    }
+                }
+            }
         }
 
         // Add tools if available (Anthropic format)
@@ -534,6 +568,14 @@ async fn execute_minimax_request(
 
     let exchange = ProviderExchange::new(request_body, response_json, Some(usage), "minimax");
 
+    // Try to parse structured output if it was requested
+    let structured_output =
+        if final_content.trim().starts_with('{') || final_content.trim().starts_with('[') {
+            serde_json::from_str(&final_content).ok()
+        } else {
+            None
+        };
+
     Ok(ProviderResponse {
         content: final_content,
         thinking, // Extract thinking separately
@@ -544,7 +586,7 @@ async fn execute_minimax_request(
             Some(tool_calls)
         },
         finish_reason: minimax_response.stop_reason,
-        structured_output: None, // MiniMax doesn't support structured output
+        structured_output,
     })
 }
 
@@ -590,5 +632,13 @@ mod tests {
         let cost = calculate_minimax_cost("MiniMax-M2.1-lightning", 1_000_000, 1_000_000, 0, 0);
         // Use approximate comparison for floating point
         assert!((cost.unwrap() - 2.7).abs() < 0.0001);
+    }
+
+    #[test]
+    fn test_provider_capabilities() {
+        let provider = MinimaxProvider::new();
+        assert!(provider.supports_caching("MiniMax-M2.1"));
+        assert!(!provider.supports_vision("MiniMax-M2.1"));
+        assert!(provider.supports_structured_output("MiniMax-M2.1"));
     }
 }

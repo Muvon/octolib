@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.4.2] - 2026-01-17
+
+### 📋 Release Summary
+
+Several bug fixes improve multi-provider functionality, including case-insensitive model name matching, fixed tool call argument handling for Zai, and structured output support for Minimax (bd85bc7c, 42da256b, 7723a7c9).
+
+
+### 🐛 Bug Fixes & Stability
+
+- **providers**: add case-insensitive model name matching `bd85bc7c`
+- **zai**: fix argument handling for tool calls `42da256b`
+- **minimax**: enable structured output support `7723a7c9`
+
+### 📊 Release Summary
+
+**Total commits**: 3 across 1 categories
+
+🐛 **3** bug fixes - *Improved stability*
+
 ## [0.4.1] - 2026-01-13
 
 ### 📋 Release Summary

@@ -32,6 +32,7 @@ use crate::llm::traits::AiProvider;
 use crate::llm::types::{
     ChatCompletionParams, ProviderExchange, ProviderResponse, ResponseMode, TokenUsage, ToolCall,
 };
+use crate::llm::utils::{normalize_model_name, starts_with_ignore_ascii_case};
 use anyhow::Result;
 use async_trait::async_trait;
 use reqwest::Client;
@@ -195,9 +196,10 @@ impl AiProvider for ZaiProvider {
     }
 
     fn supports_model(&self, model: &str) -> bool {
-        // Z.ai GLM models
-        model.starts_with("glm-")
+        // Z.ai GLM models (case-insensitive)
+        starts_with_ignore_ascii_case(model, "glm-")
     }
+
     fn get_api_key(&self) -> Result<String> {
         env::var(ZAI_API_KEY_ENV)
             .map_err(|_| anyhow::anyhow!("{} not found in environment", ZAI_API_KEY_ENV))
@@ -216,12 +218,13 @@ impl AiProvider for ZaiProvider {
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {
-        // Z.ai model context window limits
-        if model.contains("glm-4.7") {
+        // Z.ai model context window limits (case-insensitive)
+        let model_lower = normalize_model_name(model);
+        if model_lower.contains("glm-4.7") {
             200_000 // 200K context window for GLM-4.7
-        } else if model.contains("glm-4.6") {
+        } else if model_lower.contains("glm-4.6") {
             128_000 // 128K context window for GLM-4.6
-        } else if model.contains("glm-4.5") {
+        } else if model_lower.contains("glm-4.5") {
             131_072 // ~128K context window for GLM-4.5
         } else {
             128_000 // Covers glm-4 and any other model
@@ -519,6 +522,17 @@ mod tests {
         assert!(provider.supports_model("glm-4"));
         assert!(!provider.supports_model("gpt-4"));
         assert!(!provider.supports_model("claude-3"));
+    }
+
+    #[test]
+    fn test_model_support_case_insensitive() {
+        let provider = ZaiProvider::new();
+        // Test uppercase
+        assert!(provider.supports_model("GLM-4.7"));
+        assert!(provider.supports_model("GLM-4"));
+        // Test mixed case
+        assert!(provider.supports_model("Glm-4.7"));
+        assert!(provider.supports_model("GLM-4.6"));
     }
 
     #[test]

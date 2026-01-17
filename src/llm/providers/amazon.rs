@@ -16,6 +16,7 @@
 
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderResponse};
+use crate::llm::utils::normalize_model_name;
 use anyhow::Result;
 use std::env;
 
@@ -57,16 +58,17 @@ impl AiProvider for AmazonBedrockProvider {
     }
 
     fn supports_model(&self, model: &str) -> bool {
-        // Amazon Bedrock supported models
-        model.contains("claude")
-            || model.contains("titan")
-            || model.contains("llama")
-            || model.contains("anthropic.")
-            || model.contains("meta.")
-            || model.contains("amazon.")
-            || model.contains("ai21.")
-            || model.contains("cohere.")
-            || model.contains("mistral.")
+        // Amazon Bedrock supported models (case-insensitive)
+        let model_lower = normalize_model_name(model);
+        model_lower.contains("claude")
+            || model_lower.contains("titan")
+            || model_lower.contains("llama")
+            || model_lower.contains("anthropic.")
+            || model_lower.contains("meta.")
+            || model_lower.contains("amazon.")
+            || model_lower.contains("ai21.")
+            || model_lower.contains("cohere.")
+            || model_lower.contains("mistral.")
     }
 
     fn get_api_key(&self) -> Result<String> {
@@ -81,21 +83,24 @@ impl AiProvider for AmazonBedrockProvider {
     }
 
     fn supports_vision(&self, model: &str) -> bool {
-        // Claude models on Bedrock support vision
-        model.contains("claude-3")
-            || model.contains("claude-4")
-            || model.contains("anthropic.claude")
+        // Claude models on Bedrock support vision (case-insensitive)
+        let model_lower = normalize_model_name(model);
+        model_lower.contains("claude-3")
+            || model_lower.contains("claude-4")
+            || model_lower.contains("anthropic.claude")
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {
-        // Amazon Bedrock model context window limits
-        if model.contains("claude") || model.contains("anthropic.claude") {
+        // Amazon Bedrock model context window limits (case-insensitive)
+        let model_lower = normalize_model_name(model);
+        if model_lower.contains("claude") || model_lower.contains("anthropic.claude") {
             200_000 // Claude models have 200K context
-        } else if model.contains("llama3-2-90b") || model.contains("meta.llama3-2-90b") {
+        } else if model_lower.contains("llama3-2-90b") || model_lower.contains("meta.llama3-2-90b")
+        {
             128_000 // Llama 3.2 90B has 128K context
-        } else if model.contains("llama") || model.contains("meta.llama") {
+        } else if model_lower.contains("llama") || model_lower.contains("meta.llama") {
             32_768 // Other Llama models typically 32K
-        } else if model.contains("titan") || model.contains("amazon.titan") {
+        } else if model_lower.contains("titan") || model_lower.contains("amazon.titan") {
             32_000 // Titan models have 32K context
         } else {
             32_768 // Conservative default
@@ -106,5 +111,52 @@ impl AiProvider for AmazonBedrockProvider {
         Err(anyhow::anyhow!(
             "Amazon Bedrock provider not fully implemented in octolib"
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_supports_model() {
+        let provider = AmazonBedrockProvider::new();
+
+        // Amazon Bedrock supported models
+        assert!(provider.supports_model("anthropic.claude-3-haiku-20240307-v1:0"));
+        assert!(provider.supports_model("anthropic.claude-3-5-sonnet-20241022-v2:0"));
+        assert!(provider.supports_model("meta.llama3-2-90b-instruct-v1:0"));
+        assert!(provider.supports_model("amazon.titan-embed-text-v2:0"));
+
+        // Unsupported models
+        assert!(!provider.supports_model("gpt-4"));
+        assert!(!provider.supports_model("deepseek-chat"));
+    }
+
+    #[test]
+    fn test_supports_model_case_insensitive() {
+        let provider = AmazonBedrockProvider::new();
+
+        // Test uppercase
+        assert!(provider.supports_model("ANTHROPIC.CLAUDE-3-HAIKU-20240307-V1:0"));
+        assert!(provider.supports_model("META.LLAMA3-2-90B-INSTRUCT-V1:0"));
+        // Test mixed case
+        assert!(provider.supports_model("Anthropic.Claude-3-Haiku"));
+        assert!(provider.supports_model("AMAZON.TITAN-EMBED-TEXT-V2:0"));
+    }
+
+    #[test]
+    fn test_supports_vision_case_insensitive() {
+        let provider = AmazonBedrockProvider::new();
+
+        // Test lowercase
+        assert!(provider.supports_vision("claude-3-haiku"));
+        assert!(provider.supports_vision("claude-3-sonnet"));
+
+        // Test uppercase
+        assert!(provider.supports_vision("CLAUDE-3-HAIKU"));
+        assert!(provider.supports_vision("CLAUDE-3-SONNET"));
+        // Test mixed case
+        assert!(provider.supports_vision("Anthropic.Claude-3-Haiku"));
     }
 }

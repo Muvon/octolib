@@ -20,6 +20,7 @@ use crate::llm::types::{
     ChatCompletionParams, Message, ProviderExchange, ProviderResponse, ThinkingBlock, TokenUsage,
     ToolCall,
 };
+use crate::llm::utils::{normalize_model_name, starts_with_ignore_ascii_case};
 use anyhow::Result;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -204,17 +205,17 @@ impl AiProvider for OpenAiProvider {
     }
 
     fn supports_model(&self, model: &str) -> bool {
-        // OpenAI models - current lineup
-        model.starts_with("gpt-5")
-            || model.starts_with("gpt-4o")
-            || model.starts_with("gpt-4.5")
-            || model.starts_with("gpt-4.1")
-            || model.starts_with("gpt-4")
-            || model.starts_with("gpt-3.5")
-            || model.starts_with("o1")
-            || model.starts_with("o3")
-            || model.starts_with("o4")
-            || model == "chatgpt-4o-latest"
+        // OpenAI models - current lineup (case-insensitive)
+        starts_with_ignore_ascii_case(model, "gpt-5")
+            || starts_with_ignore_ascii_case(model, "gpt-4o")
+            || starts_with_ignore_ascii_case(model, "gpt-4.5")
+            || starts_with_ignore_ascii_case(model, "gpt-4.1")
+            || starts_with_ignore_ascii_case(model, "gpt-4")
+            || starts_with_ignore_ascii_case(model, "gpt-3.5")
+            || starts_with_ignore_ascii_case(model, "o1")
+            || starts_with_ignore_ascii_case(model, "o3")
+            || starts_with_ignore_ascii_case(model, "o4")
+            || model.eq_ignore_ascii_case("chatgpt-4o-latest")
     }
 
     fn get_api_key(&self) -> Result<String> {
@@ -240,65 +241,73 @@ impl AiProvider for OpenAiProvider {
     }
 
     fn supports_caching(&self, model: &str) -> bool {
-        // OpenAI supports automatic prompt caching for these models (as of Oct 2024)
-        model.contains("gpt-4o")
-            || model.contains("gpt-4.1")
-            || model.contains("gpt-5")
-            || model.contains("o1-preview")
-            || model.contains("o1-mini")
-            || model.contains("o1")
-            || model.contains("o3")
-            || model.contains("o4")
+        // OpenAI supports automatic prompt caching for these models (case-insensitive, Oct 2024)
+        let model_lower = normalize_model_name(model);
+        model_lower.contains("gpt-4o")
+            || model_lower.contains("gpt-4.1")
+            || model_lower.contains("gpt-5")
+            || model_lower.contains("o1-preview")
+            || model_lower.contains("o1-mini")
+            || model_lower.contains("o1")
+            || model_lower.contains("o3")
+            || model_lower.contains("o4")
     }
 
     fn supports_vision(&self, model: &str) -> bool {
-        // OpenAI vision-capable models
-        model.contains("gpt-4o")
-            || model.contains("gpt-4.1")
-            || model.contains("gpt-4-turbo")
-            || model.contains("gpt-4-vision-preview")
-            || model.starts_with("gpt-4o-")
-            || model.starts_with("gpt-5-")
-    }
-
-    fn supports_structured_output(&self, _model: &str) -> bool {
-        // All OpenAI models support structured output as requested
-        true
+        // OpenAI vision-capable models (case-insensitive)
+        let normalized = normalize_model_name(model);
+        normalized.starts_with("gpt-4o")
+            || normalized.starts_with("gpt-4.1")
+            || normalized.starts_with("gpt-4-turbo")
+            || normalized.starts_with("gpt-4-vision-preview")
+            || normalized.starts_with("gpt-4o-")
+            || normalized.starts_with("gpt-5-")
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {
-        // OpenAI model context window limits (what we can send as input)
+        // OpenAI model context window limits (case-insensitive)
         // These are the actual context windows - API handles output limits
+        let normalized = normalize_model_name(model);
 
         // GPT-5.1 models: 400K context window
-        if model.starts_with("gpt-5.1") {
+        if normalized.starts_with("gpt-5.1") {
             return 400_000;
         }
         // GPT-5 models: 128K context window
-        if model.starts_with("gpt-5") {
+        if normalized.starts_with("gpt-5") {
             return 128_000;
         }
         // GPT-4o models: 128K context window
-        if model.contains("gpt-4o") {
+        if normalized.starts_with("gpt-4o") {
             return 128_000;
         }
         // GPT-4 models: varies by version
-        if model.contains("gpt-4-turbo") || model.contains("gpt-4.5") || model.contains("gpt-4.1") {
+        if normalized.starts_with("gpt-4-turbo")
+            || normalized.starts_with("gpt-4.5")
+            || normalized.starts_with("gpt-4.1")
+        {
             return 128_000;
         }
-        if model.contains("gpt-4") && !model.contains("gpt-4o") {
+        if normalized.starts_with("gpt-4") && !normalized.starts_with("gpt-4o") {
             return 8_192; // Old GPT-4: 8K context window
         }
         // O-series models: 128K context window
-        if model.starts_with("o1") || model.starts_with("o2") || model.starts_with("o3") {
+        if normalized.starts_with("o1")
+            || normalized.starts_with("o2")
+            || normalized.starts_with("o3")
+        {
             return 128_000;
         }
         // GPT-3.5: 16K context window
-        if model.contains("gpt-3.5") {
+        if normalized.starts_with("gpt-3.5") {
             return 16_384;
         }
         // Default conservative limit
         8_192
+    }
+
+    fn supports_structured_output(&self, _model: &str) -> bool {
+        true // All OpenAI models support structured output
     }
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
@@ -1009,6 +1018,21 @@ mod tests {
         // Unsupported models
         assert!(!provider.supports_model("claude-3"));
         assert!(!provider.supports_model("llama-2"));
+    }
+
+    #[test]
+    fn test_supports_model_case_insensitive() {
+        let provider = OpenAiProvider::new();
+
+        // Test uppercase
+        assert!(provider.supports_model("GPT-5"));
+        assert!(provider.supports_model("GPT-4O"));
+        assert!(provider.supports_model("GPT-4"));
+        // Test mixed case
+        assert!(provider.supports_model("Gpt-5"));
+        assert!(provider.supports_model("gPT-4o"));
+        assert!(provider.supports_model("O1"));
+        assert!(provider.supports_model("o3-mini"));
     }
 
     #[test]

@@ -16,6 +16,7 @@
 
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderResponse};
+use crate::llm::utils::normalize_model_name;
 use anyhow::Result;
 use std::env;
 
@@ -57,19 +58,20 @@ impl AiProvider for CloudflareWorkersAiProvider {
     }
 
     fn supports_model(&self, model: &str) -> bool {
-        // Cloudflare Workers AI supported models
-        model.contains("llama")
-            || model.contains("mistral")
-            || model.contains("qwen")
-            || model.contains("phi")
-            || model.contains("tinyllama")
-            || model.contains("gemma")
-            || model.contains("codellama")
-            || model.contains("deepseek")
-            || model.contains("neural-chat")
-            || model.contains("openchat")
-            || model.contains("starling")
-            || model.contains("zephyr")
+        // Cloudflare Workers AI supported models (case-insensitive)
+        let model_lower = normalize_model_name(model);
+        model_lower.contains("llama")
+            || model_lower.contains("mistral")
+            || model_lower.contains("qwen")
+            || model_lower.contains("phi")
+            || model_lower.contains("tinyllama")
+            || model_lower.contains("gemma")
+            || model_lower.contains("codellama")
+            || model_lower.contains("deepseek")
+            || model_lower.contains("neural-chat")
+            || model_lower.contains("openchat")
+            || model_lower.contains("starling")
+            || model_lower.contains("zephyr")
             || model.starts_with("@cf/")
             || model.starts_with("@hf/")
     }
@@ -90,18 +92,19 @@ impl AiProvider for CloudflareWorkersAiProvider {
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {
-        // Cloudflare Workers AI model context window limits
-        if model.contains("llama-3.1") || model.contains("llama-3.2") {
+        // Cloudflare Workers AI model context window limits (case-insensitive)
+        let model_lower = normalize_model_name(model);
+        if model_lower.contains("llama-3.1") || model_lower.contains("llama-3.2") {
             32_768 // Llama 3.1 and 3.2 models have 32K context
-        } else if model.contains("llama-2") {
+        } else if model_lower.contains("llama-2") {
             4_096 // Llama 2 models have 4K context
-        } else if model.contains("mistral-7b") {
+        } else if model_lower.contains("mistral-7b") {
             8_192 // Mistral 7B has 8K context
-        } else if model.contains("qwen1.5") {
+        } else if model_lower.contains("qwen1.5") {
             32_768 // Qwen 1.5 models have 32K context
-        } else if model.contains("codellama") {
+        } else if model_lower.contains("codellama") {
             16_384 // CodeLlama has 16K context
-        } else if model.contains("gemma") {
+        } else if model_lower.contains("gemma") {
             8_192 // Gemma models have 8K context
         } else {
             4_096 // Conservative default for smaller models
@@ -112,5 +115,38 @@ impl AiProvider for CloudflareWorkersAiProvider {
         Err(anyhow::anyhow!(
             "Cloudflare Workers AI provider not fully implemented in octolib"
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_supports_model() {
+        let provider = CloudflareWorkersAiProvider::new();
+
+        // Cloudflare Workers AI supported models
+        assert!(provider.supports_model("llama-3.1-70b-instruct"));
+        assert!(provider.supports_model("@cf/meta/llama-3.1-70b-instruct"));
+        assert!(provider.supports_model("@hf/meta/llama-3.1-8b-instruct"));
+        assert!(provider.supports_model("mistral-7b-instruct-v0.1"));
+        assert!(provider.supports_model("gemma-2-27b-it"));
+
+        // Unsupported models
+        assert!(!provider.supports_model("gpt-4"));
+        assert!(!provider.supports_model("claude-3"));
+    }
+
+    #[test]
+    fn test_supports_model_case_insensitive() {
+        let provider = CloudflareWorkersAiProvider::new();
+
+        // Test uppercase
+        assert!(provider.supports_model("LLAMA-3.1-70B-INSTRUCT"));
+        assert!(provider.supports_model("MISTRAL-7B-INSTRUCT-V0.1"));
+        // Test mixed case
+        assert!(provider.supports_model("Llama-3.1-70B-Instruct"));
+        assert!(provider.supports_model("GEMMA-2-27B-IT"));
     }
 }

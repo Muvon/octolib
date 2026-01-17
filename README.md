@@ -13,7 +13,7 @@ Octolib is a comprehensive, self-sufficient AI provider library that provides a 
 
 - **🔌 Multi-Provider Support**: OpenAI, Anthropic, OpenRouter, Google, Amazon, Cloudflare, DeepSeek, MiniMax, Z.ai
 - **🛡️ Unified Interface**: Consistent API across different providers
-- **🔍 Intelligent Model Validation**: Strict `provider:model` format parsing
+- **🔍 Intelligent Model Validation**: Strict `provider:model` format parsing with case-insensitive model support
 - **📋 Structured Output**: JSON and JSON Schema support for OpenAI, OpenRouter, and DeepSeek
 - **💰 Cost Tracking**: Automatic token usage and cost calculation
 - **🖼️ Vision Support**: Image attachment handling for compatible models

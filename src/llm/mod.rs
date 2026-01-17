@@ -25,6 +25,7 @@ pub mod strategies;
 pub mod tool_calls;
 pub mod traits;
 pub mod types;
+pub mod utils;
 
 // Re-export main types and traits for easy access
 pub use config::{CacheConfig, CacheTTL, CacheType};

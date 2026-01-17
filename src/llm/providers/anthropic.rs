@@ -19,6 +19,7 @@ use crate::llm::traits::AiProvider;
 use crate::llm::types::{
     ChatCompletionParams, Message, ProviderExchange, ProviderResponse, TokenUsage, ToolCall,
 };
+use crate::llm::utils::normalize_model_name;
 use anyhow::Result;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -174,8 +175,9 @@ impl AiProvider for AnthropicProvider {
     }
 
     fn supports_model(&self, model: &str) -> bool {
-        // Anthropic Claude models
-        model.starts_with("claude-") || model.contains("claude")
+        // Anthropic Claude models (case-insensitive)
+        let normalized = normalize_model_name(model);
+        normalized.starts_with("claude-") || normalized.contains("claude")
     }
 
     fn get_api_key(&self) -> Result<String> {
@@ -204,28 +206,30 @@ impl AiProvider for AnthropicProvider {
     }
 
     fn supports_vision(&self, model: &str) -> bool {
-        // Claude 3+ models support vision
-        model.contains("claude-3")
-            || model.contains("claude-4")
-            || model.contains("claude-3.5")
-            || model.contains("claude-3.7")
+        // Claude 3+ models support vision (case-insensitive)
+        let model_lower = normalize_model_name(model);
+        model_lower.contains("claude-3")
+            || model_lower.contains("claude-4")
+            || model_lower.contains("claude-3.5")
+            || model_lower.contains("claude-3.7")
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {
-        // Anthropic model context window limits (what we can send as input)
-        if model.contains("claude-opus-4")
-            || model.contains("claude-sonnet-4")
-            || model.contains("claude-haiku-4")
+        // Anthropic model context window limits (case-insensitive)
+        let model_lower = normalize_model_name(model);
+        if model_lower.contains("claude-opus-4")
+            || model_lower.contains("claude-sonnet-4")
+            || model_lower.contains("claude-haiku-4")
         {
             // Claude 4 and 4.5 models have 200k context
             200_000
-        } else if model.contains("claude-3-7") {
+        } else if model_lower.contains("claude-3-7") {
             // Claude 3.7 has 200k context
             200_000
-        } else if model.contains("claude-3-5") {
+        } else if model_lower.contains("claude-3-5") {
             // Claude 3.5 models have 200k context
             200_000
-        } else if model.contains("claude-3") {
+        } else if model_lower.contains("claude-3") {
             // Claude 3 models have 200k context
             200_000
         } else {
@@ -794,5 +798,36 @@ mod tests {
         assert!(
             error_msg.contains("ANTHROPIC_API_KEY") || error_msg.contains("ANTHROPIC_OAUTH_TOKEN")
         );
+    }
+
+    #[test]
+    fn test_supports_model_case_insensitive() {
+        let provider = AnthropicProvider::new();
+
+        // Test lowercase (already working)
+        assert!(provider.supports_model("claude-3-haiku"));
+        assert!(provider.supports_model("claude-3-5-sonnet"));
+
+        // Test uppercase
+        assert!(provider.supports_model("CLAUDE-3-HAIKU"));
+        assert!(provider.supports_model("CLAUDE-3-5-SONNET"));
+        // Test mixed case
+        assert!(provider.supports_model("ClaUde-3-Haiku"));
+        assert!(provider.supports_model("CLAUDE-3-7-sonnet"));
+    }
+
+    #[test]
+    fn test_supports_vision_case_insensitive() {
+        let provider = AnthropicProvider::new();
+
+        // Test lowercase
+        assert!(provider.supports_vision("claude-3-haiku"));
+        assert!(provider.supports_vision("claude-3-5-sonnet"));
+
+        // Test uppercase
+        assert!(provider.supports_vision("CLAUDE-3-HAIKU"));
+        assert!(provider.supports_vision("CLAUDE-3-5-SONNET"));
+        // Test mixed case
+        assert!(provider.supports_vision("ClaUde-3-7"));
     }
 }

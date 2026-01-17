@@ -20,6 +20,7 @@ use crate::llm::types::{
     ChatCompletionParams, Message, ProviderExchange, ProviderResponse, ThinkingBlock, TokenUsage,
     ToolCall,
 };
+use crate::llm::utils::normalize_model_name;
 use anyhow::Result;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -51,20 +52,21 @@ impl AiProvider for OpenRouterProvider {
     }
 
     fn supports_model(&self, model: &str) -> bool {
-        // OpenRouter supports many models from different providers
+        // OpenRouter supports many models from different providers (case-insensitive)
         // Accept models with provider prefixes (anthropic/, openai/, meta/, google/, etc.)
         // or direct model names
-        model.contains("anthropic/")
-            || model.contains("openai/")
-            || model.contains("meta/")
-            || model.contains("google/")
-            || model.contains("mistral/")
-            || model.contains("cohere/")
-            || model.contains("claude")
-            || model.contains("gpt-")
-            || model.contains("llama")
-            || model.contains("gemini")
-            || model.contains("mistral")
+        let normalized = normalize_model_name(model);
+        normalized.starts_with("anthropic/")
+            || normalized.starts_with("openai/")
+            || normalized.starts_with("meta/")
+            || normalized.starts_with("google/")
+            || normalized.starts_with("mistral/")
+            || normalized.starts_with("cohere/")
+            || normalized.contains("claude")
+            || normalized.contains("gpt-")
+            || normalized.contains("llama")
+            || normalized.contains("gemini")
+            || normalized.contains("mistral")
             || !model.is_empty() // Accept any non-empty model string as fallback
     }
 
@@ -79,58 +81,61 @@ impl AiProvider for OpenRouterProvider {
     }
 
     fn supports_caching(&self, model: &str) -> bool {
-        // OpenRouter supports caching for Anthropic models
-        model.contains("anthropic") || model.contains("claude")
+        // OpenRouter supports caching for Anthropic models (case-insensitive)
+        let normalized = normalize_model_name(model);
+        normalized.starts_with("anthropic") || normalized.starts_with("claude")
     }
 
     fn supports_vision(&self, model: &str) -> bool {
-        model.contains("gpt-4o")
-            || model.contains("gpt-4-turbo")
-            || model.contains("claude-3")
-            || model.contains("claude-4")
-            || model.contains("gemini")
-            || model.contains("llava")
-            || model.contains("qwen-vl")
-            || model.contains("vision")
-            || model.contains("anthropic/")
-            || model.contains("google/")
-    }
-
-    fn supports_structured_output(&self, _model: &str) -> bool {
-        // All OpenRouter models support structured output as requested
-        true
+        // OpenRouter vision models (case-insensitive)
+        let normalized = normalize_model_name(model);
+        normalized.starts_with("gpt-4o")
+            || normalized.starts_with("gpt-4-turbo")
+            || normalized.starts_with("claude-3")
+            || normalized.starts_with("claude-4")
+            || normalized.contains("gemini")
+            || normalized.contains("llava")
+            || normalized.contains("qwen-vl")
+            || normalized.contains("vision")
+            || normalized.starts_with("anthropic/")
+            || normalized.starts_with("google/")
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {
-        // Auto-generated from OpenRouter API
-        match model {
+        // Auto-generated from OpenRouter API (case-insensitive)
+        let normalized = normalize_model_name(model);
+        match normalized.as_str() {
             // claude models
-            _ if model.contains("claude") => 200_000,
+            _ if normalized.starts_with("claude") => 200_000,
             // gpt-4o models
-            _ if model.contains("gpt-4o") => 128_000,
+            _ if normalized.starts_with("gpt-4o") => 128_000,
             // gpt-4-turbo models
-            _ if model.contains("gpt-4-turbo") => 128_000,
+            _ if normalized.starts_with("gpt-4-turbo") => 128_000,
             // o1/o3 models
-            _ if model.contains("o1") || model.contains("o3") => 200_000,
+            _ if normalized.starts_with("o1") || normalized.starts_with("o3") => 200_000,
             // gpt-4 models
-            _ if model.contains("gpt-4") && !model.contains("gpt-4o") => 8_192,
+            _ if normalized.starts_with("gpt-4") && !normalized.starts_with("gpt-4o") => 8_192,
             // gpt-3.5-turbo models
-            _ if model.contains("gpt-3.5-turbo") => 16_384,
+            _ if normalized.starts_with("gpt-3.5-turbo") => 16_384,
             // llama models
-            _ if model.contains("llama-3") => 131_072,
-            _ if model.contains("llama-4") => 200_000,
+            _ if normalized.starts_with("llama-3") => 131_072,
+            _ if normalized.starts_with("llama-4") => 200_000,
             // gemini models
-            _ if model.contains("gemini-1.5-pro") => 2_000_000,
-            _ if model.contains("gemini-1.5-flash") => 1_000_000,
-            _ if model.contains("gemini-2") => 1_048_576,
+            _ if normalized.starts_with("gemini-1.5-pro") => 2_000_000,
+            _ if normalized.starts_with("gemini-1.5-flash") => 1_000_000,
+            _ if normalized.starts_with("gemini-2") => 1_048_576,
             // mistral models
-            _ if model.contains("mistral-large") => 128_000,
-            _ if model.contains("mistral-small") => 32_000,
+            _ if normalized.starts_with("mistral-large") => 128_000,
+            _ if normalized.starts_with("mistral-small") => 32_000,
             // deepseek models
-            _ if model.contains("deepseek") => 128_000,
+            _ if normalized.starts_with("deepseek") => 128_000,
             // Fallback
             _ => 2_000_000,
         }
+    }
+
+    fn supports_structured_output(&self, _model: &str) -> bool {
+        true // All OpenRouter models support structured output
     }
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
@@ -648,4 +653,64 @@ async fn execute_openrouter_request(
         finish_reason: choice.finish_reason,
         structured_output,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_supports_model() {
+        let provider = OpenRouterProvider::new();
+
+        // OpenRouter supports many models
+        assert!(provider.supports_model("anthropic/claude-3.5-sonnet"));
+        assert!(provider.supports_model("openai/gpt-4o"));
+        assert!(provider.supports_model("meta/llama-3.1-70b"));
+        assert!(provider.supports_model("deepseek-chat"));
+
+        // Should accept any non-empty model string as fallback
+        assert!(provider.supports_model("any-model-name"));
+    }
+
+    #[test]
+    fn test_supports_model_case_insensitive() {
+        let provider = OpenRouterProvider::new();
+
+        // Test uppercase
+        assert!(provider.supports_model("ANTHROPIC/CLAUDE-3.5-SONNET"));
+        assert!(provider.supports_model("OPENAI/GPT-4O"));
+        assert!(provider.supports_model("META/LLAMA-3.1-70B"));
+        // Test mixed case
+        assert!(provider.supports_model("Anthropic/Claude-3.5-Sonnet"));
+        assert!(provider.supports_model("DEEPSEEK-CHAT"));
+    }
+
+    #[test]
+    fn test_supports_vision_case_insensitive() {
+        let provider = OpenRouterProvider::new();
+
+        // Test lowercase
+        assert!(provider.supports_vision("gpt-4o"));
+        assert!(provider.supports_vision("claude-3-haiku"));
+
+        // Test uppercase
+        assert!(provider.supports_vision("GPT-4O"));
+        assert!(provider.supports_vision("CLAUDE-3-HAIKU"));
+        // Test mixed case
+        assert!(provider.supports_vision("Gemini-1.5-Pro"));
+    }
+
+    #[test]
+    fn test_supports_caching_case_insensitive() {
+        let provider = OpenRouterProvider::new();
+
+        // Test lowercase
+        assert!(provider.supports_caching("anthropic/claude-3.5-sonnet"));
+        assert!(provider.supports_caching("claude-3-haiku"));
+
+        // Test uppercase
+        assert!(provider.supports_caching("ANTHROPIC/CLAUDE-3.5-SONNET"));
+        assert!(provider.supports_caching("CLAUDE-3-HAIKU"));
+    }
 }

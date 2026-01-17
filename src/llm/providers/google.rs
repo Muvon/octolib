@@ -16,6 +16,7 @@
 
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderResponse};
+use crate::llm::utils::normalize_model_name;
 use anyhow::Result;
 use std::env;
 
@@ -67,13 +68,14 @@ impl AiProvider for GoogleVertexProvider {
     }
 
     fn supports_model(&self, model: &str) -> bool {
-        // Google Vertex AI models
-        model.contains("gemini")
-            || model.contains("palm")
-            || model.contains("text-bison")
-            || model.contains("chat-bison")
-            || model.starts_with("text-")
-            || model.starts_with("chat-")
+        // Google Vertex AI models (case-insensitive)
+        let normalized = normalize_model_name(model);
+        normalized.starts_with("text-")
+            || normalized.starts_with("chat-")
+            || normalized.contains("gemini")
+            || normalized.contains("palm")
+            || normalized.contains("text-bison")
+            || normalized.contains("chat-bison")
     }
 
     fn get_api_key(&self) -> Result<String> {
@@ -94,24 +96,30 @@ impl AiProvider for GoogleVertexProvider {
     }
 
     fn supports_caching(&self, model: &str) -> bool {
-        model.contains("gemini-1.5") || model.contains("gemini-2") || model.contains("gemini-3")
+        // Google Vertex AI caching (case-insensitive)
+        let normalized = normalize_model_name(model);
+        normalized.contains("gemini-1.5")
+            || normalized.contains("gemini-2")
+            || normalized.contains("gemini-3")
     }
 
     fn supports_vision(&self, model: &str) -> bool {
-        model.contains("gemini")
+        // Google Vertex AI vision (case-insensitive)
+        normalize_model_name(model).contains("gemini")
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {
-        // Google Vertex AI model context window limits
-        if model.contains("gemini-3") {
+        // Google Vertex AI model context window limits (case-insensitive)
+        let normalized = normalize_model_name(model);
+        if normalized.contains("gemini-3") {
             1_048_576 // Gemini 3.0 has ~1M context
-        } else if model.contains("gemini-2") {
+        } else if normalized.contains("gemini-2") {
             2_000_000 // Gemini 2.0 has 2M context
-        } else if model.contains("gemini-1.5") {
+        } else if normalized.contains("gemini-1.5") {
             1_000_000 // Gemini 1.5 has 1M context
-        } else if model.contains("gemini-1.0") || model.contains("bison-32k") {
+        } else if normalized.contains("gemini-1.0") || normalized.contains("bison-32k") {
             32_768 // Gemini 1.0 and 32K variants have 32K context
-        } else if model.contains("bison") {
+        } else if normalized.contains("bison") {
             8_192 // Standard Bison models
         } else {
             32_768 // Conservative default
@@ -122,5 +130,50 @@ impl AiProvider for GoogleVertexProvider {
         Err(anyhow::anyhow!(
             "Google Vertex AI provider not fully implemented in octolib"
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_supports_model() {
+        let provider = GoogleVertexProvider::new();
+
+        // Google models should be supported
+        assert!(provider.supports_model("gemini-1.5-pro"));
+        assert!(provider.supports_model("gemini-2.0-flash"));
+        assert!(provider.supports_model("gemini-1.0-pro"));
+        assert!(provider.supports_model("text-bison"));
+
+        // Unsupported models
+        assert!(!provider.supports_model("gpt-4"));
+        assert!(!provider.supports_model("claude-3"));
+    }
+
+    #[test]
+    fn test_supports_model_case_insensitive() {
+        let provider = GoogleVertexProvider::new();
+
+        // Test uppercase
+        assert!(provider.supports_model("GEMINI-1.5-PRO"));
+        assert!(provider.supports_model("GEMINI-2.0-FLASH"));
+        // Test mixed case
+        assert!(provider.supports_model("Gemini-1.5-Pro"));
+        assert!(provider.supports_model("GEMINI-1.0-pro"));
+    }
+
+    #[test]
+    fn test_supports_caching_case_insensitive() {
+        let provider = GoogleVertexProvider::new();
+
+        // Test lowercase
+        assert!(provider.supports_caching("gemini-1.5-pro"));
+        assert!(provider.supports_caching("gemini-2.0-flash"));
+
+        // Test uppercase
+        assert!(provider.supports_caching("GEMINI-1.5-PRO"));
+        assert!(provider.supports_caching("Gemini-2.0-Flash"));
     }
 }

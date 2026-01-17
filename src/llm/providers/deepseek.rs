@@ -156,7 +156,8 @@ impl AiProvider for DeepSeekProvider {
     }
 
     fn supports_model(&self, model: &str) -> bool {
-        matches!(model, "deepseek-chat" | "deepseek-reasoner")
+        model.eq_ignore_ascii_case("deepseek-chat")
+            || model.eq_ignore_ascii_case("deepseek-reasoner")
     }
 
     fn get_api_key(&self) -> Result<String> {
@@ -347,6 +348,17 @@ mod tests {
         assert!(provider.supports_model("deepseek-reasoner"));
         assert!(!provider.supports_model("gpt-4"));
         assert!(!provider.supports_model("deepseek-coder")); // Not in current API
+    }
+
+    #[test]
+    fn test_supports_model_case_insensitive() {
+        let provider = DeepSeekProvider::new();
+        // Test uppercase
+        assert!(provider.supports_model("DEEPSEEK-CHAT"));
+        assert!(provider.supports_model("DEEPSEEK-REASONER"));
+        // Test mixed case
+        assert!(provider.supports_model("DeepSeek-Chat"));
+        assert!(provider.supports_model("DEEPSEEK-reasoner"));
     }
 
     #[test]

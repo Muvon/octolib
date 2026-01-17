@@ -20,6 +20,7 @@ use crate::llm::types::{
     ChatCompletionParams, Message, ProviderExchange, ProviderResponse, ThinkingBlock, TokenUsage,
     ToolCall,
 };
+use crate::llm::utils::{normalize_model_name, starts_with_ignore_ascii_case};
 use anyhow::Result;
 use async_trait::async_trait;
 use reqwest::Client;
@@ -113,8 +114,8 @@ impl AiProvider for MinimaxProvider {
     }
 
     fn supports_model(&self, model: &str) -> bool {
-        // MiniMax supported models
-        model.starts_with("MiniMax-M2")
+        // MiniMax supported models (case-insensitive)
+        starts_with_ignore_ascii_case(model, "minimax-m2")
     }
 
     fn get_api_key(&self) -> Result<String> {
@@ -134,8 +135,9 @@ impl AiProvider for MinimaxProvider {
         true // MiniMax supports structured output via response_format
     }
     fn get_max_input_tokens(&self, model: &str) -> usize {
-        // MiniMax model context window limits
-        if model.contains("MiniMax-M2.1") || model.contains("MiniMax-M2") {
+        // MiniMax model context window limits (case-insensitive)
+        let model_lower = normalize_model_name(model);
+        if model_lower.contains("minimax-m2.1") || model_lower.contains("minimax-m2") {
             1_000_000 // 1M context window
         } else {
             128_000 // Default fallback
@@ -602,6 +604,21 @@ mod tests {
         assert!(provider.supports_model("MiniMax-M2"));
         assert!(!provider.supports_model("gpt-4"));
         assert!(!provider.supports_model("claude-3"));
+    }
+
+    #[test]
+    fn test_model_support_case_insensitive() {
+        let provider = MinimaxProvider::new();
+        // Test lowercase
+        assert!(provider.supports_model("minimax-m2.1"));
+        assert!(provider.supports_model("minimax-m2.1-lightning"));
+        assert!(provider.supports_model("minimax-m2"));
+        // Test uppercase
+        assert!(provider.supports_model("MINIMAX-M2.1"));
+        assert!(provider.supports_model("MINIMAX-M2"));
+        // Test mixed case
+        assert!(provider.supports_model("Minimax-M2.1"));
+        assert!(provider.supports_model("MINIMAX-m2.1"));
     }
 
     #[test]

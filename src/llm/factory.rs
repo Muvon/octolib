@@ -235,4 +235,36 @@ mod tests {
         let result = ProviderFactory::get_provider_for_model("invalid:model");
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_get_provider_for_model_case_insensitive() {
+        // Test provider name case insensitivity
+        let result = ProviderFactory::get_provider_for_model("OPENAI:gpt-4o");
+        assert!(result.is_ok());
+        let (provider, model) = result.unwrap();
+        assert_eq!(provider.name(), "openai");
+        assert_eq!(model, "gpt-4o");
+
+        let result = ProviderFactory::get_provider_for_model("Anthropic:claude-3.5-sonnet");
+        assert!(result.is_ok());
+        let (provider, model) = result.unwrap();
+        assert_eq!(provider.name(), "anthropic");
+        assert_eq!(model, "claude-3.5-sonnet");
+
+        // Test model name case insensitivity (should work with providers that support it)
+        let result = ProviderFactory::get_provider_for_model("openai:GPT-4O");
+        assert!(result.is_ok());
+        let (provider, model) = result.unwrap();
+        assert_eq!(provider.name(), "openai");
+        assert_eq!(model, "GPT-4O");
+        // The provider should support the uppercase model name due to case insensitivity
+        assert!(provider.supports_model(&model));
+
+        let result = ProviderFactory::get_provider_for_model("minimax:MINIMAX-M2.1");
+        assert!(result.is_ok());
+        let (provider, model) = result.unwrap();
+        assert_eq!(provider.name(), "minimax");
+        assert_eq!(model, "MINIMAX-M2.1");
+        assert!(provider.supports_model(&model));
+    }
 }

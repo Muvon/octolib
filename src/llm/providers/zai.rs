@@ -140,7 +140,7 @@ struct ZaiToolCall {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct ZaiFunction {
     name: String,
-    arguments: serde_json::Value,
+    arguments: String, // Changed from serde_json::Value to String - Z.ai expects JSON string like OpenAI
 }
 
 #[derive(Deserialize, Debug)]
@@ -302,7 +302,8 @@ fn convert_tool_calls(tool_calls: &serde_json::Value) -> Vec<ZaiToolCall> {
                 type_field: "function".to_string(),
                 function: ZaiFunction {
                     name: call.name.clone(),
-                    arguments: call.arguments.clone(),
+                    // Z.ai expects arguments as a JSON string, not a JSON object (like OpenAI)
+                    arguments: serde_json::to_string(&call.arguments).unwrap_or_default(),
                 },
             })
             .collect()
@@ -403,10 +404,21 @@ async fn execute_zai_request(
         choice.message.tool_calls.as_ref().map(|calls| {
             calls
                 .iter()
-                .map(|tc| ToolCall {
-                    id: tc.id.clone(),
-                    name: tc.function.name.clone(),
-                    arguments: tc.function.arguments.clone(),
+                .map(|tc| {
+                    // Parse the JSON string arguments into a Value
+                    let arguments: serde_json::Value = if tc.function.arguments.trim().is_empty() {
+                        serde_json::json!({})
+                    } else {
+                        serde_json::from_str(&tc.function.arguments).unwrap_or_else(
+                            |_| serde_json::json!({"raw_arguments": tc.function.arguments}),
+                        )
+                    };
+
+                    ToolCall {
+                        id: tc.id.clone(),
+                        name: tc.function.name.clone(),
+                        arguments,
+                    }
                 })
                 .collect()
         })

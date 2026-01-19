@@ -23,7 +23,7 @@ use crate::llm::types::{
 use crate::llm::utils::{normalize_model_name, starts_with_ignore_ascii_case};
 use anyhow::Result;
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::env;
 
 /// OpenAI pricing constants (per 1M tokens in USD)
@@ -130,51 +130,79 @@ fn supports_temperature(model: &str) -> bool {
         && !model.starts_with("gpt-5")
 }
 
-/// Check if a model uses max_completion_tokens instead of max_tokens
-/// GPT-5/5.1 models use the new max_completion_tokens parameter
-fn uses_max_completion_tokens(model: &str) -> bool {
-    model.starts_with("gpt-5")
-}
+/// Convert messages to Responses API input format
+///
+/// The OpenAI Responses API maintains conversation history server-side via `previous_response_id`.
+/// This means we only send NEW messages/tool results, not the full conversation history.
+///
+/// # Behavior
+/// - **Initial request** (no previous_response_id): Send all user/system messages
+/// - **Tool response**: Send ONLY new tool results after last assistant message as function_call_output
+/// - **Continuation**: Send ONLY new user/system messages after last assistant message
+///
+/// # Arguments
+/// * `messages` - Full conversation history
+/// * `has_previous_response` - Whether we have a previous_response_id (continuation)
+fn messages_to_input(messages: &[Message], has_previous_response: bool) -> Vec<serde_json::Value> {
+    if has_previous_response {
+        // Find the index of the last assistant message with an ID
+        let last_assistant_idx = messages
+            .iter()
+            .enumerate()
+            .rev()
+            .find(|(_, m)| m.role == "assistant" && m.id.is_some())
+            .map(|(idx, _)| idx);
 
-/// Get cache pricing multiplier based on model
-/// GPT-5/5.1 models have 0.1x cache pricing (90% cheaper)
-/// Other models have 0.25x cache pricing (75% cheaper)
-fn get_cache_multiplier(model: &str) -> f64 {
-    if model.starts_with("gpt-5") {
-        0.1 // GPT-5/5.1 models: 10% of normal price for cache reads
-    } else {
-        0.25 // Other models: 25% of normal price for cache reads
-    }
-}
+        if let Some(assistant_idx) = last_assistant_idx {
+            // Check if there are any tool messages AFTER the last assistant message
+            let new_tool_results: Vec<_> = messages
+                .iter()
+                .skip(assistant_idx + 1)
+                .filter_map(|msg| {
+                    if msg.role == "tool" {
+                        let call_id_str = msg.tool_call_id.clone().unwrap_or_default();
+                        Some(serde_json::json!({
+                            "type": "function_call_output",
+                            "call_id": call_id_str,
+                            "output": msg.content
+                        }))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
 
-/// Calculate cost with cache-aware pricing
-/// This function handles the different pricing tiers for cached vs non-cached tokens:
-/// - cache_read_tokens: charged at model-specific multiplier (GPT-5/5.1: 0.1x, others: 0.25x)
-/// - regular_input_tokens: charged at normal price (includes cache write tokens)
-/// - output_tokens: charged at normal price
-fn calculate_cost_with_cache(
-    model: &str,
-    regular_input_tokens: u64,
-    cache_read_tokens: u64,
-    completion_tokens: u64,
-) -> Option<f64> {
-    for (pricing_model, input_price, output_price) in PRICING {
-        if model.contains(pricing_model) {
-            // Regular input tokens at normal price (includes cache write - no additional cost)
-            let regular_input_cost = (regular_input_tokens as f64 / 1_000_000.0) * input_price;
-
-            // Cache read tokens at model-specific multiplier
-            let cache_multiplier = get_cache_multiplier(model);
-            let cache_read_cost =
-                (cache_read_tokens as f64 / 1_000_000.0) * input_price * cache_multiplier;
-
-            // Output tokens at normal price (never cached)
-            let output_cost = (completion_tokens as f64 / 1_000_000.0) * output_price;
-
-            return Some(regular_input_cost + cache_read_cost + output_cost);
+            // If we have new tool results, send them
+            if !new_tool_results.is_empty() {
+                return new_tool_results;
+            }
         }
+
+        // No new tool results - send new user/system messages after the last assistant
+        messages
+            .iter()
+            .skip(last_assistant_idx.map(|idx| idx + 1).unwrap_or(0))
+            .filter_map(|msg| match msg.role.as_str() {
+                "user" | "system" => Some(serde_json::json!({
+                    "role": msg.role,
+                    "content": msg.content
+                })),
+                _ => None,
+            })
+            .collect()
+    } else {
+        // Initial request: send all user/system messages (skip assistant messages)
+        messages
+            .iter()
+            .filter_map(|msg| match msg.role.as_str() {
+                "user" | "system" => Some(serde_json::json!({
+                    "role": msg.role,
+                    "content": msg.content
+                })),
+                _ => None,
+            })
+            .collect()
     }
-    None
 }
 
 /// OpenAI provider
@@ -197,7 +225,7 @@ const OPENAI_API_KEY_ENV: &str = "OPENAI_API_KEY";
 const OPENAI_OAUTH_ACCESS_TOKEN_ENV: &str = "OPENAI_OAUTH_ACCESS_TOKEN";
 const OPENAI_OAUTH_ACCOUNT_ID_ENV: &str = "OPENAI_OAUTH_ACCOUNT_ID";
 const OPENAI_API_URL_ENV: &str = "OPENAI_API_URL";
-const OPENAI_API_URL: &str = "https://api.openai.com/v1/chat/completions";
+const OPENAI_API_URL: &str = "https://api.openai.com/v1/responses";
 #[async_trait::async_trait]
 impl AiProvider for OpenAiProvider {
     fn name(&self) -> &str {
@@ -327,58 +355,73 @@ impl AiProvider for OpenAiProvider {
             self.get_api_key()?
         };
 
-        // Convert messages to OpenAI format
-        let openai_messages = convert_messages(&params.messages);
-
-        // Create the request body
-        let mut request_body = serde_json::json!({
-            "model": params.model,
-            "messages": openai_messages,
+        // Extract previous_response_id from messages if not explicitly provided
+        // Find the LAST message with an ID - this is the most recent response from the API
+        // The Responses API maintains conversation state server-side via this ID
+        let previous_response_id = params.previous_response_id.clone().or_else(|| {
+            params
+                .messages
+                .iter()
+                .rev()
+                .find(|m| m.id.is_some())
+                .and_then(|m| m.id.clone())
         });
 
-        // Only add temperature for models that support it
-        // O1/O2/O3/O4 and GPT-5 series models don't support temperature parameter
+        // Convert messages to array input format for Responses API
+        let input_array = messages_to_input(&params.messages, previous_response_id.is_some());
+
+        // Create the request body for Responses API
+        let mut request_body = serde_json::json!({
+            "model": params.model,
+            "input": input_array,
+        });
+
+        // Only add temperature/top_p for models that support it
         if supports_temperature(&params.model) {
             request_body["temperature"] = serde_json::json!(params.temperature);
             request_body["top_p"] = serde_json::json!(params.top_p);
-            // Note: OpenAI doesn't have top_k parameter, but has similar "top_logprobs"
-            // We'll skip top_k for OpenAI as it's not directly supported
         }
 
-        // Add max_tokens if specified (0 means don't include it in request)
+        // Add previous_response_id for multi-turn conversations
+        if let Some(ref prev_id) = previous_response_id {
+            request_body["previous_response_id"] = serde_json::json!(prev_id);
+        }
+
+        // Add max_output_tokens if specified
         if params.max_tokens > 0 {
-            if uses_max_completion_tokens(&params.model) {
-                // GPT-5 models use max_completion_tokens
-                request_body["max_completion_tokens"] = serde_json::json!(params.max_tokens);
-            } else {
-                // Other models use max_tokens
-                request_body["max_tokens"] = serde_json::json!(params.max_tokens);
-            }
+            request_body["max_output_tokens"] = serde_json::json!(params.max_tokens);
+        }
+
+        // Add reasoning effort for reasoning models
+        if params.model.starts_with("o1")
+            || params.model.starts_with("o3")
+            || params.model.starts_with("o4")
+            || params.model.starts_with("gpt-5")
+        {
+            request_body["reasoning"] = serde_json::json!({
+                "effort": "medium"
+            });
         }
 
         // Add tools if available
         if let Some(tools) = &params.tools {
             if !tools.is_empty() {
-                // Sort tools by name for consistent ordering
                 let mut sorted_tools = tools.clone();
                 sorted_tools.sort_by(|a, b| a.name.cmp(&b.name));
 
-                let openai_tools = sorted_tools
+                let openai_tools: Vec<serde_json::Value> = sorted_tools
                     .iter()
                     .map(|f| {
                         serde_json::json!({
                             "type": "function",
-                            "function": {
-                                "name": f.name,
-                                "description": f.description,
-                                "parameters": f.parameters
-                            }
+                            "name": f.name,
+                            "description": f.description,
+                            "parameters": f.parameters
                         })
                     })
-                    .collect::<Vec<_>>();
+                    .collect();
 
                 request_body["tools"] = serde_json::json!(openai_tools);
-                request_body["tool_choice"] = serde_json::json!("auto");
             }
         }
 
@@ -386,17 +429,18 @@ impl AiProvider for OpenAiProvider {
         if let Some(response_format) = &params.response_format {
             match &response_format.format {
                 crate::llm::types::OutputFormat::Json => {
-                    request_body["response_format"] = serde_json::json!({
-                        "type": "json_object"
+                    request_body["text"] = serde_json::json!({
+                        "format": {
+                            "type": "json_object"
+                        }
                     });
                 }
                 crate::llm::types::OutputFormat::JsonSchema => {
                     if let Some(schema) = &response_format.schema {
                         let mut format_obj = serde_json::json!({
                             "type": "json_schema",
-                            "json_schema": {
-                                "schema": schema
-                            }
+                            "name": "response_schema",
+                            "schema": schema
                         });
 
                         // Add strict mode if specified
@@ -404,10 +448,12 @@ impl AiProvider for OpenAiProvider {
                             response_format.mode,
                             crate::llm::types::ResponseMode::Strict
                         ) {
-                            format_obj["json_schema"]["strict"] = serde_json::json!(true);
+                            format_obj["strict"] = serde_json::json!(true);
                         }
 
-                        request_body["response_format"] = format_obj;
+                        request_body["text"] = serde_json::json!({
+                            "format": format_obj
+                        });
                     }
                 }
             }
@@ -432,220 +478,62 @@ impl AiProvider for OpenAiProvider {
     }
 }
 
-// OpenAI API structures
-#[derive(Serialize, Deserialize, Debug)]
-struct OpenAiMessage {
-    role: String,
-    content: serde_json::Value,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tool_call_id: Option<String>, // For tool messages: the ID of the tool call
-    #[serde(skip_serializing_if = "Option::is_none")]
-    name: Option<String>, // For tool messages: the name of the tool
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tool_calls: Option<serde_json::Value>, // For assistant messages: array of tool calls
-}
-
+// Responses API structures
 #[derive(Deserialize, Debug)]
-struct OpenAiResponse {
-    choices: Vec<OpenAiChoice>,
-    usage: OpenAiUsage,
-}
-
-#[derive(Deserialize, Debug)]
-struct OpenAiChoice {
-    message: OpenAiResponseMessage,
-    finish_reason: Option<String>,
-}
-
-#[derive(Deserialize, Debug)]
-struct OpenAiResponseMessage {
-    content: Option<String>,
-    /// Reasoning content from o-series models (o1, o3, o4)
+struct ResponsesApiResponse {
     #[serde(default)]
-    reasoning_content: Option<String>,
-    tool_calls: Option<Vec<OpenAiToolCall>>,
+    id: Option<String>,
+    output: Vec<ResponseOutput>,
+    usage: ResponseUsage,
 }
-
 #[derive(Deserialize, Debug)]
-struct OpenAiToolCall {
-    id: String,
+struct ResponseOutput {
     #[serde(rename = "type")]
-    tool_type: String,
-    function: OpenAiFunction,
+    output_type: String, // "message", "function_call", "reasoning"
+    #[serde(default)]
+    #[allow(dead_code)]
+    // id field exists in API response but we use call_id for function calls
+    id: Option<String>,
+
+    #[serde(default)]
+    call_id: Option<String>,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    arguments: Option<serde_json::Value>,
+    #[serde(default)]
+    content: Option<Vec<ResponseContent>>,
 }
 
 #[derive(Deserialize, Debug)]
-struct OpenAiFunction {
-    name: String,
-    arguments: String,
+struct ResponseContent {
+    #[serde(rename = "type")]
+    content_type: String, // "output_text"
+    #[serde(default)]
+    text: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
-struct OpenAiUsage {
-    prompt_tokens: u64,
-    completion_tokens: u64,
+struct ResponseUsage {
+    input_tokens: u64,
+    output_tokens: u64,
     total_tokens: u64,
     #[serde(default)]
-    input_tokens_details: Option<OpenAiInputTokensDetails>,
+    input_tokens_details: Option<InputTokensDetails>,
     #[serde(default)]
-    completion_tokens_details: Option<OpenAiCompletionTokensDetails>,
+    output_tokens_details: Option<OutputTokensDetails>,
 }
 
 #[derive(Deserialize, Debug)]
-struct OpenAiInputTokensDetails {
+struct InputTokensDetails {
     #[serde(default)]
     cached_tokens: u64,
 }
 
 #[derive(Deserialize, Debug)]
-struct OpenAiCompletionTokensDetails {
-    /// Reasoning tokens from o-series models (o1, o3, o4)
+struct OutputTokensDetails {
     #[serde(default)]
-    reasoning_tokens: Option<u64>,
-}
-
-// Convert our session messages to OpenAI format
-fn convert_messages(messages: &[Message]) -> Vec<OpenAiMessage> {
-    let mut result = Vec::new();
-
-    for message in messages {
-        match message.role.as_str() {
-            "tool" => {
-                // Tool messages MUST include tool_call_id and name
-                let tool_call_id = message.tool_call_id.clone();
-                let name = message.name.clone();
-
-                let content = if message.cached {
-                    let mut text_content = serde_json::json!({
-                        "type": "text",
-                        "text": message.content
-                    });
-                    text_content["cache_control"] = serde_json::json!({
-                        "type": "ephemeral"
-                    });
-                    serde_json::json!([text_content])
-                } else {
-                    serde_json::json!(message.content)
-                };
-
-                result.push(OpenAiMessage {
-                    role: message.role.clone(),
-                    content,
-                    tool_call_id,
-                    name,
-                    tool_calls: None,
-                });
-            }
-            "assistant" if message.tool_calls.is_some() => {
-                // Assistant message with tool calls - convert from unified GenericToolCall format
-                let mut content_parts = Vec::new();
-
-                // Add text content if not empty
-                if !message.content.trim().is_empty() {
-                    let mut text_content = serde_json::json!({
-                        "type": "text",
-                        "text": message.content
-                    });
-
-                    if message.cached {
-                        text_content["cache_control"] = serde_json::json!({
-                            "type": "ephemeral"
-                        });
-                    }
-
-                    content_parts.push(text_content);
-                }
-
-                let content = if content_parts.len() == 1 && !message.cached {
-                    content_parts[0]["text"].clone()
-                } else if content_parts.is_empty() {
-                    serde_json::Value::Null
-                } else {
-                    serde_json::json!(content_parts)
-                };
-
-                // Convert unified GenericToolCall format to OpenAI format
-                let tool_calls = if let Ok(generic_calls) =
-                    serde_json::from_value::<Vec<crate::llm::tool_calls::GenericToolCall>>(
-                        message.tool_calls.clone().unwrap(),
-                    ) {
-                    // Convert GenericToolCall to OpenAI format
-                    let openai_calls: Vec<serde_json::Value> = generic_calls
-                        .into_iter()
-                        .map(|call| {
-                            serde_json::json!({
-                                "id": call.id,
-                                "type": "function",
-                                "function": {
-                                    "name": call.name,
-                                    "arguments": serde_json::to_string(&call.arguments).unwrap_or_default()
-                                }
-                            })
-                        })
-                        .collect();
-                    Some(serde_json::Value::Array(openai_calls))
-                } else {
-                    panic!("Invalid tool_calls format - must be Vec<GenericToolCall>");
-                };
-
-                result.push(OpenAiMessage {
-                    role: message.role.clone(),
-                    content,
-                    tool_call_id: None,
-                    name: None,
-                    tool_calls,
-                });
-            }
-            _ => {
-                // Handle regular messages (user, system)
-                let mut content_parts = vec![{
-                    let mut text_content = serde_json::json!({
-                        "type": "text",
-                        "text": message.content
-                    });
-
-                    // Add cache_control if needed (OpenAI format - currently not supported but prepared)
-                    if message.cached {
-                        text_content["cache_control"] = serde_json::json!({
-                            "type": "ephemeral"
-                        });
-                    }
-
-                    text_content
-                }];
-
-                // Add images if present
-                if let Some(images) = &message.images {
-                    for image in images {
-                        if let crate::llm::types::ImageData::Base64(data) = &image.data {
-                            content_parts.push(serde_json::json!({
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": format!("data:{};base64,{}", image.media_type, data)
-                                }
-                            }));
-                        }
-                    }
-                }
-
-                let content = if content_parts.len() == 1 && !message.cached {
-                    content_parts[0]["text"].clone()
-                } else {
-                    serde_json::json!(content_parts)
-                };
-
-                result.push(OpenAiMessage {
-                    role: message.role.clone(),
-                    content,
-                    tool_call_id: None,
-                    name: None,
-                    tool_calls: None,
-                });
-            }
-        }
-    }
-
-    result
+    reasoning_tokens: u64,
 }
 
 // Execute OpenAI HTTP request
@@ -695,13 +583,13 @@ async fn execute_openai_request(
     let headers = response.headers();
 
     // Check for cache hit headers first (fallback for older API versions)
-    let cache_creation_input_tokens = headers
+    let _cache_creation_input_tokens = headers
         .get("x-cache-creation-input-tokens")
         .and_then(|h| h.to_str().ok())
         .and_then(|s| s.parse::<u32>().ok())
         .unwrap_or(0);
 
-    let cache_read_input_tokens = headers
+    let _cache_read_input_tokens = headers
         .get("x-cache-read-input-tokens")
         .and_then(|h| h.to_str().ok())
         .and_then(|s| s.parse::<u32>().ok())
@@ -753,109 +641,108 @@ async fn execute_openai_request(
     }
 
     let response_text = response.text().await?;
-    let openai_response: OpenAiResponse = serde_json::from_str(&response_text)?;
+    let api_response: ResponsesApiResponse = serde_json::from_str(&response_text)?;
 
-    let choice = openai_response
-        .choices
-        .into_iter()
-        .next()
-        .ok_or_else(|| anyhow::anyhow!("No choices in OpenAI response"))?;
+    // Extract content from output array
+    let mut content = String::new();
+    let mut tool_calls: Option<Vec<ToolCall>> = None;
+    let mut reasoning_content: Option<String> = None;
 
-    let content = choice.message.content.unwrap_or_default();
+    for output in &api_response.output {
+        match output.output_type.as_str() {
+            "message" => {
+                if let Some(content_array) = &output.content {
+                    for content_item in content_array {
+                        if content_item.content_type == "output_text" {
+                            if let Some(text) = &content_item.text {
+                                if !content.is_empty() {
+                                    content.push('\n');
+                                }
+                                content.push_str(text);
+                            }
+                        }
+                    }
+                }
+            }
+            "function_call" => {
+                // Extract tool call from function_call output
+                // Parse arguments to avoid double-escaping when serializing back
+                if let (Some(name), Some(args), Some(call_id)) =
+                    (&output.name, &output.arguments, &output.call_id)
+                {
+                    let arguments: serde_json::Value = if args.is_string() {
+                        serde_json::from_str(args.as_str().unwrap_or("{}"))
+                            .unwrap_or(serde_json::json!({}))
+                    } else {
+                        args.clone()
+                    };
 
-    // Extract reasoning_tokens from usage details if available (must be before thinking)
-    let reasoning_tokens = openai_response
+                    // CRITICAL: APPEND to tool_calls vector for parallel tool call support
+                    let new_tool_call = ToolCall {
+                        id: call_id.clone(),
+                        name: name.clone(),
+                        arguments,
+                    };
+
+                    if let Some(ref mut calls) = tool_calls {
+                        calls.push(new_tool_call);
+                    } else {
+                        tool_calls = Some(vec![new_tool_call]);
+                    }
+                }
+            }
+
+            "reasoning" => {
+                if let Some(content_array) = &output.content {
+                    for content_item in content_array {
+                        if content_item.content_type == "output_text" {
+                            if let Some(text) = &content_item.text {
+                                reasoning_content = Some(text.clone());
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    // Extract reasoning tokens
+    let reasoning_tokens = api_response
         .usage
-        .completion_tokens_details
+        .output_tokens_details
         .as_ref()
-        .and_then(|details| details.reasoning_tokens)
+        .map(|d| d.reasoning_tokens)
         .unwrap_or(0);
 
-    // Extract reasoning_content from o-series models (o1, o3, o4)
-    let reasoning_content = choice.message.reasoning_content;
-    let thinking = reasoning_content.as_ref().map(|rc| ThinkingBlock {
-        content: rc.clone(),
-        tokens: reasoning_tokens, // Include token count
+    let thinking = reasoning_content.map(|rc| ThinkingBlock {
+        content: rc,
+        tokens: reasoning_tokens,
     });
 
-    // Convert tool calls if present
-    let tool_calls: Option<Vec<ToolCall>> = choice.message.tool_calls.map(|calls| {
-        calls
-            .into_iter()
-            .filter_map(|call| {
-                // Validate tool type - OpenAI should only have "function" type
-                if call.tool_type != "function" {
-                    eprintln!(
-                        "Warning: Unexpected tool type '{}' from OpenAI API",
-                        call.tool_type
-                    );
-                    return None;
-                }
-
-                let arguments: serde_json::Value =
-                    serde_json::from_str(&call.function.arguments).unwrap_or(serde_json::json!({}));
-
-                Some(ToolCall {
-                    id: call.id,
-                    name: call.function.name,
-                    arguments,
-                })
-            })
-            .collect()
-    });
-
-    // Calculate cost using local pricing tables if model is available
+    // Calculate cost
     let cost = request_body
         .get("model")
         .and_then(|m| m.as_str())
         .and_then(|model| {
-            // Get cached tokens from response body (preferred) or headers (fallback)
-            let cached_tokens_from_response = openai_response
-                .usage
-                .input_tokens_details
-                .as_ref()
-                .map(|details| details.cached_tokens)
-                .unwrap_or(0);
-
-            let effective_cached_tokens = if cached_tokens_from_response > 0 {
-                cached_tokens_from_response
-            } else {
-                cache_read_input_tokens as u64
-            };
-
-            if effective_cached_tokens > 0 || cache_creation_input_tokens > 0 {
-                // Use cache-aware pricing when cache tokens are present
-                let regular_input_tokens = openai_response
-                    .usage
-                    .prompt_tokens
-                    .saturating_sub(effective_cached_tokens);
-                calculate_cost_with_cache(
-                    model,
-                    regular_input_tokens,
-                    effective_cached_tokens,
-                    openai_response.usage.completion_tokens,
-                )
-            } else {
-                // Use basic pricing when no cache tokens
-                calculate_cost(
-                    model,
-                    openai_response.usage.prompt_tokens,
-                    openai_response.usage.completion_tokens,
-                )
-            }
+            calculate_cost(
+                model,
+                api_response.usage.input_tokens,
+                api_response.usage.output_tokens,
+            )
         });
 
     let usage = TokenUsage {
-        prompt_tokens: openai_response.usage.prompt_tokens,
-        output_tokens: openai_response.usage.completion_tokens,
-        reasoning_tokens, // Reasoning tokens from o-series models
-        total_tokens: openai_response.usage.total_tokens + reasoning_tokens,
-        cached_tokens: openai_response
+        prompt_tokens: api_response.usage.input_tokens,
+        output_tokens: api_response.usage.output_tokens,
+        reasoning_tokens,
+        total_tokens: api_response.usage.total_tokens + reasoning_tokens,
+        cached_tokens: api_response
             .usage
             .input_tokens_details
             .as_ref()
-            .map(|details| details.cached_tokens)
-            .unwrap_or(cache_read_input_tokens as u64),
+            .map(|d| d.cached_tokens)
+            .unwrap_or(0),
         cost,
         request_time_ms: Some(request_time_ms),
     };
@@ -871,7 +758,7 @@ async fn execute_openai_request(
                 id: call.id.clone(),
                 name: call.name.clone(),
                 arguments: call.arguments.clone(),
-                meta: None, // OpenAI doesn't use meta fields
+                meta: None,
             })
             .collect();
 
@@ -899,11 +786,12 @@ async fn execute_openai_request(
 
     Ok(ProviderResponse {
         content,
-        thinking, // Add thinking from o-series models
+        thinking,
         exchange,
         tool_calls,
-        finish_reason: choice.finish_reason,
+        finish_reason: None, // Responses API doesn't have finish_reason
         structured_output,
+        response_id: api_response.id,
     })
 }
 
@@ -911,49 +799,6 @@ async fn execute_openai_request(
 mod tests {
     use super::*;
     use serial_test::serial;
-
-    #[test]
-    fn test_get_cache_multiplier() {
-        // GPT-5 models should have 0.1x cache multiplier (10% of normal price)
-        assert_eq!(get_cache_multiplier("gpt-5"), 0.1);
-        assert_eq!(get_cache_multiplier("gpt-5-2025-08-07"), 0.1);
-        assert_eq!(get_cache_multiplier("gpt-5-mini"), 0.1);
-        assert_eq!(get_cache_multiplier("gpt-5-mini-2025-08-07"), 0.1);
-        assert_eq!(get_cache_multiplier("gpt-5-nano"), 0.1);
-        assert_eq!(get_cache_multiplier("gpt-5-nano-2025-08-07"), 0.1);
-
-        // Other models should have 0.25x cache multiplier (25% of normal price)
-        assert_eq!(get_cache_multiplier("gpt-4o"), 0.25);
-        assert_eq!(get_cache_multiplier("gpt-4o-mini"), 0.25);
-        assert_eq!(get_cache_multiplier("gpt-4.1"), 0.25);
-        assert_eq!(get_cache_multiplier("gpt-4"), 0.25);
-        assert_eq!(get_cache_multiplier("gpt-3.5-turbo"), 0.25);
-        assert_eq!(get_cache_multiplier("o1"), 0.25);
-        assert_eq!(get_cache_multiplier("o3"), 0.25);
-    }
-
-    #[test]
-    fn test_calculate_cost_with_cache() {
-        // Test GPT-5 model with cache (0.1x multiplier)
-        let cost = calculate_cost_with_cache("gpt-5", 1000, 500, 200);
-        assert!(cost.is_some());
-        let cost_value = cost.unwrap();
-        // Expected: (1000/1M * 1.25) + (500/1M * 1.25 * 0.1) + (200/1M * 10.0)
-        // = 0.00125 + 0.0000625 + 0.002 = 0.0033125
-        assert!((cost_value - 0.0033125).abs() < 0.0000001);
-
-        // Test GPT-4o model with cache (0.25x multiplier)
-        let cost = calculate_cost_with_cache("gpt-4o", 1000, 500, 200);
-        assert!(cost.is_some());
-        let cost_value = cost.unwrap();
-        // Expected: (1000/1M * 2.50) + (500/1M * 2.50 * 0.25) + (200/1M * 10.0)
-        // = 0.0025 + 0.0003125 + 0.002 = 0.0048125
-        assert!((cost_value - 0.0048125).abs() < 0.0000001);
-
-        // Test unknown model
-        let cost = calculate_cost_with_cache("unknown-model", 1000, 500, 200);
-        assert!(cost.is_none());
-    }
 
     #[test]
     fn test_supports_temperature() {
@@ -975,26 +820,6 @@ mod tests {
         assert!(!supports_temperature("gpt-5"));
         assert!(!supports_temperature("gpt-5-mini"));
         assert!(!supports_temperature("gpt-5-nano"));
-    }
-
-    #[test]
-    fn test_uses_max_completion_tokens() {
-        // GPT-5 models should use max_completion_tokens
-        assert!(uses_max_completion_tokens("gpt-5"));
-        assert!(uses_max_completion_tokens("gpt-5-2025-08-07"));
-        assert!(uses_max_completion_tokens("gpt-5-mini"));
-        assert!(uses_max_completion_tokens("gpt-5-mini-2025-08-07"));
-        assert!(uses_max_completion_tokens("gpt-5-nano"));
-        assert!(uses_max_completion_tokens("gpt-5-nano-2025-08-07"));
-
-        // Other models should use max_tokens (return false)
-        assert!(!uses_max_completion_tokens("gpt-4o"));
-        assert!(!uses_max_completion_tokens("gpt-4o-mini"));
-        assert!(!uses_max_completion_tokens("gpt-4.1"));
-        assert!(!uses_max_completion_tokens("gpt-4"));
-        assert!(!uses_max_completion_tokens("gpt-3.5-turbo"));
-        assert!(!uses_max_completion_tokens("o1"));
-        assert!(!uses_max_completion_tokens("o3"));
     }
 
     #[test]
@@ -1130,5 +955,204 @@ mod tests {
         assert!(result.is_err());
         let error_msg = result.unwrap_err().to_string();
         assert!(error_msg.contains("OPENAI_API_KEY") || error_msg.contains("OPENAI_OAUTH"));
+    }
+
+    #[test]
+    fn test_messages_to_input() {
+        let messages = vec![
+            Message {
+                role: "system".to_string(),
+                content: "You are a helpful assistant.".to_string(),
+                timestamp: 0,
+                images: None,
+                cached: false,
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+                thinking: None,
+                id: None,
+            },
+            Message {
+                role: "user".to_string(),
+                content: "Hello!".to_string(),
+                timestamp: 0,
+                images: None,
+                cached: false,
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+                thinking: None,
+                id: None,
+            },
+        ];
+
+        let input = messages_to_input(&messages, false);
+        assert_eq!(input.len(), 2);
+
+        // First message - content is plain string
+        let first = &input[0];
+        assert_eq!(first["role"], "system");
+        assert_eq!(first["content"], "You are a helpful assistant.");
+
+        // Second message - content is plain string
+        let second = &input[1];
+        assert_eq!(second["role"], "user");
+        assert_eq!(second["content"], "Hello!");
+    }
+
+    #[test]
+    fn test_messages_to_input_with_tool_response() {
+        // Scenario: Assistant made a tool call, we're sending the tool result back
+        let messages = vec![
+            Message {
+                role: "user".to_string(),
+                content: "What is the weather?".to_string(),
+                timestamp: 0,
+                images: None,
+                cached: false,
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+                thinking: None,
+                id: None,
+            },
+            Message {
+                role: "assistant".to_string(),
+                content: "".to_string(),
+                timestamp: 0,
+                images: None,
+                cached: false,
+                tool_calls: Some(serde_json::json!([{
+                    "id": "call_12345",
+                    "type": "function",
+                    "function": {
+                        "name": "get_weather",
+                        "arguments": "{}"
+                    }
+                }])),
+                tool_call_id: None,
+                name: None,
+                thinking: None,
+                id: Some("resp_abc123".to_string()),
+            },
+            Message {
+                role: "tool".to_string(),
+                content: "{\"temperature\": \"22C\", \"condition\": \"sunny\"}".to_string(),
+                timestamp: 0,
+                images: None,
+                cached: false,
+                tool_calls: None,
+                tool_call_id: Some("call_12345".to_string()),
+                name: Some("get_weather".to_string()),
+                thinking: None,
+                id: None,
+            },
+        ];
+
+        // When there are NEW tool responses after assistant, send only those tool outputs
+        let input = messages_to_input(&messages, true);
+        assert_eq!(input.len(), 1); // Only the NEW tool response
+
+        // Tool response uses function_call_output format
+        let tool_output = &input[0];
+        assert_eq!(tool_output["type"], "function_call_output");
+        assert_eq!(tool_output["call_id"], "call_12345");
+        assert_eq!(
+            tool_output["output"],
+            "{\"temperature\": \"22C\", \"condition\": \"sunny\"}"
+        );
+    }
+
+    #[test]
+    fn test_messages_to_input_continuation_without_tools() {
+        // Scenario: Continuing conversation without tool calls (like "what else you can do?")
+        let messages = vec![
+            Message {
+                role: "user".to_string(),
+                content: "run date in shell".to_string(),
+                timestamp: 0,
+                images: None,
+                cached: false,
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+                thinking: None,
+                id: None,
+            },
+            Message {
+                role: "assistant".to_string(),
+                content: "".to_string(),
+                timestamp: 0,
+                images: None,
+                cached: false,
+                tool_calls: Some(serde_json::json!([{
+                    "id": "call_old",
+                    "type": "function",
+                    "function": {
+                        "name": "shell",
+                        "arguments": "{\"command\": \"date\"}"
+                    }
+                }])),
+                tool_call_id: None,
+                name: None,
+                thinking: None,
+                id: Some("resp_first".to_string()),
+            },
+            Message {
+                role: "tool".to_string(),
+                content: "Mon Jan 19 22:12:18 +07 2026".to_string(),
+                timestamp: 0,
+                images: None,
+                cached: false,
+                tool_calls: None,
+                tool_call_id: Some("call_old".to_string()),
+                name: Some("shell".to_string()),
+                thinking: None,
+                id: None,
+            },
+            Message {
+                role: "assistant".to_string(),
+                content: "The current date is Mon Jan 19 22:12:18 +07 2026".to_string(),
+                timestamp: 0,
+                images: None,
+                cached: false,
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+                thinking: None,
+                id: Some("resp_second".to_string()),
+            },
+            Message {
+                role: "user".to_string(),
+                content: "what else you can do?".to_string(),
+                timestamp: 0,
+                images: None,
+                cached: false,
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+                thinking: None,
+                id: None,
+            },
+        ];
+
+        // Should send only the NEW user message, NOT the old tool result
+        let input = messages_to_input(&messages, true);
+        assert_eq!(input.len(), 1);
+
+        // Should be the new user message
+        let user_msg = &input[0];
+        assert_eq!(user_msg["role"], "user");
+        assert_eq!(user_msg["content"], "what else you can do?");
+    }
+
+    #[test]
+    fn test_codex_pricing() {
+        // Test that codex models have pricing defined
+        let cost = calculate_cost("gpt-5-codex", 1000, 500);
+        assert!(cost.is_some());
+        let cost_value = cost.unwrap();
+        // Expected: (1000/1M * 1.25) + (500/1M * 10.0) = 0.00125 + 0.005 = 0.00625
+        assert!((cost_value - 0.00625).abs() < 0.0000001);
     }
 }

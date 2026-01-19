@@ -396,6 +396,7 @@ struct ImageSource {
 
 #[derive(Deserialize, Debug)]
 struct AnthropicResponse {
+    id: String,
     content: Vec<AnthropicResponseContent>,
     usage: AnthropicUsage,
     #[serde(default)]
@@ -734,6 +735,7 @@ async fn execute_anthropic_request(
         },
         finish_reason: anthropic_response.stop_reason,
         structured_output: None, // Anthropic doesn't support structured output
+        response_id: Some(anthropic_response.id),
     })
 }
 

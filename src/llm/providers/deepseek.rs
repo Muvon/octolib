@@ -120,6 +120,7 @@ struct DeepSeekMessage {
 
 #[derive(Serialize, Deserialize, Debug)]
 struct DeepSeekResponse {
+    id: String,
     choices: Vec<DeepSeekChoice>,
     usage: Option<DeepSeekUsage>,
 }
@@ -333,6 +334,7 @@ impl AiProvider for DeepSeekProvider {
             tool_calls: None, // DeepSeek doesn't support tool calls in octolib yet
             finish_reason: choice.finish_reason,
             structured_output,
+            response_id: Some(deepseek_response.id),
         })
     }
 }

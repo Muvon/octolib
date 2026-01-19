@@ -24,6 +24,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// - **content**: What was said (text response)
 /// - **thinking**: Internal reasoning (separate from content, like tool_calls)
 /// - **tool_calls**: Function invocations (separate from content)
+/// - **id**: Provider's response ID (for assistant messages, used for conversation continuation)
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Message {
     pub role: String,
@@ -41,6 +42,8 @@ pub struct Message {
     pub images: Option<Vec<ImageAttachment>>, // For messages with image attachments
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking: Option<ThinkingBlock>, // Internal reasoning (separate from content)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>, // Provider's response ID (for assistant messages with tool calls)
 }
 
 fn default_cache_marker() -> bool {
@@ -60,6 +63,7 @@ impl Message {
             tool_calls: None,
             images: None,
             thinking: None,
+            id: None,
         }
     }
 
@@ -75,6 +79,7 @@ impl Message {
             tool_calls: None,
             images: None,
             thinking: None,
+            id: None,
         }
     }
 
@@ -90,6 +95,7 @@ impl Message {
             tool_calls: None,
             images: None,
             thinking: None,
+            id: None,
         }
     }
 
@@ -105,6 +111,7 @@ impl Message {
             tool_calls: None,
             images: None,
             thinking: None,
+            id: None,
         }
     }
 
@@ -144,6 +151,7 @@ pub struct MessageBuilder {
     tool_calls: Option<serde_json::Value>,
     images: Option<Vec<ImageAttachment>>,
     thinking: Option<ThinkingBlock>,
+    id: Option<String>, // Provider's response ID (for assistant messages)
 }
 
 impl MessageBuilder {
@@ -223,6 +231,12 @@ impl MessageBuilder {
         self
     }
 
+    /// Set message ID (for assistant messages with tool calls)
+    pub fn id<S: Into<String>>(mut self, id: S) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
     /// Build the message with validation
     pub fn build(self) -> Result<Message, crate::errors::MessageError> {
         let role = self
@@ -265,6 +279,7 @@ impl MessageBuilder {
             tool_calls: self.tool_calls,
             images: self.images,
             thinking: self.thinking,
+            id: self.id,
         })
     }
 
@@ -517,6 +532,8 @@ pub struct ProviderResponse {
     pub finish_reason: Option<String>,
     /// Parsed structured output (if requested)
     pub structured_output: Option<serde_json::Value>,
+    /// Response ID from provider (required for multi-turn conversations with OpenAI Responses API)
+    pub response_id: Option<String>,
 }
 
 /// Parameters for chat completion requests
@@ -547,6 +564,8 @@ pub struct ChatCompletionParams {
     pub tools: Option<Vec<FunctionDefinition>>,
     /// Structured output configuration
     pub response_format: Option<StructuredOutputRequest>,
+    /// Previous response ID for multi-turn conversations (OpenAI Responses API)
+    pub previous_response_id: Option<String>,
 }
 
 impl ChatCompletionParams {
@@ -571,6 +590,7 @@ impl ChatCompletionParams {
             cancellation_token: None,
             tools: None,
             response_format: None,
+            previous_response_id: None,
         }
     }
 
@@ -601,6 +621,12 @@ impl ChatCompletionParams {
     /// Set structured output format
     pub fn with_structured_output(mut self, response_format: StructuredOutputRequest) -> Self {
         self.response_format = Some(response_format);
+        self
+    }
+
+    /// Set previous response ID for multi-turn conversations (OpenAI Responses API)
+    pub fn with_previous_response_id(mut self, response_id: &str) -> Self {
+        self.previous_response_id = Some(response_id.to_string());
         self
     }
 }

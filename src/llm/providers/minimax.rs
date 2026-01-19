@@ -307,6 +307,7 @@ enum MinimaxContent {
 
 #[derive(Deserialize, Debug)]
 struct MinimaxResponse {
+    id: String,
     content: Vec<MinimaxResponseContent>,
     usage: MinimaxUsage,
     #[serde(default)]
@@ -589,6 +590,7 @@ async fn execute_minimax_request(
         },
         finish_reason: minimax_response.stop_reason,
         structured_output,
+        response_id: Some(minimax_response.id),
     })
 }
 

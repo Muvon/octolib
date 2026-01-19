@@ -96,6 +96,7 @@ async fn main() -> anyhow::Result<()> {
             cached: false,
             timestamp: 0,
             thinking: None,
+            id: None,
         }],
         temperature: 0.7,
         max_tokens: 200,
@@ -106,6 +107,7 @@ async fn main() -> anyhow::Result<()> {
         max_retries: 3,
         retry_timeout: std::time::Duration::from_secs(10),
         cancellation_token: None,
+        previous_response_id: None,
     };
 
     match provider.chat_completion(params).await {
@@ -154,7 +156,8 @@ async fn main() -> anyhow::Result<()> {
             cached: false,
             timestamp: 0,
             thinking: None,
-        }],
+        id: None,
+            }],
         temperature: 0.5,
         max_tokens: 300,
         top_p: 1.0,
@@ -164,6 +167,7 @@ async fn main() -> anyhow::Result<()> {
         max_retries: 3,
         retry_timeout: std::time::Duration::from_secs(10),
         cancellation_token: None,
+        previous_response_id: None,
     };
 
     match provider.chat_completion(params).await {

@@ -120,6 +120,40 @@ fn calculate_cost(model: &str, prompt_tokens: u64, completion_tokens: u64) -> Op
     None
 }
 
+/// Get cache pricing multiplier based on model
+/// GPT-5/5.1/5.2 models have 0.1x cache pricing (90% cheaper)
+/// Other models have 0.25x cache pricing (75% cheaper)
+fn get_cache_multiplier(model: &str) -> f64 {
+    if model.starts_with("gpt-5") {
+        0.1
+    } else {
+        0.25
+    }
+}
+
+/// Calculate cost with cache-aware pricing
+/// - regular_input_tokens: charged at normal price
+/// - cache_read_tokens: charged at model-specific multiplier
+/// - output_tokens: charged at normal price
+fn calculate_cost_with_cache(
+    model: &str,
+    regular_input_tokens: u64,
+    cache_read_tokens: u64,
+    completion_tokens: u64,
+) -> Option<f64> {
+    for (pricing_model, input_price, output_price) in PRICING {
+        if model.contains(pricing_model) {
+            let regular_input_cost = (regular_input_tokens as f64 / 1_000_000.0) * input_price;
+            let cache_read_cost = (cache_read_tokens as f64 / 1_000_000.0)
+                * input_price
+                * get_cache_multiplier(model);
+            let output_cost = (completion_tokens as f64 / 1_000_000.0) * output_price;
+            return Some(regular_input_cost + cache_read_cost + output_cost);
+        }
+    }
+    None
+}
+
 /// Check if a model supports the temperature parameter
 /// O1, O2, O3, O4 and GPT-5/5.1/5.2 series models don't support temperature
 fn supports_temperature(model: &str) -> bool {
@@ -725,11 +759,30 @@ async fn execute_openai_request(
         .get("model")
         .and_then(|m| m.as_str())
         .and_then(|model| {
-            calculate_cost(
-                model,
-                api_response.usage.input_tokens,
-                api_response.usage.output_tokens,
-            )
+            let cached_tokens = api_response
+                .usage
+                .input_tokens_details
+                .as_ref()
+                .map(|d| d.cached_tokens)
+                .unwrap_or(0);
+            if cached_tokens > 0 {
+                let regular_input_tokens = api_response
+                    .usage
+                    .input_tokens
+                    .saturating_sub(cached_tokens);
+                calculate_cost_with_cache(
+                    model,
+                    regular_input_tokens,
+                    cached_tokens,
+                    api_response.usage.output_tokens,
+                )
+            } else {
+                calculate_cost(
+                    model,
+                    api_response.usage.input_tokens,
+                    api_response.usage.output_tokens,
+                )
+            }
         });
 
     let usage = TokenUsage {

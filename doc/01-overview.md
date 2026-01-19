@@ -55,10 +55,12 @@ Cross-provider tool call standardization:
 - OpenAI
 - Anthropic
 - OpenRouter
+- DeepSeek
+- MiniMax
+- Z.ai
 - Google Vertex AI
 - Amazon Bedrock
 - Cloudflare Workers AI
-- DeepSeek
 
 ## Use Cases
 

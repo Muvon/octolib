@@ -4,13 +4,15 @@
 
 | Provider | Status | Capabilities |
 |----------|--------|--------------|
-| OpenAI | ✅ Full Support | Chat, Vision, Tools |
+| OpenAI | ✅ Full Support | Chat, Vision, Tools, Structured Output, Caching |
 | Anthropic | ✅ Full Support | Claude Models, Vision, Tools, Caching |
-| OpenRouter | ✅ Full Support | Multi-Provider Proxy, Vision, Caching |
+| OpenRouter | ✅ Full Support | Multi-Provider Proxy, Vision, Caching, Structured Output |
+| DeepSeek | ✅ Full Support | Open-Source AI Models, Structured Output, Caching |
+| MiniMax | ✅ Full Support | Anthropic-Compatible API, Tools, Caching, Thinking |
+| Z.ai | ✅ Full Support | GLM Models, Caching, Structured Output |
 | Google Vertex AI | ✅ Supported | Enterprise AI Integration |
 | Amazon Bedrock | ✅ Supported | Cloud AI Services |
 | Cloudflare Workers AI | ✅ Supported | Edge AI Compute |
-| DeepSeek | ✅ Supported | Open-Source AI Models |
 
 ## 🚀 Key Features
 
@@ -78,8 +80,9 @@ All providers support custom API URLs via environment variables. If not set, def
 | OpenAI | `OPENAI_API_KEY` | `OPENAI_API_URL` | `https://api.openai.com/v1/chat/completions` |
 | Anthropic | `ANTHROPIC_API_KEY` | `ANTHROPIC_API_URL` | `https://api.anthropic.com/v1/messages` |
 | OpenRouter | `OPENROUTER_API_KEY` | `OPENROUTER_API_URL` | `https://openrouter.ai/api/v1/chat/completions` |
+| DeepSeek | `DEEPSEEK_API_KEY` | `DEEPSEEK_API_URL` | `https://api.deepseek.com/chat/completions` |
 | MiniMax | `MINIMAX_API_KEY` | `MINIMAX_API_URL` | `https://api.minimax.io/anthropic/v1/messages` |
-| ZAI | `ZAI_API_KEY` | `ZAI_API_URL` | `https://api.z.ai/api/paas/v4/chat/completions` |
+| Z.ai | `ZAI_API_KEY` | `ZAI_API_URL` | `https://api.z.ai/v1/llm/chat/completions` |
 
 Example usage with custom endpoints:
 
@@ -239,6 +242,8 @@ async fn structured_output_example() -> anyhow::Result<()> {
 | OpenAI | ✅ Yes | ✅ Yes | ✅ Yes |
 | OpenRouter | ✅ Yes | ✅ Yes | ✅ Yes |
 | DeepSeek | ✅ Yes | ❌ No* | ❌ No |
+| MiniMax | ✅ Yes | ❌ No | ❌ No |
+| Z.ai | ✅ Yes | ❌ No | ❌ No |
 | Others | ❌ No | ❌ No | ❌ No |
 
 *DeepSeek falls back to JSON mode when JSON Schema is requested.

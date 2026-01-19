@@ -269,6 +269,23 @@ async fn embedding_example() -> anyhow::Result<()> {
 // - HuggingFace: sentence-transformers models
 ```
 
+### 🔐 OAuth Authentication
+
+Octolib supports OAuth authentication for ChatGPT subscriptions and Anthropic:
+
+**OpenAI OAuth** (ChatGPT Plus/Pro/Team/Enterprise):
+```bash
+export OPENAI_OAUTH_ACCESS_TOKEN="your_oauth_token"
+export OPENAI_OAUTH_ACCOUNT_ID="your_account_id"
+```
+
+**Anthropic OAuth**:
+```bash
+export ANTHROPIC_OAUTH_TOKEN="your_bearer_token"
+```
+
+The library automatically detects OAuth credentials and prefers them over API keys. See `examples/openai_oauth.rs` and `examples/anthropic_oauth.rs` for full usage examples.
+
 ## 🎯 Provider Support Matrix
 
 | Provider | Structured Output | Vision | Tool Calls | Caching |
@@ -277,7 +294,8 @@ async fn embedding_example() -> anyhow::Result<()> {
 | **OpenRouter** | ✅ JSON + Schema | ✅ Yes | ✅ Yes | ✅ Yes |
 | **DeepSeek** | ✅ JSON Mode | ❌ No | ❌ No | ✅ Yes |
 | **Anthropic** | ❌ No | ✅ Yes | ✅ Yes | ✅ Yes |
-| **MiniMax** | ❌ No | ❌ No | ✅ Yes | ✅ Yes |
+| **MiniMax** | ✅ JSON Mode | ❌ No | ✅ Yes | ✅ Yes |
+| **Z.ai** | ✅ JSON Mode | ❌ No | ✅ Yes | ✅ Yes |
 | **Google Vertex** | ❌ No | ✅ Yes | ✅ Yes | ❌ No |
 | **Amazon Bedrock** | ❌ No | ✅ Yes | ✅ Yes | ❌ No |
 | **Cloudflare** | ❌ No | ❌ No | ❌ No | ❌ No |
@@ -362,11 +380,12 @@ if let Some(usage) = &response.exchange.usage {
 
 | Provider | Status | Capabilities |
 |----------|--------|--------------|
-| OpenAI | ✅ Full Support | Chat, Vision, Tools, Structured Output |
+| OpenAI | ✅ Full Support | Chat, Vision, Tools, Structured Output, Caching |
 | Anthropic | ✅ Full Support | Claude Models, Vision, Tools, Caching |
 | OpenRouter | ✅ Full Support | Multi-Provider Proxy, Vision, Caching, Structured Output |
-| DeepSeek | ✅ Full Support | Open-Source AI Models, Structured Output |
-| MiniMax | ✅ Full Support | Anthropic-Compatible API, Tools, Caching, Thinking Blocks |
+| DeepSeek | ✅ Full Support | Open-Source AI Models, Structured Output, Caching |
+| MiniMax | ✅ Full Support | Anthropic-Compatible API, Tools, Caching, Thinking, Structured Output |
+| Z.ai | ✅ Full Support | GLM Models, Caching, Structured Output |
 | Google Vertex AI | ✅ Supported | Enterprise AI Integration |
 | Amazon Bedrock | ✅ Supported | Cloud AI Services |
 | Cloudflare Workers AI | ✅ Supported | Edge AI Compute |

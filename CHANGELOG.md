@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.5.0] - 2026-01-21
+
+### 📋 Release Summary
+
+This release enhances cost tracking with cache token pricing support for OpenAI and improves ZAI provider reliability through better model matching and documentation fixes. General improvements include updated OAuth documentation and cross-provider consistency enhancements.
+
+
+### ✨ New Features & Enhancements
+
+- **openai**: add cache token pricing for cost calculation `35723c98`
+
+### 🔧 Improvements & Optimizations
+
+- **providers**: add response_id across providers `9a754138`
+
+### 🐛 Bug Fixes & Stability
+
+- **llm/providers/zai**: format URL in documentation comment `95e226bf`
+- **zai**: case-insensitive model matching `9c2b0053`
+
+### 📚 Documentation & Examples
+
+- update OAuth and provider support documentation `444b7b17`
+
+### 📊 Release Summary
+
+**Total commits**: 5 across 4 categories
+
+✨ **1** new feature - *Enhanced functionality*
+🔧 **1** improvement - *Better performance & code quality*
+🐛 **2** bug fixes - *Improved stability*
+📚 **1** documentation update - *Better developer experience*
+
 ## [0.4.2] - 2026-01-17
 
 ### 📋 Release Summary

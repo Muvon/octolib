@@ -20,7 +20,9 @@ use crate::llm::types::{
     ChatCompletionParams, Message, ProviderExchange, ProviderResponse, ThinkingBlock, TokenUsage,
     ToolCall,
 };
-use crate::llm::utils::{normalize_model_name, starts_with_ignore_ascii_case};
+use crate::llm::utils::{
+    contains_ignore_ascii_case, normalize_model_name, starts_with_ignore_ascii_case,
+};
 use anyhow::Result;
 use async_trait::async_trait;
 use reqwest::Client;
@@ -44,14 +46,14 @@ struct CacheTokenUsage {
     output_tokens: u64,
 }
 
-/// Calculate cost for MiniMax models with cache-aware pricing
+/// Calculate cost for MiniMax models with cache-aware pricing (case-insensitive)
 /// - cache_creation_tokens: charged at 1.25x normal price ($0.375 per 1M for all models)
 /// - cache_read_tokens: charged at 0.1x normal price ($0.03 per 1M for all models)
 /// - regular_input_tokens: charged at normal price
 /// - output_tokens: charged at normal price
 fn calculate_cost_with_cache(model: &str, usage: CacheTokenUsage) -> Option<f64> {
     for (pricing_model, input_price, output_price) in PRICING {
-        if model.contains(pricing_model) {
+        if contains_ignore_ascii_case(model, pricing_model) {
             // Regular input tokens at normal price
             let regular_input_cost =
                 (usage.regular_input_tokens as f64 / 1_000_000.0) * input_price;

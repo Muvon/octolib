@@ -14,25 +14,36 @@
 
 //! Z.ai (Zhipu AI) provider implementation
 //!
-//! PRICING UPDATE: January 2026
-//!
-//! GLM-4.5 series:
-//! - Input: $0.35
-//! - Output: $1.55
-//!
-//! GLM-4.6 series:
-//! - Input: $0.30
-//! - Output: $0.90
+//! PRICING UPDATE: January 2026 (from https://docs.z.ai/guides/overview/pricing)
 //!
 //! GLM-4.7 series:
-//! - Input: $0.10-0.16
-//! - Output: $2.20
+//! - GLM-4.7: Input $0.60/1M, Output $2.20/1M
+//! - GLM-4.7-Flash: Input $0.07/1M, Output $0.40/1M
+//! - GLM-4.7-FlashX: Input $0.07/1M, Output $0.40/1M
+//!
+//! GLM-4.6 series:
+//! - GLM-4.6: Input $0.60/1M, Output $2.20/1M
+//! - GLM-4.6V: Input $0.30/1M, Output $0.90/1M
+//! - GLM-4.6V-Flash: Input $0.04/1M, Output $0.40/1M
+//! - GLM-4.6V-FlashX: Input $0.04/1M, Output $0.40/1M
+//!
+//! GLM-4.5 series:
+//! - GLM-4.5: Input $0.60/1M, Output $2.20/1M
+//! - GLM-4.5V: Input $0.60/1M, Output $1.80/1M
+//! - GLM-4.5-X: Input $2.20/1M, Output $8.90/1M
+//! - GLM-4.5-Air: Input $0.20/1M, Output $1.10/1M
+//! - GLM-4.5-AirX: Input $1.10/1M, Output $4.50/1M
+//!
+//! GLM-4 series:
+//! - GLM-4-32B-0414-128K: Input $0.10/1M, Output $0.10/1M
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
     ChatCompletionParams, ProviderExchange, ProviderResponse, ResponseMode, TokenUsage, ToolCall,
 };
-use crate::llm::utils::{normalize_model_name, starts_with_ignore_ascii_case};
+use crate::llm::utils::{
+    contains_ignore_ascii_case, normalize_model_name, starts_with_ignore_ascii_case,
+};
 use anyhow::Result;
 use async_trait::async_trait;
 use reqwest::Client;
@@ -40,31 +51,41 @@ use serde::{Deserialize, Serialize};
 use std::env;
 
 /// Z.ai pricing constants (per 1M tokens in USD)
-/// Source: https://docs.z.ai/guides/overview/pricing (as of Jan 2026)
+/// Source: https://docs.z.ai/guides/overview/pricing (verified Jan 21, 2026)
 const PRICING: &[(&str, f64, f64)] = &[
     // Model, Input price per 1M tokens, Output price per 1M tokens
     // IMPORTANT: More specific model names must come first (using contains matching)
+
     // GLM-4.7 series (latest flagship) - more specific variants first
-    ("glm-4.7-battle", 0.14, 2.20),
-    ("glm-4.7-flash", 0.10, 2.20),
-    ("glm-4.7", 0.14, 2.20),
+    ("glm-4.7-flashx", 0.07, 0.40),
+    ("glm-4.7-flash", 0.07, 0.40),
+    ("glm-4.7-battle", 0.60, 2.20), // Same as base GLM-4.7
+    ("glm-4.7", 0.60, 2.20),
     // GLM-4.6 series
-    ("glm-4.6-flash", 0.30, 0.90),
-    ("glm-4.6", 0.30, 0.90),
-    // GLM-4.5 series
-    ("glm-4.5-air-plus", 0.35, 1.55),
-    ("glm-4.5-air", 0.35, 1.55),
-    ("glm-4.5-flash", 0.35, 1.55),
-    ("glm-4.5", 0.35, 1.55),
+    ("glm-4.6v-flashx", 0.04, 0.40),
+    ("glm-4.6v-flash", 0.04, 0.40),
+    ("glm-4.6v", 0.30, 0.90),
+    ("glm-4.6-flash", 0.60, 2.20), // Same as base GLM-4.6
+    ("glm-4.6", 0.60, 2.20),
+    // GLM-4.5 series - most specific first
+    ("glm-4.5-airx", 1.10, 4.50),
+    ("glm-4.5-air-plus", 0.20, 1.10), // Same as air
+    ("glm-4.5-air", 0.20, 1.10),
+    ("glm-4.5v", 0.60, 1.80),
+    ("glm-4.5-x", 2.20, 8.90),
+    ("glm-4.5-flash", 0.60, 2.20), // Same as base GLM-4.5
+    ("glm-4.5", 0.60, 2.20),
     // GLM-4 series
-    ("glm-4-flash", 0.35, 1.55),
-    ("glm-4", 0.35, 1.55),
+    ("glm-4-32b-0414-128k", 0.10, 0.10),
+    ("glm-4-32b", 0.10, 0.10),
+    ("glm-4-flash", 0.60, 2.20), // Fallback to 4.5 pricing
+    ("glm-4", 0.60, 2.20),       // Fallback to 4.5 pricing
 ];
 
-/// Calculate cost for Z.ai models
+/// Calculate cost for Z.ai models (case-insensitive)
 fn calculate_cost(model: &str, prompt_tokens: u64, completion_tokens: u64) -> Option<f64> {
     for (pricing_model, input_price, output_price) in PRICING {
-        if model.contains(pricing_model) {
+        if contains_ignore_ascii_case(model, pricing_model) {
             let input_cost = (prompt_tokens as f64 / 1_000_000.0) * input_price;
             let output_cost = (completion_tokens as f64 / 1_000_000.0) * output_price;
             return Some(input_cost + output_cost);
@@ -538,30 +559,41 @@ mod tests {
 
     #[test]
     fn test_cost_calculation() {
-        // Test GLM-4.5: $0.35 input, $1.55 output
+        // Test GLM-4.5: $0.60 input, $2.20 output (UPDATED PRICING)
         let cost = calculate_cost("glm-4.5", 1_000_000, 1_000_000);
-        assert_eq!(cost, Some(1.90)); // 0.35 + 1.55
+        assert!((cost.unwrap() - 2.80).abs() < 0.01); // 0.60 + 2.20
 
-        // Test GLM-4.7: $0.14 input, $2.20 output
+        // Test GLM-4.7: $0.60 input, $2.20 output (UPDATED PRICING)
         let cost = calculate_cost("glm-4.7", 1_000_000, 1_000_000);
-        // Use approximate comparison for floating point
-        assert!((cost.unwrap() - 2.34).abs() < 0.01); // 0.14 + 2.20
+        assert!((cost.unwrap() - 2.80).abs() < 0.01); // 0.60 + 2.20
 
-        // Test GLM-4.6: $0.30 input, $0.90 output
+        // Test GLM-4.6: $0.60 input, $2.20 output (UPDATED PRICING)
         let cost = calculate_cost("glm-4.6", 1_000_000, 1_000_000);
-        assert_eq!(cost, Some(1.20)); // 0.30 + 0.90
+        assert!((cost.unwrap() - 2.80).abs() < 0.01); // 0.60 + 2.20
 
-        // Test GLM-4.7-flash: $0.10 input, $2.20 output
+        // Test GLM-4.7-flash: $0.07 input, $0.40 output (UPDATED PRICING)
         let cost = calculate_cost("glm-4.7-flash", 1_000_000, 1_000_000);
-        // Use approximate comparison for floating point
-        assert!((cost.unwrap() - 2.30).abs() < 0.01); // 0.10 + 2.20
+        assert!((cost.unwrap() - 0.47).abs() < 0.01); // 0.07 + 0.40
+    }
+
+    #[test]
+    fn test_cost_calculation_case_insensitive() {
+        // Test mixed case model names
+        let cost = calculate_cost("GLM-4.7", 1_000_000, 1_000_000);
+        assert!((cost.unwrap() - 2.80).abs() < 0.01); // Should work with uppercase
+
+        let cost = calculate_cost("gLm-4.7-FlAsH", 1_000_000, 1_000_000);
+        assert!((cost.unwrap() - 0.47).abs() < 0.01); // Should work with mixed case
+
+        let cost = calculate_cost("glm-4.5-AIR", 1_000_000, 1_000_000);
+        assert!((cost.unwrap() - 1.30).abs() < 0.01); // 0.20 + 1.10
     }
 
     #[test]
     fn test_cost_with_partial_tokens() {
         // Test with 500K tokens each
         let cost = calculate_cost("glm-4.5", 500_000, 500_000);
-        assert_eq!(cost, Some(0.95)); // 0.35 * 0.5 + 1.55 * 0.5
+        assert!((cost.unwrap() - 1.40).abs() < 0.01); // 0.60 * 0.5 + 2.20 * 0.5
     }
 
     #[test]

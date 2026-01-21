@@ -20,7 +20,9 @@ use crate::llm::types::{
     ChatCompletionParams, Message, ProviderExchange, ProviderResponse, ThinkingBlock, TokenUsage,
     ToolCall,
 };
-use crate::llm::utils::{normalize_model_name, starts_with_ignore_ascii_case};
+use crate::llm::utils::{
+    contains_ignore_ascii_case, normalize_model_name, starts_with_ignore_ascii_case,
+};
 use anyhow::Result;
 use reqwest::Client;
 use serde::Deserialize;
@@ -108,10 +110,10 @@ const PRICING: &[(&str, f64, f64)] = &[
     ("gpt-3.5-turbo-16k-0613", 3.00, 4.00),
 ];
 
-/// Calculate cost for OpenAI models with basic pricing
+/// Calculate cost for OpenAI models with basic pricing (case-insensitive)
 fn calculate_cost(model: &str, prompt_tokens: u64, completion_tokens: u64) -> Option<f64> {
     for (pricing_model, input_price, output_price) in PRICING {
-        if model.contains(pricing_model) {
+        if contains_ignore_ascii_case(model, pricing_model) {
             let input_cost = (prompt_tokens as f64 / 1_000_000.0) * input_price;
             let output_cost = (completion_tokens as f64 / 1_000_000.0) * output_price;
             return Some(input_cost + output_cost);
@@ -131,7 +133,7 @@ fn get_cache_multiplier(model: &str) -> f64 {
     }
 }
 
-/// Calculate cost with cache-aware pricing
+/// Calculate cost with cache-aware pricing (case-insensitive)
 /// - regular_input_tokens: charged at normal price
 /// - cache_read_tokens: charged at model-specific multiplier
 /// - output_tokens: charged at normal price
@@ -142,7 +144,7 @@ fn calculate_cost_with_cache(
     completion_tokens: u64,
 ) -> Option<f64> {
     for (pricing_model, input_price, output_price) in PRICING {
-        if model.contains(pricing_model) {
+        if contains_ignore_ascii_case(model, pricing_model) {
             let regular_input_cost = (regular_input_tokens as f64 / 1_000_000.0) * input_price;
             let cache_read_cost = (cache_read_tokens as f64 / 1_000_000.0)
                 * input_price

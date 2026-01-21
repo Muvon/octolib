@@ -29,6 +29,7 @@
 
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderExchange, ProviderResponse, TokenUsage};
+use crate::llm::utils::contains_ignore_ascii_case;
 use anyhow::Result;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -43,10 +44,10 @@ const PRICING: &[(&str, f64, f64, f64)] = &[
     ("deepseek-reasoner", 0.14, 0.55, 2.19), // R1 model
 ];
 
-/// Get pricing for a specific model
+/// Get pricing for a specific model (case-insensitive)
 fn get_model_pricing(model: &str) -> (f64, f64, f64) {
     for (pricing_model, cache_hit, cache_miss, output) in PRICING {
-        if model.contains(pricing_model) {
+        if contains_ignore_ascii_case(model, pricing_model) {
             return (*cache_hit, *cache_miss, *output);
         }
     }

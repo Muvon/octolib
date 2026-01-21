@@ -19,7 +19,7 @@ use crate::llm::traits::AiProvider;
 use crate::llm::types::{
     ChatCompletionParams, Message, ProviderExchange, ProviderResponse, TokenUsage, ToolCall,
 };
-use crate::llm::utils::normalize_model_name;
+use crate::llm::utils::{contains_ignore_ascii_case, normalize_model_name};
 use anyhow::Result;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -74,7 +74,7 @@ fn supports_temperature_and_top_p(model: &str) -> bool {
         .any(|prefix| model.contains(prefix))
 }
 
-/// Calculate cost for Anthropic models with cache-aware pricing
+/// Calculate cost for Anthropic models with cache-aware pricing (case-insensitive)
 /// - cache_creation_tokens: charged at 1.25x normal price (5m cache)
 /// - cache_creation_tokens_1h: charged at 2x normal price (1h cache)
 /// - cache_read_tokens: charged at 0.1x normal price
@@ -82,7 +82,7 @@ fn supports_temperature_and_top_p(model: &str) -> bool {
 /// - output_tokens: charged at normal price
 fn calculate_cost_with_cache(model: &str, usage: CacheTokenUsage) -> Option<f64> {
     for (pricing_model, input_price, output_price) in PRICING {
-        if model.contains(pricing_model) {
+        if contains_ignore_ascii_case(model, pricing_model) {
             // Regular input tokens at normal price
             let regular_input_cost =
                 (usage.regular_input_tokens as f64 / 1_000_000.0) * input_price;

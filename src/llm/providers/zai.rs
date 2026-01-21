@@ -14,7 +14,7 @@
 
 //! Z.ai (Zhipu AI) provider implementation
 //!
-//! PRICING UPDATE: January 2026 (from https://docs.z.ai/guides/overview/pricing)
+//! PRICING UPDATE: January 2026 (from <https://docs.z.ai/guides/overview/pricing>)
 //!
 //! GLM-4.7 series:
 //! - GLM-4.7: Input $0.60/1M, Output $2.20/1M

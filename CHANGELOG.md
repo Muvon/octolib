@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.5.1] - 2026-01-22
+
+### 📋 Release Summary
+
+This release enhances multi-provider support with improved thinking block parsing capabilities across providers (60010513, 8e66dc2c), and standardizes response field naming for a more consistent API experience (1c9be4e0).
+
+
+### ✨ New Features & Enhancements
+
+- **anthropic**: add thinking block parsing support `60010513`
+
+### 🔧 Improvements & Optimizations
+
+- **llm**: rename response_id fields to id `1c9be4e0`
+
+### 🐛 Bug Fixes & Stability
+
+- **zai**: handle thinking parsing for zai provider `8e66dc2c`
+
+### 📊 Release Summary
+
+**Total commits**: 3 across 3 categories
+
+✨ **1** new feature - *Enhanced functionality*
+🔧 **1** improvement - *Better performance & code quality*
+🐛 **1** bug fix - *Improved stability*
+
 ## [0.5.0] - 2026-01-21
 
 ### 📋 Release Summary

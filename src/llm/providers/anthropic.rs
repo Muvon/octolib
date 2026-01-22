@@ -17,7 +17,8 @@
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, TokenUsage, ToolCall,
+    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, ThinkingBlock, TokenUsage,
+    ToolCall,
 };
 use crate::llm::utils::{contains_ignore_ascii_case, normalize_model_name};
 use anyhow::Result;
@@ -408,6 +409,8 @@ struct AnthropicResponse {
 enum AnthropicResponseContent {
     #[serde(rename = "text")]
     Text { text: String },
+    #[serde(rename = "thinking")]
+    Thinking(#[serde(default)] serde_json::Value),
     #[serde(rename = "tool_use")]
     ToolUse {
         id: String,
@@ -642,8 +645,9 @@ async fn execute_anthropic_request(
     let response_text = response.text().await?;
     let anthropic_response: AnthropicResponse = serde_json::from_str(&response_text)?;
 
-    // Extract content and tool calls
+    // Extract content, thinking blocks, and tool calls
     let mut content_parts = Vec::new();
+    let mut thinking_parts = Vec::new();
     let mut tool_calls = Vec::new();
 
     for content in anthropic_response.content {
@@ -651,8 +655,13 @@ async fn execute_anthropic_request(
             AnthropicResponseContent::Text { text } => {
                 content_parts.push(text);
             }
+            AnthropicResponseContent::Thinking(value) => {
+                // Extract thinking content from the JSON value
+                if let Some(thinking_str) = value.get("thinking").and_then(|v| v.as_str()) {
+                    thinking_parts.push(thinking_str.to_string());
+                }
+            }
             AnthropicResponseContent::ToolUse { id, name, input } => {
-                // Create generic ToolCall for processing
                 tool_calls.push(ToolCall {
                     id: id.clone(),
                     name: name.clone(),
@@ -663,6 +672,21 @@ async fn execute_anthropic_request(
     }
 
     let content = content_parts.join("\n");
+
+    // Extract thinking as a separate ThinkingBlock
+    let (thinking, reasoning_tokens) = if thinking_parts.is_empty() {
+        (None, 0)
+    } else {
+        let thinking_content = thinking_parts.join("\n\n");
+        let estimated = (thinking_content.len() / 4) as u64;
+        (
+            Some(ThinkingBlock {
+                content: thinking_content,
+                tokens: estimated,
+            }),
+            estimated,
+        )
+    };
 
     // Calculate cost with proper cache pricing
     let cached_tokens = anthropic_response
@@ -686,7 +710,7 @@ async fn execute_anthropic_request(
     let usage = TokenUsage {
         prompt_tokens: anthropic_response.usage.input_tokens,
         output_tokens: anthropic_response.usage.output_tokens,
-        reasoning_tokens: 0, // Anthropic doesn't provide reasoning token count
+        reasoning_tokens,
         total_tokens: anthropic_response.usage.input_tokens
             + anthropic_response.usage.output_tokens,
         cached_tokens,
@@ -726,7 +750,7 @@ async fn execute_anthropic_request(
 
     Ok(ProviderResponse {
         content,
-        thinking: None, // Anthropic doesn't support thinking
+        thinking,
         exchange,
         tool_calls: if tool_calls.is_empty() {
             None

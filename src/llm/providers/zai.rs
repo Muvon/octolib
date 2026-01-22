@@ -39,7 +39,8 @@
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-    ChatCompletionParams, ProviderExchange, ProviderResponse, ResponseMode, TokenUsage, ToolCall,
+    ChatCompletionParams, ProviderExchange, ProviderResponse, ResponseMode, ThinkingBlock,
+    TokenUsage, ToolCall,
 };
 use crate::llm::utils::{
     contains_ignore_ascii_case, normalize_model_name, starts_with_ignore_ascii_case,
@@ -145,6 +146,8 @@ struct ZaiRequest {
 struct ZaiMessage {
     role: String,
     content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_content: Option<String>, // For thinking mode
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_calls: Option<Vec<ZaiToolCall>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -262,6 +265,7 @@ impl AiProvider for ZaiProvider {
             .map(|msg| ZaiMessage {
                 role: msg.role.clone(),
                 content: msg.content.clone(),
+                reasoning_content: msg.thinking.as_ref().map(|t| t.content.clone()),
                 tool_calls: msg.tool_calls.as_ref().map(convert_tool_calls),
                 tool_calls_id: None,
             })
@@ -412,11 +416,20 @@ async fn execute_zai_request(
     let zai_response: ZaiResponse = serde_json::from_str(&response_text)?;
 
     // Extract content and tool calls
-    let content = zai_response
+    let raw_content = zai_response
         .choices
         .first()
         .map(|choice| choice.message.content.clone())
         .unwrap_or_default();
+
+    // Extract thinking from reasoning_content field first, then fall back to tags
+    let (thinking, content) = extract_thinking(
+        &raw_content,
+        zai_response
+            .choices
+            .first()
+            .and_then(|c| c.message.reasoning_content.clone()),
+    );
 
     let finish_reason = zai_response
         .choices
@@ -502,7 +515,7 @@ async fn execute_zai_request(
 
     Ok(ProviderResponse {
         content,
-        thinking: None, // Z.ai doesn't support thinking
+        thinking,
         exchange,
         tool_calls,
         finish_reason,
@@ -528,6 +541,47 @@ fn extract_structured_output(response: &serde_json::Value) -> Option<serde_json:
         }
     }
     None
+}
+
+/// Extract thinking content from reasoning_content field or <think>...</think> tags
+fn extract_thinking(
+    content: &str,
+    reasoning_content: Option<String>,
+) -> (Option<ThinkingBlock>, String) {
+    // Priority 1: reasoning_content field (new API format for streaming)
+    if let Some(ref thinking_str) = reasoning_content {
+        if !thinking_str.trim().is_empty() {
+            let tokens = (thinking_str.len() / 4) as u64;
+            let thinking = Some(ThinkingBlock {
+                content: thinking_str.clone(),
+                tokens,
+            });
+            return (thinking, content.to_string());
+        }
+    }
+
+    // Priority 2: <function_call>...</think> tags (legacy format)
+    let think_start = "</think>";
+    let think_end = "</think>";
+
+    if let Some(start_idx) = content.find(think_start) {
+        if let Some(end_idx) = content.find(think_end) {
+            let thinking_content = &content[start_idx + think_start.len()..end_idx];
+            let before_think = &content[..start_idx];
+            let after_think = &content[end_idx + think_end.len()..];
+            let clean_content = format!("{}{}", before_think.trim(), after_think.trim())
+                .trim()
+                .to_string();
+            let tokens = (thinking_content.len() / 4) as u64;
+            let thinking = Some(ThinkingBlock {
+                content: thinking_content.to_string(),
+                tokens,
+            });
+            return (thinking, clean_content);
+        }
+    }
+
+    (None, content.to_string())
 }
 
 #[cfg(test)]

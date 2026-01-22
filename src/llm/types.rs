@@ -533,7 +533,7 @@ pub struct ProviderResponse {
     /// Parsed structured output (if requested)
     pub structured_output: Option<serde_json::Value>,
     /// Response ID from provider (required for multi-turn conversations with OpenAI Responses API)
-    pub response_id: Option<String>,
+    pub id: Option<String>,
 }
 
 /// Parameters for chat completion requests
@@ -565,7 +565,7 @@ pub struct ChatCompletionParams {
     /// Structured output configuration
     pub response_format: Option<StructuredOutputRequest>,
     /// Previous response ID for multi-turn conversations (OpenAI Responses API)
-    pub previous_response_id: Option<String>,
+    pub previous_id: Option<String>,
 }
 
 impl ChatCompletionParams {
@@ -590,7 +590,7 @@ impl ChatCompletionParams {
             cancellation_token: None,
             tools: None,
             response_format: None,
-            previous_response_id: None,
+            previous_id: None,
         }
     }
 
@@ -625,8 +625,8 @@ impl ChatCompletionParams {
     }
 
     /// Set previous response ID for multi-turn conversations (OpenAI Responses API)
-    pub fn with_previous_response_id(mut self, response_id: &str) -> Self {
-        self.previous_response_id = Some(response_id.to_string());
+    pub fn with_previous_id(mut self, id: &str) -> Self {
+        self.previous_id = Some(id.to_string());
         self
     }
 }

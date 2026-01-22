@@ -653,7 +653,7 @@ async fn execute_openrouter_request(
         tool_calls,
         finish_reason: choice.finish_reason,
         structured_output,
-        response_id: Some(openrouter_response.id),
+        id: Some(openrouter_response.id),
     })
 }
 

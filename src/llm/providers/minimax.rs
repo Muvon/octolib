@@ -592,7 +592,7 @@ async fn execute_minimax_request(
         },
         finish_reason: minimax_response.stop_reason,
         structured_output,
-        response_id: Some(minimax_response.id),
+        id: Some(minimax_response.id),
     })
 }
 

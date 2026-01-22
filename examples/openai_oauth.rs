@@ -132,7 +132,7 @@ async fn main() -> anyhow::Result<()> {
         max_retries: 3,
         retry_timeout: std::time::Duration::from_secs(10),
         cancellation_token: None,
-        previous_response_id: None,
+        previous_id: None,
     };
 
     // Make the API call

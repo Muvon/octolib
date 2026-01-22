@@ -507,7 +507,7 @@ async fn execute_zai_request(
         tool_calls,
         finish_reason,
         structured_output,
-        response_id: Some(zai_response.id),
+        id: Some(zai_response.id),
     })
 }
 

@@ -168,17 +168,17 @@ fn supports_temperature(model: &str) -> bool {
 
 /// Convert messages to Responses API input format
 ///
-/// The OpenAI Responses API maintains conversation history server-side via `previous_response_id`.
+/// The OpenAI Responses API maintains conversation history server-side via `previous_id`.
 /// This means we only send NEW messages/tool results, not the full conversation history.
 ///
 /// # Behavior
-/// - **Initial request** (no previous_response_id): Send all user/system messages
+/// - **Initial request** (no previous_id): Send all user/system messages
 /// - **Tool response**: Send ONLY new tool results after last assistant message as function_call_output
 /// - **Continuation**: Send ONLY new user/system messages after last assistant message
 ///
 /// # Arguments
 /// * `messages` - Full conversation history
-/// * `has_previous_response` - Whether we have a previous_response_id (continuation)
+/// * `has_previous_response` - Whether we have a previous_id (continuation)
 fn messages_to_input(messages: &[Message], has_previous_response: bool) -> Vec<serde_json::Value> {
     if has_previous_response {
         // Find the index of the last assistant message with an ID
@@ -391,10 +391,10 @@ impl AiProvider for OpenAiProvider {
             self.get_api_key()?
         };
 
-        // Extract previous_response_id from messages if not explicitly provided
+        // Extract previous_id from messages if not explicitly provided
         // Find the LAST message with an ID - this is the most recent response from the API
         // The Responses API maintains conversation state server-side via this ID
-        let previous_response_id = params.previous_response_id.clone().or_else(|| {
+        let previous_id = params.previous_id.clone().or_else(|| {
             params
                 .messages
                 .iter()
@@ -404,7 +404,7 @@ impl AiProvider for OpenAiProvider {
         });
 
         // Convert messages to array input format for Responses API
-        let input_array = messages_to_input(&params.messages, previous_response_id.is_some());
+        let input_array = messages_to_input(&params.messages, previous_id.is_some());
 
         // Create the request body for Responses API
         let mut request_body = serde_json::json!({
@@ -418,8 +418,8 @@ impl AiProvider for OpenAiProvider {
             request_body["top_p"] = serde_json::json!(params.top_p);
         }
 
-        // Add previous_response_id for multi-turn conversations
-        if let Some(ref prev_id) = previous_response_id {
+        // Add previous_id for multi-turn conversations
+        if let Some(ref prev_id) = previous_id {
             request_body["previous_response_id"] = serde_json::json!(prev_id);
         }
 
@@ -846,7 +846,7 @@ async fn execute_openai_request(
         tool_calls,
         finish_reason: None, // Responses API doesn't have finish_reason
         structured_output,
-        response_id: api_response.id,
+        id: api_response.id,
     })
 }
 

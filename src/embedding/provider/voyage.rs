@@ -30,6 +30,9 @@ impl VoyageProviderImpl {
     pub fn new(model: &str) -> Result<Self> {
         // Validate model first - fail fast if unsupported
         let supported_models = [
+            "voyage-4-large",
+            "voyage-4",
+            "voyage-4-lite",
             "voyage-3.5",
             "voyage-3.5-lite",
             "voyage-3-large",
@@ -38,6 +41,8 @@ impl VoyageProviderImpl {
             "voyage-finance-2",
             "voyage-law-2",
             "voyage-2",
+            "voyage-context-3",
+            "voyage-multimodal-3.5",
         ];
 
         if !supported_models.contains(&model) {
@@ -57,6 +62,9 @@ impl VoyageProviderImpl {
 
     fn get_model_dimension(model: &str) -> usize {
         match model {
+            "voyage-4-large" => 1024,
+            "voyage-4" => 1024,
+            "voyage-4-lite" => 1024,
             "voyage-3.5" => 1024,
             "voyage-3.5-lite" => 1024,
             "voyage-3-large" => 1024,
@@ -65,6 +73,8 @@ impl VoyageProviderImpl {
             "voyage-finance-2" => 1024,
             "voyage-law-2" => 1024,
             "voyage-2" => 1024,
+            "voyage-context-3" => 1024,
+            "voyage-multimodal-3.5" => 1024,
             _ => {
                 // This should never be reached due to validation in new()
                 panic!(
@@ -98,7 +108,10 @@ impl EmbeddingProvider for VoyageProviderImpl {
         // REAL validation - only support actual Voyage models, NO HALLUCINATIONS
         matches!(
             self.model_name.as_str(),
-            "voyage-3.5"
+            "voyage-4-large"
+                | "voyage-4"
+                | "voyage-4-lite"
+                | "voyage-3.5"
                 | "voyage-3.5-lite"
                 | "voyage-3-large"
                 | "voyage-code-2"
@@ -106,6 +119,8 @@ impl EmbeddingProvider for VoyageProviderImpl {
                 | "voyage-finance-2"
                 | "voyage-law-2"
                 | "voyage-2"
+                | "voyage-context-3"
+                | "voyage-multimodal-3.5"
         )
     }
 }
@@ -173,5 +188,85 @@ impl VoyageProvider {
             .collect();
 
         Ok(embeddings)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_voyage_provider_creation() {
+        // Test valid models
+        assert!(VoyageProviderImpl::new("voyage-4-large").is_ok());
+        assert!(VoyageProviderImpl::new("voyage-4").is_ok());
+        assert!(VoyageProviderImpl::new("voyage-3.5").is_ok());
+        assert!(VoyageProviderImpl::new("voyage-context-3").is_ok());
+
+        // Test invalid model
+        assert!(VoyageProviderImpl::new("invalid-model").is_err());
+    }
+
+    #[test]
+    fn test_voyage_model_dimensions() {
+        assert_eq!(
+            VoyageProviderImpl::new("voyage-4-large")
+                .unwrap()
+                .get_dimension(),
+            1024
+        );
+        assert_eq!(
+            VoyageProviderImpl::new("voyage-4").unwrap().get_dimension(),
+            1024
+        );
+        assert_eq!(
+            VoyageProviderImpl::new("voyage-4-lite")
+                .unwrap()
+                .get_dimension(),
+            1024
+        );
+        assert_eq!(
+            VoyageProviderImpl::new("voyage-3.5")
+                .unwrap()
+                .get_dimension(),
+            1024
+        );
+        assert_eq!(
+            VoyageProviderImpl::new("voyage-code-2")
+                .unwrap()
+                .get_dimension(),
+            1536
+        );
+        assert_eq!(
+            VoyageProviderImpl::new("voyage-context-3")
+                .unwrap()
+                .get_dimension(),
+            1024
+        );
+        assert_eq!(
+            VoyageProviderImpl::new("voyage-multimodal-3.5")
+                .unwrap()
+                .get_dimension(),
+            1024
+        );
+    }
+
+    #[test]
+    fn test_voyage_model_validation() {
+        let models = [
+            "voyage-4-large",
+            "voyage-4",
+            "voyage-4-lite",
+            "voyage-3.5",
+            "voyage-3.5-lite",
+            "voyage-3-large",
+            "voyage-code-3",
+            "voyage-context-3",
+            "voyage-multimodal-3.5",
+        ];
+        for model in models {
+            let provider = VoyageProviderImpl::new(model).unwrap();
+            assert!(provider.is_model_supported());
+        }
     }
 }

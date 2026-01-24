@@ -6,12 +6,29 @@ Octolib provides a unified interface for generating embeddings across multiple p
 
 | Provider | Models | Features | API Key Required |
 |----------|--------|----------|------------------|
-| **Jina** | jina-embeddings-v4, jina-clip-v2, jina-embeddings-v3 | High-quality embeddings | ✅ JINA_API_KEY |
-| **Voyage** | voyage-3.5, voyage-code-2, voyage-finance-2 | Specialized models | ✅ VOYAGE_API_KEY |
-| **Google** | gemini-embedding-001, text-embedding-005 | Google AI embeddings | ✅ GOOGLE_API_KEY |
-| **OpenAI** | text-embedding-3-small, text-embedding-3-large | OpenAI embeddings | ✅ OPENAI_API_KEY |
+| **Jina** | jina-embeddings-v4 (2048d), jina-embeddings-v3 (1024d), jina-clip-v2 (1024d), jina-colbert-v2 (128d/96d/64d), jina-code-embeddings (1024d) | High-quality embeddings, multimodal, late-interaction, code-specialized | ✅ JINA_API_KEY |
+| **Voyage** | voyage-4-large/4/4-lite (1024d, MRL), voyage-3.5 (1024d), voyage-code-3 (1024d), voyage-context-3 (1024d), voyage-multimodal-3.5 (1024d) | Specialized models, MRL support, contextualized chunks | ✅ VOYAGE_API_KEY |
+| **Google** | gemini-embedding-001 (3072d), text-embedding-005 (768d), text-multilingual-embedding-002 (768d) | Google AI embeddings, multilingual | ✅ GOOGLE_API_KEY |
+| **OpenAI** | text-embedding-3-small (1536d), text-embedding-3-large (3072d), text-embedding-ada-002 (1536d) | OpenAI embeddings, reliable | ✅ OPENAI_API_KEY |
 | **FastEmbed** | Local sentence-transformers models | Local processing | ❌ No API key |
 | **HuggingFace** | sentence-transformers models | HuggingFace Hub | ❌ No API key |
+
+### 📝 Model Notes
+
+**Jina AI:**
+- `jina-embeddings-v4`: 2048d, multimodal (text+images), 32K context
+- `jina-embeddings-v3`: 1024d, multilingual, 8K context
+- `jina-colbert-v2`: Late-interaction retrieval (128d/96d/64d variants)
+- `jina-code-embeddings-0.5b/1.5b`: Code-specialized, 32K context
+
+**Voyage AI:**
+- `voyage-4-large/4/4-lite`: Latest v4 series with MRL (Matryoshka Representation Learning) - supports dimension truncation to 2048/1024/512/256
+- `voyage-context-3`: Contextualized chunk embeddings with document-level awareness
+- `voyage-multimodal-3.5`: Multimodal support (text/images/video)
+- All v4 models share the same embedding space (interoperable)
+
+**Google:**
+- Note: `text-embedding-004` is deprecated (Jan 14, 2026)
 
 ## 🚀 Quick Start
 
@@ -120,15 +137,24 @@ let batches = split_texts_into_token_limited_batches(texts, 16, 100_000);
 ## 🎯 Best Practices
 
 1. **Choose the Right Provider**
-   - **Jina**: High-quality general embeddings, multimodal support
-   - **Voyage**: Specialized models for code, finance, etc.
-   - **Google**: Strong multilingual support
+   - **Jina**: High-quality general embeddings, multimodal support (v4), late-interaction (colbert-v2), code-specialized models
+   - **Voyage**: Specialized models for code/finance/law, v4 series with MRL support, contextualized chunks
+   - **Google**: Strong multilingual support, high-dimensional embeddings
    - **OpenAI**: Reliable, well-tested embeddings
 
-2. **Use Batch Processing** for multiple texts to improve performance
+2. **Model Selection Tips**
+   - Use `jina-embeddings-v4` for multimodal tasks (text + images)
+   - Use `jina-colbert-v2` for late-interaction retrieval (higher accuracy)
+   - Use `jina-code-embeddings` for code search and retrieval
+   - Use `voyage-4-large` for best retrieval quality
+   - Use `voyage-4-lite` for optimized latency/cost
+   - Use `voyage-context-3` for document-aware chunk embeddings
+   - Use `voyage-code-3` for code-related tasks
 
-3. **Monitor Token Usage** to stay within provider limits
+3. **Use Batch Processing** for multiple texts to improve performance
 
-4. **Handle Errors Gracefully** with proper error handling
+4. **Monitor Token Usage** to stay within provider limits
+
+5. **Handle Errors Gracefully** with proper error handling
 
 For more examples, see the main [Advanced Guide](04-advanced-guide.md).

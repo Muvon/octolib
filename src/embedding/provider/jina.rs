@@ -39,6 +39,12 @@ impl JinaProviderImpl {
             "jina-embeddings-v2-base-de",
             "jina-embeddings-v2-base-zh",
             "jina-embeddings-v2-base-en",
+            "jina-embeddings-v2-small-en",
+            "jina-colbert-v2",
+            "jina-colbert-v2-96",
+            "jina-colbert-v2-64",
+            "jina-code-embeddings-0.5b",
+            "jina-code-embeddings-1.5b",
         ];
 
         if !supported_models.contains(&model) {
@@ -67,6 +73,12 @@ impl JinaProviderImpl {
             "jina-embeddings-v2-base-de" => 768,
             "jina-embeddings-v2-base-zh" => 768,
             "jina-embeddings-v2-base-en" => 768,
+            "jina-embeddings-v2-small-en" => 512,
+            "jina-colbert-v2" => 128,
+            "jina-colbert-v2-96" => 96,
+            "jina-colbert-v2-64" => 64,
+            "jina-code-embeddings-0.5b" => 1024,
+            "jina-code-embeddings-1.5b" => 1024,
             _ => {
                 // This should never be reached due to validation in new()
                 panic!(
@@ -114,6 +126,12 @@ impl EmbeddingProvider for JinaProviderImpl {
                 | "jina-embeddings-v2-base-de"
                 | "jina-embeddings-v2-base-zh"
                 | "jina-embeddings-v2-base-en"
+                | "jina-embeddings-v2-small-en"
+                | "jina-colbert-v2"
+                | "jina-colbert-v2-96"
+                | "jina-colbert-v2-64"
+                | "jina-code-embeddings-0.5b"
+                | "jina-code-embeddings-1.5b"
         )
     }
 }
@@ -164,5 +182,101 @@ impl JinaProvider {
             .collect();
 
         Ok(embeddings)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_jina_provider_creation() {
+        // Test valid models
+        assert!(JinaProviderImpl::new("jina-embeddings-v4").is_ok());
+        assert!(JinaProviderImpl::new("jina-embeddings-v3").is_ok());
+        assert!(JinaProviderImpl::new("jina-clip-v2").is_ok());
+        assert!(JinaProviderImpl::new("jina-colbert-v2").is_ok());
+        assert!(JinaProviderImpl::new("jina-code-embeddings-0.5b").is_ok());
+
+        // Test invalid model
+        assert!(JinaProviderImpl::new("invalid-model").is_err());
+    }
+
+    #[test]
+    fn test_jina_model_dimensions() {
+        assert_eq!(
+            JinaProviderImpl::new("jina-embeddings-v4")
+                .unwrap()
+                .get_dimension(),
+            2048
+        );
+        assert_eq!(
+            JinaProviderImpl::new("jina-embeddings-v3")
+                .unwrap()
+                .get_dimension(),
+            1024
+        );
+        assert_eq!(
+            JinaProviderImpl::new("jina-clip-v2")
+                .unwrap()
+                .get_dimension(),
+            1024
+        );
+        assert_eq!(
+            JinaProviderImpl::new("jina-embeddings-v2-small-en")
+                .unwrap()
+                .get_dimension(),
+            512
+        );
+        assert_eq!(
+            JinaProviderImpl::new("jina-colbert-v2")
+                .unwrap()
+                .get_dimension(),
+            128
+        );
+        assert_eq!(
+            JinaProviderImpl::new("jina-colbert-v2-96")
+                .unwrap()
+                .get_dimension(),
+            96
+        );
+        assert_eq!(
+            JinaProviderImpl::new("jina-colbert-v2-64")
+                .unwrap()
+                .get_dimension(),
+            64
+        );
+        assert_eq!(
+            JinaProviderImpl::new("jina-code-embeddings-0.5b")
+                .unwrap()
+                .get_dimension(),
+            1024
+        );
+        assert_eq!(
+            JinaProviderImpl::new("jina-code-embeddings-1.5b")
+                .unwrap()
+                .get_dimension(),
+            1024
+        );
+    }
+
+    #[test]
+    fn test_jina_model_validation() {
+        let models = [
+            "jina-embeddings-v4",
+            "jina-embeddings-v3",
+            "jina-clip-v2",
+            "jina-clip-v1",
+            "jina-embeddings-v2-small-en",
+            "jina-colbert-v2",
+            "jina-colbert-v2-96",
+            "jina-colbert-v2-64",
+            "jina-code-embeddings-0.5b",
+            "jina-code-embeddings-1.5b",
+        ];
+        for model in models {
+            let provider = JinaProviderImpl::new(model).unwrap();
+            assert!(provider.is_model_supported());
+        }
     }
 }

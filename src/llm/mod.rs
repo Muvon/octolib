@@ -42,5 +42,6 @@ pub use types::{
 // Re-export all provider implementations
 pub use providers::{
     AmazonBedrockProvider, AnthropicProvider, CloudflareWorkersAiProvider, DeepSeekProvider,
-    GoogleVertexProvider, MinimaxProvider, OpenAiProvider, OpenRouterProvider, ZaiProvider,
+    GoogleVertexProvider, LocalProvider, MinimaxProvider, OpenAiProvider, OpenRouterProvider,
+    ZaiProvider,
 };

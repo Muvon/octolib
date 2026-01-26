@@ -18,7 +18,7 @@
 //!
 //! ## Features
 //!
-//! - **Multi-provider support**: OpenAI, Anthropic, OpenRouter, Google Vertex AI, Amazon Bedrock, Cloudflare Workers AI, DeepSeek, Z.ai
+//! - **Multi-provider support**: OpenAI, Anthropic, OpenRouter, Local (Ollama, LM Studio, LocalAI, Jan, vLLM), Google Vertex AI, Amazon Bedrock, Cloudflare Workers AI, DeepSeek, Z.ai
 //! - **Unified interface**: Single trait for all providers with consistent API
 //! - **Model validation**: Strict `provider:model` format validation
 //! - **Structured output**: JSON and JSON Schema support for OpenAI, OpenRouter, DeepSeek, and Z.ai
@@ -116,8 +116,8 @@ pub use errors::{
 pub use llm::{
     AiProvider, AmazonBedrockProvider, AnthropicProvider, CacheConfig, CacheTTL, CacheType,
     ChatCompletionParams, CloudflareWorkersAiProvider, DeepSeekProvider, FunctionDefinition,
-    GenericToolCall, GoogleVertexProvider, ImageAttachment, ImageData, Message, MessageBuilder,
-    MinimaxProvider, ModelLimits, OpenAiProvider, OpenRouterProvider, OutputFormat,
+    GenericToolCall, GoogleVertexProvider, ImageAttachment, ImageData, LocalProvider, Message,
+    MessageBuilder, MinimaxProvider, ModelLimits, OpenAiProvider, OpenRouterProvider, OutputFormat,
     ProviderExchange, ProviderFactory, ProviderResponse, ProviderStrategy, ProviderToolCalls,
     ResponseMode, SourceType, StrategyFactory, StructuredOutputRequest, ThinkingBlock, TokenUsage,
     ToolCall, ToolResult, ZaiProvider,

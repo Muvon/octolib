@@ -16,7 +16,8 @@
 
 use crate::llm::providers::{
     AmazonBedrockProvider, AnthropicProvider, CloudflareWorkersAiProvider, DeepSeekProvider,
-    GoogleVertexProvider, MinimaxProvider, OpenAiProvider, OpenRouterProvider, ZaiProvider,
+    GoogleVertexProvider, LocalProvider, MinimaxProvider, OpenAiProvider, OpenRouterProvider,
+    ZaiProvider,
 };
 use crate::llm::traits::AiProvider;
 use anyhow::Result;
@@ -49,6 +50,7 @@ impl ProviderFactory {
         match provider_name.to_lowercase().as_str() {
             "openrouter" => Ok(Box::new(OpenRouterProvider::new())),
             "openai" => Ok(Box::new(OpenAiProvider::new())),
+            "local" => Ok(Box::new(LocalProvider::new())),
             "anthropic" => Ok(Box::new(AnthropicProvider::new())),
             "google" => Ok(Box::new(GoogleVertexProvider::new())),
             "amazon" => Ok(Box::new(AmazonBedrockProvider::new())),
@@ -56,7 +58,7 @@ impl ProviderFactory {
             "deepseek" => Ok(Box::new(DeepSeekProvider::new())),
             "minimax" => Ok(Box::new(MinimaxProvider::new())),
             "zai" => Ok(Box::new(ZaiProvider::new())),
-            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported providers: openrouter, openai, anthropic, google, amazon, cloudflare, deepseek, minimax, zai", provider_name)),
+            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported providers: openrouter, openai, local, anthropic, google, amazon, cloudflare, deepseek, minimax, zai", provider_name)),
         }
     }
 
@@ -82,6 +84,7 @@ impl ProviderFactory {
         vec![
             "openrouter",
             "openai",
+            "local",
             "anthropic",
             "google",
             "amazon",

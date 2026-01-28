@@ -15,7 +15,7 @@
 //! Provider factory for creating AI provider instances
 
 use crate::llm::providers::{
-    AmazonBedrockProvider, AnthropicProvider, CloudflareWorkersAiProvider, CodexProvider,
+    AmazonBedrockProvider, AnthropicProvider, CliProvider, CloudflareWorkersAiProvider,
     DeepSeekProvider, GoogleVertexProvider, LocalProvider, MinimaxProvider, OpenAiProvider,
     OpenRouterProvider, ZaiProvider,
 };
@@ -58,15 +58,21 @@ impl ProviderFactory {
             "deepseek" => Ok(Box::new(DeepSeekProvider::new())),
             "minimax" => Ok(Box::new(MinimaxProvider::new())),
             "zai" => Ok(Box::new(ZaiProvider::new())),
-            "codex" => Ok(Box::new(CodexProvider::new()?)),
-            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported providers: openrouter, openai, local, anthropic, google, amazon, cloudflare, deepseek, minimax, zai, codex", provider_name)),
+            "cli" => Err(anyhow::anyhow!(
+                "CLI provider requires a model string like 'cli:<backend>/<model>'. Use ProviderFactory::get_provider_for_model instead."
+            )),
+            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported providers: openrouter, openai, local, anthropic, google, amazon, cloudflare, deepseek, minimax, zai, cli", provider_name)),
         }
     }
 
     /// Get the appropriate provider for a given model string
     pub fn get_provider_for_model(model: &str) -> Result<(Box<dyn AiProvider>, String)> {
         let (provider_name, model_name) = Self::parse_model(model)?;
-        let provider = Self::create_provider(&provider_name)?;
+        let provider: Box<dyn AiProvider> = if provider_name.eq_ignore_ascii_case("cli") {
+            Box::new(CliProvider::new_for_model(&model_name)?)
+        } else {
+            Self::create_provider(&provider_name)?
+        };
 
         // Verify the provider supports this model
         if !provider.supports_model(&model_name) {
@@ -93,7 +99,7 @@ impl ProviderFactory {
             "deepseek",
             "minimax",
             "zai",
-            "codex",
+            "cli",
         ]
     }
 
@@ -155,7 +161,7 @@ mod tests {
         assert!(providers.contains(&"cloudflare"));
         assert!(providers.contains(&"deepseek"));
         assert!(providers.contains(&"minimax"));
-        assert!(providers.contains(&"codex"));
+        assert!(providers.contains(&"cli"));
     }
 
     #[test]
@@ -178,11 +184,7 @@ mod tests {
         assert!(ProviderFactory::create_provider("cloudflare").is_ok());
         assert!(ProviderFactory::create_provider("deepseek").is_ok());
         assert!(ProviderFactory::create_provider("minimax").is_ok());
-        // Codex CLI may not be installed in test environments, so allow either outcome
-        let codex_result = ProviderFactory::create_provider("codex");
-        if let Err(e) = codex_result {
-            assert!(e.to_string().to_lowercase().contains("codex"));
-        }
+        assert!(ProviderFactory::create_provider("cli").is_err());
 
         // Test case insensitive
         assert!(ProviderFactory::create_provider("OpenAI").is_ok());

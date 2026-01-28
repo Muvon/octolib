@@ -11,13 +11,14 @@ Octolib is a comprehensive, self-sufficient AI provider library that provides a 
 
 ## ✨ Key Features
 
-- **🔌 Multi-Provider Support**: OpenAI, Anthropic, OpenRouter, Google, Amazon, Cloudflare, DeepSeek, MiniMax, Z.ai
+- **🔌 Multi-Provider Support**: OpenAI, Anthropic, OpenRouter, Google, Amazon, Cloudflare, DeepSeek, MiniMax, Z.ai, CLI proxies
 - **🛡️ Unified Interface**: Consistent API across different providers
 - **🔍 Intelligent Model Validation**: Strict `provider:model` format parsing with case-insensitive model support
 - **📋 Structured Output**: JSON and JSON Schema support for OpenAI, OpenRouter, and DeepSeek
 - **💰 Cost Tracking**: Automatic token usage and cost calculation
 - **🖼️ Vision Support**: Image attachment handling for compatible models
 - **🧰 Tool Calling**: Cross-provider tool call standardization
+- **🧩 CLI Provider**: Use `cli:<backend>/<model>` (e.g. `cli:codex/gpt-5.2-codex`). Proxy-only: tools/MCP are not used or controllable.
 - **⏱️ Retry Management**: Configurable exponential backoff
 - **🔒 Secure Design**: Environment-based API key management
 - **🎯 Embedding Support**: Multi-provider embedding generation with Jina, Voyage, Google, OpenAI, FastEmbed, and HuggingFace
@@ -95,6 +96,26 @@ async fn structured_example() -> anyhow::Result<()> {
 
     Ok(())
 }
+```
+
+### 🧩 CLI Provider (Proxy Mode)
+
+Use local CLIs as a lightweight proxy. This mode is prompt-only; tool calling/MCP integration is not used or controllable.
+
+```rust
+let (provider, model) = ProviderFactory::get_provider_for_model(\"cli:codex/gpt-5.2-codex\")?;
+// or: \"cli:claude/claude-sonnet-4-5\"
+// or: \"cli:gemini/gemini-2.5-pro\"
+// or: \"cli:cursor/auto\"
+```
+
+Set a backend-specific command if it is not on PATH:
+
+```
+CLI_CODEX_COMMAND=/path/to/codex
+CLI_CLAUDE_COMMAND=/path/to/claude
+CLI_GEMINI_COMMAND=/path/to/gemini
+CLI_CURSOR_COMMAND=/path/to/cursor-agent
 ```
 
 ### 🧰 Tool Calling

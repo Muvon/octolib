@@ -18,7 +18,7 @@
 //!
 //! ## Features
 //!
-//! - **Multi-provider support**: OpenAI, Anthropic, OpenRouter, Local (Ollama, LM Studio, LocalAI, Jan, vLLM), Google Vertex AI, Amazon Bedrock, Cloudflare Workers AI, DeepSeek, Z.ai, Codex CLI
+//! - **Multi-provider support**: OpenAI, Anthropic, OpenRouter, Local (Ollama, LM Studio, LocalAI, Jan, vLLM), Google Vertex AI, Amazon Bedrock, Cloudflare Workers AI, DeepSeek, Z.ai, CLI proxies (codex, claude, gemini, others)
 //! - **Unified interface**: Single trait for all providers with consistent API
 //! - **Model validation**: Strict `provider:model` format validation
 //! - **Structured output**: JSON and JSON Schema support for OpenAI, OpenRouter, DeepSeek, and Z.ai
@@ -27,6 +27,7 @@
 //! - **Caching support**: Automatic detection of caching-capable models
 //! - **Retry logic**: Exponential backoff with smart rate limit handling
 //! - **Self-sufficient**: No external dependencies on application-specific types
+//! - **CLI provider**: `cli:<backend>/<model>` proxies CLIs; tool calling/MCP is not used or controllable (prompt-only)
 //!
 //! ## Usage
 //!

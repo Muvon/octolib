@@ -201,6 +201,7 @@ impl AiProvider for DeepSeekProvider {
             .map(|msg| DeepSeekMessage {
                 role: msg.role.clone(),
                 content: msg.content.clone(),
+                reasoning_content: None,
             })
             .collect();
 

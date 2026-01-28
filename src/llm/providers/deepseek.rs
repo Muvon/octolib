@@ -117,6 +117,8 @@ struct DeepSeekRequest {
 struct DeepSeekMessage {
     role: String,
     content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_content: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -320,6 +322,24 @@ impl AiProvider for DeepSeekProvider {
 
         let content = &choice.message.content;
 
+        // Extract thinking block from reasoning_content if present
+        let thinking = choice
+            .message
+            .reasoning_content
+            .as_ref()
+            .and_then(|reasoning| {
+                if reasoning.trim().is_empty() {
+                    None
+                } else {
+                    // Estimate tokens from content length (4 chars per token)
+                    let tokens = (reasoning.len() / 4) as u64;
+                    Some(crate::llm::types::ThinkingBlock {
+                        content: reasoning.clone(),
+                        tokens,
+                    })
+                }
+            });
+
         // Try to parse structured output if it was requested
         let structured_output =
             if content.trim().starts_with('{') || content.trim().starts_with('[') {
@@ -330,7 +350,7 @@ impl AiProvider for DeepSeekProvider {
 
         Ok(ProviderResponse {
             content: choice.message.content,
-            thinking: None, // DeepSeek doesn't support thinking in octolib yet
+            thinking,
             exchange: final_exchange,
             tool_calls: None, // DeepSeek doesn't support tool calls in octolib yet
             finish_reason: choice.finish_reason,
@@ -401,5 +421,47 @@ mod tests {
         let cost_no_cache = calculate_cost("deepseek-chat", 1_000_000, 250_000);
         assert!(cost_no_cache.is_some());
         assert!(cost_value < cost_no_cache.unwrap());
+    }
+
+    #[test]
+    fn test_thinking_block_extraction() {
+        // Test with reasoning_content present
+        let message_with_thinking = DeepSeekMessage {
+            role: "assistant".to_string(),
+            content: "The answer is 9.11".to_string(),
+            reasoning_content: Some("Let me compare 9.11 and 9.8. Converting to same decimal places: 9.11 vs 9.80. Clearly 9.80 > 9.11.".to_string()),
+        };
+
+        // Verify reasoning_content is properly stored
+        assert!(message_with_thinking.reasoning_content.is_some());
+        let reasoning = message_with_thinking.reasoning_content.as_ref().unwrap();
+        assert_eq!(reasoning, "Let me compare 9.11 and 9.8. Converting to same decimal places: 9.11 vs 9.80. Clearly 9.80 > 9.11.");
+
+        // Test token estimation (length / 4)
+        let estimated_tokens = (reasoning.len() / 4) as u64;
+        assert!(estimated_tokens > 0);
+
+        // Test without reasoning_content
+        let message_without_thinking = DeepSeekMessage {
+            role: "assistant".to_string(),
+            content: "Hello".to_string(),
+            reasoning_content: None,
+        };
+
+        assert!(message_without_thinking.reasoning_content.is_none());
+
+        // Test with empty reasoning_content
+        let message_empty_thinking = DeepSeekMessage {
+            role: "assistant".to_string(),
+            content: "Hello".to_string(),
+            reasoning_content: Some("".to_string()),
+        };
+
+        assert!(message_empty_thinking.reasoning_content.is_some());
+        assert!(message_empty_thinking
+            .reasoning_content
+            .as_ref()
+            .unwrap()
+            .is_empty());
     }
 }

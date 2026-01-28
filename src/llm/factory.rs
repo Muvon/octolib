@@ -15,9 +15,9 @@
 //! Provider factory for creating AI provider instances
 
 use crate::llm::providers::{
-    AmazonBedrockProvider, AnthropicProvider, CloudflareWorkersAiProvider, DeepSeekProvider,
-    GoogleVertexProvider, LocalProvider, MinimaxProvider, OpenAiProvider, OpenRouterProvider,
-    ZaiProvider,
+    AmazonBedrockProvider, AnthropicProvider, CloudflareWorkersAiProvider, CodexProvider,
+    DeepSeekProvider, GoogleVertexProvider, LocalProvider, MinimaxProvider, OpenAiProvider,
+    OpenRouterProvider, ZaiProvider,
 };
 use crate::llm::traits::AiProvider;
 use anyhow::Result;
@@ -58,7 +58,8 @@ impl ProviderFactory {
             "deepseek" => Ok(Box::new(DeepSeekProvider::new())),
             "minimax" => Ok(Box::new(MinimaxProvider::new())),
             "zai" => Ok(Box::new(ZaiProvider::new())),
-            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported providers: openrouter, openai, local, anthropic, google, amazon, cloudflare, deepseek, minimax, zai", provider_name)),
+            "codex" => Ok(Box::new(CodexProvider::new()?)),
+            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported providers: openrouter, openai, local, anthropic, google, amazon, cloudflare, deepseek, minimax, zai, codex", provider_name)),
         }
     }
 
@@ -92,6 +93,7 @@ impl ProviderFactory {
             "deepseek",
             "minimax",
             "zai",
+            "codex",
         ]
     }
 
@@ -153,6 +155,7 @@ mod tests {
         assert!(providers.contains(&"cloudflare"));
         assert!(providers.contains(&"deepseek"));
         assert!(providers.contains(&"minimax"));
+        assert!(providers.contains(&"codex"));
     }
 
     #[test]
@@ -175,6 +178,11 @@ mod tests {
         assert!(ProviderFactory::create_provider("cloudflare").is_ok());
         assert!(ProviderFactory::create_provider("deepseek").is_ok());
         assert!(ProviderFactory::create_provider("minimax").is_ok());
+        // Codex CLI may not be installed in test environments, so allow either outcome
+        let codex_result = ProviderFactory::create_provider("codex");
+        if let Err(e) = codex_result {
+            assert!(e.to_string().to_lowercase().contains("codex"));
+        }
 
         // Test case insensitive
         assert!(ProviderFactory::create_provider("OpenAI").is_ok());

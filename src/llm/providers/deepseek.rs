@@ -27,6 +27,8 @@
 //! - Cache Miss (Input): $0.55
 //! - Output: $2.19
 
+use crate::errors::ProviderError;
+use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderExchange, ProviderResponse, TokenUsage};
 use crate::llm::utils::contains_ignore_ascii_case;
@@ -232,18 +234,30 @@ impl AiProvider for DeepSeekProvider {
             }
         }
 
-        let response = self
-            .client
-            .post("https://api.deepseek.com/chat/completions")
-            .header("Authorization", format!("Bearer {}", api_key))
-            .header("Content-Type", "application/json")
-            .json(&request)
-            .send()
-            .await?;
+        let response = retry::cancellable(
+            async {
+                self.client
+                    .post("https://api.deepseek.com/chat/completions")
+                    .header("Authorization", format!("Bearer {}", api_key))
+                    .header("Content-Type", "application/json")
+                    .json(&request)
+                    .send()
+                    .await
+                    .map_err(anyhow::Error::from)
+            },
+            params.cancellation_token.as_ref(),
+            || ProviderError::Cancelled.into(),
+        )
+        .await?;
 
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_default();
+            let error_text = retry::cancellable(
+                async { response.text().await.map_err(anyhow::Error::from) },
+                params.cancellation_token.as_ref(),
+                || ProviderError::Cancelled.into(),
+            )
+            .await?;
             return Err(anyhow::anyhow!(
                 "DeepSeek API error {}: {}",
                 status,
@@ -251,7 +265,12 @@ impl AiProvider for DeepSeekProvider {
             ));
         }
 
-        let deepseek_response: DeepSeekResponse = response.json().await?;
+        let deepseek_response: DeepSeekResponse = retry::cancellable(
+            async { response.json().await.map_err(anyhow::Error::from) },
+            params.cancellation_token.as_ref(),
+            || ProviderError::Cancelled.into(),
+        )
+        .await?;
 
         // Clone the response for exchange logging before moving parts of it
         let response_for_exchange = serde_json::to_value(&deepseek_response)?;

@@ -14,6 +14,7 @@
 
 //! Anthropic provider implementation
 
+use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
@@ -568,11 +569,19 @@ async fn execute_anthropic_request(
                     .json(&request_body)
                     .send()
                     .await
+                    .map_err(anyhow::Error::from)
             })
         },
         max_retries,
         base_timeout,
         cancellation_token,
+        || ProviderError::Cancelled.into(),
+        |e| {
+            matches!(
+                e.downcast_ref::<ProviderError>(),
+                Some(ProviderError::Cancelled)
+            )
+        },
     )
     .await?;
 
@@ -634,7 +643,12 @@ async fn execute_anthropic_request(
 
     if !response.status().is_success() {
         let status = response.status();
-        let error_text = response.text().await.unwrap_or_default();
+        let error_text = retry::cancellable(
+            async { response.text().await.map_err(anyhow::Error::from) },
+            cancellation_token,
+            || ProviderError::Cancelled.into(),
+        )
+        .await?;
         return Err(anyhow::anyhow!(
             "Anthropic API error {}: {}",
             status,
@@ -642,7 +656,12 @@ async fn execute_anthropic_request(
         ));
     }
 
-    let response_text = response.text().await?;
+    let response_text = retry::cancellable(
+        async { response.text().await.map_err(anyhow::Error::from) },
+        cancellation_token,
+        || ProviderError::Cancelled.into(),
+    )
+    .await?;
     let anthropic_response: AnthropicResponse = serde_json::from_str(&response_text)?;
 
     // Extract content, thinking blocks, and tool calls

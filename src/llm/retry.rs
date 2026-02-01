@@ -21,6 +21,58 @@ use std::time::Duration;
 use tokio::sync::watch;
 use tokio::time::sleep;
 
+/// Await a future while honoring an optional cancellation token.
+pub async fn cancellable<F, T, E, C>(
+    future: F,
+    cancellation_token: Option<&watch::Receiver<bool>>,
+    on_cancel: C,
+) -> Result<T, E>
+where
+    F: Future<Output = Result<T, E>> + Send,
+    C: Fn() -> E + Copy,
+{
+    if let Some(token) = cancellation_token {
+        if *token.borrow() {
+            return Err(on_cancel());
+        }
+
+        let mut token = token.clone();
+        let mut future = Box::pin(future);
+
+        loop {
+            tokio::select! {
+                result = &mut future => return result,
+                changed = token.changed() => {
+                    if changed.is_err() || *token.borrow() {
+                        return Err(on_cancel());
+                    }
+                }
+            }
+        }
+    } else {
+        future.await
+    }
+}
+
+async fn sleep_cancellable<E, C>(
+    duration: Duration,
+    cancellation_token: Option<&watch::Receiver<bool>>,
+    on_cancel: C,
+) -> Result<(), E>
+where
+    C: Fn() -> E + Copy,
+{
+    cancellable(
+        async {
+            sleep(duration).await;
+            Ok(())
+        },
+        cancellation_token,
+        on_cancel,
+    )
+    .await
+}
+
 /// Generic retry logic with exponential backoff for providers that don't have smart retry
 ///
 /// This function implements exponential backoff with a configurable base timeout.
@@ -40,6 +92,8 @@ pub async fn retry_with_exponential_backoff<F, T, E>(
     max_retries: u32,
     base_timeout: Duration,
     cancellation_token: Option<&watch::Receiver<bool>>,
+    on_cancel: impl Fn() -> E + Copy,
+    is_cancelled: impl Fn(&E) -> bool + Copy,
 ) -> Result<T, E>
 where
     F: FnMut() -> Pin<Box<dyn Future<Output = Result<T, E>> + Send>>,
@@ -51,19 +105,19 @@ where
         // Check for cancellation before each attempt
         if let Some(token) = cancellation_token {
             if *token.borrow() {
-                return Err(last_error.unwrap_or_else(|| {
-                    // This is a bit tricky since we need to return E, but we know it's cancelled
-                    // In practice, this shouldn't happen since we check cancellation first
-                    panic!("Request cancelled before any attempt")
-                }));
+                return Err(on_cancel());
             }
         }
 
-        match operation().await {
+        match cancellable(operation(), cancellation_token, on_cancel).await {
             Ok(result) => return Ok(result),
             Err(e) => {
+                if is_cancelled(&e) {
+                    return Err(e);
+                }
+
                 // Simple debug logging without external dependencies
-                eprintln!("🔄 API request attempt {} failed: {}", attempt + 1, e);
+                tracing::debug!("API request attempt {} failed: {}", attempt + 1, e);
 
                 last_error = Some(e);
 
@@ -74,13 +128,9 @@ where
                     // Cap at 5 minutes for safety
                     let delay = std::cmp::min(delay, Duration::from_secs(300));
 
-                    eprintln!(
-                        "🔄 Waiting {:?} before retry attempt {}",
-                        delay,
-                        attempt + 2
-                    );
+                    tracing::debug!("Waiting {:?} before retry attempt {}", delay, attempt + 2);
 
-                    sleep(delay).await;
+                    sleep_cancellable(delay, cancellation_token, on_cancel).await?;
                 }
             }
         }
@@ -97,6 +147,8 @@ pub async fn retry_http_request<T, E>(
     max_retries: u32,
     base_timeout: Duration,
     cancellation_token: Option<&watch::Receiver<bool>>,
+    on_cancel: impl Fn() -> E + Copy,
+    is_cancelled: impl Fn(&E) -> bool + Copy,
     request_builder: impl Fn() -> Pin<Box<dyn Future<Output = Result<T, E>> + Send>>,
 ) -> Result<T, E>
 where
@@ -107,6 +159,8 @@ where
         max_retries,
         base_timeout,
         cancellation_token,
+        on_cancel,
+        is_cancelled,
     )
     .await
 }

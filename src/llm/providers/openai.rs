@@ -14,6 +14,7 @@
 
 //! OpenAI provider implementation
 
+use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
@@ -603,12 +604,22 @@ async fn execute_openai_request(
                     req = req.header("ChatGPT-Account-ID", id);
                 }
 
-                req.json(&request_body).send().await
+                req.json(&request_body)
+                    .send()
+                    .await
+                    .map_err(anyhow::Error::from)
             })
         },
         max_retries,
         base_timeout,
         cancellation_token,
+        || ProviderError::Cancelled.into(),
+        |e| {
+            matches!(
+                e.downcast_ref::<ProviderError>(),
+                Some(ProviderError::Cancelled)
+            )
+        },
     )
     .await?;
 
@@ -668,7 +679,12 @@ async fn execute_openai_request(
 
     if !response.status().is_success() {
         let status = response.status();
-        let error_text = response.text().await.unwrap_or_default();
+        let error_text = retry::cancellable(
+            async { response.text().await.map_err(anyhow::Error::from) },
+            cancellation_token,
+            || ProviderError::Cancelled.into(),
+        )
+        .await?;
         return Err(anyhow::anyhow!(
             "OpenAI API error {}: {}",
             status,
@@ -676,7 +692,12 @@ async fn execute_openai_request(
         ));
     }
 
-    let response_text = response.text().await?;
+    let response_text = retry::cancellable(
+        async { response.text().await.map_err(anyhow::Error::from) },
+        cancellation_token,
+        || ProviderError::Cancelled.into(),
+    )
+    .await?;
     let api_response: ResponsesApiResponse = serde_json::from_str(&response_text)?;
 
     // Extract content from output array

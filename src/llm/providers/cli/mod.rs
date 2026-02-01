@@ -20,6 +20,7 @@ mod cursor;
 mod gemini;
 mod generic;
 
+use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, Message, ProviderExchange, ProviderResponse};
@@ -191,6 +192,13 @@ impl AiProvider for CliProvider {
                     params.max_retries,
                     params.retry_timeout,
                     params.cancellation_token.as_ref(),
+                    || ProviderError::Cancelled.into(),
+                    |e| {
+                        matches!(
+                            e.downcast_ref::<ProviderError>(),
+                            Some(ProviderError::Cancelled)
+                        )
+                    },
                 )
                 .await?;
 
@@ -219,6 +227,13 @@ impl AiProvider for CliProvider {
                     params.max_retries,
                     params.retry_timeout,
                     params.cancellation_token.as_ref(),
+                    || ProviderError::Cancelled.into(),
+                    |e| {
+                        matches!(
+                            e.downcast_ref::<ProviderError>(),
+                            Some(ProviderError::Cancelled)
+                        )
+                    },
                 )
                 .await?;
 
@@ -239,6 +254,13 @@ impl AiProvider for CliProvider {
                     params.max_retries,
                     params.retry_timeout,
                     params.cancellation_token.as_ref(),
+                    || ProviderError::Cancelled.into(),
+                    |e| {
+                        matches!(
+                            e.downcast_ref::<ProviderError>(),
+                            Some(ProviderError::Cancelled)
+                        )
+                    },
                 )
                 .await?;
 
@@ -259,6 +281,13 @@ impl AiProvider for CliProvider {
                     params.max_retries,
                     params.retry_timeout,
                     params.cancellation_token.as_ref(),
+                    || ProviderError::Cancelled.into(),
+                    |e| {
+                        matches!(
+                            e.downcast_ref::<ProviderError>(),
+                            Some(ProviderError::Cancelled)
+                        )
+                    },
                 )
                 .await?;
 
@@ -279,6 +308,13 @@ impl AiProvider for CliProvider {
                     params.max_retries,
                     params.retry_timeout,
                     params.cancellation_token.as_ref(),
+                    || ProviderError::Cancelled.into(),
+                    |e| {
+                        matches!(
+                            e.downcast_ref::<ProviderError>(),
+                            Some(ProviderError::Cancelled)
+                        )
+                    },
                 )
                 .await?;
 

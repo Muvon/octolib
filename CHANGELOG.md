@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.6.0] - 2026-02-01
+
+### 📋 Release Summary
+
+This release expands multi-provider support with new Codex AI integration and local LLM capabilities, along with enhanced DeepSeek reasoning content features. Additional improvements include provider cancellation support and updated embedding model documentation.
+
+
+### ✨ New Features & Enhancements
+
+- **providers**: add Codex AI and fix DeepSeek reasoning_content `1c315e7f`
+- **deepseek**: add reasoning content support `98497c54`
+- **factory**: add local LLM provider support `9608f6d1`
+
+### 🔧 Improvements & Optimizations
+
+- **llm**: add cancellation support to providers `6cd2183d`
+- **llm**: rename codex to cli provider `23054c48`
+
+### 📚 Documentation & Examples
+
+- **embedding**: document model dimensions and specs `39dd6a15`
+
+### 📊 Release Summary
+
+**Total commits**: 6 across 3 categories
+
+✨ **3** new features - *Enhanced functionality*
+🔧 **2** improvements - *Better performance & code quality*
+📚 **1** documentation update - *Better developer experience*
+
 ## [0.5.1] - 2026-01-22
 
 ### 📋 Release Summary

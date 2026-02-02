@@ -22,6 +22,7 @@ Octolib is a comprehensive, self-sufficient AI provider library that provides a 
 - **⏱️ Retry Management**: Configurable exponential backoff
 - **🔒 Secure Design**: Environment-based API key management
 - **🎯 Embedding Support**: Multi-provider embedding generation with Jina, Voyage, Google, OpenAI, FastEmbed, and HuggingFace
+- **🔄 Reranking**: Document relevance scoring with cross-encoder models (Voyage AI)
 
 ## 📦 Quick Installation
 
@@ -288,6 +289,49 @@ async fn embedding_example() -> anyhow::Result<()> {
 // - OpenAI: text-embedding-3-small, text-embedding-3-large
 // - FastEmbed: Local models (feature-gated)
 // - HuggingFace: sentence-transformers models
+```
+
+### 🎯 Document Reranking
+
+Improve search results by scoring document relevance with cross-encoder models:
+
+```rust
+use octolib::reranker::rerank;
+
+async fn reranking_example() -> anyhow::Result<()> {
+    let query = "What is machine learning?";
+    let documents = vec![
+        "Machine learning is a subset of AI.".to_string(),
+        "Cooking recipes for beginners.".to_string(),
+        "Deep learning uses neural networks.".to_string(),
+    ];
+
+    // Rerank documents by relevance to query
+    let response = rerank(
+        query,
+        documents,
+        "voyage",           // provider
+        "rerank-2.5",       // model
+        Some(2)             // top_k: return top 2 results
+    ).await?;
+
+    for (rank, result) in response.results.iter().enumerate() {
+        println!("Rank {}: Score {:.4}", rank + 1, result.relevance_score);
+        println!("  Document: {}", result.document);
+    }
+
+    println!("Total tokens used: {}", response.total_tokens);
+
+    Ok(())
+}
+
+// Supported reranker models (Voyage AI):
+// - rerank-2.5: Latest model, 32K context, multilingual
+// - rerank-2.5-lite: Optimized for latency, 32K context
+// - rerank-2: 16K context, multilingual
+// - rerank-2-lite: 8K context, optimized
+// - rerank-1: 8K context, first generation
+// - rerank-lite-1: 4K context, fast
 ```
 
 ### 🔐 OAuth Authentication

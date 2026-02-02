@@ -26,6 +26,8 @@
 //! - **Vision support**: Image attachment support for compatible models
 //! - **Caching support**: Automatic detection of caching-capable models
 //! - **Retry logic**: Exponential backoff with smart rate limit handling
+//! - **Embeddings**: Multi-provider embedding support (Jina, Voyage, Google, OpenAI, FastEmbed, HuggingFace)
+//! - **Reranking**: Document relevance scoring with cross-encoder models (Voyage AI)
 //! - **Self-sufficient**: No external dependencies on application-specific types
 //! - **CLI provider**: `cli:<backend>/<model>` proxies CLIs; tool calling/MCP is not used or controllable (prompt-only)
 //!
@@ -102,6 +104,7 @@
 pub mod embedding;
 pub mod errors;
 pub mod llm;
+pub mod reranker;
 pub mod storage;
 
 // Re-export main types and traits for easy access (backward compatibility)
@@ -122,4 +125,8 @@ pub use llm::{
     ProviderExchange, ProviderFactory, ProviderResponse, ProviderStrategy, ProviderToolCalls,
     ResponseMode, SourceType, StrategyFactory, StructuredOutputRequest, ThinkingBlock, TokenUsage,
     ToolCall, ToolResult, ZaiProvider,
+};
+pub use reranker::{
+    create_rerank_provider_from_parts, parse_provider_model as parse_rerank_provider_model, rerank,
+    rerank_with_truncation, RerankProvider, RerankProviderType, RerankResponse, RerankResult,
 };

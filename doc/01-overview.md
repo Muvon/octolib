@@ -37,6 +37,20 @@ A robust `Message` type that supports:
 - Caching markers
 - Tool call tracking
 
+### Embedding Generation
+Multi-provider embedding support:
+- Jina, Voyage, Google, OpenAI providers
+- Batch processing with token limits
+- Input type specification (query/document)
+- Optional local models (FastEmbed, HuggingFace)
+
+### Document Reranking
+Cross-encoder models for relevance scoring:
+- Voyage AI reranker models
+- Query-document relevance scoring
+- Configurable top-k results
+- Token usage tracking
+
 ### Error Handling
 Comprehensive error types for:
 - Provider-specific errors
@@ -52,6 +66,7 @@ Cross-provider tool call standardization:
 
 ## Supported Providers
 
+### LLM Providers
 - OpenAI
 - Anthropic
 - OpenRouter
@@ -61,14 +76,30 @@ Cross-provider tool call standardization:
 - Google Vertex AI
 - Amazon Bedrock
 - Cloudflare Workers AI
+- Local (Ollama, LM Studio, LocalAI, Jan, vLLM)
+- CLI proxies (codex, claude, gemini, etc.)
+
+### Embedding Providers
+- Jina AI
+- Voyage AI
+- Google (Gemini)
+- OpenAI
+- FastEmbed (local, feature-gated)
+- HuggingFace (local, feature-gated)
+
+### Reranker Providers
+- Voyage AI
 
 ## Use Cases
 
 - AI-powered applications
-- Chatbots
+- Chatbots and conversational AI
 - Code generation tools
 - Intelligent assistants
 - Multi-provider AI platforms
+- Semantic search with embeddings
+- Document relevance ranking
+- RAG (Retrieval-Augmented Generation) systems
 
 ## Performance Considerations
 
@@ -90,6 +121,7 @@ Cross-provider tool call standardization:
 - Enhanced caching mechanisms
 - Improved vision support
 - Advanced tool calling capabilities
+- Additional reranker providers
 
 ## Contributing
 

@@ -157,4 +157,8 @@ let batches = split_texts_into_token_limited_batches(texts, 16, 100_000);
 
 5. **Handle Errors Gracefully** with proper error handling
 
+## 🔗 Related Features
+
+For document relevance scoring after retrieval, see the [Reranker documentation](06-reranking.md).
+
 For more examples, see the main [Advanced Guide](04-advanced-guide.md).

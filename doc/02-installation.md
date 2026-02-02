@@ -17,7 +17,20 @@ Add to your `Cargo.toml`:
 octolib = { git = "https://github.com/muvon/octolib" }
 ```
 
-### 2. Specific Version from Git
+### 2. With Optional Features
+
+Enable local embedding models:
+
+```toml
+[dependencies]
+octolib = { git = "https://github.com/muvon/octolib", features = ["fastembed", "huggingface"] }
+```
+
+Available features:
+- `fastembed` - Local FastEmbed models
+- `huggingface` - Local HuggingFace models
+
+### 3. Specific Version from Git
 
 Pin to a specific commit or branch:
 
@@ -28,7 +41,8 @@ octolib = { git = "https://github.com/muvon/octolib", branch = "main" }
 octolib = { git = "https://github.com/muvon/octolib", rev = "abc123" }
 ```
 
-### 3. Local Path (Development)
+### 4. Local Path (Development)
+
 
 ```toml
 [dependencies]
@@ -42,25 +56,25 @@ octolib = { path = "/path/to/local/octolib" }
 Each provider requires its specific API key:
 
 ```bash
-# OpenAI
+# LLM Providers
 export OPENAI_API_KEY="your_openai_api_key"
-
-# Anthropic
 export ANTHROPIC_API_KEY="your_anthropic_api_key"
-
-# OpenRouter
 export OPENROUTER_API_KEY="your_openrouter_api_key"
-
-# MiniMax
 export MINIMAX_API_KEY="your_minimax_api_key"
+export DEEPSEEK_API_KEY="your_deepseek_api_key"
+export ZAI_API_KEY="your_zai_api_key"
 
-# Google Vertex AI
+# Embedding Providers
+export JINA_API_KEY="your_jina_api_key"
+export VOYAGE_API_KEY="your_voyage_api_key"
+export GOOGLE_API_KEY="your_google_api_key"
+
+# Cloud Providers
 export GOOGLE_APPLICATION_CREDENTIALS="/path/to/credentials.json"
-
-# AWS Bedrock
 export AWS_ACCESS_KEY_ID="your_access_key"
 export AWS_SECRET_ACCESS_KEY="your_secret_key"
 ```
+
 
 ### Rust Project Setup
 

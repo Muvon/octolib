@@ -47,7 +47,12 @@ src/llm/
 src/embedding/
 ├── mod.rs             → Main API: generate_embeddings()
 ├── types.rs           → EmbeddingProvider trait
-└── constants.rs       → Provider configs (Jina, Voyage, etc.)
+└── provider/          → Jina, Voyage, Google, OpenAI, etc.
+
+src/reranker/
+├── mod.rs             → Main API: rerank()
+├── types.rs           → RerankProvider trait, response types
+└── provider/          → Voyage AI implementation
 
 src/errors.rs          → ProviderError, ConfigError, etc.
 ```
@@ -83,12 +88,23 @@ src/errors.rs          → ProviderError, ConfigError, etc.
 **Check**: OpenAI/OpenRouter/DeepSeek for working examples
 
 ### "Add new embedding provider"
-1. **Constants**: Add to `src/embedding/constants.rs` (models, URL, API key env)
-2. **Function**: Add `generate_embeddings_<provider>()` in `src/embedding/mod.rs`
-3. **Route**: Add case in `generate_embeddings()` match statement
-4. **Test**: `cargo test embedding_<provider>`
+1. **Provider file**: Create `src/embedding/provider/<provider>.rs`
+2. **Implement**: `EmbeddingProvider` trait
+3. **Register**: Add to `src/embedding/provider/mod.rs`
+4. **Factory**: Add case in `create_embedding_provider_from_parts()`
+5. **Test**: `cargo test embedding_<provider>`
 
-**Files to touch**: `embedding/constants.rs`, `embedding/mod.rs`
+**Files to touch**: `embedding/provider/<provider>.rs`, `embedding/provider/mod.rs`
+
+### "Add new reranker provider"
+1. **Provider file**: Create `src/reranker/provider/<provider>.rs`
+2. **Implement**: `RerankProvider` trait
+3. **Register**: Add to `src/reranker/provider/mod.rs`
+4. **Factory**: Add case in `create_rerank_provider_from_parts()`
+5. **Test**: `cargo test reranker_<provider>`
+
+**Files to touch**: `reranker/provider/<provider>.rs`, `reranker/provider/mod.rs`
+
 
 ### "Fix cost calculation"
 1. **Provider file**: `src/llm/providers/<provider>.rs`

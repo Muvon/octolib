@@ -441,6 +441,10 @@ if let Some(usage) = &response.exchange.usage {
 - **[Advanced Usage](doc/03-advanced-usage.md)** - Advanced features and customization
 - **[Advanced Guide](doc/04-advanced-guide.md)** - Comprehensive usage patterns
 - **[Embedding Guide](doc/05-embedding.md)** - Embedding generation with multiple providers
+- **[Reranking Guide](doc/06-reranking.md)** - Document relevance scoring
+- **[Tool Calling](doc/07-tool-calling.md)** - Cross-provider tool calling
+- **[Thinking/Reasoning](doc/08-thinking.md)** - Reasoning model support
+
 ## 🌐 Supported Providers
 
 | Provider | Status | Capabilities |

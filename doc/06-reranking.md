@@ -13,9 +13,19 @@ Cross-encoders process query and document together, enabling deeper semantic und
 
 ## 🚀 Supported Providers
 
+### API-Based Providers (require API keys)
+
 | Provider | Models | Context Length | Features |
 |----------|--------|----------------|----------|
 | **Voyage AI** | rerank-2.5, rerank-2.5-lite, rerank-2, rerank-2-lite, rerank-1, rerank-lite-1 | 4K-32K tokens | Multilingual, instruction-following |
+| **Cohere** | rerank-english-v3.0, rerank-multilingual-v3.0, rerank-english-v2.0, rerank-multilingual-v2.0 | Up to 4K tokens | Enterprise-grade, multilingual |
+| **Jina AI** | jina-reranker-v3, jina-reranker-v2-base-multilingual, jina-reranker-v1-base-en, jina-colbert-v2 | 1K-131K tokens | Automatic chunking, multilingual |
+
+### Local Providers (no API keys, requires features)
+
+| Provider | Models | Features |
+|----------|--------|----------|
+| **FastEmbed** | bge-reranker-base, bge-reranker-large, jina-reranker-v1-turbo-en, jina-reranker-v2-base-multilingual | ONNX-based, CPU-friendly, no API costs |
 
 ### 📝 Model Details
 
@@ -30,19 +40,66 @@ Cross-encoders process query and document together, enabling deeper semantic und
 | `rerank-1` | 8K tokens | First generation | Legacy support |
 | `rerank-lite-1` | 4K tokens | Fastest model | Low-latency needs |
 
+**Cohere Models:**
+
+| Model | Description | Use Case |
+|-------|-------------|----------|
+| `rerank-english-v3.0` | Latest English model | Best for English content |
+| `rerank-multilingual-v3.0` | Latest multilingual model | 100+ languages |
+| `rerank-english-v2.0` | Previous generation English | Legacy support |
+| `rerank-multilingual-v2.0` | Previous generation multilingual | Legacy support |
+
+**Jina AI Models:**
+
+| Model | Context Length | Description | Use Case |
+|-------|----------------|-------------|----------|
+| `jina-reranker-v3` | 131K tokens | Latest model with long context | Long documents |
+| `jina-reranker-v2-base-multilingual` | 1K tokens | Multilingual with auto-chunking | Multilingual content |
+| `jina-reranker-v1-base-en` | 1K tokens | English-only | English content |
+| `jina-colbert-v2` | 8K tokens | ColBERT architecture | Fast retrieval |
+
+**FastEmbed Models (Local):**
+
+| Model | Description | Use Case |
+|-------|-------------|----------|
+| `bge-reranker-base` | BAAI base model | Balanced quality/speed |
+| `bge-reranker-large` | BAAI large model | Best quality |
+| `jina-reranker-v1-turbo-en` | Jina turbo model | Fast inference |
+| `jina-reranker-v2-base-multilingual` | Jina multilingual | Multilingual local |
+
 **Recommendations:**
-- Use `rerank-2.5` for best quality
-- Use `rerank-2.5-lite` for balanced latency/quality
-- Use `rerank-2-lite` for high-throughput scenarios
+- **Best Quality**: Voyage `rerank-2.5` or Jina `jina-reranker-v3`
+- **Balanced**: Cohere `rerank-english-v3.0` or Voyage `rerank-2.5-lite`
+- **Fast/Local**: FastEmbed `bge-reranker-base` (no API costs)
+- **Multilingual**: Cohere `rerank-multilingual-v3.0` or Jina `jina-reranker-v2-base-multilingual`
+- **Long Documents**: Jina `jina-reranker-v3` (131K context)
 
 ## 🚀 Quick Start
 
+### Environment Setup
+
+**API-Based Providers:**
+```bash
+# Set API keys for providers you want to use
+export VOYAGE_API_KEY="your_voyage_key"
+export COHERE_API_KEY="your_cohere_key"
+export JINA_API_KEY="your_jina_key"
+```
+
+**Local Providers:**
+```bash
+# Enable fastembed feature in Cargo.toml
+cargo build --features fastembed
+# No API keys needed!
+```
+
 ### Basic Reranking
 
+**Voyage AI:**
 ```rust
 use octolib::reranker::rerank;
 
-async fn basic_example() -> anyhow::Result<()> {
+async fn voyage_example() -> anyhow::Result<()> {
     let query = "What is machine learning?";
     let documents = vec![
         "Machine learning is a subset of artificial intelligence.".to_string(),
@@ -50,22 +107,73 @@ async fn basic_example() -> anyhow::Result<()> {
         "Deep learning uses neural networks.".to_string(),
     ];
 
-    // Rerank documents by relevance
     let response = rerank(
         query,
         documents,
-        "voyage",           // provider
-        "rerank-2.5",       // model
-        Some(2)             // top_k: return top 2 results
+        "voyage",
+        "rerank-2.5",
+        Some(2)  // Return top 2 results
     ).await?;
 
-    for (rank, result) in response.results.iter().enumerate() {
-        println!("Rank {}: Score {:.4}", rank + 1, result.relevance_score);
-        println!("  Document: {}", result.document);
+    for result in response.results {
+        println!("Score: {:.4} - {}", result.relevance_score, result.document);
     }
 
-    println!("Total tokens used: {}", response.total_tokens);
+    Ok(())
+}
+```
 
+**Cohere:**
+```rust
+use octolib::reranker::rerank;
+
+async fn cohere_example() -> anyhow::Result<()> {
+    let response = rerank(
+        "machine learning tutorial",
+        vec!["AI guide".to_string(), "Cooking tips".to_string()],
+        "cohere",
+        "rerank-english-v3.0",
+        Some(1)
+    ).await?;
+
+    println!("Top result: {}", response.results[0].document);
+    Ok(())
+}
+```
+
+**Jina AI:**
+```rust
+use octolib::reranker::rerank;
+
+async fn jina_example() -> anyhow::Result<()> {
+    let response = rerank(
+        "artificial intelligence",
+        vec!["ML basics".to_string(), "Cooking recipes".to_string()],
+        "jina",
+        "jina-reranker-v3",
+        Some(1)
+    ).await?;
+
+    println!("Top result: {}", response.results[0].document);
+    Ok(())
+}
+```
+
+**FastEmbed (Local):**
+```rust
+use octolib::reranker::rerank;
+
+async fn fastembed_example() -> anyhow::Result<()> {
+    // No API key needed - runs locally!
+    let response = rerank(
+        "deep learning",
+        vec!["Neural networks".to_string(), "Pasta recipes".to_string()],
+        "fastembed",
+        "bge-reranker-base",
+        Some(1)
+    ).await?;
+
+    println!("Top result: {}", response.results[0].document);
     Ok(())
 }
 ```

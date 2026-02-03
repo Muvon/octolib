@@ -32,9 +32,19 @@ static HTTP_CLIENT: LazyLock<Client> = LazyLock::new(|| {
         .expect("Failed to create HTTP client")
 });
 
+pub mod cohere;
+pub mod jina;
 pub mod voyage;
 
+#[cfg(feature = "fastembed")]
+pub mod fastembed;
+
+pub use cohere::CohereProvider;
+pub use jina::JinaProvider;
 pub use voyage::{VoyageProvider, VoyageProviderImpl};
+
+#[cfg(feature = "fastembed")]
+pub use self::fastembed::FastEmbedProvider;
 
 /// Trait for reranker providers
 #[async_trait::async_trait]
@@ -61,5 +71,9 @@ pub async fn create_rerank_provider_from_parts(
 ) -> Result<Box<dyn RerankProvider>> {
     match provider {
         RerankProviderType::Voyage => Ok(Box::new(VoyageProviderImpl::new(model)?)),
+        RerankProviderType::Cohere => Ok(Box::new(CohereProvider::new(model)?)),
+        RerankProviderType::Jina => Ok(Box::new(JinaProvider::new(model)?)),
+        #[cfg(feature = "fastembed")]
+        RerankProviderType::FastEmbed => Ok(Box::new(FastEmbedProvider::new(model)?)),
     }
 }

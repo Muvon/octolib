@@ -41,6 +41,10 @@ pub struct RerankResponse {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RerankProviderType {
     Voyage,
+    Cohere,
+    Jina,
+    #[cfg(feature = "fastembed")]
+    FastEmbed,
 }
 
 impl FromStr for RerankProviderType {
@@ -49,6 +53,10 @@ impl FromStr for RerankProviderType {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "voyage" => Ok(Self::Voyage),
+            "cohere" => Ok(Self::Cohere),
+            "jina" => Ok(Self::Jina),
+            #[cfg(feature = "fastembed")]
+            "fastembed" => Ok(Self::FastEmbed),
             _ => Err(format!("Unknown reranker provider: {}", s)),
         }
     }
@@ -59,6 +67,10 @@ impl RerankProviderType {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Voyage => "voyage",
+            Self::Cohere => "cohere",
+            Self::Jina => "jina",
+            #[cfg(feature = "fastembed")]
+            Self::FastEmbed => "fastembed",
         }
     }
 }
@@ -82,6 +94,21 @@ mod tests {
         assert_eq!(provider, RerankProviderType::Voyage);
         assert_eq!(model, "rerank-2.5");
 
+        let (provider, model) = parse_provider_model("cohere:rerank-english-v3.0");
+        assert_eq!(provider, RerankProviderType::Cohere);
+        assert_eq!(model, "rerank-english-v3.0");
+
+        let (provider, model) = parse_provider_model("jina:jina-reranker-v3");
+        assert_eq!(provider, RerankProviderType::Jina);
+        assert_eq!(model, "jina-reranker-v3");
+
+        #[cfg(feature = "fastembed")]
+        {
+            let (provider, model) = parse_provider_model("fastembed:bge-reranker-base");
+            assert_eq!(provider, RerankProviderType::FastEmbed);
+            assert_eq!(model, "bge-reranker-base");
+        }
+
         // Default to voyage if no provider specified
         let (provider, model) = parse_provider_model("rerank-2");
         assert_eq!(provider, RerankProviderType::Voyage);
@@ -98,8 +125,29 @@ mod tests {
             "Voyage".parse::<RerankProviderType>().unwrap(),
             RerankProviderType::Voyage
         );
+        assert_eq!(
+            "cohere".parse::<RerankProviderType>().unwrap(),
+            RerankProviderType::Cohere
+        );
+        assert_eq!(
+            "jina".parse::<RerankProviderType>().unwrap(),
+            RerankProviderType::Jina
+        );
+        #[cfg(feature = "fastembed")]
+        {
+            assert_eq!(
+                "fastembed".parse::<RerankProviderType>().unwrap(),
+                RerankProviderType::FastEmbed
+            );
+        }
         assert!("unknown".parse::<RerankProviderType>().is_err());
 
         assert_eq!(RerankProviderType::Voyage.as_str(), "voyage");
+        assert_eq!(RerankProviderType::Cohere.as_str(), "cohere");
+        assert_eq!(RerankProviderType::Jina.as_str(), "jina");
+        #[cfg(feature = "fastembed")]
+        {
+            assert_eq!(RerankProviderType::FastEmbed.as_str(), "fastembed");
+        }
     }
 }

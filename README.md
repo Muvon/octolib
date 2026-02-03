@@ -310,7 +310,7 @@ async fn reranking_example() -> anyhow::Result<()> {
     let response = rerank(
         query,
         documents,
-        "voyage",           // provider
+        "voyage",           // provider: voyage, cohere, jina, fastembed
         "rerank-2.5",       // model
         Some(2)             // top_k: return top 2 results
     ).await?;
@@ -325,13 +325,15 @@ async fn reranking_example() -> anyhow::Result<()> {
     Ok(())
 }
 
-// Supported reranker models (Voyage AI):
-// - rerank-2.5: Latest model, 32K context, multilingual
-// - rerank-2.5-lite: Optimized for latency, 32K context
-// - rerank-2: 16K context, multilingual
-// - rerank-2-lite: 8K context, optimized
-// - rerank-1: 8K context, first generation
-// - rerank-lite-1: 4K context, fast
+// Supported Providers:
+//
+// API-Based (require API keys):
+// - Voyage AI (VOYAGE_API_KEY): rerank-2.5, rerank-2.5-lite, rerank-2, rerank-2-lite
+// - Cohere (COHERE_API_KEY): rerank-english-v3.0, rerank-multilingual-v3.0
+// - Jina AI (JINA_API_KEY): jina-reranker-v3, jina-reranker-v2-base-multilingual
+//
+// Local (no API keys, requires features):
+// - FastEmbed (fastembed feature): bge-reranker-base, bge-reranker-large, jina-reranker-v1-turbo-en
 ```
 
 ### 🔐 OAuth Authentication

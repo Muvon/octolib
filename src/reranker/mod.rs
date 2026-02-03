@@ -20,10 +20,29 @@
 //!
 //! # Supported Providers
 //!
+//! ## API-Based Providers (require API keys)
+//!
 //! - **Voyage AI**: Latest reranker models with multilingual support
+//!   - Models: `rerank-2.5`, `rerank-2.5-lite`, `rerank-2`, `rerank-2-lite`
+//!   - Requires: `VOYAGE_API_KEY` environment variable
 //!
-//! # Usage
+//! - **Cohere**: Enterprise-grade reranking with multiple language support
+//!   - Models: `rerank-english-v3.0`, `rerank-multilingual-v3.0`, `rerank-english-v2.0`, `rerank-multilingual-v2.0`
+//!   - Requires: `COHERE_API_KEY` environment variable
 //!
+//! - **Jina AI**: Multilingual reranking with automatic chunking for long documents
+//!   - Models: `jina-reranker-v3`, `jina-reranker-v2-base-multilingual`, `jina-reranker-v1-base-en`, `jina-colbert-v2`
+//!   - Requires: `JINA_API_KEY` environment variable
+//!
+//! ## Local Providers (no API keys, requires features)
+//!
+//! - **FastEmbed**: Fast local ONNX-based reranking (requires `fastembed` feature)
+//!   - Models: `bge-reranker-base`, `bge-reranker-large`, `jina-reranker-v1-turbo-en`, `jina-reranker-v2-base-multilingual`
+//!   - No API key needed, runs locally with CPU
+//!
+//! # Usage Examples
+//!
+//! ## Voyage AI
 //! ```rust,no_run
 //! use octolib::reranker::rerank;
 //!
@@ -44,6 +63,55 @@
 //!
 //!     Ok(())
 //! }
+//! ```
+//!
+//! ## Cohere
+//! ```rust,no_run
+//! use octolib::reranker::rerank;
+//!
+//! # async fn example() -> anyhow::Result<()> {
+//! let response = rerank(
+//!     "machine learning tutorial",
+//!     vec!["AI guide".to_string(), "Cooking recipes".to_string()],
+//!     "cohere",
+//!     "rerank-english-v3.0",
+//!     Some(1)
+//! ).await?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ## Jina AI
+//! ```rust,no_run
+//! use octolib::reranker::rerank;
+//!
+//! # async fn example() -> anyhow::Result<()> {
+//! let response = rerank(
+//!     "artificial intelligence",
+//!     vec!["ML basics".to_string(), "Cooking tips".to_string()],
+//!     "jina",
+//!     "jina-reranker-v3",
+//!     Some(1)
+//! ).await?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ## FastEmbed (Local)
+//! ```rust,no_run
+//! use octolib::reranker::rerank;
+//!
+//! # async fn example() -> anyhow::Result<()> {
+//! // No API key needed - runs locally
+//! let response = rerank(
+//!     "deep learning",
+//!     vec!["Neural networks".to_string(), "Pasta recipes".to_string()],
+//!     "fastembed",
+//!     "bge-reranker-base",
+//!     Some(1)
+//! ).await?;
+//! # Ok(())
+//! # }
 //! ```
 
 use anyhow::Result;
@@ -134,6 +202,21 @@ mod tests {
         let (provider, model) = parse_provider_model("voyage:rerank-2.5");
         assert_eq!(provider, RerankProviderType::Voyage);
         assert_eq!(model, "rerank-2.5");
+
+        let (provider, model) = parse_provider_model("cohere:rerank-english-v3.0");
+        assert_eq!(provider, RerankProviderType::Cohere);
+        assert_eq!(model, "rerank-english-v3.0");
+
+        let (provider, model) = parse_provider_model("jina:jina-reranker-v3");
+        assert_eq!(provider, RerankProviderType::Jina);
+        assert_eq!(model, "jina-reranker-v3");
+
+        #[cfg(feature = "fastembed")]
+        {
+            let (provider, model) = parse_provider_model("fastembed:bge-reranker-base");
+            assert_eq!(provider, RerankProviderType::FastEmbed);
+            assert_eq!(model, "bge-reranker-base");
+        }
     }
 
     #[tokio::test]
@@ -141,5 +224,47 @@ mod tests {
         let result =
             create_rerank_provider_from_parts(&RerankProviderType::Voyage, "rerank-2.5").await;
         assert!(result.is_ok());
+
+        let result =
+            create_rerank_provider_from_parts(&RerankProviderType::Cohere, "rerank-english-v3.0")
+                .await;
+        assert!(result.is_ok());
+
+        let result =
+            create_rerank_provider_from_parts(&RerankProviderType::Jina, "jina-reranker-v3").await;
+        assert!(result.is_ok());
+
+        #[cfg(feature = "fastembed")]
+        {
+            let result = create_rerank_provider_from_parts(
+                &RerankProviderType::FastEmbed,
+                "bge-reranker-base",
+            )
+            .await;
+            assert!(result.is_ok());
+        }
+    }
+
+    #[tokio::test]
+    async fn test_invalid_models() {
+        let result =
+            create_rerank_provider_from_parts(&RerankProviderType::Voyage, "invalid-model").await;
+        assert!(result.is_err());
+
+        let result =
+            create_rerank_provider_from_parts(&RerankProviderType::Cohere, "invalid-model").await;
+        assert!(result.is_err());
+
+        let result =
+            create_rerank_provider_from_parts(&RerankProviderType::Jina, "invalid-model").await;
+        assert!(result.is_err());
+
+        #[cfg(feature = "fastembed")]
+        {
+            let result =
+                create_rerank_provider_from_parts(&RerankProviderType::FastEmbed, "invalid-model")
+                    .await;
+            assert!(result.is_err());
+        }
     }
 }

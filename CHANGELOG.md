@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.7.0] - 2026-02-03
+
+### 📋 Release Summary
+
+This release introduces cross-encoder reranking capabilities with new provider support for Cohere, Jina, and FastEmbed. A bug fix replaces a deprecated FastEmbed model with updated API syntax. Documentation and tests accompany the new reranking functionality.
+
+
+### ✨ New Features & Enhancements
+
+- **reranker**: add Cohere, Jina, and FastEmbed providers `6a940561`
+- **reranker**: add cross-encoder reranking module `3d3edd32`
+
+### 🐛 Bug Fixes & Stability
+
+- **fastembed**: replace deprecated model and fix API syntax `b6a2cb72`
+
+### 📚 Documentation & Examples
+
+- add reranker docs and reorganize file order `8382acd4`
+
+### 🔄 Other Changes
+
+- test(reranker): make provider tests resilient in CI `55191b94`
+
+### 📊 Release Summary
+
+**Total commits**: 5 across 4 categories
+
+✨ **2** new features - *Enhanced functionality*
+🐛 **1** bug fix - *Improved stability*
+📚 **1** documentation update - *Better developer experience*
+🔄 **1** other change - *Maintenance & tooling*
+
 ## [0.6.0] - 2026-02-01
 
 ### 📋 Release Summary

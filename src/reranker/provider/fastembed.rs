@@ -57,15 +57,15 @@ impl FastEmbedProvider {
     fn map_model_name(model_name: &str) -> Result<RerankerModel> {
         match model_name {
             "bge-reranker-base" | "BAAI/bge-reranker-base" => Ok(RerankerModel::BGERerankerBase),
-            "bge-reranker-large" | "BAAI/bge-reranker-large" => Ok(RerankerModel::BGERerankerLarge),
+            "bge-reranker-v2-m3" | "rozgo/bge-reranker-v2-m3" => Ok(RerankerModel::BGERerankerV2M3),
             "jina-reranker-v1-turbo-en" | "jinaai/jina-reranker-v1-turbo-en" => {
-                Ok(RerankerModel::JinaRerankerV1TurboEn)
+                Ok(RerankerModel::JINARerankerV1TurboEn)
             }
             "jina-reranker-v2-base-multilingual" | "jinaai/jina-reranker-v2-base-multilingual" => {
-                Ok(RerankerModel::JinaRerankerV2BaseMultilingual)
+                Ok(RerankerModel::JINARerankerV2BaseMultiligual)
             }
             _ => Err(anyhow::anyhow!(
-                "Unsupported FastEmbed reranker model: '{}'. Supported: bge-reranker-base, bge-reranker-large, jina-reranker-v1-turbo-en, jina-reranker-v2-base-multilingual",
+                "Unsupported FastEmbed reranker model: '{}'. Supported: bge-reranker-base, bge-reranker-v2-m3, jina-reranker-v1-turbo-en, jina-reranker-v2-base-multilingual",
                 model_name
             )),
         }
@@ -74,7 +74,7 @@ impl FastEmbedProvider {
     pub fn list_supported_models() -> Vec<String> {
         vec![
             "bge-reranker-base".to_string(),
-            "bge-reranker-large".to_string(),
+            "bge-reranker-v2-m3".to_string(),
             "jina-reranker-v1-turbo-en".to_string(),
             "jina-reranker-v2-base-multilingual".to_string(),
         ]
@@ -97,12 +97,13 @@ impl RerankProvider for FastEmbedProvider {
         let results = tokio::task::spawn_blocking(move || -> Result<Vec<RerankResult>> {
             let mut model = model.lock().unwrap();
 
-            // Convert documents to string slices
+            // Convert Vec<String> to Vec<&str> for the rerank API
+            // We need to keep documents alive for the lifetime of doc_refs
             let doc_refs: Vec<&str> = documents.iter().map(|s| s.as_str()).collect();
 
             // Rerank returns scores for each document
             let scores = model
-                .rerank(&query, doc_refs, true, None)
+                .rerank(query.as_str(), doc_refs, true, None)
                 .context("Failed to rerank documents")?;
 
             // Create results with original indices
@@ -144,8 +145,8 @@ impl RerankProvider for FastEmbedProvider {
             self.model_name.as_str(),
             "bge-reranker-base"
                 | "BAAI/bge-reranker-base"
-                | "bge-reranker-large"
-                | "BAAI/bge-reranker-large"
+                | "bge-reranker-v2-m3"
+                | "rozgo/bge-reranker-v2-m3"
                 | "jina-reranker-v1-turbo-en"
                 | "jinaai/jina-reranker-v1-turbo-en"
                 | "jina-reranker-v2-base-multilingual"
@@ -163,7 +164,7 @@ mod tests {
     fn test_fastembed_provider_creation() {
         assert!(FastEmbedProvider::new("bge-reranker-base").is_ok());
         assert!(FastEmbedProvider::new("BAAI/bge-reranker-base").is_ok());
-        assert!(FastEmbedProvider::new("bge-reranker-large").is_ok());
+        assert!(FastEmbedProvider::new("bge-reranker-v2-m3").is_ok());
         assert!(FastEmbedProvider::new("jina-reranker-v1-turbo-en").is_ok());
         assert!(FastEmbedProvider::new("jina-reranker-v2-base-multilingual").is_ok());
         assert!(FastEmbedProvider::new("invalid-model").is_err());
@@ -173,7 +174,7 @@ mod tests {
     fn test_fastembed_model_validation() {
         let models = [
             "bge-reranker-base",
-            "bge-reranker-large",
+            "bge-reranker-v2-m3",
             "jina-reranker-v1-turbo-en",
             "jina-reranker-v2-base-multilingual",
         ];

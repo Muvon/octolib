@@ -11,7 +11,7 @@ Octolib is a comprehensive, self-sufficient AI provider library that provides a 
 
 ## ✨ Key Features
 
-- **🔌 Multi-Provider Support**: OpenAI, Anthropic, OpenRouter, Google, Amazon, Cloudflare, DeepSeek, MiniMax, Z.ai, CLI proxies
+- **🔌 Multi-Provider Support**: OpenAI, Anthropic, OpenRouter, Google, Amazon, Cloudflare, DeepSeek, MiniMax, Moonshot AI (Kimi), Z.ai, CLI proxies
 - **🛡️ Unified Interface**: Consistent API across different providers
 - **🔍 Intelligent Model Validation**: Strict `provider:model` format parsing with case-insensitive model support
 - **📋 Structured Output**: JSON and JSON Schema support for OpenAI, OpenRouter, and DeepSeek
@@ -360,8 +360,9 @@ The library automatically detects OAuth credentials and prefers them over API ke
 | **OpenAI** | ✅ JSON + Schema | ✅ Yes | ✅ Yes | ✅ Yes |
 | **OpenRouter** | ✅ JSON + Schema | ✅ Yes | ✅ Yes | ✅ Yes |
 | **DeepSeek** | ✅ JSON Mode | ❌ No | ❌ No | ✅ Yes |
-| **Anthropic** | ❌ No | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Moonshot AI (Kimi)** | ✅ JSON Mode | ✅ kimi-k2.5 | ✅ Yes | ✅ Yes |
 | **MiniMax** | ✅ JSON Mode | ❌ No | ✅ Yes | ✅ Yes |
+| **Anthropic** | ❌ No | ✅ Yes | ✅ Yes | ✅ Yes |
 | **Z.ai** | ✅ JSON Mode | ❌ No | ✅ Yes | ✅ Yes |
 | **Google Vertex** | ❌ No | ✅ Yes | ✅ Yes | ❌ No |
 | **Amazon Bedrock** | ❌ No | ✅ Yes | ✅ Yes | ❌ No |
@@ -455,6 +456,7 @@ if let Some(usage) = &response.exchange.usage {
 | Anthropic | ✅ Full Support | Claude Models, Vision, Tools, Caching |
 | OpenRouter | ✅ Full Support | Multi-Provider Proxy, Vision, Caching, Structured Output |
 | DeepSeek | ✅ Full Support | Open-Source AI Models, Structured Output, Caching |
+| Moonshot AI (Kimi) | ✅ Full Support | Kimi K2 Series, Vision (kimi-k2.5), Tools, Structured Output, Caching |
 | MiniMax | ✅ Full Support | Anthropic-Compatible API, Tools, Caching, Thinking, Structured Output |
 | Z.ai | ✅ Full Support | GLM Models, Caching, Structured Output |
 | Google Vertex AI | ✅ Supported | Enterprise AI Integration |

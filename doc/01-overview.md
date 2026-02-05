@@ -71,6 +71,7 @@ Cross-provider tool call standardization:
 - Anthropic
 - OpenRouter
 - DeepSeek
+- Moonshot AI (Kimi)
 - MiniMax
 - Z.ai
 - Google Vertex AI

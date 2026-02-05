@@ -16,8 +16,8 @@
 
 use crate::llm::providers::{
     AmazonBedrockProvider, AnthropicProvider, CliProvider, CloudflareWorkersAiProvider,
-    DeepSeekProvider, GoogleVertexProvider, LocalProvider, MinimaxProvider, OpenAiProvider,
-    OpenRouterProvider, ZaiProvider,
+    DeepSeekProvider, GoogleVertexProvider, LocalProvider, MinimaxProvider, MoonshotProvider,
+    OpenAiProvider, OpenRouterProvider, ZaiProvider,
 };
 use crate::llm::traits::AiProvider;
 use anyhow::Result;
@@ -57,11 +57,12 @@ impl ProviderFactory {
             "cloudflare" => Ok(Box::new(CloudflareWorkersAiProvider::new())),
             "deepseek" => Ok(Box::new(DeepSeekProvider::new())),
             "minimax" => Ok(Box::new(MinimaxProvider::new())),
+            "moonshot" | "kimi" => Ok(Box::new(MoonshotProvider::new())),
             "zai" => Ok(Box::new(ZaiProvider::new())),
             "cli" => Err(anyhow::anyhow!(
                 "CLI provider requires a model string like 'cli:<backend>/<model>'. Use ProviderFactory::get_provider_for_model instead."
             )),
-            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported providers: openrouter, openai, local, anthropic, google, amazon, cloudflare, deepseek, minimax, zai, cli", provider_name)),
+            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported providers: openrouter, openai, local, anthropic, google, amazon, cloudflare, deepseek, minimax, moonshot, zai, cli", provider_name)),
         }
     }
 
@@ -98,6 +99,7 @@ impl ProviderFactory {
             "cloudflare",
             "deepseek",
             "minimax",
+            "moonshot",
             "zai",
             "cli",
         ]
@@ -161,6 +163,7 @@ mod tests {
         assert!(providers.contains(&"cloudflare"));
         assert!(providers.contains(&"deepseek"));
         assert!(providers.contains(&"minimax"));
+        assert!(providers.contains(&"moonshot"));
         assert!(providers.contains(&"cli"));
     }
 
@@ -184,12 +187,14 @@ mod tests {
         assert!(ProviderFactory::create_provider("cloudflare").is_ok());
         assert!(ProviderFactory::create_provider("deepseek").is_ok());
         assert!(ProviderFactory::create_provider("minimax").is_ok());
+        assert!(ProviderFactory::create_provider("moonshot").is_ok());
         assert!(ProviderFactory::create_provider("cli").is_err());
 
         // Test case insensitive
         assert!(ProviderFactory::create_provider("OpenAI").is_ok());
         assert!(ProviderFactory::create_provider("ANTHROPIC").is_ok());
         assert!(ProviderFactory::create_provider("MiniMax").is_ok());
+        assert!(ProviderFactory::create_provider("MOONSHOT").is_ok());
 
         // Test invalid provider
         assert!(ProviderFactory::create_provider("invalid").is_err());
@@ -201,7 +206,7 @@ mod tests {
         assert_eq!(openai.name(), "openai");
         assert!(openai.supports_model("gpt-4o"));
         assert!(openai.supports_vision("gpt-4o"));
-        assert!(openai.supports_caching("gpt-4o")); // OpenAI now supports caching
+        assert!(openai.supports_caching("gpt-4o"));
 
         let anthropic = ProviderFactory::create_provider("anthropic").unwrap();
         assert_eq!(anthropic.name(), "anthropic");
@@ -211,14 +216,13 @@ mod tests {
 
         let openrouter = ProviderFactory::create_provider("openrouter").unwrap();
         assert_eq!(openrouter.name(), "openrouter");
-        assert!(openrouter.supports_model("any-model")); // OpenRouter accepts any model
+        assert!(openrouter.supports_model("any-model"));
         assert!(openrouter.supports_vision("claude-3.5-sonnet"));
         assert!(openrouter.supports_caching("claude-3.5-sonnet"));
     }
 
     #[test]
     fn test_get_provider_for_model() {
-        // Test valid model strings
         let result = ProviderFactory::get_provider_for_model("openai:gpt-4o");
         assert!(result.is_ok());
         let (provider, model) = result.unwrap();
@@ -240,6 +244,13 @@ mod tests {
         assert!(provider.supports_caching(&model));
         assert!(provider.supports_model(&model));
 
+        // Test Moonshot provider
+        let result = ProviderFactory::get_provider_for_model("moonshot:kimi-k2");
+        assert!(result.is_ok());
+        let (provider, model) = result.unwrap();
+        assert_eq!(provider.name(), "moonshot");
+        assert_eq!(model, "kimi-k2");
+
         // Test invalid format
         let result = ProviderFactory::get_provider_for_model("gpt-4o");
         assert!(result.is_err());
@@ -251,7 +262,6 @@ mod tests {
 
     #[test]
     fn test_get_provider_for_model_case_insensitive() {
-        // Test provider name case insensitivity
         let result = ProviderFactory::get_provider_for_model("OPENAI:gpt-4o");
         assert!(result.is_ok());
         let (provider, model) = result.unwrap();
@@ -264,13 +274,11 @@ mod tests {
         assert_eq!(provider.name(), "anthropic");
         assert_eq!(model, "claude-3.5-sonnet");
 
-        // Test model name case insensitivity (should work with providers that support it)
         let result = ProviderFactory::get_provider_for_model("openai:GPT-4O");
         assert!(result.is_ok());
         let (provider, model) = result.unwrap();
         assert_eq!(provider.name(), "openai");
         assert_eq!(model, "GPT-4O");
-        // The provider should support the uppercase model name due to case insensitivity
         assert!(provider.supports_model(&model));
 
         let result = ProviderFactory::get_provider_for_model("minimax:MINIMAX-M2.1");

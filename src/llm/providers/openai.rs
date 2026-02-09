@@ -375,6 +375,19 @@ impl AiProvider for OpenAiProvider {
         true // All OpenAI models support structured output
     }
 
+    fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
+        // Search through pricing table for matching model
+        for (pricing_model, input_price, output_price) in PRICING {
+            if contains_ignore_ascii_case(model, pricing_model) {
+                return Some(crate::llm::types::ModelPricing::without_cache(
+                    *input_price,
+                    *output_price,
+                ));
+            }
+        }
+        None
+    }
+
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
         // Check for OAuth tokens first (priority), otherwise use API key
         let (use_oauth, oauth_account_id) = if let (Ok(access_token), Ok(account_id)) = (

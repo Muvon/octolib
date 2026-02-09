@@ -189,6 +189,22 @@ impl AiProvider for DeepSeekProvider {
         true
     }
 
+    fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
+        // DeepSeek has explicit cache-aware pricing
+        // PRICING format: (model, cache_hit_price, cache_miss_price, output_price)
+        for (pricing_model, cache_hit_price, cache_miss_price, output_price) in PRICING {
+            if model.to_lowercase().contains(pricing_model) {
+                return Some(crate::llm::types::ModelPricing::new(
+                    *cache_miss_price, // Regular input (cache miss)
+                    *output_price,
+                    *cache_miss_price, // Cache write = same as cache miss
+                    *cache_hit_price,  // Cache read (cache hit)
+                ));
+            }
+        }
+        None
+    }
+
     fn get_max_input_tokens(&self, _model: &str) -> usize {
         64_000 // DeepSeek context window
     }

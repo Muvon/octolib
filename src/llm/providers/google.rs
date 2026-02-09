@@ -16,7 +16,7 @@
 
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderResponse};
-use crate::llm::utils::normalize_model_name;
+use crate::llm::utils::{contains_ignore_ascii_case, normalize_model_name};
 use anyhow::Result;
 use std::env;
 
@@ -106,6 +106,19 @@ impl AiProvider for GoogleVertexProvider {
     fn supports_vision(&self, model: &str) -> bool {
         // Google Vertex AI vision (case-insensitive)
         normalize_model_name(model).contains("gemini")
+    }
+
+    fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
+        // Search through pricing table for matching model
+        for (pricing_model, input_price, output_price) in PRICING {
+            if contains_ignore_ascii_case(model, pricing_model) {
+                return Some(crate::llm::types::ModelPricing::without_cache(
+                    *input_price,
+                    *output_price,
+                ));
+            }
+        }
+        None
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {

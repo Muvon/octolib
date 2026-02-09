@@ -139,6 +139,40 @@ impl AiProvider for OpenRouterProvider {
         true // All OpenRouter models support structured output
     }
 
+    fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
+        // OpenRouter proxies to underlying providers
+        // Try to detect provider from model name and delegate to their pricing
+        let normalized = normalize_model_name(model);
+
+        // Anthropic models (claude)
+        if normalized.starts_with("anthropic/") || normalized.contains("claude") {
+            // Delegate to Anthropic provider pricing
+            let anthropic = crate::llm::providers::AnthropicProvider::new();
+            return anthropic.get_model_pricing(model);
+        }
+
+        // OpenAI models (gpt)
+        if normalized.starts_with("openai/") || normalized.contains("gpt-") {
+            let openai = crate::llm::providers::OpenAiProvider::new();
+            return openai.get_model_pricing(model);
+        }
+
+        // DeepSeek models
+        if normalized.starts_with("deepseek") {
+            let deepseek = crate::llm::providers::DeepSeekProvider::new();
+            return deepseek.get_model_pricing(model);
+        }
+
+        // Google models (gemini)
+        if normalized.starts_with("google/") || normalized.contains("gemini") {
+            let google = crate::llm::providers::GoogleVertexProvider::new();
+            return google.get_model_pricing(model);
+        }
+
+        // Unknown provider - no pricing available
+        None
+    }
+
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
         let api_key = self.get_api_key()?;
 

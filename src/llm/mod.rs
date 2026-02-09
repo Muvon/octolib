@@ -35,7 +35,7 @@ pub use tool_calls::{GenericToolCall, ProviderToolCalls};
 pub use traits::AiProvider;
 pub use types::{
     ChatCompletionParams, FunctionDefinition, ImageAttachment, ImageData, Message, MessageBuilder,
-    OutputFormat, ProviderExchange, ProviderResponse, ResponseMode, SourceType,
+    ModelPricing, OutputFormat, ProviderExchange, ProviderResponse, ResponseMode, SourceType,
     StructuredOutputRequest, ThinkingBlock, TokenUsage, ToolCall,
 };
 

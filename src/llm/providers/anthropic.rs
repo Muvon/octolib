@@ -240,6 +240,24 @@ impl AiProvider for AnthropicProvider {
         }
     }
 
+    fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
+        // Search through pricing table for matching model
+        for (pricing_model, input_price, output_price) in PRICING {
+            if contains_ignore_ascii_case(model, pricing_model) {
+                // Anthropic cache pricing:
+                // - Cache write: 1.25x input price
+                // - Cache read: 0.1x input price
+                return Some(crate::llm::types::ModelPricing::new(
+                    *input_price,
+                    *output_price,
+                    input_price * 1.25, // Cache write price
+                    input_price * 0.1,  // Cache read price
+                ));
+            }
+        }
+        None
+    }
+
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
         // Check for OAuth token first (priority), otherwise use API key
         let (auth_header_name, auth_header_value) =
@@ -874,5 +892,31 @@ mod tests {
         assert!(provider.supports_vision("CLAUDE-3-5-SONNET"));
         // Test mixed case
         assert!(provider.supports_vision("ClaUde-3-7"));
+    }
+
+    #[test]
+    fn test_get_model_pricing() {
+        let provider = AnthropicProvider::new();
+
+        // Test Sonnet 4 pricing
+        let pricing = provider.get_model_pricing("claude-sonnet-4").unwrap();
+        assert_eq!(pricing.input_price_per_1m, 3.0);
+        assert_eq!(pricing.output_price_per_1m, 15.0);
+        assert!((pricing.cache_write_price_per_1m - 3.75).abs() < 0.01); // 3.0 * 1.25
+        assert!((pricing.cache_read_price_per_1m - 0.30).abs() < 0.01); // 3.0 * 0.1
+
+        // Test Haiku 3 pricing
+        let pricing = provider.get_model_pricing("claude-3-haiku").unwrap();
+        assert_eq!(pricing.input_price_per_1m, 0.25);
+        assert_eq!(pricing.output_price_per_1m, 1.25);
+        assert!((pricing.cache_write_price_per_1m - 0.3125).abs() < 0.0001); // 0.25 * 1.25
+        assert!((pricing.cache_read_price_per_1m - 0.025).abs() < 0.0001); // 0.25 * 0.1
+
+        // Test case insensitive
+        let pricing = provider.get_model_pricing("CLAUDE-SONNET-4").unwrap();
+        assert_eq!(pricing.input_price_per_1m, 3.0);
+
+        // Test unknown model
+        assert!(provider.get_model_pricing("unknown-model").is_none());
     }
 }

@@ -54,4 +54,11 @@ pub trait AiProvider: Send + Sync {
         // Default implementation - providers can override
         false
     }
+
+    /// Get pricing information for a model
+    /// Returns None if pricing is not available or model is not recognized
+    fn get_model_pricing(&self, _model: &str) -> Option<crate::llm::types::ModelPricing> {
+        // Default implementation - providers should override with actual pricing
+        None
+    }
 }

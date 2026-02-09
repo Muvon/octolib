@@ -478,6 +478,69 @@ pub enum ResponseMode {
     Strict,
 }
 
+/// Pricing information for a model
+/// All prices are per 1M tokens in USD
+#[derive(Debug, Clone, Copy)]
+pub struct ModelPricing {
+    /// Regular input price per 1M tokens (USD) - for uncached input
+    pub input_price_per_1m: f64,
+    /// Output price per 1M tokens (USD)
+    pub output_price_per_1m: f64,
+    /// Cache write price per 1M tokens (USD) - cost to write to cache
+    /// For providers without cache write differentiation, same as input_price_per_1m
+    pub cache_write_price_per_1m: f64,
+    /// Cache read price per 1M tokens (USD) - cost to read from cache
+    /// For providers without caching, same as input_price_per_1m
+    pub cache_read_price_per_1m: f64,
+}
+
+impl ModelPricing {
+    /// Create new pricing with explicit cache prices
+    pub fn new(
+        input_price_per_1m: f64,
+        output_price_per_1m: f64,
+        cache_write_price_per_1m: f64,
+        cache_read_price_per_1m: f64,
+    ) -> Self {
+        Self {
+            input_price_per_1m,
+            output_price_per_1m,
+            cache_write_price_per_1m,
+            cache_read_price_per_1m,
+        }
+    }
+
+    /// Create pricing without cache support (all cache prices = input price)
+    pub fn without_cache(input_price_per_1m: f64, output_price_per_1m: f64) -> Self {
+        Self {
+            input_price_per_1m,
+            output_price_per_1m,
+            cache_write_price_per_1m: input_price_per_1m,
+            cache_read_price_per_1m: input_price_per_1m,
+        }
+    }
+
+    /// Calculate cost for given token counts
+    /// Returns cost in USD
+    pub fn calculate_cost(
+        &self,
+        regular_input_tokens: u64,
+        cache_write_tokens: u64,
+        cache_read_tokens: u64,
+        output_tokens: u64,
+    ) -> f64 {
+        let regular_input_cost =
+            (regular_input_tokens as f64 / 1_000_000.0) * self.input_price_per_1m;
+        let cache_write_cost =
+            (cache_write_tokens as f64 / 1_000_000.0) * self.cache_write_price_per_1m;
+        let cache_read_cost =
+            (cache_read_tokens as f64 / 1_000_000.0) * self.cache_read_price_per_1m;
+        let output_cost = (output_tokens as f64 / 1_000_000.0) * self.output_price_per_1m;
+
+        regular_input_cost + cache_write_cost + cache_read_cost + output_cost
+    }
+}
+
 /// Structured output request configuration
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct StructuredOutputRequest {

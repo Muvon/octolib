@@ -52,7 +52,7 @@ src/embedding/
 src/reranker/
 ├── mod.rs             → Main API: rerank()
 ├── types.rs           → RerankProvider trait, response types
-└── provider/          → Voyage AI implementation
+└── provider/          → Voyage, Cohere, Jina, FastEmbed implementations
 
 src/errors.rs          → ProviderError, ConfigError, etc.
 ```

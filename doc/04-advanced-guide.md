@@ -8,11 +8,14 @@
 | Anthropic | ✅ Full Support | Claude Models, Vision, Tools, Caching |
 | OpenRouter | ✅ Full Support | Multi-Provider Proxy, Vision, Caching, Structured Output |
 | DeepSeek | ✅ Full Support | Open-Source AI Models, Structured Output, Caching |
+| Moonshot AI (Kimi) | ✅ Full Support | Kimi K2 Series, Vision (kimi-k2.5), Tools, Structured Output, Caching |
 | MiniMax | ✅ Full Support | Anthropic-Compatible API, Tools, Caching, Thinking |
 | Z.ai | ✅ Full Support | GLM Models, Caching, Structured Output |
 | Google Vertex AI | ✅ Supported | Enterprise AI Integration |
 | Amazon Bedrock | ✅ Supported | Cloud AI Services |
 | Cloudflare Workers AI | ✅ Supported | Edge AI Compute |
+| Local LLM | ✅ Supported | Ollama, LM Studio, LocalAI, Jan, vLLM |
+| CLI Proxy | ✅ Supported | Codex, Claude, Gemini, Cursor |
 
 ## 🚀 Key Features
 

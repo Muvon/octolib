@@ -90,6 +90,9 @@ Cross-provider tool call standardization:
 
 ### Reranker Providers
 - Voyage AI
+- Cohere
+- Jina AI
+- FastEmbed (local, feature-gated)
 
 ## Use Cases
 

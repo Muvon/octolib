@@ -63,11 +63,15 @@ export OPENROUTER_API_KEY="your_openrouter_api_key"
 export MINIMAX_API_KEY="your_minimax_api_key"
 export DEEPSEEK_API_KEY="your_deepseek_api_key"
 export ZAI_API_KEY="your_zai_api_key"
+export MOONSHOT_API_KEY="your_moonshot_api_key"
 
 # Embedding Providers
 export JINA_API_KEY="your_jina_api_key"
 export VOYAGE_API_KEY="your_voyage_api_key"
 export GOOGLE_API_KEY="your_google_api_key"
+
+# Reranking Providers
+export COHERE_API_KEY="your_cohere_api_key"
 
 # Cloud Providers
 export GOOGLE_APPLICATION_CREDENTIALS="/path/to/credentials.json"

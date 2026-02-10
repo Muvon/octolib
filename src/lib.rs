@@ -124,7 +124,8 @@ pub use llm::{
     MessageBuilder, MinimaxProvider, ModelLimits, MoonshotProvider, OpenAiProvider,
     OpenRouterProvider, OutputFormat, ProviderExchange, ProviderFactory, ProviderResponse,
     ProviderStrategy, ProviderToolCalls, ResponseMode, SourceType, StrategyFactory,
-    StructuredOutputRequest, ThinkingBlock, TokenUsage, ToolCall, ToolResult, ZaiProvider,
+    StructuredOutputRequest, ThinkingBlock, TokenUsage, ToolCall, ToolResult, VideoAttachment,
+    VideoData, ZaiProvider,
 };
 pub use reranker::{
     create_rerank_provider_from_parts, parse_provider_model as parse_rerank_provider_model, rerank,

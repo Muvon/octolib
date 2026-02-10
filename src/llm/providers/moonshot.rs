@@ -342,6 +342,19 @@ fn convert_messages(messages: &[crate::llm::types::Message], _model: &str) -> Ve
                     }
                 }
 
+                if let Some(videos) = &message.videos {
+                    for video in videos {
+                        if let crate::llm::types::VideoData::Base64(data) = &video.data {
+                            content_parts.push(serde_json::json!({
+                                "type": "video_url",
+                                "video_url": {
+                                    "url": format!("data:{};base64,{}", video.media_type, data)
+                                }
+                            }));
+                        }
+                    }
+                }
+
                 let content = if content_parts.is_empty() {
                     None
                 } else {
@@ -416,6 +429,19 @@ fn convert_messages(messages: &[crate::llm::types::Message], _model: &str) -> Ve
                                 "type": "image_url",
                                 "image_url": {
                                     "url": format!("data:{};base64,{}", image.media_type, data)
+                                }
+                            }));
+                        }
+                    }
+                }
+
+                if let Some(videos) = &message.videos {
+                    for video in videos {
+                        if let crate::llm::types::VideoData::Base64(data) = &video.data {
+                            content_parts.push(serde_json::json!({
+                                "type": "video_url",
+                                "video_url": {
+                                    "url": format!("data:{};base64,{}", video.media_type, data)
                                 }
                             }));
                         }
@@ -948,6 +974,7 @@ mod tests {
                 "arguments": {"city": "Beijing"}
             }])),
             images: None,
+            videos: None,
             thinking: Some(ThinkingBlock {
                 content: "Let me check the weather".to_string(),
                 tokens: 0,
@@ -984,6 +1011,7 @@ mod tests {
                 "arguments": {"query": "test"}
             }])),
             images: None,
+            videos: None,
             thinking: None,
             id: None,
         };
@@ -1010,6 +1038,7 @@ mod tests {
             name: None,
             tool_calls: None,
             images: None,
+            videos: None,
             thinking: None,
             id: None,
         };
@@ -1033,6 +1062,7 @@ mod tests {
             name: Some("get_weather".to_string()),
             tool_calls: None,
             images: None,
+            videos: None,
             thinking: None,
             id: None,
         };

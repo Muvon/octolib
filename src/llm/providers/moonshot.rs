@@ -136,6 +136,12 @@ struct MoonshotMessage {
     tool_call_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<String>,
+    /// Required for kimi-k2.5 and thinking models when tool_calls are present
+    /// - Some("") = empty reasoning (required for tool calls)
+    /// - Some(content) = actual reasoning content
+    /// - None = omit field (backward compatible for non-thinking models)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_content: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -200,7 +206,7 @@ struct MoonshotToolFunction {
 }
 
 // Convert messages to Moonshot (OpenAI-compatible) format
-fn convert_messages(messages: &[crate::llm::types::Message]) -> Vec<MoonshotMessage> {
+fn convert_messages(messages: &[crate::llm::types::Message], _model: &str) -> Vec<MoonshotMessage> {
     let mut result = Vec::new();
 
     for message in messages {
@@ -212,6 +218,8 @@ fn convert_messages(messages: &[crate::llm::types::Message]) -> Vec<MoonshotMess
                     tool_calls: None,
                     tool_call_id: message.tool_call_id.clone(),
                     name: message.name.clone(),
+                    // Tool response messages don't need reasoning_content
+                    reasoning_content: None,
                 });
             }
             "assistant" if message.tool_calls.is_some() => {
@@ -269,8 +277,25 @@ fn convert_messages(messages: &[crate::llm::types::Message]) -> Vec<MoonshotMess
                             .collect(),
                     )
                 } else {
-                    None
+                    // If parsing as GenericToolCall fails, try parsing as MoonshotToolCall directly
+                    // This handles cases where tool_calls are stored in provider-specific format
+                    serde_json::from_value::<Vec<MoonshotToolCall>>(
+                        message.tool_calls.clone().unwrap(),
+                    )
+                    .ok()
                 };
+
+
+                // Extract reasoning_content from thinking block if present.
+                // Moonshot requires reasoning_content for assistant messages with tool_calls.
+                // Always include the field (even if empty) for tool calls.
+                let reasoning_content = Some(
+                    message
+                        .thinking
+                        .as_ref()
+                        .map(|t| t.content.clone())
+                        .unwrap_or_else(String::new),
+                );
 
                 result.push(MoonshotMessage {
                     role: message.role.clone(),
@@ -278,6 +303,7 @@ fn convert_messages(messages: &[crate::llm::types::Message]) -> Vec<MoonshotMess
                     tool_calls,
                     tool_call_id: None,
                     name: None,
+                    reasoning_content,
                 });
             }
             "user" | "assistant" | "system" => {
@@ -311,6 +337,8 @@ fn convert_messages(messages: &[crate::llm::types::Message]) -> Vec<MoonshotMess
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
+                    // Regular messages without tool calls don't need reasoning_content
+                    reasoning_content: None,
                 });
             }
             _ => {
@@ -384,7 +412,7 @@ impl AiProvider for MoonshotProvider {
         let api_key = self.get_api_key()?;
 
         // Convert messages to Moonshot format
-        let messages = convert_messages(&params.messages);
+        let messages = convert_messages(&params.messages, &params.model);
 
         // Kimi K2.5 only accepts temperature=1.0. Other models use standard temperature.
         let temperature = if contains_ignore_ascii_case(&params.model, "kimi-k2.5") {
@@ -532,6 +560,16 @@ impl AiProvider for MoonshotProvider {
 
         let content = extract_text_content(&choice.message.content);
 
+        // Extract reasoning_content from response and convert to ThinkingBlock
+        // CRITICAL: Preserve even empty reasoning_content for thinking models
+        // Empty reasoning_content is required when replaying tool call messages
+        let thinking = choice.message.reasoning_content.map(|rc| {
+            crate::llm::types::ThinkingBlock {
+                content: rc,
+                tokens: 0, // Moonshot doesn't provide separate reasoning token count
+            }
+        });
+
         let tool_calls: Option<Vec<ToolCall>> = choice.message.tool_calls.map(|calls| {
             calls
                 .into_iter()
@@ -594,7 +632,7 @@ impl AiProvider for MoonshotProvider {
 
         Ok(ProviderResponse {
             content,
-            thinking: None,
+            thinking,
             exchange,
             tool_calls,
             finish_reason: choice.finish_reason,
@@ -653,5 +691,161 @@ mod tests {
         assert_eq!(provider.get_max_input_tokens("kimi-k2"), 256_000);
         assert_eq!(provider.get_max_input_tokens("kimi-k2.5"), 256_000);
         assert_eq!(provider.get_max_input_tokens("unknown"), 128_000);
+    }
+
+    #[test]
+    fn test_reasoning_content_serialization() {
+        use crate::llm::types::ThinkingBlock;
+
+        // Test 1: Thinking model - Assistant message with tool calls and thinking
+        let msg_with_thinking = crate::llm::types::Message {
+            role: "assistant".to_string(),
+            content: "I'll help you with that.".to_string(),
+            timestamp: 0,
+            cached: false,
+            tool_call_id: None,
+            name: None,
+            tool_calls: Some(serde_json::json!([{
+                "id": "call_123",
+                "name": "get_weather",
+                "arguments": {"city": "Beijing"}
+            }])),
+            images: None,
+            thinking: Some(ThinkingBlock {
+                content: "Let me check the weather".to_string(),
+                tokens: 0,
+            }),
+            id: None,
+        };
+
+        // For thinking models, reasoning_content should be present
+        let converted =
+            convert_messages(std::slice::from_ref(&msg_with_thinking), "kimi-k2-thinking");
+        assert_eq!(converted.len(), 1);
+        assert!(converted[0].reasoning_content.is_some());
+        assert_eq!(
+            converted[0].reasoning_content.as_ref().unwrap(),
+            "Let me check the weather"
+        );
+
+        // For Kimi K2 models, reasoning_content should be present
+        let converted = convert_messages(std::slice::from_ref(&msg_with_thinking), "kimi-k2");
+        assert_eq!(converted.len(), 1);
+        assert!(converted[0].reasoning_content.is_some());
+
+        // Test 2: Thinking model - Assistant message with tool calls but no thinking (empty reasoning_content)
+        let msg_no_thinking = crate::llm::types::Message {
+            role: "assistant".to_string(),
+            content: "I'll help you with that.".to_string(),
+            timestamp: 0,
+            cached: false,
+            tool_call_id: None,
+            name: None,
+            tool_calls: Some(serde_json::json!([{
+                "id": "call_456",
+                "name": "search",
+                "arguments": {"query": "test"}
+            }])),
+            images: None,
+            thinking: None,
+            id: None,
+        };
+
+        // For thinking models, should have Some("") for tool calls even without thinking
+        let converted = convert_messages(std::slice::from_ref(&msg_no_thinking), "kimi-k2.5");
+        assert_eq!(converted.len(), 1);
+        assert!(converted[0].reasoning_content.is_some());
+        assert_eq!(converted[0].reasoning_content.as_ref().unwrap(), "");
+
+        // For Kimi K2 models, should be Some("") even without thinking
+        let converted = convert_messages(std::slice::from_ref(&msg_no_thinking), "kimi-k2");
+        assert_eq!(converted.len(), 1);
+        assert!(converted[0].reasoning_content.is_some());
+        assert_eq!(converted[0].reasoning_content.as_ref().unwrap(), "");
+
+        // Test 3: Regular assistant message without tool calls (no reasoning_content)
+        let regular_msg = crate::llm::types::Message {
+            role: "assistant".to_string(),
+            content: "Hello, how can I help?".to_string(),
+            timestamp: 0,
+            cached: false,
+            tool_call_id: None,
+            name: None,
+            tool_calls: None,
+            images: None,
+            thinking: None,
+            id: None,
+        };
+
+        // Regular assistant messages without tool calls: no reasoning_content
+        let converted = convert_messages(std::slice::from_ref(&regular_msg), "kimi-k2-thinking");
+        assert_eq!(converted.len(), 1);
+        assert!(converted[0].reasoning_content.is_none());
+
+        let converted = convert_messages(std::slice::from_ref(&regular_msg), "kimi-k2");
+        assert_eq!(converted.len(), 1);
+        assert!(converted[0].reasoning_content.is_none());
+
+        // Test 4: Tool response message (no reasoning_content)
+        let tool_msg = crate::llm::types::Message {
+            role: "tool".to_string(),
+            content: "Weather is sunny".to_string(),
+            timestamp: 0,
+            cached: false,
+            tool_call_id: Some("call_123".to_string()),
+            name: Some("get_weather".to_string()),
+            tool_calls: None,
+            images: None,
+            thinking: None,
+            id: None,
+        };
+
+        let converted = convert_messages(&[tool_msg], "kimi-k2-thinking");
+        assert_eq!(converted.len(), 1);
+        assert!(converted[0].reasoning_content.is_none());
+
+        // Test 5: Verify JSON serialization behavior
+        let msg_with_reasoning = MoonshotMessage {
+            role: "assistant".to_string(),
+            content: Some(serde_json::json!("test")),
+            tool_calls: Some(vec![]),
+            tool_call_id: None,
+            name: None,
+            reasoning_content: Some("thinking".to_string()),
+        };
+
+        let json = serde_json::to_value(&msg_with_reasoning).unwrap();
+        assert!(json.get("reasoning_content").is_some());
+        assert_eq!(
+            json.get("reasoning_content").unwrap().as_str().unwrap(),
+            "thinking"
+        );
+
+        // Test 6: None reasoning_content should be omitted
+        let msg_without_reasoning = MoonshotMessage {
+            role: "assistant".to_string(),
+            content: Some(serde_json::json!("test")),
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+            reasoning_content: None,
+        };
+
+        let json = serde_json::to_value(&msg_without_reasoning).unwrap();
+        assert!(json.get("reasoning_content").is_none());
+
+        // Test 7: Empty reasoning_content (Some("")) should be serialized
+        let msg_with_empty_reasoning = MoonshotMessage {
+            role: "assistant".to_string(),
+            content: Some(serde_json::json!("test")),
+            tool_calls: Some(vec![]),
+            tool_call_id: None,
+            name: None,
+            reasoning_content: Some("".to_string()),
+        };
+
+        let json = serde_json::to_value(&msg_with_empty_reasoning).unwrap();
+        assert!(json.get("reasoning_content").is_some());
+        assert_eq!(json.get("reasoning_content").unwrap().as_str().unwrap(), "");
     }
 }

@@ -137,6 +137,25 @@ impl AiProvider for MinimaxProvider {
     fn supports_structured_output(&self, _model: &str) -> bool {
         true // MiniMax supports structured output via response_format
     }
+
+    fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
+        // Search through pricing table for matching model
+        for (pricing_model, input_price, output_price) in PRICING {
+            if contains_ignore_ascii_case(model, pricing_model) {
+                // MiniMax cache pricing:
+                // - Cache write: $0.375 per 1M tokens (fixed for all models)
+                // - Cache read: $0.03 per 1M tokens (fixed for all models)
+                return Some(crate::llm::types::ModelPricing::new(
+                    *input_price,
+                    *output_price,
+                    0.375, // Cache write price (fixed)
+                    0.03,  // Cache read price (fixed)
+                ));
+            }
+        }
+        None
+    }
+
     fn get_max_input_tokens(&self, model: &str) -> usize {
         // MiniMax model context window limits (case-insensitive)
         let model_lower = normalize_model_name(model);

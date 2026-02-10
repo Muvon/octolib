@@ -83,6 +83,7 @@ async fn main() -> anyhow::Result<()> {
             tool_call_id: None,
             tool_calls: None,
             images: None,
+            videos: None,
             cached: false,
             timestamp: 0,
             thinking: None,

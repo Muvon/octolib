@@ -16,7 +16,7 @@ Octolib is a comprehensive, self-sufficient AI provider library that provides a 
 - **🔍 Intelligent Model Validation**: Strict `provider:model` format parsing with case-insensitive model support
 - **📋 Structured Output**: JSON and JSON Schema support for OpenAI, OpenRouter, and DeepSeek
 - **💰 Cost Tracking**: Automatic token usage and cost calculation
-- **🖼️ Vision Support**: Image attachment handling for compatible models
+- **🖼️ Vision Support**: Image and video attachment handling for compatible models (Moonshot Kimi K2.5)
 - **🧰 Tool Calling**: Cross-provider tool call standardization
 - **🧩 CLI Provider**: Use `cli:<backend>/<model>` (e.g. `cli:codex/gpt-5.2-codex`). Proxy-only: tools/MCP are not used or controllable.
 - **⏱️ Retry Management**: Configurable exponential backoff

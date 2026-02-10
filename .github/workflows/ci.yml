@@ -129,25 +129,17 @@ jobs:
     - name: Run tests (all features)
       if: runner.os != 'Windows'
       run: cargo test --verbose --lib --all-features
-      env:
-        CARGO_TARGET_DIR: ${{ runner.os == 'Linux' && '/dev/shm/target' || './target' }}
 
     - name: Run tests (no default features)
       run: cargo test --verbose --lib --no-default-features
-      env:
-        CARGO_TARGET_DIR: ${{ runner.os == 'Linux' && '/dev/shm/target' || './target' }}
 
     - name: Run tests (fastembed only)
       if: runner.os != 'Windows'
       run: cargo test --verbose --lib --no-default-features --features fastembed
-      env:
-        CARGO_TARGET_DIR: ${{ runner.os == 'Linux' && '/dev/shm/target' || './target' }}
 
     - name: Run tests (huggingface only)
       if: runner.os != 'Windows'
       run: cargo test --verbose --lib --no-default-features --features huggingface
-      env:
-        CARGO_TARGET_DIR: ${{ runner.os == 'Linux' && '/dev/shm/target' || './target' }}
   doc:
     name: Documentation
     runs-on: ubuntu-latest

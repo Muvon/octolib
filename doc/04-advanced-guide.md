@@ -8,8 +8,8 @@
 | Anthropic | ✅ Full Support | Claude Models, Vision, Tools, Caching |
 | OpenRouter | ✅ Full Support | Multi-Provider Proxy, Vision, Caching, Structured Output |
 | DeepSeek | ✅ Full Support | Open-Source AI Models, Structured Output, Caching |
-| Moonshot AI (Kimi) | ✅ Full Support | Kimi K2 Series, Vision (kimi-k2.5), Tools, Structured Output, Caching |
-| MiniMax | ✅ Full Support | Anthropic-Compatible API, Tools, Caching, Thinking |
+| Moonshot AI (Kimi) | ✅ Full Support | Kimi K2 Series, Vision (kimi-k2.5), Tools, Structured Output, Caching, Thinking |
+| MiniMax | ✅ Full Support | Anthropic-Compatible API, Tools, Caching, Thinking, Structured Output |
 | Z.ai | ✅ Full Support | GLM Models, Caching, Structured Output |
 | Google Vertex AI | ✅ Supported | Enterprise AI Integration |
 | Amazon Bedrock | ✅ Supported | Cloud AI Services |

@@ -46,7 +46,8 @@ Multi-provider embedding support:
 
 ### Document Reranking
 Cross-encoder models for relevance scoring:
-- Voyage AI reranker models
+- Voyage AI, Cohere, Jina AI reranker models
+- Local models via FastEmbed (BGE rerankers)
 - Query-document relevance scoring
 - Configurable top-k results
 - Token usage tracking
@@ -71,14 +72,14 @@ Cross-provider tool call standardization:
 - Anthropic
 - OpenRouter
 - DeepSeek
-- Moonshot AI (Kimi)
-- MiniMax
+- Moonshot AI (Kimi) - with thinking support
+- MiniMax - with thinking support
 - Z.ai
 - Google Vertex AI
 - Amazon Bedrock
 - Cloudflare Workers AI
 - Local (Ollama, LM Studio, LocalAI, Jan, vLLM)
-- CLI proxies (codex, claude, gemini, etc.)
+- CLI proxies (codex, claude, gemini, cursor)
 
 ### Embedding Providers
 - Jina AI

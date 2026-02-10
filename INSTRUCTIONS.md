@@ -174,7 +174,7 @@ cargo build --release  # Too slow
 → Check `src/llm/factory.rs` → `get_provider_for_model()`
 
 **Problem: Structured output not working**
-→ Only OpenAI, OpenRouter, DeepSeek support it
+→ Only OpenAI, OpenRouter, DeepSeek, Moonshot, MiniMax support it
 → Check `provider.supports_structured_output(&model)`
 → See `examples/structured_output.rs`
 

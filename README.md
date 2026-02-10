@@ -22,7 +22,7 @@ Octolib is a comprehensive, self-sufficient AI provider library that provides a 
 - **⏱️ Retry Management**: Configurable exponential backoff
 - **🔒 Secure Design**: Environment-based API key management
 - **🎯 Embedding Support**: Multi-provider embedding generation with Jina, Voyage, Google, OpenAI, FastEmbed, and HuggingFace
-- **🔄 Reranking**: Document relevance scoring with cross-encoder models (Voyage AI)
+- **🔄 Reranking**: Document relevance scoring with cross-encoder models (Voyage AI, Cohere, Jina AI)
 
 ## 📦 Quick Installation
 

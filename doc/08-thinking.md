@@ -92,6 +92,26 @@ let (provider, model) = ProviderFactory::get_provider_for_model("minimax:MiniMax
 let response = provider.chat_completion(params).await?;
 ```
 
+### Moonshot AI
+
+Moonshot AI (Kimi) supports thinking with content blocks similar to Anthropic:
+
+**Request/Response Format:**
+```json
+{
+  "content": [
+    {"type": "reasoning", "reasoning_content": "Let me analyze this step by step..."},
+    {"type": "text", "text": "The answer is 42."}
+  ]
+}
+```
+
+**Usage:**
+```rust
+let (provider, model) = ProviderFactory::get_provider_for_model("moonshot:kimi-k2.5")?;
+let response = provider.chat_completion(params).await?;
+```
+
 ### OpenAI o-series
 
 OpenAI o1, o3, and o4 models use `reasoning_content` field:
@@ -244,6 +264,7 @@ let (provider, model) = ProviderFactory::get_provider_for_model("minimax:MiniMax
 
 // Check if model supports thinking (this is provider-specific)
 let supports_thinking = model.starts_with("MiniMax") ||
+                        model.starts_with("kimi") ||
                         model.starts_with("o1") ||
                         model.starts_with("o3") ||
                         model.starts_with("o4");
@@ -324,7 +345,7 @@ Check provider pricing documentation for current rates.
 **Problem:** `response.thinking` is always `None`
 
 **Solutions:**
-1. Verify you're using a thinking-capable model (MiniMax-M2, OpenAI o1/o3/o4)
+1. Verify you're using a thinking-capable model (MiniMax-M2, Moonshot kimi-k2.5, OpenAI o1/o3/o4)
 2. Check that thinking wasn't stripped by provider
 3. Verify API response contains thinking content
 

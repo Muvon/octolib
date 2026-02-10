@@ -93,6 +93,16 @@ jobs:
     continue-on-error: ${{ matrix.rust == 'nightly' }}
 
     steps:
+    - name: Free disk space
+      if: matrix.os == 'ubuntu-latest'
+      uses: easimon/maximize-build-space@master
+      with:
+        remove-dotnet: 'true'
+        remove-android: 'true'
+        remove-haskell: 'true'
+        remove-codeql: 'true'
+        remove-docker-images: 'true'
+
     - name: Checkout code
       uses: actions/checkout@v4
 
@@ -113,21 +123,31 @@ jobs:
           ${{ runner.os }}-${{ matrix.rust }}-cargo-
           ${{ runner.os }}-cargo-
 
+    - name: Clean build artifacts
+      run: cargo clean
+
     - name: Run tests (all features)
       if: runner.os != 'Windows'
-      run: cargo test --verbose --all-features
+      run: cargo test --verbose --lib --all-features
+      env:
+        CARGO_TARGET_DIR: ${{ runner.os == 'Linux' && '/dev/shm/target' || './target' }}
 
     - name: Run tests (no default features)
-      run: cargo test --verbose --no-default-features
+      run: cargo test --verbose --lib --no-default-features
+      env:
+        CARGO_TARGET_DIR: ${{ runner.os == 'Linux' && '/dev/shm/target' || './target' }}
 
     - name: Run tests (fastembed only)
       if: runner.os != 'Windows'
-      run: cargo test --verbose --no-default-features --features fastembed
+      run: cargo test --verbose --lib --no-default-features --features fastembed
+      env:
+        CARGO_TARGET_DIR: ${{ runner.os == 'Linux' && '/dev/shm/target' || './target' }}
 
     - name: Run tests (huggingface only)
       if: runner.os != 'Windows'
-      run: cargo test --verbose --no-default-features --features huggingface
-
+      run: cargo test --verbose --lib --no-default-features --features huggingface
+      env:
+        CARGO_TARGET_DIR: ${{ runner.os == 'Linux' && '/dev/shm/target' || './target' }}
   doc:
     name: Documentation
     runs-on: ubuntu-latest
@@ -197,7 +217,7 @@ jobs:
           ${{ runner.os }}-cargo-
 
     - name: Generate code coverage
-      run: cargo tarpaulin --verbose --all-features --workspace --timeout 120 --out xml
+      run: cargo tarpaulin --verbose --no-default-features --timeout 120 --out xml
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4

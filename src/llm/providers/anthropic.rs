@@ -726,7 +726,7 @@ async fn execute_anthropic_request(
     };
 
     // Calculate cost with proper cache pricing
-    let cached_tokens = anthropic_response
+    let cache_read_tokens = anthropic_response
         .usage
         .cache_read_input_tokens
         .unwrap_or(0);
@@ -736,12 +736,18 @@ async fn execute_anthropic_request(
         .cache_creation_input_tokens
         .unwrap_or(0);
 
+    // CRITICAL FIX: cached_tokens must include BOTH cache_read AND cache_creation
+    // Because prompt_tokens = total input (regular + creation + read)
+    // And regular_prompt_tokens = prompt_tokens - cached_tokens
+    // So cached_tokens must = creation + read to get correct regular tokens
+    let cached_tokens = cache_read_tokens + cache_creation_tokens;
+
     let cost = calculate_anthropic_cost(
         request_body["model"].as_str().unwrap_or(""),
         anthropic_response.usage.input_tokens as u32,
         anthropic_response.usage.output_tokens as u32,
         cache_creation_tokens as u32,
-        cached_tokens as u32,
+        cache_read_tokens as u32,
     );
 
     let usage = TokenUsage {

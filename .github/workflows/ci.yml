@@ -123,9 +123,6 @@ jobs:
           ${{ runner.os }}-${{ matrix.rust }}-cargo-
           ${{ runner.os }}-cargo-
 
-    - name: Clean build artifacts
-      run: cargo clean
-
     - name: Run tests (all features)
       if: runner.os != 'Windows'
       run: cargo test --verbose --lib --all-features

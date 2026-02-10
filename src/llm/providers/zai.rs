@@ -242,6 +242,20 @@ impl AiProvider for ZaiProvider {
         true
     }
 
+    fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
+        // Search through pricing table for matching model
+        for (pricing_model, input_price, output_price) in PRICING {
+            if contains_ignore_ascii_case(model, pricing_model) {
+                // Z.ai doesn't support caching yet, use without_cache
+                return Some(crate::llm::types::ModelPricing::without_cache(
+                    *input_price,
+                    *output_price,
+                ));
+            }
+        }
+        None
+    }
+
     fn get_max_input_tokens(&self, model: &str) -> usize {
         // Z.ai model context window limits (case-insensitive)
         let model_lower = normalize_model_name(model);

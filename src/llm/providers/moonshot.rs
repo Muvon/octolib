@@ -399,6 +399,17 @@ impl AiProvider for MoonshotProvider {
         true
     }
 
+    fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
+        // Moonshot has cache-aware pricing: (cache_hit, cache_miss, output)
+        let (cache_hit, cache_miss, output) = get_model_pricing(model);
+        Some(crate::llm::types::ModelPricing::new(
+            cache_miss, // Regular input (cache miss)
+            output,     // Output price
+            cache_miss, // Cache write = same as cache miss
+            cache_hit,  // Cache read (cache hit)
+        ))
+    }
+
     fn get_max_input_tokens(&self, model: &str) -> usize {
         // Kimi K2 series supports up to 256K context
         if contains_ignore_ascii_case(model, "kimi-k2") {

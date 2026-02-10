@@ -1,5 +1,44 @@
 # Changelog
 
+## [0.8.0] - 2026-02-10
+
+### 📋 Release Summary
+
+This release adds comprehensive Moonshot AI provider support with pricing, context caching, and reasoning capabilities for advanced thinking models (ee8c7233, 23285017, 622f9bf5, 5b3150a1). All providers now include model pricing support for better cost tracking and transparency (56fec226, 3ff3d62f). Documentation has been expanded with new provider guides and enhanced reranking/thinking support details (534f8f94, f21a41a9).
+
+
+### ✨ New Features & Enhancements
+
+- **moonshot**: add new model pricing and support `ee8c7233`
+- **moonshot**: add context caching support `23285017`
+- **llm**: add pricing function to minimax, moonshot, and zai providers `56fec226`
+- **moonshot**: add reasoning_content support for kimi-k2.5 thinking mode `622f9bf5`
+- **pricing**: add model pricing support to all providers `3ff3d62f`
+- **providers**: add Moonshot AI provider support `5b3150a1`
+
+### 📚 Documentation & Examples
+
+- expand reranking and thinking support documentation `534f8a94`
+- add Moonshot, Cohere, Jina, FastEmbed providers `f21a41a9`
+
+### 🔄 Other Changes
+
+- **ci**: remove disk space cleanup step `31de438c`
+- **ci**: use v10 version of maximize-build-space `68dfba39`
+- bump Rust version to 1.92.0 `6a2b74e2`
+- remove redundant cargo clean step `5951d57d`
+- remove CARGO_TARGET_DIR environment variable `25d339be`
+- **coverage**: fix tarpaulin configuration for CI `7799dda2`
+- **deps**: update deps versions `2464c2eb`
+
+### 📊 Release Summary
+
+**Total commits**: 15 across 3 categories
+
+✨ **6** new features - *Enhanced functionality*
+📚 **2** documentation updates - *Better developer experience*
+🔄 **7** other changes - *Maintenance & tooling*
+
 ## [0.7.0] - 2026-02-03
 
 ### 📋 Release Summary

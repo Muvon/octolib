@@ -46,12 +46,19 @@ use std::time::{SystemTime, UNIX_EPOCH};
 // Source: https://platform.moonshot.ai/docs/pricing/chat
 const PRICING: &[(&str, f64, f64, f64)] = &[
     // Model, Cache Hit price, Cache Miss (Input) price, Output price per 1M tokens
-    ("kimi-k2", 0.15, 0.60, 2.50),
+    // Kimi K2 series (newer generation)
+    ("kimi-k2.5", 0.10, 0.60, 3.00),
+    ("kimi-k2-thinking-turbo", 0.15, 1.15, 8.00),
+    ("kimi-k2-turbo", 0.15, 1.15, 8.00),
     ("kimi-k2-thinking", 0.15, 0.60, 2.50),
-    ("kimi-k2-thinking-turbo", 0.15, 0.60, 2.50),
-    ("kimi-k2.5", 0.30, 0.60, 2.50),
     ("kimi-k2-0905", 0.15, 0.60, 2.50),
+    ("kimi-k2-0711", 0.15, 0.60, 2.50),
     ("kimi-k2-0915", 0.15, 0.60, 2.50),
+    ("kimi-k2", 0.15, 0.60, 2.50),
+    // Moonshot V1 series (legacy, no cache support)
+    ("moonshot-v1-128k", 0.0, 2.00, 5.00),
+    ("moonshot-v1-32k", 0.0, 1.00, 3.00),
+    ("moonshot-v1-8k", 0.0, 0.20, 2.00),
 ];
 
 /// Get pricing for a specific model (case-insensitive)
@@ -464,6 +471,7 @@ impl AiProvider for MoonshotProvider {
 
     fn supports_model(&self, model: &str) -> bool {
         contains_ignore_ascii_case(model, "kimi-k2")
+            || contains_ignore_ascii_case(model, "moonshot-v1")
     }
 
     fn get_api_key(&self) -> Result<String> {
@@ -503,10 +511,20 @@ impl AiProvider for MoonshotProvider {
     fn get_max_input_tokens(&self, model: &str) -> usize {
         // Kimi K2 series supports up to 256K context
         if contains_ignore_ascii_case(model, "kimi-k2") {
-            256_000
-        } else {
-            128_000
+            return 256_000;
         }
+        // Moonshot V1 series - context window based on model variant
+        if contains_ignore_ascii_case(model, "moonshot-v1-128k") {
+            return 131_072;
+        }
+        if contains_ignore_ascii_case(model, "moonshot-v1-32k") {
+            return 32_768;
+        }
+        if contains_ignore_ascii_case(model, "moonshot-v1-8k") {
+            return 8_192;
+        }
+        // Default fallback
+        128_000
     }
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
@@ -818,10 +836,20 @@ mod tests {
     #[test]
     fn test_supports_model() {
         let provider = MoonshotProvider::new();
+        // Kimi K2 series
         assert!(provider.supports_model("kimi-k2"));
         assert!(provider.supports_model("kimi-k2-thinking"));
+        assert!(provider.supports_model("kimi-k2-thinking-turbo"));
+        assert!(provider.supports_model("kimi-k2-turbo-preview"));
         assert!(provider.supports_model("kimi-k2.5"));
+        assert!(provider.supports_model("kimi-k2-0711-preview"));
         assert!(provider.supports_model("KIMI-K2"));
+        // Moonshot V1 series
+        assert!(provider.supports_model("moonshot-v1-8k"));
+        assert!(provider.supports_model("moonshot-v1-32k"));
+        assert!(provider.supports_model("moonshot-v1-128k"));
+        assert!(provider.supports_model("moonshot-v1-8k-vision-preview"));
+        // Not supported
         assert!(!provider.supports_model("gpt-4"));
     }
 
@@ -852,14 +880,54 @@ mod tests {
         // Cost with cache should be less
         let cost_no_cache = calculate_cost("kimi-k2", 1_000_000, 250_000);
         assert!(cost.unwrap() < cost_no_cache.unwrap());
+
+        // kimi-k2.5: Cache hit: $0.10/1M, Cache miss: $0.60/1M, Output: $3.00/1M
+        let cost_k25 = calculate_cost_with_cache("kimi-k2.5", 400_000, 600_000, 500_000);
+        assert!(cost_k25.is_some());
+        let expected_k25 = (0.4 * 0.60) + (0.6 * 0.10) + (0.5 * 3.00);
+        assert!((cost_k25.unwrap() - expected_k25).abs() < 0.01);
+
+        // kimi-k2-thinking-turbo: Cache hit: $0.15/1M, Cache miss: $1.15/1M, Output: $8.00/1M
+        let cost_turbo =
+            calculate_cost_with_cache("kimi-k2-thinking-turbo", 500_000, 500_000, 250_000);
+        assert!(cost_turbo.is_some());
+        let expected_turbo = (0.5 * 1.15) + (0.5 * 0.15) + (0.25 * 8.00);
+        assert!((cost_turbo.unwrap() - expected_turbo).abs() < 0.01);
     }
 
     #[test]
     fn test_get_max_input_tokens() {
         let provider = MoonshotProvider::new();
+        // Kimi K2 series
         assert_eq!(provider.get_max_input_tokens("kimi-k2"), 256_000);
         assert_eq!(provider.get_max_input_tokens("kimi-k2.5"), 256_000);
+        // Moonshot V1 series
+        assert_eq!(provider.get_max_input_tokens("moonshot-v1-128k"), 131_072);
+        assert_eq!(provider.get_max_input_tokens("moonshot-v1-32k"), 32_768);
+        assert_eq!(provider.get_max_input_tokens("moonshot-v1-8k"), 8_192);
+        // Unknown
         assert_eq!(provider.get_max_input_tokens("unknown"), 128_000);
+    }
+
+    #[test]
+    fn test_moonshot_v1_pricing() {
+        // moonshot-v1-8k: Input: $0.20/1M, Output: $2.00/1M (no cache)
+        let cost = calculate_cost("moonshot-v1-8k", 1_000_000, 500_000);
+        assert!(cost.is_some());
+        let expected = 0.20 + (0.5 * 2.00);
+        assert!((cost.unwrap() - expected).abs() < 0.01);
+
+        // moonshot-v1-32k: Input: $1.00/1M, Output: $3.00/1M
+        let cost_32k = calculate_cost("moonshot-v1-32k", 1_000_000, 500_000);
+        assert!(cost_32k.is_some());
+        let expected_32k = 1.00 + (0.5 * 3.00);
+        assert!((cost_32k.unwrap() - expected_32k).abs() < 0.01);
+
+        // moonshot-v1-128k: Input: $2.00/1M, Output: $5.00/1M
+        let cost_128k = calculate_cost("moonshot-v1-128k", 1_000_000, 500_000);
+        assert!(cost_128k.is_some());
+        let expected_128k = 2.00 + (0.5 * 5.00);
+        assert!((cost_128k.unwrap() - expected_128k).abs() < 0.01);
     }
 
     #[test]

@@ -28,6 +28,7 @@
 //! - Output: $2.50
 
 use crate::errors::ProviderError;
+use crate::llm::config::CacheTTL;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
@@ -37,6 +38,7 @@ use crate::llm::utils::contains_ignore_ascii_case;
 use anyhow::Result;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -105,6 +107,38 @@ impl MoonshotProvider {
 }
 
 const MOONSHOT_API_KEY_ENV: &str = "MOONSHOT_API_KEY";
+const MOONSHOT_CACHE_ENDPOINT: &str = "https://api.moonshot.ai/v1/caching";
+
+fn cache_ttl_secs(
+    messages: &[crate::llm::types::Message],
+    tools: Option<&[crate::llm::types::FunctionDefinition]>,
+) -> u64 {
+    let default_ttl = CacheTTL::short().to_duration().as_secs();
+
+    let has_cached_system = messages.iter().any(|m| m.role == "system" && m.cached);
+    if !has_cached_system {
+        return default_ttl;
+    }
+
+    let has_long_cache_tool = tools
+        .unwrap_or(&[])
+        .iter()
+        .filter_map(|tool| tool.cache_control.as_ref())
+        .any(|cache_control| {
+            cache_control
+                .get("ttl")
+                .and_then(|ttl| ttl.as_str())
+                .and_then(|ttl| CacheTTL::from_string(ttl).ok())
+                .map(|ttl| ttl.is_long())
+                .unwrap_or(false)
+        });
+
+    if has_long_cache_tool {
+        CacheTTL::long().to_duration().as_secs()
+    } else {
+        default_ttl
+    }
+}
 
 // Moonshot API request/response structures (OpenAI-compatible)
 #[derive(Serialize, Debug)]
@@ -123,6 +157,22 @@ struct MoonshotRequest {
     tools: Option<Vec<MoonshotTool>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<serde_json::Value>,
+}
+
+#[derive(Serialize, Debug)]
+struct MoonshotCacheRequest {
+    model: String,
+    messages: Vec<MoonshotMessage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tools: Option<Vec<MoonshotTool>>,
+    ttl: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tags: Option<Vec<String>>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct MoonshotCacheResponse {
+    id: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -205,6 +255,46 @@ struct MoonshotToolFunction {
     parameters: serde_json::Value,
 }
 
+fn to_hex(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        out.push_str(&format!("{:02x}", b));
+    }
+    out
+}
+
+fn build_cache_tag(
+    model: &str,
+    messages: &[MoonshotMessage],
+    tools: Option<&[MoonshotTool]>,
+) -> String {
+    let payload = serde_json::json!({
+        "model": model,
+        "messages": messages,
+        "tools": tools
+    });
+    let bytes = serde_json::to_vec(&payload).unwrap_or_default();
+    let digest = Sha256::digest(bytes);
+    format!("octolib-cache-{}", to_hex(&digest))
+}
+
+fn build_moonshot_tools(tools: &[crate::llm::types::FunctionDefinition]) -> Vec<MoonshotTool> {
+    let mut sorted_tools = tools.to_vec();
+    sorted_tools.sort_by(|a, b| a.name.cmp(&b.name));
+
+    sorted_tools
+        .iter()
+        .map(|f| MoonshotTool {
+            tool_type: "function".to_string(),
+            function: MoonshotToolFunction {
+                name: f.name.clone(),
+                description: f.description.clone(),
+                parameters: f.parameters.clone(),
+            },
+        })
+        .collect()
+}
+
 // Convert messages to Moonshot (OpenAI-compatible) format
 fn convert_messages(messages: &[crate::llm::types::Message], _model: &str) -> Vec<MoonshotMessage> {
     let mut result = Vec::new();
@@ -285,16 +375,16 @@ fn convert_messages(messages: &[crate::llm::types::Message], _model: &str) -> Ve
                     .ok()
                 };
 
-
                 // Extract reasoning_content from thinking block if present.
                 // Moonshot requires reasoning_content for assistant messages with tool_calls.
                 // Always include the field (even if empty) for tool calls.
+                // CRITICAL: Handle both fresh responses and replayed messages from cache
                 let reasoning_content = Some(
                     message
                         .thinking
                         .as_ref()
                         .map(|t| t.content.clone())
-                        .unwrap_or_else(String::new),
+                        .unwrap_or_default(), // Use unwrap_or_default() instead of unwrap_or_else for consistency
                 );
 
                 result.push(MoonshotMessage {
@@ -422,8 +512,90 @@ impl AiProvider for MoonshotProvider {
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
         let api_key = self.get_api_key()?;
 
-        // Convert messages to Moonshot format
-        let messages = convert_messages(&params.messages, &params.model);
+        // Convert messages to Moonshot format (with optional context caching)
+        let mut tools_in_cache = false;
+        let mut messages = convert_messages(&params.messages, &params.model);
+
+        if let Some(cache_index) = params.messages.iter().rposition(|m| m.cached) {
+            let (cached_messages, remaining_messages) = params.messages.split_at(cache_index + 1);
+            let cached_moonshot_messages = convert_messages(cached_messages, &params.model);
+
+            let cache_tools = params
+                .tools
+                .as_ref()
+                .map(|tools| build_moonshot_tools(tools));
+
+            let cache_ttl_secs = cache_ttl_secs(&params.messages, params.tools.as_deref());
+            let cache_tag = build_cache_tag(
+                &params.model,
+                &cached_moonshot_messages,
+                cache_tools.as_deref(),
+            );
+
+            let cache_request = MoonshotCacheRequest {
+                model: params.model.clone(),
+                messages: cached_moonshot_messages,
+                tools: cache_tools.clone(),
+                ttl: cache_ttl_secs,
+                tags: Some(vec![cache_tag]),
+            };
+
+            let cache_id = retry::cancellable(
+                async {
+                    let response = self
+                        .client
+                        .post(MOONSHOT_CACHE_ENDPOINT)
+                        .header("Authorization", format!("Bearer {}", api_key))
+                        .header("Content-Type", "application/json")
+                        .json(&cache_request)
+                        .send()
+                        .await
+                        .map_err(anyhow::Error::from)?;
+
+                    if !response.status().is_success() {
+                        let status = response.status();
+                        let error_text = response.text().await.unwrap_or_default();
+                        return Err(anyhow::anyhow!(
+                            "Moonshot cache API error {}: {}",
+                            status,
+                            error_text
+                        ));
+                    }
+
+                    let cache_response: MoonshotCacheResponse =
+                        response.json().await.map_err(anyhow::Error::from)?;
+                    Ok(cache_response.id)
+                },
+                params.cancellation_token.as_ref(),
+                || ProviderError::Cancelled.into(),
+            )
+            .await
+            .map_err(|e| {
+                tracing::warn!("Moonshot cache creation failed: {}", e);
+                e
+            })
+            .ok();
+
+            if let Some(cache_id) = cache_id {
+                let cache_message = MoonshotMessage {
+                    role: "cache".to_string(),
+                    content: Some(serde_json::json!(format!(
+                        "cache_id={};reset_ttl={}",
+                        cache_id, cache_ttl_secs
+                    ))),
+                    tool_calls: None,
+                    tool_call_id: None,
+                    name: None,
+                    reasoning_content: None,
+                };
+
+                let mut cached_chat_messages = Vec::new();
+                cached_chat_messages.push(cache_message);
+                cached_chat_messages.extend(convert_messages(remaining_messages, &params.model));
+                messages = cached_chat_messages;
+                tools_in_cache = cache_tools.is_some();
+            }
+        }
 
         // Kimi K2.5 only accepts temperature=1.0. Other models use standard temperature.
         let temperature = if contains_ignore_ascii_case(&params.model, "kimi-k2.5") {
@@ -449,22 +621,8 @@ impl AiProvider for MoonshotProvider {
 
         // Add tools if available (Moonshot is OpenAI-compatible)
         if let Some(tools) = &params.tools {
-            if !tools.is_empty() {
-                let mut sorted_tools = tools.clone();
-                sorted_tools.sort_by(|a, b| a.name.cmp(&b.name));
-
-                let moonshot_tools = sorted_tools
-                    .iter()
-                    .map(|f| MoonshotTool {
-                        tool_type: "function".to_string(),
-                        function: MoonshotToolFunction {
-                            name: f.name.clone(),
-                            description: f.description.clone(),
-                            parameters: f.parameters.clone(),
-                        },
-                    })
-                    .collect::<Vec<_>>();
-
+            if !tools.is_empty() && !tools_in_cache {
+                let moonshot_tools = build_moonshot_tools(tools);
                 request.tools = Some(moonshot_tools);
                 request.tool_choice = Some(serde_json::json!("auto"));
             }

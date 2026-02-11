@@ -79,13 +79,7 @@ impl JinaProviderImpl {
             "jina-colbert-v2-64" => 64,
             "jina-code-embeddings-0.5b" => 1024,
             "jina-code-embeddings-1.5b" => 1024,
-            _ => {
-                // This should never be reached due to validation in new()
-                panic!(
-                    "Invalid Jina model '{}' passed to get_model_dimension",
-                    model
-                );
-            }
+            _ => unreachable!("Invalid Jina model '{}' passed to get_model_dimension - this is a bug as model should be validated in new()", model),
         }
     }
 }

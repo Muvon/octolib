@@ -75,13 +75,7 @@ impl VoyageProviderImpl {
             "voyage-2" => 1024,
             "voyage-context-3" => 1024,
             "voyage-multimodal-3.5" => 1024,
-            _ => {
-                // This should never be reached due to validation in new()
-                panic!(
-                    "Invalid Voyage model '{}' passed to get_model_dimension",
-                    model
-                );
-            }
+            _ => unreachable!("Invalid Voyage model '{}' passed to get_model_dimension - this is a bug as model should be validated in new()", model),
         }
     }
 }

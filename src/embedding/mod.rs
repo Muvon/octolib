@@ -32,7 +32,7 @@ pub use types::*;
 /// Generate embeddings using specified provider and model
 pub async fn generate_embeddings(contents: &str, provider: &str, model: &str) -> Result<Vec<f32>> {
     // Parse provider and model from the string
-    let (provider_type, model_name) = parse_provider_model(&format!("{}:{}", provider, model));
+    let (provider_type, model_name) = parse_provider_model(&format!("{}:{}", provider, model))?;
 
     let provider_impl = create_embedding_provider_from_parts(&provider_type, &model_name).await?;
     provider_impl.generate_embedding(contents).await
@@ -123,7 +123,7 @@ pub async fn generate_embeddings_batch(
     max_tokens_per_batch: usize,
 ) -> Result<Vec<Vec<f32>>> {
     // Parse provider and model from the string
-    let (provider_type, model_name) = parse_provider_model(&format!("{}:{}", provider, model));
+    let (provider_type, model_name) = parse_provider_model(&format!("{}:{}", provider, model))?;
 
     let provider_impl = create_embedding_provider_from_parts(&provider_type, &model_name).await?;
 

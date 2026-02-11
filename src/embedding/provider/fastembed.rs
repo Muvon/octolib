@@ -277,7 +277,7 @@ impl FastEmbedProvider {
             "Alibaba-NLP/gte-large-en-v1.5-quantized" => EmbeddingModel::GTELargeENV15Q,
             "Qdrant/clip-ViT-B-32-text" => EmbeddingModel::ClipVitB32,
             "jinaai/jina-embeddings-v2-base-code" => EmbeddingModel::JinaEmbeddingsV2BaseCode,
-            _ => panic!("Unsupported embedding model: {}", model),
+            _ => unreachable!("Unsupported embedding model: {} - this is a bug as model should be validated in new()", model),
         }
     }
 }

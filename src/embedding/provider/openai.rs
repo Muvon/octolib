@@ -55,13 +55,7 @@ impl OpenAIProviderImpl {
             "text-embedding-3-small" => 1536,
             "text-embedding-3-large" => 3072,
             "text-embedding-ada-002" => 1536,
-            _ => {
-                // This should never be reached due to validation in new()
-                panic!(
-                    "Invalid OpenAI model '{}' passed to get_model_dimension",
-                    model
-                );
-            }
+            _ => unreachable!("Invalid OpenAI model '{}' passed to get_model_dimension - this is a bug as model should be validated in new()", model),
         }
     }
 }

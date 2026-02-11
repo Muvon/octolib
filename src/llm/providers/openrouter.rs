@@ -15,6 +15,7 @@
 //! OpenRouter provider implementation
 
 use crate::errors::ProviderError;
+use crate::errors::ToolCallError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
@@ -176,8 +177,8 @@ impl AiProvider for OpenRouterProvider {
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
         let api_key = self.get_api_key()?;
 
-        // Convert messages to OpenAI-compatible format (OpenRouter uses OpenAI API)
-        let messages = convert_messages(&params.messages);
+        // Convert messages to OpenRouter format (same as OpenAI)
+        let messages = convert_messages(&params.messages)?;
 
         // Create the request body
         let mut request_body = serde_json::json!({
@@ -346,7 +347,7 @@ struct OpenRouterUsage {
 }
 
 // Convert messages to OpenRouter format (same as OpenAI)
-fn convert_messages(messages: &[Message]) -> Vec<OpenRouterMessage> {
+fn convert_messages(messages: &[Message]) -> Result<Vec<OpenRouterMessage>, ToolCallError> {
     let mut result = Vec::new();
 
     for message in messages {
@@ -407,38 +408,37 @@ fn convert_messages(messages: &[Message]) -> Vec<OpenRouterMessage> {
                 };
 
                 // Convert unified GenericToolCall format to OpenRouter format
-                let (tool_calls, reasoning_details) = if let Ok(generic_calls) =
-                    serde_json::from_value::<Vec<crate::llm::tool_calls::GenericToolCall>>(
-                        message.tool_calls.clone().unwrap(),
-                    ) {
-                    // Extract reasoning_details from first tool call's meta (Gemini thought signatures)
-                    let reasoning_details = generic_calls
-                        .first()
-                        .and_then(|call| call.meta.as_ref())
-                        .and_then(|meta| meta.get("reasoning_details"))
-                        .cloned();
+                let generic_calls: Vec<crate::llm::tool_calls::GenericToolCall> =
+                    serde_json::from_value(message.tool_calls.clone().unwrap()).map_err(|_| {
+                        ToolCallError::InvalidFormat {
+                            provider: "openrouter".to_string(),
+                            reason: "tool_calls must be Vec<GenericToolCall>".to_string(),
+                        }
+                    })?;
 
-                    // Convert GenericToolCall to OpenRouter format
-                    let openrouter_calls: Vec<serde_json::Value> = generic_calls
-                        .into_iter()
-                        .map(|call| {
-                            serde_json::json!({
-                                "id": call.id,
-                                "type": "function",
-                                "function": {
-                                    "name": call.name,
-                                    "arguments": serde_json::to_string(&call.arguments).unwrap_or_default()
-                                }
-                            })
+                // Extract reasoning_details from first tool call's meta (Gemini thought signatures)
+                let reasoning_details = generic_calls
+                    .first()
+                    .and_then(|call| call.meta.as_ref())
+                    .and_then(|meta| meta.get("reasoning_details"))
+                    .cloned();
+
+                // Convert GenericToolCall to OpenRouter format
+                let openrouter_calls: Vec<serde_json::Value> = generic_calls
+                    .into_iter()
+                    .map(|call| {
+                        serde_json::json!({
+                            "id": call.id,
+                            "type": "function",
+                            "function": {
+                                "name": call.name,
+                                "arguments": serde_json::to_string(&call.arguments).unwrap_or_default()
+                            }
                         })
-                        .collect();
-                    (
-                        Some(serde_json::Value::Array(openrouter_calls)),
-                        reasoning_details,
-                    )
-                } else {
-                    panic!("Invalid tool_calls format - must be Vec<GenericToolCall>");
-                };
+                    })
+                    .collect();
+
+                let tool_calls = Some(serde_json::Value::Array(openrouter_calls));
 
                 result.push(OpenRouterMessage {
                     role: message.role.clone(),
@@ -499,7 +499,7 @@ fn convert_messages(messages: &[Message]) -> Vec<OpenRouterMessage> {
         }
     }
 
-    result
+    Ok(result)
 }
 
 // Execute OpenRouter HTTP request

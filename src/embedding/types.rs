@@ -113,10 +113,10 @@ impl Default for EmbeddingConfig {
 }
 
 /// Parse provider and model from a string in format "provider:model"
-pub fn parse_provider_model(input: &str) -> (EmbeddingProviderType, String) {
-    let (provider_str, model) = input
-        .split_once(':')
-        .expect("Model format must be 'provider:model' (e.g., 'jina:jina-embeddings-v4')");
+pub fn parse_provider_model(input: &str) -> Result<(EmbeddingProviderType, String)> {
+    let (provider_str, model) = input.split_once(':').ok_or_else(|| {
+        anyhow::anyhow!("Model format must be 'provider:model' (e.g., 'jina:jina-embeddings-v4')")
+    })?;
 
     let provider = match provider_str.to_lowercase().as_str() {
         "fastembed" => EmbeddingProviderType::FastEmbed,
@@ -125,21 +125,23 @@ pub fn parse_provider_model(input: &str) -> (EmbeddingProviderType, String) {
         "google" => EmbeddingProviderType::Google,
         "huggingface" | "hf" => EmbeddingProviderType::HuggingFace,
         "openai" => EmbeddingProviderType::OpenAI,
-        unknown => panic!(
-            "Unknown embedding provider '{}'. Supported: fastembed, jina, voyage, google, huggingface, openai. \
-             This is a programming error - the provider should be validated before calling parse_provider_model.",
-            unknown
-        ),
+        unknown => {
+            return Err(anyhow::anyhow!(
+                "Unknown embedding provider '{}'. Supported: fastembed, jina, voyage, google, huggingface, openai. \
+                 This is a programming error - the provider should be validated before calling parse_provider_model.",
+                unknown
+            ));
+        }
     };
 
-    (provider, model.to_string())
+    Ok((provider, model.to_string()))
 }
 
 impl EmbeddingConfig {
     /// Get the currently active provider based on the code model
-    pub fn get_active_provider(&self) -> EmbeddingProviderType {
-        let (provider, _) = parse_provider_model(&self.code_model);
-        provider
+    pub fn get_active_provider(&self) -> Result<EmbeddingProviderType> {
+        let (provider, _) = parse_provider_model(&self.code_model)?;
+        Ok(provider)
     }
 
     /// Get API key for a specific provider (from environment variables only)
@@ -157,17 +159,11 @@ impl EmbeddingConfig {
         &self,
         provider: &EmbeddingProviderType,
         model: &str,
-    ) -> usize {
+    ) -> Result<usize> {
         // Try to create provider and get dimension
-        match super::provider::create_embedding_provider_from_parts(provider, model).await {
-            Ok(provider_impl) => provider_impl.get_dimension(),
-            Err(e) => {
-                panic!(
-                    "Failed to create provider for {:?}:{}: {}. Using fallback dimension.",
-                    provider, model, e
-                );
-            }
-        }
+        let provider_impl =
+            super::provider::create_embedding_provider_from_parts(provider, model).await?;
+        Ok(provider_impl.get_dimension())
     }
 
     /// Validate model by trying to create provider
@@ -226,22 +222,22 @@ mod tests {
     #[test]
     fn test_parse_provider_model() {
         // Test valid provider:model format
-        let (provider, model) = parse_provider_model("jina:jina-embeddings-v4");
+        let (provider, model) = parse_provider_model("jina:jina-embeddings-v4").unwrap();
         assert_eq!(provider, EmbeddingProviderType::Jina);
         assert_eq!(model, "jina-embeddings-v4");
 
         // Test voyage provider
-        let (provider, model) = parse_provider_model("voyage:voyage-3.5");
+        let (provider, model) = parse_provider_model("voyage:voyage-3.5").unwrap();
         assert_eq!(provider, EmbeddingProviderType::Voyage);
         assert_eq!(model, "voyage-3.5");
 
         // Test google provider
-        let (provider, model) = parse_provider_model("google:gemini-embedding-001");
+        let (provider, model) = parse_provider_model("google:gemini-embedding-001").unwrap();
         assert_eq!(provider, EmbeddingProviderType::Google);
         assert_eq!(model, "gemini-embedding-001");
 
         // Test openai provider
-        let (provider, model) = parse_provider_model("openai:text-embedding-3-small");
+        let (provider, model) = parse_provider_model("openai:text-embedding-3-small").unwrap();
         assert_eq!(provider, EmbeddingProviderType::OpenAI);
         assert_eq!(model, "text-embedding-3-small");
     }
@@ -253,7 +249,7 @@ mod tests {
             text_model: "voyage:voyage-3.5".to_string(),
         };
 
-        let active_provider = config.get_active_provider();
+        let active_provider = config.get_active_provider().unwrap();
         assert_eq!(active_provider, EmbeddingProviderType::Jina);
     }
 

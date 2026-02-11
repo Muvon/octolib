@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.8.1] - 2026-02-11
+
+### 📋 Release Summary
+
+This release improves cost tracking accuracy by fixing token caching calculations for Moonshot and other providers (956423a9, ee7e0094). Enhanced error handling ensures more reliable provider operations (118c6b46).
+
+
+### 🔧 Improvements & Optimizations
+
+- **openrouter**: replace panics with error handling `118c6b46`
+
+### 🐛 Bug Fixes & Stability
+
+- **moonshot**: fix cached_tokens detection and remove deprecated manual caching `956423a9`
+- **llm**: correct cache token calculation for pricing `ee7e0094`
+
+### 📊 Release Summary
+
+**Total commits**: 3 across 2 categories
+
+🔧 **1** improvement - *Better performance & code quality*
+🐛 **2** bug fixes - *Improved stability*
+
 ## [0.8.0] - 2026-02-10
 
 ### 📋 Release Summary

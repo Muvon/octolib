@@ -137,9 +137,8 @@ fn calculate_anthropic_cost(
         0
     };
 
-    // Calculate regular input tokens (total input minus cache tokens)
-    let regular_input_tokens =
-        input_tokens.saturating_sub(cache_creation_input_tokens + cache_read_input_tokens);
+    // input_tokens from API is ALREADY clean (non-cached regular tokens)
+    let regular_input_tokens = input_tokens;
 
     let usage = CacheTokenUsage {
         regular_input_tokens: regular_input_tokens as u64,
@@ -740,14 +739,12 @@ async fn execute_anthropic_request(
         .cache_creation_input_tokens
         .unwrap_or(0);
 
-    // CRITICAL: Calculate CLEAN input tokens (no cache tokens)
-    // Anthropic's input_tokens = regular + cache_creation (write) + cache_read
-    // So: input_tokens_clean = input_tokens - cache_read - cache_creation
-    let input_tokens_clean = anthropic_response
-        .usage
-        .input_tokens
-        .saturating_sub(cache_read_tokens)
-        .saturating_sub(cache_creation_tokens);
+    // CRITICAL: input_tokens from API is ALREADY clean (non-cached)
+    // According to Anthropic docs:
+    // - input_tokens = regular non-cached tokens only (NEW tokens in this request)
+    // - cache_creation_input_tokens = tokens written to cache (separate)
+    // - cache_read_input_tokens = tokens read from cache (separate)
+    let input_tokens_clean = anthropic_response.usage.input_tokens;
 
     let cost = calculate_anthropic_cost(
         request_body["model"].as_str().unwrap_or(""),

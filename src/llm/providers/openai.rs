@@ -88,10 +88,10 @@ const PRICING: &[(&str, f64, Option<f64>, f64)] = &[
 ];
 
 /// Calculate cost for OpenAI models with basic pricing (case-insensitive)
-fn calculate_cost(model: &str, prompt_tokens: u64, completion_tokens: u64) -> Option<f64> {
+fn calculate_cost(model: &str, input_tokens: u64, completion_tokens: u64) -> Option<f64> {
     for (pricing_model, input_price, _, output_price) in PRICING {
         if contains_ignore_ascii_case(model, pricing_model) {
-            let input_cost = (prompt_tokens as f64 / 1_000_000.0) * input_price;
+            let input_cost = (input_tokens as f64 / 1_000_000.0) * input_price;
             let output_cost = (completion_tokens as f64 / 1_000_000.0) * output_price;
             return Some(input_cost + output_cost);
         }
@@ -808,17 +808,31 @@ async fn execute_openai_request(
             }
         });
 
+    // OpenAI reports cache_read in input_tokens_details, but NOT cache_write
+    // input_tokens from API includes: regular_input + cache_read
+    let cache_read_tokens = api_response
+        .usage
+        .input_tokens_details
+        .as_ref()
+        .map(|d| d.cached_tokens)
+        .unwrap_or(0);
+
+    // OpenAI does NOT report cache_write tokens in API response
+    let cache_write_tokens = 0_u64;
+
+    // Calculate CLEAN input tokens (no cache)
+    let input_tokens_clean = api_response
+        .usage
+        .input_tokens
+        .saturating_sub(cache_read_tokens);
+
     let usage = TokenUsage {
-        prompt_tokens: api_response.usage.input_tokens,
+        input_tokens: input_tokens_clean, // CLEAN input (no cache)
+        cache_read_tokens,                // Tokens read from cache
+        cache_write_tokens,               // OpenAI doesn't expose this (0)
         output_tokens: api_response.usage.output_tokens,
         reasoning_tokens,
         total_tokens: api_response.usage.total_tokens + reasoning_tokens,
-        cached_tokens: api_response
-            .usage
-            .input_tokens_details
-            .as_ref()
-            .map(|d| d.cached_tokens)
-            .unwrap_or(0),
         cost,
         request_time_ms: Some(request_time_ms),
     };

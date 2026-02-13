@@ -382,11 +382,12 @@ mod tests {
                 ]
             }),
             Some(TokenUsage {
-                prompt_tokens: 100,
+                input_tokens: 100,
+                cache_read_tokens: 0,
+                cache_write_tokens: 0,
                 output_tokens: 50,
                 reasoning_tokens: 0,
                 total_tokens: 150,
-                cached_tokens: 0,
                 cost: Some(0.01),
                 request_time_ms: Some(1000),
             }),

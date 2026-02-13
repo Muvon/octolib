@@ -92,10 +92,10 @@ const PRICING: &[(&str, f64, f64)] = &[
 ];
 
 /// Calculate cost for Z.ai models (case-insensitive)
-fn calculate_cost(model: &str, prompt_tokens: u64, completion_tokens: u64) -> Option<f64> {
+fn calculate_cost(model: &str, input_tokens: u64, completion_tokens: u64) -> Option<f64> {
     for (pricing_model, input_price, output_price) in PRICING {
         if contains_ignore_ascii_case(model, pricing_model) {
-            let input_cost = (prompt_tokens as f64 / 1_000_000.0) * input_price;
+            let input_cost = (input_tokens as f64 / 1_000_000.0) * input_price;
             let output_cost = (completion_tokens as f64 / 1_000_000.0) * output_price;
             return Some(input_cost + output_cost);
         }
@@ -197,7 +197,7 @@ struct ZaiChoice {
 
 #[derive(Deserialize, Debug)]
 struct ZaiUsage {
-    prompt_tokens: u64,
+    input_tokens: u64,
     completion_tokens: u64,
     total_tokens: u64,
     #[serde(default)]
@@ -503,24 +503,33 @@ async fn execute_zai_request(
 
     // Calculate cost
     let usage = zai_response.usage.as_ref();
-    let prompt_tokens = usage.map(|u| u.prompt_tokens).unwrap_or(0);
+    let input_tokens = usage.map(|u| u.input_tokens).unwrap_or(0);
     let completion_tokens = usage.map(|u| u.completion_tokens).unwrap_or(0);
-    let cached_tokens = usage
+
+    // Z.ai reports cached_tokens in prompt_tokens_details (these are cache READ tokens)
+    let cache_read_tokens = usage
         .map(|u| u.prompt_tokens_details.cached_tokens)
         .unwrap_or(0);
 
+    // Z.ai doesn't expose cache_write separately
+    let cache_write_tokens = 0_u64;
+
+    // Calculate CLEAN input tokens (no cache)
+    let input_tokens_clean = input_tokens.saturating_sub(cache_read_tokens);
+
     let cost = calculate_cost(
         zai_response.model.as_str(),
-        prompt_tokens.saturating_sub(cached_tokens),
+        input_tokens_clean,
         completion_tokens,
     );
 
     let token_usage = TokenUsage {
-        prompt_tokens,
+        input_tokens: input_tokens_clean, // CLEAN input (no cache)
+        cache_read_tokens,                // Tokens read from cache
+        cache_write_tokens,               // Z.ai doesn't expose this (0)
         output_tokens: completion_tokens,
         reasoning_tokens: 0, // Z.ai doesn't provide reasoning token count
         total_tokens: usage.map(|u| u.total_tokens).unwrap_or(0),
-        cached_tokens,
         cost,
         request_time_ms: Some(request_time_ms),
     };

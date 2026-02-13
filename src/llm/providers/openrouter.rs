@@ -341,7 +341,7 @@ struct OpenRouterFunction {
 
 #[derive(Deserialize, Debug)]
 struct OpenRouterUsage {
-    prompt_tokens: u64,
+    input_tokens: u64,
     completion_tokens: u64,
     total_tokens: u64,
 }
@@ -650,13 +650,15 @@ async fn execute_openrouter_request(
     // Estimate reasoning tokens from thinking content length (4 chars per token)
     let reasoning_tokens = thinking.as_ref().map(|t| t.tokens).unwrap_or(0);
 
+    // OpenRouter doesn't provide cache info in usage
     let usage = TokenUsage {
-        prompt_tokens: openrouter_response.usage.prompt_tokens,
+        input_tokens: openrouter_response.usage.input_tokens, // All input (no cache breakdown)
+        cache_read_tokens: 0,                                 // Not provided by OpenRouter
+        cache_write_tokens: 0,                                // Not provided by OpenRouter
         output_tokens: openrouter_response.usage.completion_tokens,
         reasoning_tokens,
         total_tokens: openrouter_response.usage.total_tokens,
-        cached_tokens: 0, // OpenRouter doesn't provide cache info in usage
-        cost: None,       // OpenRouter doesn't provide cost info directly
+        cost: None, // OpenRouter doesn't provide cost
         request_time_ms: Some(request_time_ms),
     };
 

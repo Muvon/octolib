@@ -256,8 +256,11 @@ async fn structured_output_example() -> anyhow::Result<()> {
 ```rust
 let response = provider.chat_completion(params).await?;
 if let Some(usage) = response.exchange.usage {
-    println!("Prompt Tokens: {}", usage.prompt_tokens);
+    println!("Input Tokens: {}", usage.input_tokens);
+    println!("Cache Read Tokens: {}", usage.cache_read_tokens);
+    println!("Cache Write Tokens: {}", usage.cache_write_tokens);
     println!("Output Tokens: {}", usage.output_tokens);
+    println!("Reasoning Tokens: {}", usage.reasoning_tokens);
     println!("Total Cost: ${}", usage.cost.unwrap_or(0.0));
 }
 ```

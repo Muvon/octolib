@@ -380,18 +380,53 @@ impl ThinkingBlock {
 }
 
 /// Common token usage structure across all providers
+///
+/// # Token Categories
+/// - `input_tokens`: CLEAN input tokens (never includes cache tokens) - user messages, system prompts, tool definitions, tool responses
+/// - `cache_read_tokens`: Tokens read from cache (cheaper rate, already cached from previous request)
+/// - `cache_write_tokens`: Tokens written to cache (premium rate, happens once per cache entry)
+/// - `output_tokens`: AI-generated response tokens (completion)
+/// - `reasoning_tokens`: Tokens used for thinking/reasoning (separate from output, DeepSeek R1, Claude thinking, etc.)
+///
+/// # Total Calculation
+/// `total_tokens` should equal: input_tokens + cache_read_tokens + cache_write_tokens + output_tokens
+///
+/// # Provider-Specific Notes
+/// - **Anthropic**: Reports cache_read and cache_creation (write) separately; input_tokens includes everything
+/// - **OpenAI**: Reports cache_read in details; input_tokens includes regular + cache_read; NO cache_write info
+/// - **DeepSeek**: Reports cache_hit (read) and cache_miss; input_tokens includes everything
+/// - **OpenRouter**: NO cache info provided
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TokenUsage {
-    pub prompt_tokens: u64, // ALL input tokens (user messages, system prompts, tool definitions, tool responses)
-    pub output_tokens: u64, // AI-generated response tokens only (excludes thinking tokens)
-    pub reasoning_tokens: u64, // Tokens used for thinking/reasoning (separate from output)
-    pub total_tokens: u64,  // prompt_tokens + output_tokens + reasoning_tokens
-    pub cached_tokens: u64, // Subset of prompt_tokens that came from cache (discounted)
+    /// CLEAN input tokens - NEVER includes any cache tokens (read or write)
+    /// These are "fresh" tokens being sent to the API for the first time
+    pub input_tokens: u64,
+
+    /// Tokens read from cache (cache hit) - cheaper pricing tier
+    /// These were previously cached and are being retrieved
+    pub cache_read_tokens: u64,
+
+    /// Tokens written to cache (cache creation/write) - premium pricing tier
+    /// These are being stored in cache for future use
+    pub cache_write_tokens: u64,
+
+    /// AI-generated response tokens (completion/output)
+    pub output_tokens: u64,
+
+    /// Tokens used for thinking/reasoning (DeepSeek R1, Claude thinking, etc.)
+    /// These are separate from output_tokens
+    pub reasoning_tokens: u64,
+
+    /// Total tokens as reported by provider (should equal input + cache_read + cache_write + output)
+    pub total_tokens: u64,
+
+    /// Pre-calculated total cost in USD (provider handles cache pricing)
     #[serde(default)]
-    pub cost: Option<f64>, // Pre-calculated total cost (provider handles cache pricing)
-    // Time tracking
+    pub cost: Option<f64>,
+
+    /// Time spent on this API request in milliseconds
     #[serde(default)]
-    pub request_time_ms: Option<u64>, // Time spent on this API request
+    pub request_time_ms: Option<u64>,
 }
 
 /// Common exchange record for logging across all providers
@@ -760,20 +795,22 @@ mod tests {
     #[test]
     fn test_token_usage() {
         let usage = TokenUsage {
-            prompt_tokens: 100,
+            input_tokens: 100,
+            cache_read_tokens: 50,
+            cache_write_tokens: 25,
             output_tokens: 50,
             reasoning_tokens: 30,
-            total_tokens: 180,
-            cached_tokens: 20,
+            total_tokens: 255, // 100 + 50 + 25 + 50 + 30 (if provider includes reasoning)
             cost: Some(0.01),
             request_time_ms: Some(1500),
         };
 
-        assert_eq!(usage.prompt_tokens, 100);
+        assert_eq!(usage.input_tokens, 100);
+        assert_eq!(usage.cache_read_tokens, 50);
+        assert_eq!(usage.cache_write_tokens, 25);
         assert_eq!(usage.output_tokens, 50);
         assert_eq!(usage.reasoning_tokens, 30);
-        assert_eq!(usage.total_tokens, 180);
-        assert_eq!(usage.cached_tokens, 20);
+        assert_eq!(usage.total_tokens, 255);
         assert_eq!(usage.cost, Some(0.01));
         assert_eq!(usage.request_time_ms, Some(1500));
     }
@@ -783,11 +820,12 @@ mod tests {
         let request = serde_json::json!({"model": "test", "messages": []});
         let response = serde_json::json!({"choices": []});
         let usage = TokenUsage {
-            prompt_tokens: 10,
+            input_tokens: 10,
+            cache_read_tokens: 5,
+            cache_write_tokens: 0,
             output_tokens: 5,
             reasoning_tokens: 3,
-            total_tokens: 18,
-            cached_tokens: 0,
+            total_tokens: 23,
             cost: None,
             request_time_ms: None,
         };

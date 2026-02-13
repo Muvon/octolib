@@ -119,11 +119,14 @@ async fn main() -> anyhow::Result<()> {
 
             if let Some(usage) = response.exchange.usage {
                 println!("📊 Token usage:");
-                println!("   Input tokens:  {}", usage.prompt_tokens);
+                println!("   Input tokens:  {}", usage.input_tokens);
                 println!("   Output tokens: {}", usage.output_tokens);
                 println!("   Total tokens:  {}", usage.total_tokens);
-                if usage.cached_tokens > 0 {
-                    println!("   Cached tokens: {} (saved cost!)", usage.cached_tokens);
+                if usage.cache_read_tokens > 0 {
+                    println!(
+                        "   Cached tokens: {} (saved cost!)",
+                        usage.cache_read_tokens
+                    );
                 }
                 if let Some(cost) = usage.cost {
                     println!("   Cost: ${:.6}", cost);
@@ -179,7 +182,7 @@ async fn main() -> anyhow::Result<()> {
 
             if let Some(usage) = response.exchange.usage {
                 println!("📊 Token usage:");
-                println!("   Input tokens:  {}", usage.prompt_tokens);
+                println!("   Input tokens:  {}", usage.input_tokens);
                 println!("   Output tokens: {}", usage.output_tokens);
                 if let Some(cost) = usage.cost {
                     println!("   Cost: ${:.6}", cost);

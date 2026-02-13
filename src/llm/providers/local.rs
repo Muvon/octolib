@@ -253,7 +253,7 @@ struct LocalResponseMessage {
 
 #[derive(Deserialize, Debug)]
 struct LocalUsage {
-    prompt_tokens: u64,
+    input_tokens: u64,
     completion_tokens: u64,
     total_tokens: u64,
 }
@@ -466,12 +466,14 @@ async fn execute_request(
 
     let reasoning_tokens = thinking.as_ref().map(|t| t.tokens).unwrap_or(0);
 
+    // Local models don't support caching
     let usage = TokenUsage {
-        prompt_tokens: api_response.usage.prompt_tokens,
+        input_tokens: api_response.usage.input_tokens,
+        cache_read_tokens: 0,
+        cache_write_tokens: 0,
         output_tokens: api_response.usage.completion_tokens,
         reasoning_tokens,
         total_tokens: api_response.usage.total_tokens,
-        cached_tokens: 0,
         cost: Some(0.0), // Local models are free
         request_time_ms: Some(request_time_ms),
     };

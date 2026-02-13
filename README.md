@@ -402,14 +402,14 @@ async fn thinking_example() -> anyhow::Result<()> {
 
     // Final response (clean, no thinking prefix)
     println!("Response: {}", response.content);
-
     // Token usage breakdown
     if let Some(usage) = &response.exchange.usage {
-        println!("Prompt tokens: {}", usage.prompt_tokens);
+        println!("Input tokens: {}", usage.input_tokens);
+        println!("Cache read tokens: {}", usage.cache_read_tokens);
+        println!("Cache write tokens: {}", usage.cache_write_tokens);
         println!("Output tokens: {}", usage.output_tokens);
         println!("Reasoning tokens: {}", usage.reasoning_tokens);
     }
-
     Ok(())
 }
 ```
@@ -429,7 +429,9 @@ Thinking tokens are tracked separately in `TokenUsage.reasoning_tokens`:
 ```rust
 if let Some(usage) = &response.exchange.usage {
     println!("Total tokens: {}", usage.total_tokens);
-    println!("  - Prompt: {}", usage.prompt_tokens);
+    println!("  - Input: {}", usage.input_tokens);
+    println!("  - Cache Read: {}", usage.cache_read_tokens);
+    println!("  - Cache Write: {}", usage.cache_write_tokens);
     println!("  - Output: {}", usage.output_tokens);
     println!("  - Reasoning: {}", usage.reasoning_tokens);
 }

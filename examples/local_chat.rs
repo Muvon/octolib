@@ -97,7 +97,7 @@ async fn main() -> anyhow::Result<()> {
     // Display token usage
     if let Some(usage) = response.exchange.usage {
         println!("📊 Token Usage:");
-        println!("  - Prompt tokens: {}", usage.prompt_tokens);
+        println!("  - Prompt tokens: {}", usage.input_tokens);
         println!("  - Output tokens: {}", usage.output_tokens);
         println!("  - Total tokens: {}", usage.total_tokens);
         if let Some(time) = usage.request_time_ms {

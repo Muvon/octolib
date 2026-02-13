@@ -740,12 +740,14 @@ async fn execute_anthropic_request(
         .cache_creation_input_tokens
         .unwrap_or(0);
 
-    // CRITICAL: cached_tokens should ONLY be cache_read_tokens
-    // cache_creation_tokens are NEW tokens being written to cache (not cached yet)
-    // Anthropic's input_tokens = regular + cache_creation + cache_read
-    // So: regular_input_tokens = input_tokens - cache_creation - cache_read
-    // And cached_tokens (for display) = only cache_read (actually served from cache)
-    let cached_tokens = cache_read_tokens;
+    // CRITICAL: Calculate CLEAN input tokens (no cache tokens)
+    // Anthropic's input_tokens = regular + cache_creation (write) + cache_read
+    // So: input_tokens_clean = input_tokens - cache_read - cache_creation
+    let input_tokens_clean = anthropic_response
+        .usage
+        .input_tokens
+        .saturating_sub(cache_read_tokens)
+        .saturating_sub(cache_creation_tokens);
 
     let cost = calculate_anthropic_cost(
         request_body["model"].as_str().unwrap_or(""),
@@ -756,12 +758,14 @@ async fn execute_anthropic_request(
     );
 
     let usage = TokenUsage {
-        prompt_tokens: anthropic_response.usage.input_tokens,
+        input_tokens: input_tokens_clean,          // CLEAN input (no cache)
+        cache_read_tokens,                         // Tokens read from cache
+        cache_write_tokens: cache_creation_tokens, // Tokens written to cache
         output_tokens: anthropic_response.usage.output_tokens,
         reasoning_tokens,
         total_tokens: anthropic_response.usage.input_tokens
-            + anthropic_response.usage.output_tokens,
-        cached_tokens,
+            + anthropic_response.usage.output_tokens
+            + reasoning_tokens,
         cost,
         request_time_ms: Some(request_time_ms),
     };

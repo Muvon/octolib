@@ -146,15 +146,16 @@ pub(crate) fn parse_response(lines: &[String]) -> Result<(String, Option<TokenUs
     }
 
     let usage = if input_tokens.is_some() || output_tokens.is_some() || total_tokens.is_some() {
-        let prompt_tokens = input_tokens.unwrap_or(0);
+        let input_tokens_val = input_tokens.unwrap_or(0);
         let output_tokens_val = output_tokens.unwrap_or(0);
-        let total = total_tokens.unwrap_or(prompt_tokens + output_tokens_val);
+        let total = total_tokens.unwrap_or(input_tokens_val + output_tokens_val);
         Some(TokenUsage {
-            prompt_tokens,
+            input_tokens: input_tokens_val,
+            cache_read_tokens: 0,
+            cache_write_tokens: 0,
             output_tokens: output_tokens_val,
             reasoning_tokens: 0,
             total_tokens: total,
-            cached_tokens: 0,
             cost: None,
             request_time_ms: None,
         })

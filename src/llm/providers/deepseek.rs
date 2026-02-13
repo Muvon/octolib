@@ -74,8 +74,8 @@ fn calculate_cost_with_cache(
 }
 
 /// Calculate cost for DeepSeek models without cache
-fn calculate_cost(model: &str, prompt_tokens: u64, completion_tokens: u64) -> Option<f64> {
-    calculate_cost_with_cache(model, prompt_tokens, 0, completion_tokens)
+fn calculate_cost(model: &str, input_tokens: u64, completion_tokens: u64) -> Option<f64> {
+    calculate_cost_with_cache(model, input_tokens, 0, completion_tokens)
 }
 
 /// DeepSeek provider
@@ -138,7 +138,7 @@ struct DeepSeekChoice {
 
 #[derive(Serialize, Deserialize, Debug)]
 struct DeepSeekUsage {
-    prompt_tokens: u64,
+    input_tokens: u64,
     completion_tokens: u64,
     total_tokens: u64,
     #[serde(default)]
@@ -312,21 +312,30 @@ impl AiProvider for DeepSeekProvider {
 
         // Calculate cost with new unified pricing
         let token_usage = if let Some(usage) = deepseek_response.usage {
-            let prompt_tokens = usage.prompt_tokens;
+            let prompt_tokens = usage.input_tokens;
             let completion_tokens = usage.completion_tokens;
             let total_tokens = usage.total_tokens;
-            let cache_hit_tokens = usage.prompt_cache_hit_tokens;
 
-            // For DeepSeek: Cache hit tokens get special pricing ($0.07/1M)
-            // Regular input tokens are charged at cache miss rate ($0.56/1M)
-            let regular_input_tokens = prompt_tokens.saturating_sub(cache_hit_tokens);
+            // DeepSeek reports:
+            // - prompt_cache_hit_tokens: tokens read from cache (cache READ)
+            // - prompt_cache_miss_tokens: fresh input tokens (includes regular + cache WRITE)
+            // DeepSeek doesn't separate regular input from cache write in their API
+            let cache_read_tokens = usage.prompt_cache_hit_tokens;
+            let cache_miss_tokens = usage.prompt_cache_miss_tokens;
 
-            // Calculate cost with unified pricing (Sept 5, 2025+)
-            let cost = if cache_hit_tokens > 0 {
+            // For CLEAN input_tokens, we use cache_miss_tokens
+            // (DeepSeek charges these at the "cache miss" rate which includes write cost)
+            let input_tokens_clean = cache_miss_tokens;
+
+            // DeepSeek doesn't expose cache_write separately - it's included in cache_miss
+            let cache_write_tokens = 0_u64;
+
+            // Calculate cost with unified pricing (Jan 2026)
+            let cost = if cache_read_tokens > 0 {
                 calculate_cost_with_cache(
                     &params.model,
-                    regular_input_tokens,
-                    cache_hit_tokens,
+                    input_tokens_clean,
+                    cache_read_tokens,
                     completion_tokens,
                 )
             } else {
@@ -340,11 +349,12 @@ impl AiProvider for DeepSeekProvider {
                 .unwrap_or(0);
 
             Some(TokenUsage {
-                prompt_tokens,
+                input_tokens: input_tokens_clean, // CLEAN input (cache miss tokens)
+                cache_read_tokens,                // Tokens read from cache
+                cache_write_tokens,               // DeepSeek doesn't expose this (0)
                 output_tokens: completion_tokens,
-                reasoning_tokens, // From completion_tokens_details (may be 0 for non-reasoning models)
+                reasoning_tokens,
                 total_tokens,
-                cached_tokens: cache_hit_tokens,
                 cost,
                 request_time_ms: None,
             })

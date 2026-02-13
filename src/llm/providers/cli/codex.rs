@@ -151,18 +151,24 @@ pub(crate) fn parse_response(
         || reasoning_tokens.is_some()
         || total_tokens.is_some()
     {
-        let prompt_tokens = input_tokens.unwrap_or(0);
+        let input_tokens_val = input_tokens.unwrap_or(0);
         let output_tokens_val = output_tokens.unwrap_or(0);
         let reasoning_tokens_val = reasoning_tokens.unwrap_or(0);
+        let cache_read_tokens = cached_tokens.unwrap_or(0);
+
+        // Calculate CLEAN input tokens (no cache)
+        let input_tokens_clean = input_tokens_val.saturating_sub(cache_read_tokens);
+
         let total =
-            total_tokens.unwrap_or(prompt_tokens + output_tokens_val + reasoning_tokens_val);
+            total_tokens.unwrap_or(input_tokens_val + output_tokens_val + reasoning_tokens_val);
 
         Some(TokenUsage {
-            prompt_tokens,
+            input_tokens: input_tokens_clean, // CLEAN input (no cache)
+            cache_read_tokens,                // Tokens read from cache
+            cache_write_tokens: 0,            // Codex doesn't expose this
             output_tokens: output_tokens_val,
             reasoning_tokens: reasoning_tokens_val,
             total_tokens: total,
-            cached_tokens: cached_tokens.unwrap_or(0),
             cost: None,
             request_time_ms: None,
         })

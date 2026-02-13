@@ -107,7 +107,7 @@ async fn main() -> anyhow::Result<()> {
             println!("{}", response.content);
             println!("\n📊 Token usage:");
             if let Some(usage) = response.exchange.usage {
-                println!("   Input tokens:  {}", usage.prompt_tokens);
+                println!("   Input tokens:  {}", usage.input_tokens);
                 println!("   Output tokens: {}", usage.output_tokens);
                 println!("   Total tokens:  {}", usage.total_tokens);
                 if let Some(cost) = usage.cost {

@@ -30,90 +30,66 @@ use serde::Deserialize;
 use std::env;
 
 /// OpenAI pricing constants (per 1M tokens in USD)
-/// Source: https://platform.openai.com/docs/pricing (as of December 2025)
-const PRICING: &[(&str, f64, f64)] = &[
-    // Model, Input price per 1M tokens, Output price per 1M tokens
-    // Latest models (2025)
-    // GPT-4.1 and variants
-    ("gpt-4.1", 2.00, 8.00),
-    ("gpt-4.1-2025-04-14", 2.00, 8.00),
-    ("gpt-4.1-mini", 0.40, 1.60),
-    ("gpt-4.1-mini-2025-04-14", 0.40, 1.60),
-    ("gpt-4.1-nano", 0.10, 0.40),
-    ("gpt-4.1-nano-2025-04-14", 0.10, 0.40),
-    // GPT-4.5
-    ("gpt-4.5-preview", 75.00, 150.00),
-    ("gpt-4.5-preview-2025-02-27", 75.00, 150.00),
-    // GPT-5
-    ("gpt-5", 1.25, 10.00),
-    ("gpt-5-2025-08-07", 1.25, 10.00),
-    ("gpt-5-chat-latest", 1.25, 10.00),
-    ("gpt-5-codex", 1.25, 10.00),
-    ("gpt-5-mini", 0.25, 2.0),
-    ("gpt-5-mini-2025-08-07", 0.25, 2.0),
-    ("gpt-5-nano", 0.05, 0.40),
-    ("gpt-5-nano-2025-08-07", 0.05, 0.40),
-    ("gpt-5-pro", 15.00, 120.00),
-    // GPT-5.1
-    ("gpt-5.1", 1.25, 10.00),
-    ("gpt-5.1-2025-11-20", 1.25, 10.00),
-    ("gpt-5.1-chat-latest", 1.25, 10.00),
-    ("gpt-5.1-codex", 1.25, 10.00),
-    ("gpt-5.1-codex-max", 1.25, 10.00),
-    // GPT-5.2
-    ("gpt-5.2", 1.75, 14.00),
-    ("gpt-5.2-chat-latest", 1.75, 14.00),
-    ("gpt-5.2-pro", 21.00, 168.00),
-    // GPT-4o series
-    ("gpt-4o", 2.50, 10.00),
-    ("gpt-4o-2024-08-06", 2.50, 10.00),
-    ("gpt-4o-2024-05-13", 5.00, 15.00),
-    ("gpt-4o-realtime-preview", 5.00, 20.00),
-    ("gpt-4o-realtime-preview-2025-06-03", 5.00, 20.00),
-    ("gpt-4o-mini", 0.15, 0.60),
-    ("gpt-4o-mini-2024-07-18", 0.15, 0.60),
-    ("gpt-4o-mini-realtime-preview", 0.60, 2.40),
-    ("gpt-4o-mini-realtime-preview-2024-12-17", 0.60, 2.40),
-    ("gpt-4o-mini-search-preview", 0.15, 0.60),
-    ("gpt-4o-mini-search-preview-2025-03-11", 0.15, 0.60),
-    ("gpt-4o-search-preview", 2.50, 10.00),
-    ("gpt-4o-search-preview-2025-03-11", 2.50, 10.00),
-    // O-series and variants
-    ("o1", 15.00, 60.00),
-    ("o1-2024-12-17", 15.00, 60.00),
-    ("o1-pro", 150.00, 600.00),
-    ("o1-pro-2025-03-19", 150.00, 600.00),
-    ("o1-mini", 1.10, 4.40),
-    ("o1-mini-2024-09-12", 1.10, 4.40),
-    ("o3", 2.00, 8.00),
-    ("o3-2025-04-16", 2.00, 8.00),
-    ("o3-pro", 20.00, 80.00),
-    ("o3-pro-2025-06-10", 20.00, 80.00),
-    ("o3-mini", 1.10, 4.40),
-    ("o3-mini-2025-01-31", 1.10, 4.40),
-    ("o3-deep-research", 10.00, 40.00),
-    ("o3-deep-research-2025-06-26", 10.00, 40.00),
-    ("o4-mini", 1.10, 4.40),
-    ("o4-mini-2025-04-16", 1.10, 4.40),
-    ("o4-mini-deep-research", 2.00, 8.00),
-    ("o4-mini-deep-research-2025-06-26", 2.00, 8.00),
-    // GPT-4 Turbo
-    ("gpt-4-turbo", 10.00, 30.00),
-    ("gpt-4-turbo-2024-04-09", 10.00, 30.00),
-    // GPT-4
-    ("gpt-4", 30.00, 60.00),
-    ("gpt-4-0613", 30.00, 60.00),
-    ("gpt-4-32k", 60.00, 120.00),
-    // GPT-3.5 Turbo
-    ("gpt-3.5-turbo", 0.50, 1.50),
-    ("gpt-3.5-turbo-0125", 0.50, 1.50),
-    ("gpt-3.5-turbo-instruct", 1.50, 2.00),
-    ("gpt-3.5-turbo-16k-0613", 3.00, 4.00),
+/// Source: https://platform.openai.com/docs/pricing and model cards (verified Feb 13, 2026)
+const PRICING: &[(&str, f64, Option<f64>, f64)] = &[
+    // Model, Input, Cached input (None if unavailable), Output
+    // GPT-5.2 family
+    // NOTE: gpt-5.3-codex pricing is inferred from current docs until OpenAI publishes explicit rates.
+    ("gpt-5.3-codex", 1.75, Some(0.175), 14.00),
+    ("gpt-5.2-pro", 21.00, None, 168.00),
+    ("gpt-5.2-codex", 1.75, Some(0.175), 14.00),
+    ("gpt-5.2-chat-latest", 1.75, Some(0.175), 14.00),
+    ("gpt-5.2", 1.75, Some(0.175), 14.00),
+    // GPT-5.1 family
+    ("gpt-5.1-codex-mini", 0.25, Some(0.025), 2.00),
+    ("gpt-5.1-codex-max", 1.25, Some(0.125), 10.00),
+    ("gpt-5.1-codex", 1.25, Some(0.125), 10.00),
+    ("gpt-5.1-chat-latest", 1.25, Some(0.125), 10.00),
+    ("gpt-5.1", 1.25, Some(0.125), 10.00),
+    // GPT-5 family
+    ("gpt-5-pro", 15.00, None, 120.00),
+    ("gpt-5-codex", 1.25, Some(0.125), 10.00),
+    ("gpt-5-chat-latest", 1.25, Some(0.125), 10.00),
+    ("gpt-5-mini", 0.25, Some(0.025), 2.00),
+    ("gpt-5-nano", 0.05, Some(0.005), 0.40),
+    ("gpt-5", 1.25, Some(0.125), 10.00),
+    // Codex CLI optimized model
+    ("codex-mini-latest", 1.50, Some(0.375), 6.00),
+    // GPT-4.1 family
+    ("gpt-4.1-mini", 0.40, Some(0.10), 1.60),
+    ("gpt-4.1-nano", 0.10, Some(0.025), 0.40),
+    ("gpt-4.1", 2.00, Some(0.50), 8.00),
+    // GPT-4o / realtime / audio
+    ("gpt-realtime-mini", 0.60, Some(0.06), 2.40),
+    ("gpt-realtime", 4.00, Some(0.40), 16.00),
+    ("gpt-audio", 2.50, None, 10.00),
+    ("gpt-4o-mini-realtime-preview", 0.60, Some(0.30), 2.40),
+    ("gpt-4o-realtime-preview", 5.00, Some(2.50), 20.00),
+    ("gpt-4o-mini", 0.15, Some(0.075), 0.60),
+    ("gpt-4o-2024-05-13", 5.00, None, 15.00),
+    ("gpt-4o", 2.50, Some(1.25), 10.00),
+    // Legacy/long-tail models retained for compatibility
+    ("gpt-4.5-preview", 75.00, None, 150.00),
+    ("o1", 15.00, Some(7.50), 60.00),
+    ("o1-pro", 150.00, None, 600.00),
+    ("o1-mini", 1.10, Some(0.55), 4.40),
+    ("o3", 2.00, Some(0.50), 8.00),
+    ("o3-pro", 20.00, None, 80.00),
+    ("o3-mini", 1.10, Some(0.55), 4.40),
+    ("o3-deep-research", 10.00, Some(2.50), 40.00),
+    ("o4-mini", 1.10, Some(0.275), 4.40),
+    ("o4-mini-deep-research", 2.00, Some(0.50), 8.00),
+    ("gpt-4-turbo", 10.00, None, 30.00),
+    ("gpt-4", 30.00, None, 60.00),
+    ("gpt-4-32k", 60.00, None, 120.00),
+    ("gpt-3.5-turbo-instruct", 1.50, None, 2.00),
+    ("gpt-3.5-turbo-16k-0613", 3.00, None, 4.00),
+    ("gpt-3.5-turbo", 0.50, None, 1.50),
 ];
 
 /// Calculate cost for OpenAI models with basic pricing (case-insensitive)
 fn calculate_cost(model: &str, prompt_tokens: u64, completion_tokens: u64) -> Option<f64> {
-    for (pricing_model, input_price, output_price) in PRICING {
+    for (pricing_model, input_price, _, output_price) in PRICING {
         if contains_ignore_ascii_case(model, pricing_model) {
             let input_cost = (prompt_tokens as f64 / 1_000_000.0) * input_price;
             let output_cost = (completion_tokens as f64 / 1_000_000.0) * output_price;
@@ -123,20 +99,9 @@ fn calculate_cost(model: &str, prompt_tokens: u64, completion_tokens: u64) -> Op
     None
 }
 
-/// Get cache pricing multiplier based on model
-/// GPT-5/5.1/5.2 models have 0.1x cache pricing (90% cheaper)
-/// Other models have 0.25x cache pricing (75% cheaper)
-fn get_cache_multiplier(model: &str) -> f64 {
-    if model.starts_with("gpt-5") {
-        0.1
-    } else {
-        0.25
-    }
-}
-
 /// Calculate cost with cache-aware pricing (case-insensitive)
 /// - regular_input_tokens: charged at normal price
-/// - cache_read_tokens: charged at model-specific multiplier
+/// - cache_read_tokens: charged at model-specific cached-input price
 /// - output_tokens: charged at normal price
 fn calculate_cost_with_cache(
     model: &str,
@@ -144,12 +109,12 @@ fn calculate_cost_with_cache(
     cache_read_tokens: u64,
     completion_tokens: u64,
 ) -> Option<f64> {
-    for (pricing_model, input_price, output_price) in PRICING {
+    for (pricing_model, input_price, cached_input_price, output_price) in PRICING {
         if contains_ignore_ascii_case(model, pricing_model) {
             let regular_input_cost = (regular_input_tokens as f64 / 1_000_000.0) * input_price;
-            let cache_read_cost = (cache_read_tokens as f64 / 1_000_000.0)
-                * input_price
-                * get_cache_multiplier(model);
+            let effective_cached_input_price = cached_input_price.unwrap_or(*input_price);
+            let cache_read_cost =
+                (cache_read_tokens as f64 / 1_000_000.0) * effective_cached_input_price;
             let output_cost = (completion_tokens as f64 / 1_000_000.0) * output_price;
             return Some(regular_input_cost + cache_read_cost + output_cost);
         }
@@ -158,7 +123,7 @@ fn calculate_cost_with_cache(
 }
 
 /// Check if a model supports the temperature parameter
-/// O1, O2, O3, O4 and GPT-5/5.1/5.2 series models don't support temperature
+/// O1, O2, O3, O4 and GPT-5 series models don't support temperature
 fn supports_temperature(model: &str) -> bool {
     !model.starts_with("o1")
         && !model.starts_with("o2")
@@ -272,7 +237,10 @@ impl AiProvider for OpenAiProvider {
     fn supports_model(&self, model: &str) -> bool {
         // OpenAI models - current lineup (case-insensitive)
         starts_with_ignore_ascii_case(model, "gpt-5")
+            || starts_with_ignore_ascii_case(model, "codex-mini")
             || starts_with_ignore_ascii_case(model, "gpt-4o")
+            || starts_with_ignore_ascii_case(model, "gpt-realtime")
+            || starts_with_ignore_ascii_case(model, "gpt-audio")
             || starts_with_ignore_ascii_case(model, "gpt-4.5")
             || starts_with_ignore_ascii_case(model, "gpt-4.1")
             || starts_with_ignore_ascii_case(model, "gpt-4")
@@ -306,16 +274,22 @@ impl AiProvider for OpenAiProvider {
     }
 
     fn supports_caching(&self, model: &str) -> bool {
-        // OpenAI supports automatic prompt caching for these models (case-insensitive, Oct 2024)
+        // OpenAI supports automatic prompt caching for most text models.
+        // Exclude known no-cache models (pro and audio variants).
         let model_lower = normalize_model_name(model);
-        model_lower.contains("gpt-4o")
-            || model_lower.contains("gpt-4.1")
-            || model_lower.contains("gpt-5")
-            || model_lower.contains("o1-preview")
-            || model_lower.contains("o1-mini")
-            || model_lower.contains("o1")
-            || model_lower.contains("o3")
-            || model_lower.contains("o4")
+        !(model_lower.starts_with("gpt-5-pro")
+            || model_lower.starts_with("gpt-5.2-pro")
+            || model_lower.starts_with("gpt-audio"))
+            && (model_lower.contains("gpt-4o")
+                || model_lower.contains("gpt-4.1")
+                || model_lower.contains("gpt-5")
+                || model_lower.contains("codex-mini")
+                || model_lower.contains("gpt-realtime")
+                || model_lower.contains("o1-preview")
+                || model_lower.contains("o1-mini")
+                || model_lower.contains("o1")
+                || model_lower.contains("o3")
+                || model_lower.contains("o4"))
     }
 
     fn supports_vision(&self, model: &str) -> bool {
@@ -326,7 +300,9 @@ impl AiProvider for OpenAiProvider {
             || normalized.starts_with("gpt-4-turbo")
             || normalized.starts_with("gpt-4-vision-preview")
             || normalized.starts_with("gpt-4o-")
-            || normalized.starts_with("gpt-5-")
+            || normalized.starts_with("gpt-5")
+            || normalized.starts_with("codex-mini")
+            || normalized.starts_with("gpt-realtime")
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {
@@ -334,12 +310,20 @@ impl AiProvider for OpenAiProvider {
         // These are the actual context windows - API handles output limits
         let normalized = normalize_model_name(model);
 
-        // GPT-5.1 models: 400K context window
-        if normalized.starts_with("gpt-5.1") {
+        // GPT-5 family: 400K context window
+        if normalized.starts_with("gpt-5") {
             return 400_000;
         }
-        // GPT-5 models: 128K context window
-        if normalized.starts_with("gpt-5") {
+        // codex-mini-latest: 200K context window
+        if normalized.starts_with("codex-mini") {
+            return 200_000;
+        }
+        // Realtime models: 32K context window
+        if normalized.starts_with("gpt-realtime") {
+            return 32_000;
+        }
+        // GPT Audio: 128K context window
+        if normalized.starts_with("gpt-audio") {
             return 128_000;
         }
         // GPT-4o models: 128K context window
@@ -377,11 +361,14 @@ impl AiProvider for OpenAiProvider {
 
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
         // Search through pricing table for matching model
-        for (pricing_model, input_price, output_price) in PRICING {
+        for (pricing_model, input_price, cached_input_price, output_price) in PRICING {
             if contains_ignore_ascii_case(model, pricing_model) {
-                return Some(crate::llm::types::ModelPricing::without_cache(
+                let cache_read = cached_input_price.unwrap_or(*input_price);
+                return Some(crate::llm::types::ModelPricing::new(
                     *input_price,
                     *output_price,
+                    *input_price,
+                    cache_read,
                 ));
             }
         }
@@ -922,6 +909,10 @@ mod tests {
         assert!(provider.supports_model("gpt-5-mini-2025-08-07"));
         assert!(provider.supports_model("gpt-5-nano"));
         assert!(provider.supports_model("gpt-5-nano-2025-08-07"));
+        assert!(provider.supports_model("gpt-5.2-codex"));
+        assert!(provider.supports_model("gpt-5.3-codex"));
+        assert!(provider.supports_model("gpt-5.2-chat-latest"));
+        assert!(provider.supports_model("codex-mini-latest"));
 
         // Other models should still be supported
         assert!(provider.supports_model("gpt-4o"));
@@ -953,11 +944,14 @@ mod tests {
     fn test_get_max_input_tokens_gpt5() {
         let provider = OpenAiProvider::new();
 
-        // GPT-5 models should have 128K context window
-        assert_eq!(provider.get_max_input_tokens("gpt-5"), 128_000);
-        assert_eq!(provider.get_max_input_tokens("gpt-5-2025-08-07"), 128_000);
-        assert_eq!(provider.get_max_input_tokens("gpt-5-mini"), 128_000);
-        assert_eq!(provider.get_max_input_tokens("gpt-5-nano"), 128_000);
+        // GPT-5 models should have 400K context window
+        assert_eq!(provider.get_max_input_tokens("gpt-5"), 400_000);
+        assert_eq!(provider.get_max_input_tokens("gpt-5-2025-08-07"), 400_000);
+        assert_eq!(provider.get_max_input_tokens("gpt-5-mini"), 400_000);
+        assert_eq!(provider.get_max_input_tokens("gpt-5-nano"), 400_000);
+        assert_eq!(provider.get_max_input_tokens("gpt-5.2-codex"), 400_000);
+        assert_eq!(provider.get_max_input_tokens("gpt-5.3-codex"), 400_000);
+        assert_eq!(provider.get_max_input_tokens("codex-mini-latest"), 200_000);
 
         // Other models should maintain their existing limits
         assert_eq!(provider.get_max_input_tokens("gpt-4o"), 128_000);
@@ -977,6 +971,10 @@ mod tests {
         assert!(provider.supports_vision("gpt-4-vision-preview"));
         assert!(provider.supports_vision("gpt-4.1"));
         assert!(provider.supports_vision("gpt-5-mini"));
+        assert!(provider.supports_vision("gpt-5.2-codex"));
+        assert!(provider.supports_vision("gpt-5.3-codex"));
+        assert!(provider.supports_vision("codex-mini-latest"));
+        assert!(provider.supports_vision("gpt-realtime"));
 
         // Models that should NOT support vision
         assert!(!provider.supports_vision("gpt-3.5-turbo"));
@@ -1243,5 +1241,25 @@ mod tests {
         let cost_value = cost.unwrap();
         // Expected: (1000/1M * 1.25) + (500/1M * 10.0) = 0.00125 + 0.005 = 0.00625
         assert!((cost_value - 0.00625).abs() < 0.0000001);
+
+        // Verify gpt-5.2-codex pricing path exists
+        let cost_52 = calculate_cost("gpt-5.2-codex", 1000, 500);
+        assert!(cost_52.is_some());
+        let cost_52_value = cost_52.unwrap();
+        // Expected: (1000/1M * 1.75) + (500/1M * 14.0) = 0.00175 + 0.007 = 0.00875
+        assert!((cost_52_value - 0.00875).abs() < 0.0000001);
+
+        // Verify gpt-5.3-codex pricing path exists
+        let cost_53 = calculate_cost("gpt-5.3-codex", 1000, 500);
+        assert!(cost_53.is_some());
+        let cost_53_value = cost_53.unwrap();
+        assert!((cost_53_value - 0.00875).abs() < 0.0000001);
+    }
+
+    #[test]
+    fn test_cache_pricing_for_gpt_5_2_codex() {
+        // (regular 1000 * 1.75 + cached 1000 * 0.175 + output 500 * 14) / 1M
+        let cost = calculate_cost_with_cache("gpt-5.2-codex", 1000, 1000, 500).unwrap();
+        assert!((cost - 0.008925).abs() < 0.0000001);
     }
 }

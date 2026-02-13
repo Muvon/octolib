@@ -740,11 +740,12 @@ async fn execute_anthropic_request(
         .cache_creation_input_tokens
         .unwrap_or(0);
 
-    // CRITICAL FIX: cached_tokens must include BOTH cache_read AND cache_creation
-    // Because prompt_tokens = total input (regular + creation + read)
-    // And regular_prompt_tokens = prompt_tokens - cached_tokens
-    // So cached_tokens must = creation + read to get correct regular tokens
-    let cached_tokens = cache_read_tokens + cache_creation_tokens;
+    // CRITICAL: cached_tokens should ONLY be cache_read_tokens
+    // cache_creation_tokens are NEW tokens being written to cache (not cached yet)
+    // Anthropic's input_tokens = regular + cache_creation + cache_read
+    // So: regular_input_tokens = input_tokens - cache_creation - cache_read
+    // And cached_tokens (for display) = only cache_read (actually served from cache)
+    let cached_tokens = cache_read_tokens;
 
     let cost = calculate_anthropic_cost(
         request_body["model"].as_str().unwrap_or(""),

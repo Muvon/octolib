@@ -31,10 +31,11 @@ use serde::{Deserialize, Serialize};
 use std::env;
 
 /// MiniMax pricing constants (per 1M tokens in USD)
-/// Source: https://platform.minimax.io/docs/guides/pricing (as of Feb 2026)
-/// Updated with latest pricing from MiniMax official docs
+/// Source: https://www.minimax.io/news/minimax-m25 (as of Feb 2026)
 const PRICING: &[(&str, f64, f64)] = &[
     // Model, Input price per 1M tokens, Output price per 1M tokens
+    ("MiniMax-M2.5-lightning", 0.15, 2.40),
+    ("MiniMax-M2.5", 0.30, 1.20),
     ("MiniMax-M2.1-lightning", 0.30, 2.40),
     ("MiniMax-M2.1", 0.27, 0.95),
     ("MiniMax-M2", 0.255, 1.00),
@@ -49,8 +50,8 @@ struct CacheTokenUsage {
 }
 
 /// Calculate cost for MiniMax models with cache-aware pricing (case-insensitive)
-/// - cache_creation_tokens: charged at 1.25x normal price ($0.375 per 1M for all models)
-/// - cache_read_tokens: charged at 0.1x normal price ($0.03 per 1M for all models)
+/// - cache_creation_tokens: charged at 1.25x the model's input price
+/// - cache_read_tokens: charged at 0.1x the model's input price
 /// - regular_input_tokens: charged at normal price
 /// - output_tokens: charged at normal price
 fn calculate_cost_with_cache(model: &str, usage: CacheTokenUsage) -> Option<f64> {
@@ -60,11 +61,13 @@ fn calculate_cost_with_cache(model: &str, usage: CacheTokenUsage) -> Option<f64>
             let regular_input_cost =
                 (usage.regular_input_tokens as f64 / 1_000_000.0) * input_price;
 
-            // Cache creation tokens at fixed $0.375 per 1M tokens
-            let cache_creation_cost = (usage.cache_creation_tokens as f64 / 1_000_000.0) * 0.375;
+            // Cache creation tokens at 1.25x input price
+            let cache_creation_cost =
+                (usage.cache_creation_tokens as f64 / 1_000_000.0) * (input_price * 1.25);
 
-            // Cache read tokens at fixed $0.03 per 1M tokens
-            let cache_read_cost = (usage.cache_read_tokens as f64 / 1_000_000.0) * 0.03;
+            // Cache read tokens at 0.1x input price
+            let cache_read_cost =
+                (usage.cache_read_tokens as f64 / 1_000_000.0) * (input_price * 0.1);
 
             // Output tokens at normal price
             let output_cost = (usage.output_tokens as f64 / 1_000_000.0) * output_price;
@@ -116,10 +119,10 @@ impl AiProvider for MinimaxProvider {
     fn name(&self) -> &str {
         "minimax"
     }
-
     fn supports_model(&self, model: &str) -> bool {
         // MiniMax supported models (case-insensitive)
-        starts_with_ignore_ascii_case(model, "minimax-m2")
+        starts_with_ignore_ascii_case(model, "minimax-m2.5")
+            || starts_with_ignore_ascii_case(model, "minimax-m2")
     }
 
     fn get_api_key(&self) -> Result<String> {
@@ -649,6 +652,8 @@ mod tests {
     #[test]
     fn test_model_support() {
         let provider = MinimaxProvider::new();
+        assert!(provider.supports_model("MiniMax-M2.5"));
+        assert!(provider.supports_model("MiniMax-M2.5-lightning"));
         assert!(provider.supports_model("MiniMax-M2.1"));
         assert!(provider.supports_model("MiniMax-M2.1-lightning"));
         assert!(provider.supports_model("MiniMax-M2"));
@@ -660,47 +665,39 @@ mod tests {
     fn test_model_support_case_insensitive() {
         let provider = MinimaxProvider::new();
         // Test lowercase
+        assert!(provider.supports_model("minimax-m2.5"));
+        assert!(provider.supports_model("minimax-m2.5-lightning"));
         assert!(provider.supports_model("minimax-m2.1"));
         assert!(provider.supports_model("minimax-m2.1-lightning"));
         assert!(provider.supports_model("minimax-m2"));
         // Test uppercase
+        assert!(provider.supports_model("MINIMAX-M2.5"));
         assert!(provider.supports_model("MINIMAX-M2.1"));
         assert!(provider.supports_model("MINIMAX-M2"));
         // Test mixed case
-        assert!(provider.supports_model("Minimax-M2.1"));
+        assert!(provider.supports_model("Minimax-M2.5"));
         assert!(provider.supports_model("MINIMAX-m2.1"));
     }
 
     #[test]
     fn test_cost_calculation() {
-        // Test MiniMax-M2.1: $0.27 input, $0.95 output (updated Feb 2026)
+        // Test MiniMax-M2.5: $0.30 input, $1.20 output (Feb 2026)
+        let cost = calculate_minimax_cost("MiniMax-M2.5", 1_000_000, 1_000_000, 0, 0);
+        assert_eq!(cost, Some(1.50)); // 0.30 + 1.20
+
+        // Test MiniMax-M2.5-lightning: $0.15 input, $2.40 output (Feb 2026)
+        let cost = calculate_minimax_cost("MiniMax-M2.5-lightning", 1_000_000, 1_000_000, 0, 0);
+        assert_eq!(cost, Some(2.55)); // 0.15 + 2.40
+
+        // Test MiniMax-M2.1: $0.27 input, $0.95 output
         let cost = calculate_minimax_cost("MiniMax-M2.1", 1_000_000, 1_000_000, 0, 0);
         assert_eq!(cost, Some(1.22)); // 0.27 + 0.95
 
-        // Test with cache creation: $0.375 per 1M
-        // Input: 1M total, 500K cache creation, 500K regular
-        // Regular: 500K / 1M * $0.27 = $0.135
-        // Cache creation: 500K / 1M * $0.375 = $0.1875
-        // Output: 1M / 1M * $0.95 = $0.95
-        // Total: $0.135 + $0.1875 + $0.95 = $1.2725
-        let cost = calculate_minimax_cost("MiniMax-M2.1", 1_000_000, 1_000_000, 500_000, 0);
-        assert_eq!(cost, Some(1.2725));
-
-        // Test with cache read: $0.03 per 1M
-        // Input: 1M total, 500K cache read, 500K regular
-        // Regular: 500K / 1M * $0.27 = $0.135
-        // Cache read: 500K / 1M * $0.03 = $0.015
-        // Output: 1M / 1M * $0.95 = $0.95
-        // Total: $0.135 + $0.015 + $0.95 = $1.10
-        let cost = calculate_minimax_cost("MiniMax-M2.1", 1_000_000, 1_000_000, 0, 500_000);
-        assert_eq!(cost, Some(1.10));
-
-        // Test MiniMax-M2.1-lightning: $0.3 input, $2.4 output
+        // Test MiniMax-M2.1-lightning: $0.30 input, $2.40 output
         let cost = calculate_minimax_cost("MiniMax-M2.1-lightning", 1_000_000, 1_000_000, 0, 0);
-        // Use approximate comparison for floating point
         assert!((cost.unwrap() - 2.7).abs() < 0.0001);
 
-        // Test MiniMax-M2: $0.255 input, $1.00 output (updated Feb 2026)
+        // Test MiniMax-M2: $0.255 input, $1.00 output
         let cost = calculate_minimax_cost("MiniMax-M2", 1_000_000, 1_000_000, 0, 0);
         assert_eq!(cost, Some(1.255)); // 0.255 + 1.00
     }

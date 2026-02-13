@@ -62,15 +62,17 @@ async fn main() -> anyhow::Result<()> {
             eprintln!("2. Set the environment variable:");
             eprintln!("   export MINIMAX_API_KEY=\"your-api-key-here\"");
             eprintln!("\nSupported models:");
-            eprintln!("   - minimax:MiniMax-M2.1 (recommended)");
+            eprintln!("   - minimax:MiniMax-M2.5 (recommended - latest)");
+            eprintln!("   - minimax:MiniMax-M2.5-lightning (faster)");
+            eprintln!("   - minimax:MiniMax-M2.1");
             eprintln!("   - minimax:MiniMax-M2.1-lightning (faster)");
             eprintln!("   - minimax:MiniMax-M2");
             std::process::exit(1);
         }
     }
 
-    // Create provider with MiniMax-M2.1 model
-    let (provider, model) = ProviderFactory::get_provider_for_model("minimax:MiniMax-M2.1")?;
+    // Create provider with MiniMax-M2.5 model
+    let (provider, model) = ProviderFactory::get_provider_for_model("minimax:MiniMax-M2.5")?;
 
     println!("\n📝 Provider: {}", provider.name());
     println!("🤖 Model: {}", model);

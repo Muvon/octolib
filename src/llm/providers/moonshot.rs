@@ -14,8 +14,9 @@
 
 //! Moonshot AI (Kimi) provider implementation
 //!
-//! PRICING UPDATE: February 2026
+//! PRICING UPDATE: February 2026 (verified Feb 13, 2026)
 //! Model-specific pricing (per 1M tokens in USD):
+//! Source: https://platform.moonshot.ai/docs/pricing/chat
 //!
 //! kimi-k2 series:
 //! - Cache Hit: $0.15
@@ -23,9 +24,9 @@
 //! - Output: $2.50
 //!
 //! kimi-k2.5:
-//! - Cache Hit: $0.30
+//! - Cache Hit: $0.10
 //! - Cache Miss (Input): $0.60
-//! - Output: $2.50
+//! - Output: $3.00
 
 use crate::errors::ProviderError;
 use crate::llm::retry;

@@ -14,7 +14,11 @@
 
 //! Z.ai (Zhipu AI) provider implementation
 //!
-//! PRICING UPDATE: January 2026 (from <https://docs.z.ai/guides/overview/pricing>)
+//! PRICING UPDATE: February 2026 (from <https://docs.z.ai/guides/overview/pricing>)
+//!
+//! GLM-5 series (NEW - Feb 2026):
+//! - GLM-5: Input $1.00/1M, Output $3.20/1M
+//! - GLM-5-Code: Input $1.20/1M, Output $5.00/1M
 //!
 //! GLM-4.7 series:
 //! - GLM-4.7: Input $0.60/1M, Output $2.20/1M
@@ -53,12 +57,15 @@ use serde::{Deserialize, Serialize};
 use std::env;
 
 /// Z.ai pricing constants (per 1M tokens in USD)
-/// Source: https://docs.z.ai/guides/overview/pricing (verified Jan 21, 2026)
+/// Source: https://docs.z.ai/guides/overview/pricing (verified Feb 13, 2026)
 const PRICING: &[(&str, f64, f64)] = &[
     // Model, Input price per 1M tokens, Output price per 1M tokens
     // IMPORTANT: More specific model names must come first (using contains matching)
 
-    // GLM-4.7 series (latest flagship) - more specific variants first
+    // GLM-5 series (latest generation - Feb 2026)
+    ("glm-5-code", 1.20, 5.00),
+    ("glm-5", 1.00, 3.20),
+    // GLM-4.7 series (flagship) - more specific variants first
     ("glm-4.7-flashx", 0.07, 0.40),
     ("glm-4.7-flash", 0.07, 0.40),
     ("glm-4.7-battle", 0.60, 2.20), // Same as base GLM-4.7
@@ -73,7 +80,7 @@ const PRICING: &[(&str, f64, f64)] = &[
     ("glm-4.5-airx", 1.10, 4.50),
     ("glm-4.5-air-plus", 0.20, 1.10), // Same as air
     ("glm-4.5-air", 0.20, 1.10),
-    ("glm-4.5v", 0.60, 1.80),
+    ("glm-4.5v", 0.60, 1.80), // Vision model
     ("glm-4.5-x", 2.20, 8.90),
     ("glm-4.5-flash", 0.60, 2.20), // Same as base GLM-4.5
     ("glm-4.5", 0.60, 2.20),

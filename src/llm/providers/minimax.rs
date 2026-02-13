@@ -31,12 +31,13 @@ use serde::{Deserialize, Serialize};
 use std::env;
 
 /// MiniMax pricing constants (per 1M tokens in USD)
-/// Source: https://platform.minimax.io/docs/guides/pricing (as of Jan 2026)
+/// Source: https://platform.minimax.io/docs/guides/pricing (as of Feb 2026)
+/// Updated with latest pricing from MiniMax official docs
 const PRICING: &[(&str, f64, f64)] = &[
     // Model, Input price per 1M tokens, Output price per 1M tokens
     ("MiniMax-M2.1-lightning", 0.30, 2.40),
-    ("MiniMax-M2.1", 0.30, 1.20),
-    ("MiniMax-M2", 0.30, 1.20),
+    ("MiniMax-M2.1", 0.27, 0.95),
+    ("MiniMax-M2", 0.255, 1.00),
 ];
 
 /// Token usage breakdown for cache-aware pricing
@@ -671,32 +672,36 @@ mod tests {
 
     #[test]
     fn test_cost_calculation() {
-        // Test MiniMax-M2.1: $0.3 input, $1.2 output
+        // Test MiniMax-M2.1: $0.27 input, $0.95 output (updated Feb 2026)
         let cost = calculate_minimax_cost("MiniMax-M2.1", 1_000_000, 1_000_000, 0, 0);
-        assert_eq!(cost, Some(1.5)); // 0.3 + 1.2
+        assert_eq!(cost, Some(1.22)); // 0.27 + 0.95
 
         // Test with cache creation: $0.375 per 1M
         // Input: 1M total, 500K cache creation, 500K regular
-        // Regular: 500K / 1M * $0.3 = $0.15
+        // Regular: 500K / 1M * $0.27 = $0.135
         // Cache creation: 500K / 1M * $0.375 = $0.1875
-        // Output: 1M / 1M * $1.2 = $1.2
-        // Total: $0.15 + $0.1875 + $1.2 = $1.5375
+        // Output: 1M / 1M * $0.95 = $0.95
+        // Total: $0.135 + $0.1875 + $0.95 = $1.2725
         let cost = calculate_minimax_cost("MiniMax-M2.1", 1_000_000, 1_000_000, 500_000, 0);
-        assert_eq!(cost, Some(1.5375));
+        assert_eq!(cost, Some(1.2725));
 
         // Test with cache read: $0.03 per 1M
         // Input: 1M total, 500K cache read, 500K regular
-        // Regular: 500K / 1M * $0.3 = $0.15
+        // Regular: 500K / 1M * $0.27 = $0.135
         // Cache read: 500K / 1M * $0.03 = $0.015
-        // Output: 1M / 1M * $1.2 = $1.2
-        // Total: $0.15 + $0.015 + $1.2 = $1.365
+        // Output: 1M / 1M * $0.95 = $0.95
+        // Total: $0.135 + $0.015 + $0.95 = $1.10
         let cost = calculate_minimax_cost("MiniMax-M2.1", 1_000_000, 1_000_000, 0, 500_000);
-        assert_eq!(cost, Some(1.365));
+        assert_eq!(cost, Some(1.10));
 
         // Test MiniMax-M2.1-lightning: $0.3 input, $2.4 output
         let cost = calculate_minimax_cost("MiniMax-M2.1-lightning", 1_000_000, 1_000_000, 0, 0);
         // Use approximate comparison for floating point
         assert!((cost.unwrap() - 2.7).abs() < 0.0001);
+
+        // Test MiniMax-M2: $0.255 input, $1.00 output (updated Feb 2026)
+        let cost = calculate_minimax_cost("MiniMax-M2", 1_000_000, 1_000_000, 0, 0);
+        assert_eq!(cost, Some(1.255)); // 0.255 + 1.00
     }
 
     #[test]

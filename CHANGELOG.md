@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.8.2] - 2026-02-13
+
+### 📋 Release Summary
+
+This release adds MiniMax-M2.5 and the latest February 2026 models with refreshed pricing, expanding your provider choices. All cached-input costs are now tracked accurately, so usage reports and budgets reflect real spend.
+
+
+### ✨ New Features & Enhancements
+
+- **minimax**: add MiniMax-M2.5 model support with updated pricing `ffe2326c`
+- **pricing**: add latest model pricing for Feb 2026 `52b76516`
+
+### 🐛 Bug Fixes & Stability
+
+- **openai**: add cached input pricing and update model support `52a5218f`
+- **llm**: correct cached token calculation for providers `b46e3c7d`
+
+### 📊 Release Summary
+
+**Total commits**: 4 across 2 categories
+
+✨ **2** new features - *Enhanced functionality*
+🐛 **2** bug fixes - *Improved stability*
+
 ## [0.8.1] - 2026-02-11
 
 ### 📋 Release Summary

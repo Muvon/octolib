@@ -15,9 +15,10 @@
 //! Provider factory for creating AI provider instances
 
 use crate::llm::providers::{
-    AmazonBedrockProvider, AnthropicProvider, CliProvider, CloudflareWorkersAiProvider,
-    DeepSeekProvider, GoogleVertexProvider, LocalProvider, MinimaxProvider, MoonshotProvider,
-    OllamaProvider, OpenAiProvider, OpenRouterProvider, ZaiProvider,
+    AmazonBedrockProvider, AnthropicProvider, CerebrasProvider, CliProvider,
+    CloudflareWorkersAiProvider, DeepSeekProvider, GoogleVertexProvider, LocalProvider,
+    MinimaxProvider, MoonshotProvider, OllamaProvider, OpenAiProvider, OpenRouterProvider,
+    ZaiProvider,
 };
 use crate::llm::traits::AiProvider;
 use anyhow::Result;
@@ -50,6 +51,7 @@ impl ProviderFactory {
         match provider_name.to_lowercase().as_str() {
             "openrouter" => Ok(Box::new(OpenRouterProvider::new())),
             "openai" => Ok(Box::new(OpenAiProvider::new())),
+            "cerebras" => Ok(Box::new(CerebrasProvider::new())),
             "local" => Ok(Box::new(LocalProvider::new())),
             "ollama" => Ok(Box::new(OllamaProvider::new())),
             "anthropic" => Ok(Box::new(AnthropicProvider::new())),
@@ -63,7 +65,7 @@ impl ProviderFactory {
             "cli" => Err(anyhow::anyhow!(
                 "CLI provider requires a model string like 'cli:<backend>/<model>'. Use ProviderFactory::get_provider_for_model instead."
             )),
-            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported providers: openrouter, openai, local, ollama, anthropic, google, amazon, cloudflare, deepseek, minimax, moonshot, zai, cli", provider_name)),
+            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported providers: openrouter, openai, cerebras, local, ollama, anthropic, google, amazon, cloudflare, deepseek, minimax, moonshot, zai, cli", provider_name)),
         }
     }
 
@@ -93,6 +95,7 @@ impl ProviderFactory {
         vec![
             "openrouter",
             "openai",
+            "cerebras",
             "local",
             "ollama",
             "anthropic",
@@ -160,6 +163,7 @@ mod tests {
         assert!(providers.contains(&"openai"));
         assert!(providers.contains(&"anthropic"));
         assert!(providers.contains(&"openrouter"));
+        assert!(providers.contains(&"cerebras"));
         assert!(providers.contains(&"ollama"));
         assert!(providers.contains(&"google"));
         assert!(providers.contains(&"amazon"));
@@ -185,6 +189,7 @@ mod tests {
         assert!(ProviderFactory::create_provider("openai").is_ok());
         assert!(ProviderFactory::create_provider("anthropic").is_ok());
         assert!(ProviderFactory::create_provider("openrouter").is_ok());
+        assert!(ProviderFactory::create_provider("cerebras").is_ok());
         assert!(ProviderFactory::create_provider("ollama").is_ok());
         assert!(ProviderFactory::create_provider("google").is_ok());
         assert!(ProviderFactory::create_provider("amazon").is_ok());
@@ -200,6 +205,7 @@ mod tests {
         assert!(ProviderFactory::create_provider("MiniMax").is_ok());
         assert!(ProviderFactory::create_provider("MOONSHOT").is_ok());
         assert!(ProviderFactory::create_provider("OLLAMA").is_ok());
+        assert!(ProviderFactory::create_provider("CEREBRAS").is_ok());
 
         // Test invalid provider
         assert!(ProviderFactory::create_provider("invalid").is_err());
@@ -229,6 +235,11 @@ mod tests {
         assert_eq!(ollama.name(), "ollama");
         assert!(ollama.supports_model("llama3.2"));
         assert!(!ollama.supports_caching("llama3.2"));
+
+        let cerebras = ProviderFactory::create_provider("cerebras").unwrap();
+        assert_eq!(cerebras.name(), "cerebras");
+        assert!(cerebras.supports_model("llama-3.3-70b"));
+        assert!(!cerebras.supports_caching("llama-3.3-70b"));
     }
 
     #[test]
@@ -266,6 +277,12 @@ mod tests {
         let (provider, model) = result.unwrap();
         assert_eq!(provider.name(), "ollama");
         assert_eq!(model, "llama3.2");
+
+        let result = ProviderFactory::get_provider_for_model("cerebras:gpt-oss-120b");
+        assert!(result.is_ok());
+        let (provider, model) = result.unwrap();
+        assert_eq!(provider.name(), "cerebras");
+        assert_eq!(model, "gpt-oss-120b");
 
         // Test invalid format
         let result = ProviderFactory::get_provider_for_model("gpt-4o");

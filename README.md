@@ -11,7 +11,7 @@ Octolib is a comprehensive, self-sufficient AI provider library that provides a 
 
 ## ✨ Key Features
 
-- **🔌 Multi-Provider Support**: OpenAI, Anthropic, OpenRouter, Ollama, Google, Amazon, Cloudflare, DeepSeek, MiniMax, Moonshot AI (Kimi), Z.ai, Local, CLI proxies
+- **🔌 Multi-Provider Support**: OpenAI, Anthropic, OpenRouter, Cerebras, Ollama, Google, Amazon, Cloudflare, DeepSeek, MiniMax, Moonshot AI (Kimi), Z.ai, Local, CLI proxies
 - **🛡️ Unified Interface**: Consistent API across different providers
 - **🔍 Intelligent Model Validation**: Strict `provider:model` format parsing with case-insensitive model support
 - **📋 Structured Output**: JSON and JSON Schema support for OpenAI, OpenRouter, and DeepSeek

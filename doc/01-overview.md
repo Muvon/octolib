@@ -71,6 +71,7 @@ Cross-provider tool call standardization:
 - OpenAI
 - Anthropic
 - OpenRouter
+- Cerebras
 - Ollama
 - DeepSeek
 - Moonshot AI (Kimi) - with thinking support

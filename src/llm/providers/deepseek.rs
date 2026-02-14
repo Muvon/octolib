@@ -31,7 +31,7 @@ use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderExchange, ProviderResponse, TokenUsage};
-use crate::llm::utils::{is_model_in_pricing_unified, PricingTuple};
+use crate::llm::utils::{is_model_in_pricing_table, PricingTuple};
 use anyhow::Result;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -60,11 +60,8 @@ fn calculate_cost_with_cache(
     cache_hit_tokens: u64,
     completion_tokens: u64,
 ) -> Option<f64> {
-    let Some((input_price, output_price, _cache_write_price, cache_read_price)) =
-        get_pricing_tuple(model)
-    else {
-        return None;
-    };
+    let (input_price, output_price, _cache_write_price, cache_read_price) =
+        get_pricing_tuple(model)?;
 
     let regular_input_cost = (regular_input_tokens as f64 / 1_000_000.0) * input_price;
     let cache_hit_cost = (cache_hit_tokens as f64 / 1_000_000.0) * cache_read_price;
@@ -163,7 +160,7 @@ impl AiProvider for DeepSeekProvider {
 
     fn supports_model(&self, model: &str) -> bool {
         // DeepSeek models - check against pricing table (strict)
-        is_model_in_pricing_unified(model, PRICING)
+        is_model_in_pricing_table(model, PRICING)
     }
 
     fn get_api_key(&self) -> Result<String> {
@@ -306,7 +303,7 @@ impl AiProvider for DeepSeekProvider {
             rate_limit_headers: None, // DeepSeek doesn't provide rate limit headers in response
         };
 
-        // Calculate cost with new unified pricing
+        // Calculate cost with the provider pricing table
         let token_usage = if let Some(usage) = deepseek_response.usage {
             let prompt_tokens = usage.input_tokens;
             let completion_tokens = usage.completion_tokens;
@@ -326,7 +323,7 @@ impl AiProvider for DeepSeekProvider {
             // DeepSeek doesn't expose cache_write separately - it's included in cache_miss
             let cache_write_tokens = 0_u64;
 
-            // Calculate cost with unified pricing (Jan 2026)
+            // Calculate cost with pricing table values (Jan 2026)
             let cost = if cache_read_tokens > 0 {
                 calculate_cost_with_cache(
                     &params.model,

@@ -22,8 +22,8 @@ use crate::llm::types::{
     ToolCall,
 };
 use crate::llm::utils::{
-    calculate_cost_unified, get_model_pricing, is_model_in_pricing_unified, normalize_model_name,
-    PricingTuple,
+    calculate_cost_from_pricing_table, get_model_pricing, is_model_in_pricing_table,
+    normalize_model_name, PricingTuple,
 };
 use anyhow::Result;
 use reqwest::Client;
@@ -90,7 +90,7 @@ const PRICING: &[PricingTuple] = &[
 
 /// Calculate cost for OpenAI models with basic pricing (case-insensitive)
 fn calculate_cost(model: &str, input_tokens: u64, completion_tokens: u64) -> Option<f64> {
-    calculate_cost_unified(model, PRICING, input_tokens, 0, 0, completion_tokens)
+    calculate_cost_from_pricing_table(model, PRICING, input_tokens, 0, 0, completion_tokens)
 }
 
 /// Calculate cost with cache-aware pricing (case-insensitive)
@@ -103,7 +103,7 @@ fn calculate_cost_with_cache(
     cache_read_tokens: u64,
     completion_tokens: u64,
 ) -> Option<f64> {
-    calculate_cost_unified(
+    calculate_cost_from_pricing_table(
         model,
         PRICING,
         regular_input_tokens,
@@ -227,7 +227,7 @@ impl AiProvider for OpenAiProvider {
 
     fn supports_model(&self, model: &str) -> bool {
         // OpenAI models - check against pricing table (strict, if not in pricing = not supported)
-        is_model_in_pricing_unified(model, PRICING)
+        is_model_in_pricing_table(model, PRICING)
     }
 
     fn get_api_key(&self) -> Result<String> {

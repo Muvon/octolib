@@ -22,7 +22,7 @@ use crate::llm::types::{
     ToolCall,
 };
 use crate::llm::utils::{
-    get_model_pricing, is_model_in_pricing_unified, normalize_model_name, PricingTuple,
+    get_model_pricing, is_model_in_pricing_table, normalize_model_name, PricingTuple,
 };
 use anyhow::Result;
 use async_trait::async_trait;
@@ -55,11 +55,8 @@ struct CacheTokenUsage {
 /// - regular_input_tokens: charged at normal price
 /// - output_tokens: charged at normal price
 fn calculate_cost_with_cache(model: &str, usage: CacheTokenUsage) -> Option<f64> {
-    let Some((input_price, output_price, cache_write_price, cache_read_price)) =
-        get_model_pricing(model, PRICING)
-    else {
-        return None;
-    };
+    let (input_price, output_price, cache_write_price, cache_read_price) =
+        get_model_pricing(model, PRICING)?;
 
     // Regular input tokens at normal price
     let regular_input_cost = (usage.regular_input_tokens as f64 / 1_000_000.0) * input_price;
@@ -120,7 +117,7 @@ impl AiProvider for MinimaxProvider {
     }
     fn supports_model(&self, model: &str) -> bool {
         // MiniMax models - check against pricing table (strict)
-        is_model_in_pricing_unified(model, PRICING)
+        is_model_in_pricing_table(model, PRICING)
     }
 
     fn get_api_key(&self) -> Result<String> {

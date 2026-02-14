@@ -17,7 +17,7 @@
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderResponse};
 use crate::llm::utils::{
-    get_model_pricing, is_model_in_pricing_unified, normalize_model_name, PricingTuple,
+    get_model_pricing, is_model_in_pricing_table, normalize_model_name, PricingTuple,
 };
 use anyhow::Result;
 use std::env;
@@ -78,7 +78,7 @@ impl AiProvider for GoogleVertexProvider {
 
     fn supports_model(&self, model: &str) -> bool {
         // Google Vertex AI (Gemini) models - check against pricing table (strict)
-        is_model_in_pricing_unified(model, PRICING)
+        is_model_in_pricing_table(model, PRICING)
     }
 
     fn get_api_key(&self) -> Result<String> {

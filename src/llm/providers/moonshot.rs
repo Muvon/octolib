@@ -34,7 +34,7 @@ use crate::llm::traits::AiProvider;
 use crate::llm::types::{
     ChatCompletionParams, ProviderExchange, ProviderResponse, TokenUsage, ToolCall,
 };
-use crate::llm::utils::{contains_ignore_ascii_case, is_model_in_pricing_unified, PricingTuple};
+use crate::llm::utils::{contains_ignore_ascii_case, is_model_in_pricing_table, PricingTuple};
 use anyhow::Result;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -72,11 +72,8 @@ fn calculate_cost_with_cache(
     cache_hit_tokens: u64,
     completion_tokens: u64,
 ) -> Option<f64> {
-    let Some((input_price, output_price, _cache_write_price, cache_read_price)) =
-        get_pricing_tuple(model)
-    else {
-        return None;
-    };
+    let (input_price, output_price, _cache_write_price, cache_read_price) =
+        get_pricing_tuple(model)?;
 
     let regular_input_cost = (regular_input_tokens as f64 / 1_000_000.0) * input_price;
     let cache_hit_cost = (cache_hit_tokens as f64 / 1_000_000.0) * cache_read_price;
@@ -402,7 +399,7 @@ impl AiProvider for MoonshotProvider {
 
     fn supports_model(&self, model: &str) -> bool {
         // Moonshot (Kimi) models - check against pricing table (strict)
-        is_model_in_pricing_unified(model, PRICING)
+        is_model_in_pricing_table(model, PRICING)
     }
 
     fn get_api_key(&self) -> Result<String> {

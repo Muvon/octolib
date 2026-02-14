@@ -20,7 +20,7 @@
 //! 1. AWS Console → IAM → Users → Select/Create user
 //! 2. Security credentials → Create service-specific credential
 //! 3. Select "Amazon Bedrock" as the service
-//! 4. Copy the generated API key (format: bedrock-<region>-<account>:<secret>)
+//! 4. Copy the generated API key (format: bedrock-region-account:secret)
 //! 5. Set environment variable: export AWS_BEARER_TOKEN_BEDROCK="your-api-key"
 //!
 //! **Note:** These are NOT regular AWS access keys. They are Bedrock-specific API keys

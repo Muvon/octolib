@@ -18,7 +18,7 @@
 //! NOT Vertex AI. Authentication is via simple API key, not service account.
 //!
 //! **How to get an API key:**
-//! 1. Go to Google AI Studio: https://makersuite.google.com/app/apikey
+//! 1. Go to Google AI Studio: <https://makersuite.google.com/app/apikey>
 //! 2. Create an API key
 //! 3. Set environment variable: export GOOGLE_API_KEY="your-api-key"
 //!

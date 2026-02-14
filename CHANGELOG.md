@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.8.3] - 2026-02-14
+
+### 📋 Release Summary
+
+This release improves cost tracking accuracy for cached requests and unifies pricing structures across all AI providers (d93c6091, 1359bdf5, c57d862c, f6872ead). Enhanced model validation and updated pre-commit hooks ensure more reliable provider integrations (3bc7ae08, 62a4e00a).
+
+
+### 🔧 Improvements & Optimizations
+
+- **llm**: unify pricing table to 5-tuple format `c57d862c`
+- **llm**: unify pricing structure across providers `f6872ead`
+- **llm**: rename prompt_tokens to input_tokens and add cache fields `2f7f6e66`
+
+### 🐛 Bug Fixes & Stability
+
+- **zai**: handle cache read tokens in cost calculation `d93c6091`
+- **anthropic**: restore dot notation model aliases `dfb56d78`
+- **llm**: correct token calculation logic for cached requests `1359bdf5`
+
+### 🔄 Other Changes
+
+- **release**: 0.8.3" `549abe53`
+- **release**: 0.8.3 `371da6c0`
+- **pre-commit**: update hooks and model validation `3bc7ae08`
+- **pre-commit**: add cargo doc check to precommit hooks `62a4e00a`
+
+### 📊 Release Summary
+
+**Total commits**: 10 across 3 categories
+
+🔧 **3** improvements - *Better performance & code quality*
+🐛 **3** bug fixes - *Improved stability*
+🔄 **4** other changes - *Maintenance & tooling*
+
 ## [0.8.2] - 2026-02-13
 
 ### 📋 Release Summary

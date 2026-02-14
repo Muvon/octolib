@@ -31,6 +31,16 @@ repos:
         files: \.rs$
         args: ['--all-targets', '--all-features']
 
+      # Check documentation builds without warnings
+      - id: rust-doc
+        name: cargo doc
+        description: Check Rust documentation builds without warnings
+        entry: bash
+        language: system
+        args: ['-c', 'RUSTDOCFLAGS="-D warnings" cargo doc --all-features --no-deps']
+        pass_filenames: false
+        always_run: true
+
   # General hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.4.0

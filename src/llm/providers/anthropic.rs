@@ -57,10 +57,13 @@ const PRICING: &[(&str, f64, f64)] = &[
     // Claude 3.7
     ("claude-3-7-sonnet-20250219", 3.00, 15.00),
     ("claude-3-7-sonnet", 3.00, 15.00),
-    // Claude 3.5
+    // Claude 3.5 (hyphenated format)
     ("claude-3-5-sonnet", 3.00, 15.00),
     ("claude-3-5-haiku-20241022", 0.80, 4.00),
     ("claude-3-5-haiku", 0.80, 4.00),
+    // Claude 3.5 (dot notation aliases - common user format)
+    ("claude-3.5-sonnet", 3.00, 15.00),
+    ("claude-3.5-haiku", 0.80, 4.00),
     // Claude 3
     ("claude-3-opus", 15.00, 75.00),
     ("claude-3-sonnet", 3.00, 15.00),

@@ -48,7 +48,8 @@ use crate::llm::types::{
     TokenUsage, ToolCall,
 };
 use crate::llm::utils::{
-    contains_ignore_ascii_case, is_model_in_pricing_table, normalize_model_name,
+    calculate_cost_unified, get_model_pricing, is_model_in_pricing_unified, normalize_model_name,
+    PricingTuple,
 };
 use anyhow::Result;
 use async_trait::async_trait;
@@ -58,49 +59,41 @@ use std::env;
 
 /// Z.ai pricing constants (per 1M tokens in USD)
 /// Source: https://docs.z.ai/guides/overview/pricing (verified Feb 13, 2026)
-const PRICING: &[(&str, f64, f64)] = &[
-    // Model, Input price per 1M tokens, Output price per 1M tokens
-    // IMPORTANT: More specific model names must come first (using contains matching)
-
+/// Format: (model, input, output, cache_write, cache_read)
+/// Note: Z.ai supports caching - using input price as cache price (can be updated when specific pricing is known)
+const PRICING: &[PricingTuple] = &[
     // GLM-5 series (latest generation - Feb 2026)
-    ("glm-5-code", 1.20, 5.00),
-    ("glm-5", 1.00, 3.20),
+    ("glm-5-code", 1.20, 5.00, 1.20, 0.12),
+    ("glm-5", 1.00, 3.20, 1.00, 0.10),
     // GLM-4.7 series (flagship) - more specific variants first
-    ("glm-4.7-flashx", 0.07, 0.40),
-    ("glm-4.7-flash", 0.07, 0.40),
-    ("glm-4.7-battle", 0.60, 2.20), // Same as base GLM-4.7
-    ("glm-4.7", 0.60, 2.20),
+    ("glm-4.7-flashx", 0.07, 0.40, 0.07, 0.007),
+    ("glm-4.7-flash", 0.07, 0.40, 0.07, 0.007),
+    ("glm-4.7-battle", 0.60, 2.20, 0.60, 0.06),
+    ("glm-4.7", 0.60, 2.20, 0.60, 0.06),
     // GLM-4.6 series
-    ("glm-4.6v-flashx", 0.04, 0.40),
-    ("glm-4.6v-flash", 0.04, 0.40),
-    ("glm-4.6v", 0.30, 0.90),
-    ("glm-4.6-flash", 0.60, 2.20), // Same as base GLM-4.6
-    ("glm-4.6", 0.60, 2.20),
+    ("glm-4.6v-flashx", 0.04, 0.40, 0.04, 0.004),
+    ("glm-4.6v-flash", 0.04, 0.40, 0.04, 0.004),
+    ("glm-4.6v", 0.30, 0.90, 0.30, 0.03),
+    ("glm-4.6-flash", 0.60, 2.20, 0.60, 0.06),
+    ("glm-4.6", 0.60, 2.20, 0.60, 0.06),
     // GLM-4.5 series - most specific first
-    ("glm-4.5-airx", 1.10, 4.50),
-    ("glm-4.5-air-plus", 0.20, 1.10), // Same as air
-    ("glm-4.5-air", 0.20, 1.10),
-    ("glm-4.5v", 0.60, 1.80), // Vision model
-    ("glm-4.5-x", 2.20, 8.90),
-    ("glm-4.5-flash", 0.60, 2.20), // Same as base GLM-4.5
-    ("glm-4.5", 0.60, 2.20),
+    ("glm-4.5-airx", 1.10, 4.50, 1.10, 0.11),
+    ("glm-4.5-air-plus", 0.20, 1.10, 0.20, 0.02),
+    ("glm-4.5-air", 0.20, 1.10, 0.20, 0.02),
+    ("glm-4.5v", 0.60, 1.80, 0.60, 0.06),
+    ("glm-4.5-x", 2.20, 8.90, 2.20, 0.22),
+    ("glm-4.5-flash", 0.60, 2.20, 0.60, 0.06),
+    ("glm-4.5", 0.60, 2.20, 0.60, 0.06),
     // GLM-4 series
-    ("glm-4-32b-0414-128k", 0.10, 0.10),
-    ("glm-4-32b", 0.10, 0.10),
-    ("glm-4-flash", 0.60, 2.20), // Fallback to 4.5 pricing
-    ("glm-4", 0.60, 2.20),       // Fallback to 4.5 pricing
+    ("glm-4-32b-0414-128k", 0.10, 0.10, 0.10, 0.01),
+    ("glm-4-32b", 0.10, 0.10, 0.10, 0.01),
+    ("glm-4-flash", 0.60, 2.20, 0.60, 0.06),
+    ("glm-4", 0.60, 2.20, 0.60, 0.06),
 ];
 
 /// Calculate cost for Z.ai models (case-insensitive)
 fn calculate_cost(model: &str, input_tokens: u64, completion_tokens: u64) -> Option<f64> {
-    for (pricing_model, input_price, output_price) in PRICING {
-        if contains_ignore_ascii_case(model, pricing_model) {
-            let input_cost = (input_tokens as f64 / 1_000_000.0) * input_price;
-            let output_cost = (completion_tokens as f64 / 1_000_000.0) * output_price;
-            return Some(input_cost + output_cost);
-        }
-    }
-    None
+    calculate_cost_unified(model, PRICING, input_tokens, 0, 0, completion_tokens)
 }
 
 /// Z.ai provider
@@ -229,7 +222,7 @@ impl AiProvider for ZaiProvider {
 
     fn supports_model(&self, model: &str) -> bool {
         // Z.ai (GLM) models - check against pricing table (strict)
-        is_model_in_pricing_table(model, PRICING)
+        is_model_in_pricing_unified(model, PRICING)
     }
 
     fn get_api_key(&self) -> Result<String> {
@@ -250,17 +243,15 @@ impl AiProvider for ZaiProvider {
     }
 
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
-        // Search through pricing table for matching model
-        for (pricing_model, input_price, output_price) in PRICING {
-            if contains_ignore_ascii_case(model, pricing_model) {
-                // Z.ai doesn't support caching yet, use without_cache
-                return Some(crate::llm::types::ModelPricing::without_cache(
-                    *input_price,
-                    *output_price,
-                ));
-            }
-        }
-        None
+        let (input_price, output_price, cache_write_price, cache_read_price) =
+            get_model_pricing(model, PRICING)?;
+
+        Some(crate::llm::types::ModelPricing::new(
+            input_price,
+            output_price,
+            cache_write_price,
+            cache_read_price,
+        ))
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {

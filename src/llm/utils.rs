@@ -91,6 +91,46 @@ pub fn is_model_in_pricing_table_optional_cache(
     is_model_in_pricing_names(model, pricing.iter().map(|(name, _, _, _)| *name))
 }
 
+/// Unified 5-tuple pricing: (model, input, output, cache_write, cache_read)
+/// All prices are per 1M tokens in USD
+pub type PricingTuple = (&'static str, f64, f64, f64, f64);
+
+/// Check if a model is supported based on the unified 5-tuple pricing table.
+pub fn is_model_in_pricing_unified(model: &str, pricing: &[PricingTuple]) -> bool {
+    is_model_in_pricing_names(model, pricing.iter().map(|(name, _, _, _, _)| *name))
+}
+
+/// Get pricing for a model from unified 5-tuple pricing table.
+/// Returns None if model not found.
+pub fn get_model_pricing(model: &str, pricing: &[PricingTuple]) -> Option<(f64, f64, f64, f64)> {
+    let normalized = normalize_model_name(model);
+    pricing
+        .iter()
+        .find(|(name, _, _, _, _)| normalized.contains(&normalize_model_name(name)))
+        .map(|(_, input, output, cache_write, cache_read)| {
+            (*input, *output, *cache_write, *cache_read)
+        })
+}
+
+/// Calculate cost using unified 5-tuple pricing.
+pub fn calculate_cost_unified(
+    model: &str,
+    pricing: &[PricingTuple],
+    regular_input_tokens: u64,
+    cache_write_tokens: u64,
+    cache_read_tokens: u64,
+    output_tokens: u64,
+) -> Option<f64> {
+    let (input, output, cache_write, cache_read) = get_model_pricing(model, pricing)?;
+
+    let regular_input_cost = (regular_input_tokens as f64 / 1_000_000.0) * input;
+    let cache_write_cost = (cache_write_tokens as f64 / 1_000_000.0) * cache_write;
+    let cache_read_cost = (cache_read_tokens as f64 / 1_000_000.0) * cache_read;
+    let output_cost = (output_tokens as f64 / 1_000_000.0) * output;
+
+    Some(regular_input_cost + cache_write_cost + cache_read_cost + output_cost)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

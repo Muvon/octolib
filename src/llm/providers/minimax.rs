@@ -22,7 +22,7 @@ use crate::llm::types::{
     ToolCall,
 };
 use crate::llm::utils::{
-    contains_ignore_ascii_case, is_model_in_pricing_table, normalize_model_name,
+    get_model_pricing, is_model_in_pricing_unified, normalize_model_name, PricingTuple,
 };
 use anyhow::Result;
 use async_trait::async_trait;
@@ -32,13 +32,13 @@ use std::env;
 
 /// MiniMax pricing constants (per 1M tokens in USD)
 /// Source: https://www.minimax.io/news/minimax-m25 (as of Feb 2026)
-const PRICING: &[(&str, f64, f64)] = &[
-    // Model, Input price per 1M tokens, Output price per 1M tokens
-    ("MiniMax-M2.5-lightning", 0.15, 2.40),
-    ("MiniMax-M2.5", 0.30, 1.20),
-    ("MiniMax-M2.1-lightning", 0.30, 2.40),
-    ("MiniMax-M2.1", 0.27, 0.95),
-    ("MiniMax-M2", 0.255, 1.00),
+/// Format: (model, input, output, cache_write, cache_read)
+const PRICING: &[PricingTuple] = &[
+    ("MiniMax-M2.5-lightning", 0.15, 2.40, 0.15, 0.015),
+    ("MiniMax-M2.5", 0.30, 1.20, 0.30, 0.03),
+    ("MiniMax-M2.1-lightning", 0.30, 2.40, 0.30, 0.03),
+    ("MiniMax-M2.1", 0.27, 0.95, 0.27, 0.027),
+    ("MiniMax-M2", 0.255, 1.00, 0.255, 0.0255),
 ];
 
 /// Token usage breakdown for cache-aware pricing
@@ -55,27 +55,26 @@ struct CacheTokenUsage {
 /// - regular_input_tokens: charged at normal price
 /// - output_tokens: charged at normal price
 fn calculate_cost_with_cache(model: &str, usage: CacheTokenUsage) -> Option<f64> {
-    for (pricing_model, input_price, output_price) in PRICING {
-        if contains_ignore_ascii_case(model, pricing_model) {
-            // Regular input tokens at normal price
-            let regular_input_cost =
-                (usage.regular_input_tokens as f64 / 1_000_000.0) * input_price;
+    let Some((input_price, output_price, cache_write_price, cache_read_price)) =
+        get_model_pricing(model, PRICING)
+    else {
+        return None;
+    };
 
-            // Cache creation tokens at 1.25x input price
-            let cache_creation_cost =
-                (usage.cache_creation_tokens as f64 / 1_000_000.0) * (input_price * 1.25);
+    // Regular input tokens at normal price
+    let regular_input_cost = (usage.regular_input_tokens as f64 / 1_000_000.0) * input_price;
 
-            // Cache read tokens at 0.1x input price
-            let cache_read_cost =
-                (usage.cache_read_tokens as f64 / 1_000_000.0) * (input_price * 0.1);
+    // Cache creation tokens at cache_write_price
+    let cache_creation_cost =
+        (usage.cache_creation_tokens as f64 / 1_000_000.0) * cache_write_price;
 
-            // Output tokens at normal price
-            let output_cost = (usage.output_tokens as f64 / 1_000_000.0) * output_price;
+    // Cache read tokens at cache_read_price
+    let cache_read_cost = (usage.cache_read_tokens as f64 / 1_000_000.0) * cache_read_price;
 
-            return Some(regular_input_cost + cache_creation_cost + cache_read_cost + output_cost);
-        }
-    }
-    None
+    // Output tokens at normal price
+    let output_cost = (usage.output_tokens as f64 / 1_000_000.0) * output_price;
+
+    Some(regular_input_cost + cache_creation_cost + cache_read_cost + output_cost)
 }
 
 /// Helper function to calculate cost for MiniMax models
@@ -121,7 +120,7 @@ impl AiProvider for MinimaxProvider {
     }
     fn supports_model(&self, model: &str) -> bool {
         // MiniMax models - check against pricing table (strict)
-        is_model_in_pricing_table(model, PRICING)
+        is_model_in_pricing_unified(model, PRICING)
     }
 
     fn get_api_key(&self) -> Result<String> {
@@ -142,21 +141,15 @@ impl AiProvider for MinimaxProvider {
     }
 
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
-        // Search through pricing table for matching model
-        for (pricing_model, input_price, output_price) in PRICING {
-            if contains_ignore_ascii_case(model, pricing_model) {
-                // MiniMax cache pricing:
-                // - Cache write: $0.375 per 1M tokens (fixed for all models)
-                // - Cache read: $0.03 per 1M tokens (fixed for all models)
-                return Some(crate::llm::types::ModelPricing::new(
-                    *input_price,
-                    *output_price,
-                    0.375, // Cache write price (fixed)
-                    0.03,  // Cache read price (fixed)
-                ));
-            }
-        }
-        None
+        let (input_price, output_price, cache_write_price, cache_read_price) =
+            get_model_pricing(model, PRICING)?;
+
+        Some(crate::llm::types::ModelPricing::new(
+            input_price,
+            output_price,
+            cache_write_price,
+            cache_read_price,
+        ))
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {

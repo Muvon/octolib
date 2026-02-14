@@ -22,7 +22,8 @@ use crate::llm::types::{
     ToolCall,
 };
 use crate::llm::utils::{
-    contains_ignore_ascii_case, is_model_in_pricing_table_optional_cache, normalize_model_name,
+    calculate_cost_unified, get_model_pricing, is_model_in_pricing_unified, normalize_model_name,
+    PricingTuple,
 };
 use anyhow::Result;
 use reqwest::Client;
@@ -31,72 +32,65 @@ use std::env;
 
 /// OpenAI pricing constants (per 1M tokens in USD)
 /// Source: https://platform.openai.com/docs/pricing and model cards (verified Feb 13, 2026)
-const PRICING: &[(&str, f64, Option<f64>, f64)] = &[
-    // Model, Input, Cached input (None if unavailable), Output
+/// Format: (model, input, output, cache_write, cache_read)
+/// Note: For models without caching, cache_write = input and cache_read = input
+const PRICING: &[PricingTuple] = &[
     // GPT-5.2 family
-    // NOTE: gpt-5.3-codex pricing is inferred from current docs until OpenAI publishes explicit rates.
-    ("gpt-5.3-codex", 1.75, Some(0.175), 14.00),
-    ("gpt-5.2-pro", 21.00, None, 168.00),
-    ("gpt-5.2-codex", 1.75, Some(0.175), 14.00),
-    ("gpt-5.2-chat-latest", 1.75, Some(0.175), 14.00),
-    ("gpt-5.2", 1.75, Some(0.175), 14.00),
+    ("gpt-5.3-codex", 1.75, 14.00, 1.75, 0.175),
+    ("gpt-5.2-pro", 21.00, 168.00, 21.00, 21.00),
+    ("gpt-5.2-codex", 1.75, 14.00, 1.75, 0.175),
+    ("gpt-5.2-chat-latest", 1.75, 14.00, 1.75, 0.175),
+    ("gpt-5.2", 1.75, 14.00, 1.75, 0.175),
     // GPT-5.1 family
-    ("gpt-5.1-codex-mini", 0.25, Some(0.025), 2.00),
-    ("gpt-5.1-codex-max", 1.25, Some(0.125), 10.00),
-    ("gpt-5.1-codex", 1.25, Some(0.125), 10.00),
-    ("gpt-5.1-chat-latest", 1.25, Some(0.125), 10.00),
-    ("gpt-5.1", 1.25, Some(0.125), 10.00),
+    ("gpt-5.1-codex-mini", 0.25, 2.00, 0.25, 0.025),
+    ("gpt-5.1-codex-max", 1.25, 10.00, 1.25, 0.125),
+    ("gpt-5.1-codex", 1.25, 10.00, 1.25, 0.125),
+    ("gpt-5.1-chat-latest", 1.25, 10.00, 1.25, 0.125),
+    ("gpt-5.1", 1.25, 10.00, 1.25, 0.125),
     // GPT-5 family
-    ("gpt-5-pro", 15.00, None, 120.00),
-    ("gpt-5-codex", 1.25, Some(0.125), 10.00),
-    ("gpt-5-chat-latest", 1.25, Some(0.125), 10.00),
-    ("gpt-5-mini", 0.25, Some(0.025), 2.00),
-    ("gpt-5-nano", 0.05, Some(0.005), 0.40),
-    ("gpt-5", 1.25, Some(0.125), 10.00),
+    ("gpt-5-pro", 15.00, 120.00, 15.00, 15.00),
+    ("gpt-5-codex", 1.25, 10.00, 1.25, 0.125),
+    ("gpt-5-chat-latest", 1.25, 10.00, 1.25, 0.125),
+    ("gpt-5-mini", 0.25, 2.00, 0.25, 0.025),
+    ("gpt-5-nano", 0.05, 0.40, 0.05, 0.005),
+    ("gpt-5", 1.25, 10.00, 1.25, 0.125),
     // Codex CLI optimized model
-    ("codex-mini-latest", 1.50, Some(0.375), 6.00),
+    ("codex-mini-latest", 1.50, 6.00, 1.50, 0.375),
     // GPT-4.1 family
-    ("gpt-4.1-mini", 0.40, Some(0.10), 1.60),
-    ("gpt-4.1-nano", 0.10, Some(0.025), 0.40),
-    ("gpt-4.1", 2.00, Some(0.50), 8.00),
+    ("gpt-4.1-mini", 0.40, 1.60, 0.40, 0.10),
+    ("gpt-4.1-nano", 0.10, 0.40, 0.10, 0.025),
+    ("gpt-4.1", 2.00, 8.00, 2.00, 0.50),
     // GPT-4o / realtime / audio
-    ("gpt-realtime-mini", 0.60, Some(0.06), 2.40),
-    ("gpt-realtime", 4.00, Some(0.40), 16.00),
-    ("gpt-audio", 2.50, None, 10.00),
-    ("gpt-4o-mini-realtime-preview", 0.60, Some(0.30), 2.40),
-    ("gpt-4o-realtime-preview", 5.00, Some(2.50), 20.00),
-    ("gpt-4o-mini", 0.15, Some(0.075), 0.60),
-    ("gpt-4o-2024-05-13", 5.00, None, 15.00),
-    ("gpt-4o", 2.50, Some(1.25), 10.00),
+    ("gpt-realtime-mini", 0.60, 2.40, 0.60, 0.06),
+    ("gpt-realtime", 4.00, 16.00, 4.00, 0.40),
+    ("gpt-audio", 2.50, 10.00, 2.50, 2.50),
+    ("gpt-4o-mini-realtime-preview", 0.60, 2.40, 0.60, 0.30),
+    ("gpt-4o-realtime-preview", 5.00, 20.00, 5.00, 2.50),
+    ("gpt-4o-mini", 0.15, 0.60, 0.15, 0.075),
+    ("gpt-4o-2024-05-13", 5.00, 15.00, 5.00, 5.00),
+    ("gpt-4o", 2.50, 10.00, 2.50, 1.25),
     // Legacy/long-tail models retained for compatibility
-    ("gpt-4.5-preview", 75.00, None, 150.00),
-    ("o1", 15.00, Some(7.50), 60.00),
-    ("o1-pro", 150.00, None, 600.00),
-    ("o1-mini", 1.10, Some(0.55), 4.40),
-    ("o3", 2.00, Some(0.50), 8.00),
-    ("o3-pro", 20.00, None, 80.00),
-    ("o3-mini", 1.10, Some(0.55), 4.40),
-    ("o3-deep-research", 10.00, Some(2.50), 40.00),
-    ("o4-mini", 1.10, Some(0.275), 4.40),
-    ("o4-mini-deep-research", 2.00, Some(0.50), 8.00),
-    ("gpt-4-turbo", 10.00, None, 30.00),
-    ("gpt-4", 30.00, None, 60.00),
-    ("gpt-4-32k", 60.00, None, 120.00),
-    ("gpt-3.5-turbo-instruct", 1.50, None, 2.00),
-    ("gpt-3.5-turbo-16k-0613", 3.00, None, 4.00),
-    ("gpt-3.5-turbo", 0.50, None, 1.50),
+    ("gpt-4.5-preview", 75.00, 150.00, 75.00, 75.00),
+    ("o1", 15.00, 60.00, 15.00, 7.50),
+    ("o1-pro", 150.00, 600.00, 150.00, 150.00),
+    ("o1-mini", 1.10, 4.40, 1.10, 0.55),
+    ("o3", 2.00, 8.00, 2.00, 0.50),
+    ("o3-pro", 20.00, 80.00, 20.00, 20.00),
+    ("o3-mini", 1.10, 4.40, 1.10, 0.55),
+    ("o3-deep-research", 10.00, 40.00, 10.00, 2.50),
+    ("o4-mini", 1.10, 4.40, 1.10, 0.275),
+    ("o4-mini-deep-research", 2.00, 8.00, 2.00, 0.50),
+    ("gpt-4-turbo", 10.00, 30.00, 10.00, 10.00),
+    ("gpt-4", 30.00, 60.00, 30.00, 30.00),
+    ("gpt-4-32k", 60.00, 120.00, 60.00, 60.00),
+    ("gpt-3.5-turbo-instruct", 1.50, 2.00, 1.50, 1.50),
+    ("gpt-3.5-turbo-16k-0613", 3.00, 4.00, 3.00, 3.00),
+    ("gpt-3.5-turbo", 0.50, 1.50, 0.50, 0.50),
 ];
 
 /// Calculate cost for OpenAI models with basic pricing (case-insensitive)
 fn calculate_cost(model: &str, input_tokens: u64, completion_tokens: u64) -> Option<f64> {
-    for (pricing_model, input_price, _, output_price) in PRICING {
-        if contains_ignore_ascii_case(model, pricing_model) {
-            let input_cost = (input_tokens as f64 / 1_000_000.0) * input_price;
-            let output_cost = (completion_tokens as f64 / 1_000_000.0) * output_price;
-            return Some(input_cost + output_cost);
-        }
-    }
-    None
+    calculate_cost_unified(model, PRICING, input_tokens, 0, 0, completion_tokens)
 }
 
 /// Calculate cost with cache-aware pricing (case-insensitive)
@@ -109,17 +103,14 @@ fn calculate_cost_with_cache(
     cache_read_tokens: u64,
     completion_tokens: u64,
 ) -> Option<f64> {
-    for (pricing_model, input_price, cached_input_price, output_price) in PRICING {
-        if contains_ignore_ascii_case(model, pricing_model) {
-            let regular_input_cost = (regular_input_tokens as f64 / 1_000_000.0) * input_price;
-            let effective_cached_input_price = cached_input_price.unwrap_or(*input_price);
-            let cache_read_cost =
-                (cache_read_tokens as f64 / 1_000_000.0) * effective_cached_input_price;
-            let output_cost = (completion_tokens as f64 / 1_000_000.0) * output_price;
-            return Some(regular_input_cost + cache_read_cost + output_cost);
-        }
-    }
-    None
+    calculate_cost_unified(
+        model,
+        PRICING,
+        regular_input_tokens,
+        0,
+        cache_read_tokens,
+        completion_tokens,
+    )
 }
 
 /// Check if a model supports the temperature parameter
@@ -236,7 +227,7 @@ impl AiProvider for OpenAiProvider {
 
     fn supports_model(&self, model: &str) -> bool {
         // OpenAI models - check against pricing table (strict, if not in pricing = not supported)
-        is_model_in_pricing_table_optional_cache(model, PRICING)
+        is_model_in_pricing_unified(model, PRICING)
     }
 
     fn get_api_key(&self) -> Result<String> {
@@ -348,19 +339,15 @@ impl AiProvider for OpenAiProvider {
     }
 
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
-        // Search through pricing table for matching model
-        for (pricing_model, input_price, cached_input_price, output_price) in PRICING {
-            if contains_ignore_ascii_case(model, pricing_model) {
-                let cache_read = cached_input_price.unwrap_or(*input_price);
-                return Some(crate::llm::types::ModelPricing::new(
-                    *input_price,
-                    *output_price,
-                    *input_price,
-                    cache_read,
-                ));
-            }
-        }
-        None
+        let (input_price, output_price, cache_write_price, cache_read_price) =
+            get_model_pricing(model, PRICING)?;
+
+        Some(crate::llm::types::ModelPricing::new(
+            input_price,
+            output_price,
+            cache_write_price,
+            cache_read_price,
+        ))
     }
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {

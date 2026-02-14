@@ -17,7 +17,7 @@
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderResponse};
 use crate::llm::utils::{
-    contains_ignore_ascii_case, is_model_in_pricing_table, normalize_model_name,
+    get_model_pricing, is_model_in_pricing_unified, normalize_model_name, PricingTuple,
 };
 use anyhow::Result;
 use std::env;
@@ -42,32 +42,32 @@ const GOOGLE_APPLICATION_CREDENTIALS_ENV: &str = "GOOGLE_APPLICATION_CREDENTIALS
 const GOOGLE_API_KEY_ENV: &str = "GOOGLE_API_KEY";
 
 #[allow(dead_code)] // Pricing table ready for when implementation is completed
-const PRICING: &[(&str, f64, f64)] = &[
-    // Model, Input price per 1M tokens, Output price per 1M tokens
-    // Source: https://ai.google.dev/gemini-api/docs/pricing (as of Jan 2026)
+/// Format: (model, input, output, cache_write, cache_read)
+/// Note: Google/Gemini does NOT support caching, so cache_write and cache_read = input price
+const PRICING: &[PricingTuple] = &[
     // Gemini 3 (Released Nov 18, 2025)
-    ("gemini-3-pro", 2.00, 12.00),
-    ("gemini-3-pro-preview", 2.00, 12.00),
+    ("gemini-3-pro", 2.00, 12.00, 2.00, 2.00),
+    ("gemini-3-pro-preview", 2.00, 12.00, 2.00, 2.00),
     // Gemini 2.5
-    ("gemini-2.5-pro", 1.25, 5.00),
-    ("gemini-2.5-flash", 0.075, 0.30),
-    ("gemini-2.5-flash-lite", 0.10, 0.30),
+    ("gemini-2.5-pro", 1.25, 5.00, 1.25, 1.25),
+    ("gemini-2.5-flash", 0.075, 0.30, 0.075, 0.075),
+    ("gemini-2.5-flash-lite", 0.10, 0.30, 0.10, 0.10),
     // Gemini 2.0
-    ("gemini-2.0-flash", 0.10, 0.40), // Updated Jan 2026: simplified pricing
-    ("gemini-2.0-flash-lite", 0.10, 0.30),
-    ("gemini-2.0-flash-live", 0.35, 1.50), // Text pricing, audio/video higher
+    ("gemini-2.0-flash", 0.10, 0.40, 0.10, 0.10),
+    ("gemini-2.0-flash-lite", 0.10, 0.30, 0.10, 0.10),
+    ("gemini-2.0-flash-live", 0.35, 1.50, 0.35, 0.35),
     // Gemini 1.5
-    ("gemini-1.5-pro", 1.25, 5.00),
-    ("gemini-1.5-flash", 0.075, 0.30),
+    ("gemini-1.5-pro", 1.25, 5.00, 1.25, 1.25),
+    ("gemini-1.5-flash", 0.075, 0.30, 0.075, 0.075),
     // Gemini 1.0
-    ("gemini-1.0-pro", 0.50, 1.50),
+    ("gemini-1.0-pro", 0.50, 1.50, 0.50, 0.50),
     // Legacy PaLM 2 models (deprecated but still supported)
-    ("text-bison", 0.25, 0.50),        // PaLM 2 Text
-    ("text-bison-32k", 0.25, 0.50),    // PaLM 2 Text 32K
-    ("chat-bison", 0.25, 0.50),        // PaLM 2 Chat
-    ("chat-bison-32k", 0.25, 0.50),    // PaLM 2 Chat 32K
-    ("gemini-pro", 0.50, 1.50),        // Original Gemini Pro (legacy)
-    ("gemini-pro-vision", 0.50, 1.50), // Gemini Pro Vision (legacy)
+    ("text-bison", 0.25, 0.50, 0.25, 0.25),
+    ("text-bison-32k", 0.25, 0.50, 0.25, 0.25),
+    ("chat-bison", 0.25, 0.50, 0.25, 0.25),
+    ("chat-bison-32k", 0.25, 0.50, 0.25, 0.25),
+    ("gemini-pro", 0.50, 1.50, 0.50, 0.50),
+    ("gemini-pro-vision", 0.50, 1.50, 0.50, 0.50),
 ];
 
 #[async_trait::async_trait]
@@ -78,7 +78,7 @@ impl AiProvider for GoogleVertexProvider {
 
     fn supports_model(&self, model: &str) -> bool {
         // Google Vertex AI (Gemini) models - check against pricing table (strict)
-        is_model_in_pricing_table(model, PRICING)
+        is_model_in_pricing_unified(model, PRICING)
     }
 
     fn get_api_key(&self) -> Result<String> {
@@ -112,16 +112,15 @@ impl AiProvider for GoogleVertexProvider {
     }
 
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
-        // Search through pricing table for matching model
-        for (pricing_model, input_price, output_price) in PRICING {
-            if contains_ignore_ascii_case(model, pricing_model) {
-                return Some(crate::llm::types::ModelPricing::without_cache(
-                    *input_price,
-                    *output_price,
-                ));
-            }
-        }
-        None
+        let (input_price, output_price, cache_write_price, cache_read_price) =
+            get_model_pricing(model, PRICING)?;
+
+        Some(crate::llm::types::ModelPricing::new(
+            input_price,
+            output_price,
+            cache_write_price,
+            cache_read_price,
+        ))
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {

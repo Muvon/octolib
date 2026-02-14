@@ -31,7 +31,7 @@ use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderExchange, ProviderResponse, TokenUsage};
-use crate::llm::utils::is_model_in_pricing_table_3tuple;
+use crate::llm::utils::{is_model_in_pricing_unified, PricingTuple};
 use anyhow::Result;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -40,37 +40,34 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 // Model pricing (per 1M tokens in USD) - Updated Jan 2026
 // Source: https://api-docs.deepseek.com/quick_start/pricing
-const PRICING: &[(&str, f64, f64, f64)] = &[
-    // Model, Cache Hit price, Cache Miss (Input) price, Output price per 1M tokens
-    ("deepseek-chat", 0.07, 0.27, 1.10),     // V3 model
-    ("deepseek-reasoner", 0.14, 0.55, 2.19), // R1 model
+/// Format: (model, input, output, cache_write, cache_read)
+/// Note: DeepSeek uses cache_hit/cache_miss model - cache_write = cache_miss (input), cache_read = cache_hit
+const PRICING: &[PricingTuple] = &[
+    ("deepseek-chat", 0.27, 1.10, 0.27, 0.07),     // V3 model
+    ("deepseek-reasoner", 0.55, 2.19, 0.55, 0.14), // R1 model
 ];
 
-/// Get pricing for a specific model (case-insensitive)
+/// Get pricing tuple for a specific model (case-insensitive)
 /// Returns None if the model is not in the pricing table (not supported)
-fn get_model_pricing(model: &str) -> Option<(f64, f64, f64)> {
-    let normalized = model.to_ascii_lowercase();
-    for (pricing_model, cache_hit, cache_miss, output) in PRICING {
-        if normalized.contains(&pricing_model.to_ascii_lowercase()) {
-            return Some((*cache_hit, *cache_miss, *output));
-        }
-    }
-    // Model not in pricing table - not supported
-    None
+fn get_pricing_tuple(model: &str) -> Option<(f64, f64, f64, f64)> {
+    crate::llm::utils::get_model_pricing(model, PRICING)
 }
 
 /// Calculate cost for DeepSeek models with cache-aware pricing (Jan 2026)
-/// Returns None if the model is not supported (not in pricing table)
 fn calculate_cost_with_cache(
     model: &str,
     regular_input_tokens: u64,
     cache_hit_tokens: u64,
     completion_tokens: u64,
 ) -> Option<f64> {
-    let (cache_hit_price, cache_miss_price, output_price) = get_model_pricing(model)?;
+    let Some((input_price, output_price, _cache_write_price, cache_read_price)) =
+        get_pricing_tuple(model)
+    else {
+        return None;
+    };
 
-    let regular_input_cost = (regular_input_tokens as f64 / 1_000_000.0) * cache_miss_price;
-    let cache_hit_cost = (cache_hit_tokens as f64 / 1_000_000.0) * cache_hit_price;
+    let regular_input_cost = (regular_input_tokens as f64 / 1_000_000.0) * input_price;
+    let cache_hit_cost = (cache_hit_tokens as f64 / 1_000_000.0) * cache_read_price;
     let output_cost = (completion_tokens as f64 / 1_000_000.0) * output_price;
 
     Some(regular_input_cost + cache_hit_cost + output_cost)
@@ -166,7 +163,7 @@ impl AiProvider for DeepSeekProvider {
 
     fn supports_model(&self, model: &str) -> bool {
         // DeepSeek models - check against pricing table (strict)
-        is_model_in_pricing_table_3tuple(model, PRICING)
+        is_model_in_pricing_unified(model, PRICING)
     }
 
     fn get_api_key(&self) -> Result<String> {
@@ -193,19 +190,15 @@ impl AiProvider for DeepSeekProvider {
     }
 
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
-        // DeepSeek has explicit cache-aware pricing
-        // PRICING format: (model, cache_hit_price, cache_miss_price, output_price)
-        for (pricing_model, cache_hit_price, cache_miss_price, output_price) in PRICING {
-            if model.to_lowercase().contains(pricing_model) {
-                return Some(crate::llm::types::ModelPricing::new(
-                    *cache_miss_price, // Regular input (cache miss)
-                    *output_price,
-                    *cache_miss_price, // Cache write = same as cache miss
-                    *cache_hit_price,  // Cache read (cache hit)
-                ));
-            }
-        }
-        None
+        let (input_price, output_price, cache_write_price, cache_read_price) =
+            crate::llm::utils::get_model_pricing(model, PRICING)?;
+
+        Some(crate::llm::types::ModelPricing::new(
+            input_price,
+            output_price,
+            cache_write_price,
+            cache_read_price,
+        ))
     }
 
     fn get_max_input_tokens(&self, _model: &str) -> usize {

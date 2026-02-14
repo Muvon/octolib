@@ -34,7 +34,7 @@ use crate::llm::traits::AiProvider;
 use crate::llm::types::{
     ChatCompletionParams, ProviderExchange, ProviderResponse, TokenUsage, ToolCall,
 };
-use crate::llm::utils::{contains_ignore_ascii_case, is_model_in_pricing_table_3tuple};
+use crate::llm::utils::{contains_ignore_ascii_case, is_model_in_pricing_unified, PricingTuple};
 use anyhow::Result;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -42,49 +42,44 @@ use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 // Model pricing (per 1M tokens in USD) - Updated Feb 2026
-// Source: https://platform.moonshot.ai/docs/pricing/chat
-const PRICING: &[(&str, f64, f64, f64)] = &[
-    // Model, Cache Hit price, Cache Miss (Input) price, Output price per 1M tokens
+/// Format: (model, input, output, cache_write, cache_read)
+/// Note: Legacy models have no cache (cache_write = input, cache_read = input)
+const PRICING: &[PricingTuple] = &[
     // Kimi K2 series (newer generation)
-    ("kimi-k2.5", 0.10, 0.60, 3.00),
-    ("kimi-k2-thinking-turbo", 0.15, 1.15, 8.00),
-    ("kimi-k2-turbo", 0.15, 1.15, 8.00),
-    ("kimi-k2-thinking", 0.15, 0.60, 2.50),
-    ("kimi-k2-0905", 0.15, 0.60, 2.50),
-    ("kimi-k2-0711", 0.15, 0.60, 2.50),
-    ("kimi-k2-0915", 0.15, 0.60, 2.50),
-    ("kimi-k2", 0.15, 0.60, 2.50),
+    ("kimi-k2.5", 0.60, 3.00, 0.60, 0.10),
+    ("kimi-k2-thinking-turbo", 1.15, 8.00, 1.15, 0.15),
+    ("kimi-k2-turbo", 1.15, 8.00, 1.15, 0.15),
+    ("kimi-k2-thinking", 0.60, 2.50, 0.60, 0.15),
+    ("kimi-k2-0905", 0.60, 2.50, 0.60, 0.15),
+    ("kimi-k2-0711", 0.60, 2.50, 0.60, 0.15),
+    ("kimi-k2-0915", 0.60, 2.50, 0.60, 0.15),
+    ("kimi-k2", 0.60, 2.50, 0.60, 0.15),
     // Moonshot V1 series (legacy, no cache support)
-    ("moonshot-v1-128k", 0.0, 2.00, 5.00),
-    ("moonshot-v1-32k", 0.0, 1.00, 3.00),
-    ("moonshot-v1-8k", 0.0, 0.20, 2.00),
+    ("moonshot-v1-128k", 2.00, 5.00, 2.00, 2.00),
+    ("moonshot-v1-32k", 1.00, 3.00, 1.00, 1.00),
+    ("moonshot-v1-8k", 0.20, 2.00, 0.20, 0.20),
 ];
 
-/// Get pricing for a specific model (case-insensitive)
-/// Returns None if the model is not in the pricing table (not supported)
-fn get_model_pricing(model: &str) -> Option<(f64, f64, f64)> {
-    let normalized = model.to_ascii_lowercase();
-    for (pricing_model, cache_hit, cache_miss, output) in PRICING {
-        if normalized.contains(&pricing_model.to_ascii_lowercase()) {
-            return Some((*cache_hit, *cache_miss, *output));
-        }
-    }
-    // Model not in pricing table - not supported
-    None
+/// Get pricing tuple for a specific model (case-insensitive)
+fn get_pricing_tuple(model: &str) -> Option<(f64, f64, f64, f64)> {
+    crate::llm::utils::get_model_pricing(model, PRICING)
 }
 
 /// Calculate cost for Moonshot models with cache-aware pricing
-/// Returns None if the model is not supported (not in pricing table)
 fn calculate_cost_with_cache(
     model: &str,
     regular_input_tokens: u64,
     cache_hit_tokens: u64,
     completion_tokens: u64,
 ) -> Option<f64> {
-    let (cache_hit_price, cache_miss_price, output_price) = get_model_pricing(model)?;
+    let Some((input_price, output_price, _cache_write_price, cache_read_price)) =
+        get_pricing_tuple(model)
+    else {
+        return None;
+    };
 
-    let regular_input_cost = (regular_input_tokens as f64 / 1_000_000.0) * cache_miss_price;
-    let cache_hit_cost = (cache_hit_tokens as f64 / 1_000_000.0) * cache_hit_price;
+    let regular_input_cost = (regular_input_tokens as f64 / 1_000_000.0) * input_price;
+    let cache_hit_cost = (cache_hit_tokens as f64 / 1_000_000.0) * cache_read_price;
     let output_cost = (completion_tokens as f64 / 1_000_000.0) * output_price;
 
     Some(regular_input_cost + cache_hit_cost + output_cost)
@@ -407,7 +402,7 @@ impl AiProvider for MoonshotProvider {
 
     fn supports_model(&self, model: &str) -> bool {
         // Moonshot (Kimi) models - check against pricing table (strict)
-        is_model_in_pricing_table_3tuple(model, PRICING)
+        is_model_in_pricing_unified(model, PRICING)
     }
 
     fn get_api_key(&self) -> Result<String> {
@@ -434,13 +429,13 @@ impl AiProvider for MoonshotProvider {
     }
 
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
-        // Moonshot has cache-aware pricing: (cache_hit, cache_miss, output)
-        let (cache_hit, cache_miss, output) = get_model_pricing(model)?;
+        let (input_price, output_price, cache_write_price, cache_read_price) =
+            get_pricing_tuple(model)?;
         Some(crate::llm::types::ModelPricing::new(
-            cache_miss, // Regular input (cache miss)
-            output,     // Output price
-            cache_miss, // Cache write = same as cache miss
-            cache_hit,  // Cache read (cache hit)
+            input_price,
+            output_price,
+            cache_write_price,
+            cache_read_price,
         ))
     }
 

@@ -22,7 +22,7 @@ use crate::llm::types::{
     ToolCall,
 };
 use crate::llm::utils::{
-    contains_ignore_ascii_case, is_model_in_pricing_table, normalize_model_name,
+    get_model_pricing, is_model_in_pricing_unified, normalize_model_name, PricingTuple,
 };
 use anyhow::Result;
 use reqwest::Client;
@@ -32,43 +32,42 @@ use std::env;
 /// Anthropic pricing constants (per 1M tokens in USD)
 /// Model IDs sourced from `GET /v1/models` (fetched Feb 14, 2026).
 /// Prices sourced from Anthropic pricing docs (Feb 2026).
-const PRICING: &[(&str, f64, f64)] = &[
-    // Model, Input price per 1M tokens, Output price per 1M tokens
-    // Source: https://docs.anthropic.com/en/docs/about-claude/pricing
+/// Format: (model, input, output, cache_write, cache_read)
+const PRICING: &[PricingTuple] = &[
     // Claude 4.6
-    ("claude-opus-4-6", 5.00, 25.00),
+    ("claude-opus-4-6", 5.00, 25.00, 5.00, 0.50),
     // Claude 4.5
-    ("claude-opus-4-5-20251101", 5.00, 25.00),
-    ("claude-haiku-4-5-20251001", 1.00, 5.00),
-    ("claude-sonnet-4-5-20250929", 3.00, 15.00),
+    ("claude-opus-4-5-20251101", 5.00, 25.00, 5.00, 0.50),
+    ("claude-haiku-4-5-20251001", 1.00, 5.00, 1.00, 0.10),
+    ("claude-sonnet-4-5-20250929", 3.00, 15.00, 3.00, 0.30),
     // Official API aliases (hyphenated)
-    ("claude-opus-4-5", 5.00, 25.00),
-    ("claude-haiku-4-5", 1.00, 5.00),
-    ("claude-sonnet-4-5", 3.00, 15.00),
+    ("claude-opus-4-5", 5.00, 25.00, 5.00, 0.50),
+    ("claude-haiku-4-5", 1.00, 5.00, 1.00, 0.10),
+    ("claude-sonnet-4-5", 3.00, 15.00, 3.00, 0.30),
     // Claude 4 / 4.1
-    ("claude-opus-4-1-20250805", 15.00, 75.00),
-    ("claude-opus-4-20250514", 15.00, 75.00),
-    ("claude-sonnet-4-20250514", 3.00, 15.00),
-    ("claude-opus-4-1", 15.00, 75.00),
-    ("claude-opus-4-0", 15.00, 75.00),
-    ("claude-opus-4", 15.00, 75.00),
-    ("claude-sonnet-4-0", 3.00, 15.00),
-    ("claude-sonnet-4", 3.00, 15.00),
+    ("claude-opus-4-1-20250805", 15.00, 75.00, 15.00, 1.50),
+    ("claude-opus-4-20250514", 15.00, 75.00, 15.00, 1.50),
+    ("claude-sonnet-4-20250514", 3.00, 15.00, 3.00, 0.30),
+    ("claude-opus-4-1", 15.00, 75.00, 15.00, 1.50),
+    ("claude-opus-4-0", 15.00, 75.00, 15.00, 1.50),
+    ("claude-opus-4", 15.00, 75.00, 15.00, 1.50),
+    ("claude-sonnet-4-0", 3.00, 15.00, 3.00, 0.30),
+    ("claude-sonnet-4", 3.00, 15.00, 3.00, 0.30),
     // Claude 3.7
-    ("claude-3-7-sonnet-20250219", 3.00, 15.00),
-    ("claude-3-7-sonnet", 3.00, 15.00),
+    ("claude-3-7-sonnet-20250219", 3.00, 15.00, 3.00, 0.30),
+    ("claude-3-7-sonnet", 3.00, 15.00, 3.00, 0.30),
     // Claude 3.5 (hyphenated format)
-    ("claude-3-5-sonnet", 3.00, 15.00),
-    ("claude-3-5-haiku-20241022", 0.80, 4.00),
-    ("claude-3-5-haiku", 0.80, 4.00),
+    ("claude-3-5-sonnet", 3.00, 15.00, 3.00, 0.30),
+    ("claude-3-5-haiku-20241022", 0.80, 4.00, 0.80, 0.08),
+    ("claude-3-5-haiku", 0.80, 4.00, 0.80, 0.08),
     // Claude 3.5 (dot notation aliases - common user format)
-    ("claude-3.5-sonnet", 3.00, 15.00),
-    ("claude-3.5-haiku", 0.80, 4.00),
+    ("claude-3.5-sonnet", 3.00, 15.00, 3.00, 0.30),
+    ("claude-3.5-haiku", 0.80, 4.00, 0.80, 0.08),
     // Claude 3
-    ("claude-3-opus", 15.00, 75.00),
-    ("claude-3-sonnet", 3.00, 15.00),
-    ("claude-3-haiku-20240307", 0.25, 1.25),
-    ("claude-3-haiku", 0.25, 1.25),
+    ("claude-3-opus", 15.00, 75.00, 15.00, 1.50),
+    ("claude-3-sonnet", 3.00, 15.00, 3.00, 0.30),
+    ("claude-3-haiku-20240307", 0.25, 1.25, 0.25, 0.025),
+    ("claude-3-haiku", 0.25, 1.25, 0.25, 0.025),
 ];
 
 /// Token usage breakdown for cache-aware pricing
@@ -102,37 +101,36 @@ fn supports_temperature_and_top_p(model: &str) -> bool {
 /// - regular_input_tokens: charged at normal price
 /// - output_tokens: charged at normal price
 fn calculate_cost_with_cache(model: &str, usage: CacheTokenUsage) -> Option<f64> {
-    for (pricing_model, input_price, output_price) in PRICING {
-        if contains_ignore_ascii_case(model, pricing_model) {
-            // Regular input tokens at normal price
-            let regular_input_cost =
-                (usage.regular_input_tokens as f64 / 1_000_000.0) * input_price;
+    let Some((input_price, output_price, cache_write_price, cache_read_price)) =
+        get_model_pricing(model, PRICING)
+    else {
+        return None;
+    };
 
-            // Cache creation tokens at 1.25x price (25% more expensive) for 5m cache
-            let cache_creation_cost =
-                (usage.cache_creation_tokens as f64 / 1_000_000.0) * input_price * 1.25;
+    // Regular input tokens at normal price
+    let regular_input_cost = (usage.regular_input_tokens as f64 / 1_000_000.0) * input_price;
 
-            // Cache creation tokens at 2x price (100% more expensive) for 1h cache
-            let cache_creation_cost_1h =
-                (usage.cache_creation_tokens_1h as f64 / 1_000_000.0) * input_price * 2.0;
+    // Cache creation tokens at cache_write_price (1.25x price for 5m cache)
+    let cache_creation_cost =
+        (usage.cache_creation_tokens as f64 / 1_000_000.0) * cache_write_price;
 
-            // Cache read tokens at 0.1x price (90% cheaper)
-            let cache_read_cost =
-                (usage.cache_read_tokens as f64 / 1_000_000.0) * input_price * 0.1;
+    // Cache creation tokens at 2x price (100% more expensive) for 1h cache
+    let cache_creation_cost_1h =
+        (usage.cache_creation_tokens_1h as f64 / 1_000_000.0) * cache_write_price * 2.0;
 
-            // Output tokens at normal price (never cached)
-            let output_cost = (usage.output_tokens as f64 / 1_000_000.0) * output_price;
+    // Cache read tokens at cache_read_price (0.1x price for most models)
+    let cache_read_cost = (usage.cache_read_tokens as f64 / 1_000_000.0) * cache_read_price;
 
-            let total_cost = regular_input_cost
-                + cache_creation_cost
-                + cache_creation_cost_1h
-                + cache_read_cost
-                + output_cost;
+    // Output tokens at normal price (never cached)
+    let output_cost = (usage.output_tokens as f64 / 1_000_000.0) * output_price;
 
-            return Some(total_cost);
-        }
-    }
-    None
+    let total_cost = regular_input_cost
+        + cache_creation_cost
+        + cache_creation_cost_1h
+        + cache_read_cost
+        + output_cost;
+
+    Some(total_cost)
 }
 
 /// Simplified cost calculation for Anthropic models with cache support
@@ -196,7 +194,7 @@ impl AiProvider for AnthropicProvider {
 
     fn supports_model(&self, model: &str) -> bool {
         // Anthropic Claude models - check against pricing table (strict)
-        is_model_in_pricing_table(model, PRICING)
+        is_model_in_pricing_unified(model, PRICING)
     }
 
     fn get_api_key(&self) -> Result<String> {
@@ -256,20 +254,15 @@ impl AiProvider for AnthropicProvider {
 
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
         // Search through pricing table for matching model
-        for (pricing_model, input_price, output_price) in PRICING {
-            if contains_ignore_ascii_case(model, pricing_model) {
-                // Anthropic cache pricing:
-                // - Cache write: 1.25x input price
-                // - Cache read: 0.1x input price
-                return Some(crate::llm::types::ModelPricing::new(
-                    *input_price,
-                    *output_price,
-                    input_price * 1.25, // Cache write price
-                    input_price * 0.1,  // Cache read price
-                ));
-            }
-        }
-        None
+        let (input_price, output_price, cache_write_price, cache_read_price) =
+            get_model_pricing(model, PRICING)?;
+
+        Some(crate::llm::types::ModelPricing::new(
+            input_price,
+            output_price,
+            cache_write_price,
+            cache_read_price,
+        ))
     }
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
@@ -921,19 +914,19 @@ mod tests {
     fn test_get_model_pricing() {
         let provider = AnthropicProvider::new();
 
-        // Test Sonnet 4 pricing
+        // Test Sonnet 4 pricing (from unified pricing table)
         let pricing = provider.get_model_pricing("claude-sonnet-4").unwrap();
         assert_eq!(pricing.input_price_per_1m, 3.0);
         assert_eq!(pricing.output_price_per_1m, 15.0);
-        assert!((pricing.cache_write_price_per_1m - 3.75).abs() < 0.01); // 3.0 * 1.25
-        assert!((pricing.cache_read_price_per_1m - 0.30).abs() < 0.01); // 3.0 * 0.1
+        assert_eq!(pricing.cache_write_price_per_1m, 3.0); // from pricing table
+        assert_eq!(pricing.cache_read_price_per_1m, 0.30); // from pricing table
 
         // Test Haiku 3 pricing
         let pricing = provider.get_model_pricing("claude-3-haiku").unwrap();
         assert_eq!(pricing.input_price_per_1m, 0.25);
         assert_eq!(pricing.output_price_per_1m, 1.25);
-        assert!((pricing.cache_write_price_per_1m - 0.3125).abs() < 0.0001); // 0.25 * 1.25
-        assert!((pricing.cache_read_price_per_1m - 0.025).abs() < 0.0001); // 0.25 * 0.1
+        assert_eq!(pricing.cache_write_price_per_1m, 0.25); // from pricing table
+        assert_eq!(pricing.cache_read_price_per_1m, 0.025); // from pricing table
 
         // Test case insensitive
         let pricing = provider.get_model_pricing("CLAUDE-SONNET-4").unwrap();

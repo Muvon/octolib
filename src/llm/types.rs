@@ -41,6 +41,8 @@ pub struct Message {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub images: Option<Vec<ImageAttachment>>, // For messages with image attachments
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub videos: Option<Vec<VideoAttachment>>, // For messages with video attachments
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking: Option<ThinkingBlock>, // Internal reasoning (separate from content)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>, // Provider's response ID (for assistant messages with tool calls)
@@ -62,6 +64,7 @@ impl Message {
             name: None,
             tool_calls: None,
             images: None,
+            videos: None,
             thinking: None,
             id: None,
         }
@@ -78,6 +81,7 @@ impl Message {
             name: None,
             tool_calls: None,
             images: None,
+            videos: None,
             thinking: None,
             id: None,
         }
@@ -94,6 +98,7 @@ impl Message {
             name: None,
             tool_calls: None,
             images: None,
+            videos: None,
             thinking: None,
             id: None,
         }
@@ -110,6 +115,7 @@ impl Message {
             name: Some(name.to_string()),
             tool_calls: None,
             images: None,
+            videos: None,
             thinking: None,
             id: None,
         }
@@ -124,6 +130,12 @@ impl Message {
     /// Add image attachment to message
     pub fn with_images(mut self, images: Vec<ImageAttachment>) -> Self {
         self.images = Some(images);
+        self
+    }
+
+    /// Add video attachment to message
+    pub fn with_videos(mut self, videos: Vec<VideoAttachment>) -> Self {
+        self.videos = Some(videos);
         self
     }
 
@@ -150,6 +162,7 @@ pub struct MessageBuilder {
     name: Option<String>,
     tool_calls: Option<serde_json::Value>,
     images: Option<Vec<ImageAttachment>>,
+    videos: Option<Vec<VideoAttachment>>,
     thinking: Option<ThinkingBlock>,
     id: Option<String>, // Provider's response ID (for assistant messages)
 }
@@ -225,6 +238,21 @@ impl MessageBuilder {
         self
     }
 
+    /// Add videos
+    pub fn with_videos(mut self, videos: Vec<VideoAttachment>) -> Self {
+        self.videos = Some(videos);
+        self
+    }
+
+    /// Add a single video
+    pub fn with_video(mut self, video: VideoAttachment) -> Self {
+        match self.videos {
+            Some(ref mut videos) => videos.push(video),
+            None => self.videos = Some(vec![video]),
+        }
+        self
+    }
+
     /// Set thinking block (for assistant messages with reasoning)
     pub fn thinking(mut self, thinking: ThinkingBlock) -> Self {
         self.thinking = Some(thinking);
@@ -278,6 +306,7 @@ impl MessageBuilder {
             name: self.name,
             tool_calls: self.tool_calls,
             images: self.images,
+            videos: self.videos,
             thinking: self.thinking,
             id: self.id,
         })
@@ -332,7 +361,26 @@ pub enum ImageData {
     Url(String),
 }
 
-/// Source of the image
+/// Video attachment for messages
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct VideoAttachment {
+    pub data: VideoData,
+    pub media_type: String,
+    pub source_type: SourceType,
+    pub dimensions: Option<(u32, u32)>,
+    pub size_bytes: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration_secs: Option<f64>,
+}
+
+/// Video data storage format
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum VideoData {
+    Base64(String),
+    Url(String),
+}
+
+/// Source of the image or video
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum SourceType {
     File(PathBuf),

@@ -13,6 +13,21 @@
 // limitations under the License.
 
 //! Google AI embedding provider implementation
+//!
+//! **Important:** This uses Google AI Studio API (generativelanguage.googleapis.com),
+//! NOT Vertex AI. Authentication is via simple API key, not service account.
+//!
+//! **How to get an API key:**
+//! 1. Go to Google AI Studio: https://makersuite.google.com/app/apikey
+//! 2. Create an API key
+//! 3. Set environment variable: export GOOGLE_API_KEY="your-api-key"
+//!
+//! **Difference from Vertex AI:**
+//! - Google AI Studio: Simple API key authentication (this provider)
+//! - Vertex AI: Service account JSON + OAuth tokens (see llm/providers/google.rs)
+//!
+//! For production use with Vertex AI embeddings, you would need to implement
+//! the same JWT authentication as the LLM provider.
 
 use anyhow::{Context, Result};
 use serde_json::{json, Value};

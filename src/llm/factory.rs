@@ -42,7 +42,10 @@ impl ProviderFactory {
 
             Ok((provider, model_name))
         } else {
-            Err(anyhow::anyhow!("Invalid model format '{}'. Must specify provider like 'openai:gpt-4o' or 'openrouter:anthropic/claude-3.5-sonnet'", model))
+            Err(anyhow::anyhow!(
+                "Invalid model format '{}'. Must specify provider like 'provider:model'",
+                model
+            ))
         }
     }
 
@@ -65,7 +68,7 @@ impl ProviderFactory {
             "cli" => Err(anyhow::anyhow!(
                 "CLI provider requires a model string like 'cli:<backend>/<model>'. Use ProviderFactory::get_provider_for_model instead."
             )),
-            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported providers: openrouter, openai, cerebras, local, ollama, anthropic, google, amazon, cloudflare, deepseek, minimax, moonshot, zai, cli", provider_name)),
+_ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported: openai, anthropic, openrouter, cerebras, local, ollama, google, amazon, cloudflare, deepseek, minimax, moonshot, zai, cli", provider_name))
         }
     }
 
@@ -271,6 +274,25 @@ mod tests {
         let (provider, model) = result.unwrap();
         assert_eq!(provider.name(), "moonshot");
         assert_eq!(model, "kimi-k2");
+
+        // Generic multi-model providers should accept arbitrary non-empty model IDs
+        let result = ProviderFactory::get_provider_for_model("google:any-gemini-variant");
+        assert!(result.is_ok());
+        let (provider, model) = result.unwrap();
+        assert_eq!(provider.name(), "google");
+        assert_eq!(model, "any-gemini-variant");
+
+        let result = ProviderFactory::get_provider_for_model("cloudflare:@cf/custom/model");
+        assert!(result.is_ok());
+        let (provider, model) = result.unwrap();
+        assert_eq!(provider.name(), "cloudflare");
+        assert_eq!(model, "@cf/custom/model");
+
+        let result = ProviderFactory::get_provider_for_model("amazon:custom.model-id-v1");
+        assert!(result.is_ok());
+        let (provider, model) = result.unwrap();
+        assert_eq!(provider.name(), "amazon");
+        assert_eq!(model, "custom.model-id-v1");
 
         let result = ProviderFactory::get_provider_for_model("ollama:llama3.2");
         assert!(result.is_ok());

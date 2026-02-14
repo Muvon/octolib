@@ -13,12 +13,29 @@
 // limitations under the License.
 
 //! Amazon Bedrock provider implementation
+//!
+//! Authentication: Uses Amazon Bedrock API keys (long-term credentials).
+//!
+//! **How to get a Bedrock API key:**
+//! 1. AWS Console → IAM → Users → Select/Create user
+//! 2. Security credentials → Create service-specific credential
+//! 3. Select "Amazon Bedrock" as the service
+//! 4. Copy the generated API key (format: bedrock-<region>-<account>:<secret>)
+//! 5. Set environment variable: export AWS_BEARER_TOKEN_BEDROCK="your-api-key"
+//!
+//! **Note:** These are NOT regular AWS access keys. They are Bedrock-specific API keys
+//! that work with the OpenAI-compatible endpoint without requiring AWS SigV4 signing.
+//!
+//! Alternative: You can implement AWS SigV4 signing, but API keys are simpler for most use cases.
 
+use crate::llm::providers::openai_compat::{
+    chat_completion as openai_compat_chat_completion, get_api_url, get_optional_api_key,
+    OpenAiCompatConfig,
+};
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderResponse};
 use crate::llm::utils::normalize_model_name;
 use anyhow::Result;
-use std::env;
 
 /// Amazon Bedrock provider
 #[derive(Debug, Clone)]
@@ -34,22 +51,19 @@ impl AmazonBedrockProvider {
     pub fn new() -> Self {
         Self
     }
-
-    /// Get AWS access key ID
-    fn get_aws_access_key_id(&self) -> Result<String> {
-        env::var(AWS_ACCESS_KEY_ID_ENV)
-            .map_err(|_| anyhow::anyhow!("AWS_ACCESS_KEY_ID not found in environment"))
-    }
-
-    /// Get AWS secret access key
-    fn get_aws_secret_access_key(&self) -> Result<String> {
-        env::var(AWS_SECRET_ACCESS_KEY_ENV)
-            .map_err(|_| anyhow::anyhow!("AWS_SECRET_ACCESS_KEY not found in environment"))
-    }
 }
 
-const AWS_ACCESS_KEY_ID_ENV: &str = "AWS_ACCESS_KEY_ID";
-const AWS_SECRET_ACCESS_KEY_ENV: &str = "AWS_SECRET_ACCESS_KEY";
+const AWS_BEARER_TOKEN_BEDROCK_ENV: &str = "AWS_BEARER_TOKEN_BEDROCK";
+const AWS_BEDROCK_REGION_ENV: &str = "AWS_BEDROCK_REGION";
+const AWS_BEDROCK_API_URL_ENV: &str = "AWS_BEDROCK_API_URL";
+
+fn default_bedrock_api_url() -> String {
+    let region = std::env::var(AWS_BEDROCK_REGION_ENV).unwrap_or_else(|_| "us-east-1".to_string());
+    format!(
+        "https://bedrock-runtime.{}.amazonaws.com/openai/v1/chat/completions",
+        region
+    )
+}
 
 #[async_trait::async_trait]
 impl AiProvider for AmazonBedrockProvider {
@@ -58,24 +72,25 @@ impl AiProvider for AmazonBedrockProvider {
     }
 
     fn supports_model(&self, model: &str) -> bool {
-        // Amazon Bedrock supported models (case-insensitive)
-        let model_lower = normalize_model_name(model);
-        model_lower.contains("claude")
-            || model_lower.contains("titan")
-            || model_lower.contains("llama")
-            || model_lower.contains("anthropic.")
-            || model_lower.contains("meta.")
-            || model_lower.contains("amazon.")
-            || model_lower.contains("ai21.")
-            || model_lower.contains("cohere.")
-            || model_lower.contains("mistral.")
+        !model.is_empty()
     }
 
     fn get_api_key(&self) -> Result<String> {
-        // Amazon Bedrock requires both access key ID and secret access key
-        let access_key_id = self.get_aws_access_key_id()?;
-        let _secret_access_key = self.get_aws_secret_access_key()?; // Validate it exists
-        Ok(access_key_id) // Return access key ID as the "API key"
+        let token = get_optional_api_key(AWS_BEARER_TOKEN_BEDROCK_ENV);
+        if token.is_empty() {
+            Err(anyhow::anyhow!(
+                "Amazon Bedrock API key not found. Set {} environment variable.\n\
+                To create a Bedrock API key:\n\
+                1. AWS Console → IAM → Users → Select/Create user\n\
+                2. Security credentials → Create service-specific credential\n\
+                3. Select 'Amazon Bedrock' as the service\n\
+                4. Copy the generated API key (format: bedrock-<region>-<account>:<secret>)\n\
+                Note: These are NOT regular AWS access keys.",
+                AWS_BEARER_TOKEN_BEDROCK_ENV
+            ))
+        } else {
+            Ok(token)
+        }
     }
 
     fn supports_caching(&self, _model: &str) -> bool {
@@ -88,6 +103,7 @@ impl AiProvider for AmazonBedrockProvider {
         model_lower.contains("claude-3")
             || model_lower.contains("claude-4")
             || model_lower.contains("anthropic.claude")
+            || model_lower.contains("nova")
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {
@@ -107,10 +123,25 @@ impl AiProvider for AmazonBedrockProvider {
         }
     }
 
-    async fn chat_completion(&self, _params: ChatCompletionParams) -> Result<ProviderResponse> {
-        Err(anyhow::anyhow!(
-            "Amazon Bedrock provider not fully implemented in octolib"
-        ))
+    fn supports_structured_output(&self, _model: &str) -> bool {
+        true
+    }
+
+    async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
+        let api_key = self.get_api_key()?;
+        let api_url = get_api_url(AWS_BEDROCK_API_URL_ENV, &default_bedrock_api_url());
+
+        openai_compat_chat_completion(
+            OpenAiCompatConfig {
+                provider_name: "amazon",
+                usage_fallback_cost: None,
+                use_response_cost: true,
+            },
+            api_key,
+            api_url,
+            params,
+        )
+        .await
     }
 }
 
@@ -122,15 +153,14 @@ mod tests {
     fn test_supports_model() {
         let provider = AmazonBedrockProvider::new();
 
-        // Amazon Bedrock supported models
+        // Amazon Bedrock accepts any non-empty model identifier
         assert!(provider.supports_model("anthropic.claude-3-haiku-20240307-v1:0"));
         assert!(provider.supports_model("anthropic.claude-3-5-sonnet-20241022-v2:0"));
         assert!(provider.supports_model("meta.llama3-2-90b-instruct-v1:0"));
         assert!(provider.supports_model("amazon.titan-embed-text-v2:0"));
-
-        // Unsupported models
-        assert!(!provider.supports_model("gpt-4"));
-        assert!(!provider.supports_model("deepseek-chat"));
+        assert!(provider.supports_model("gpt-4"));
+        assert!(provider.supports_model("deepseek-chat"));
+        assert!(!provider.supports_model(""));
     }
 
     #[test]

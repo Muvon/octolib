@@ -13,7 +13,23 @@
 // limitations under the License.
 
 //! Cloudflare Workers AI provider implementation
+//!
+//! Authentication: Requires API token and Account ID.
+//!
+//! **How to get credentials:**
+//! 1. Cloudflare Dashboard → My Profile → API Tokens
+//! 2. Create Token → Use template "Workers AI" or create custom with Workers AI permissions
+//! 3. Copy the API token
+//! 4. Get Account ID from Cloudflare Dashboard → Workers & Pages (in URL or sidebar)
+//! 5. Set environment variables:
+//!    - export CLOUDFLARE_API_TOKEN="your-api-token"
+//!    - export CLOUDFLARE_ACCOUNT_ID="your-account-id"
+//!
+//! The API token is sent as a Bearer token in the Authorization header.
 
+use crate::llm::providers::openai_compat::{
+    chat_completion as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
+};
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderResponse};
 use crate::llm::utils::normalize_model_name;
@@ -37,19 +53,40 @@ impl CloudflareWorkersAiProvider {
 
     /// Get Cloudflare API token
     fn get_api_token(&self) -> Result<String> {
-        env::var(CLOUDFLARE_API_TOKEN_ENV)
-            .map_err(|_| anyhow::anyhow!("CLOUDFLARE_API_TOKEN not found in environment"))
+        env::var(CLOUDFLARE_API_TOKEN_ENV).map_err(|_| {
+            anyhow::anyhow!(
+                "Cloudflare API token not found. Set {} environment variable.\n\
+                To create an API token:\n\
+                1. Cloudflare Dashboard → My Profile → API Tokens\n\
+                2. Create Token → Use 'Workers AI' template or create custom\n\
+                3. Ensure token has Workers AI permissions",
+                CLOUDFLARE_API_TOKEN_ENV
+            )
+        })
     }
 
     /// Get Cloudflare Account ID
     fn get_account_id(&self) -> Result<String> {
-        env::var(CLOUDFLARE_ACCOUNT_ID_ENV)
-            .map_err(|_| anyhow::anyhow!("CLOUDFLARE_ACCOUNT_ID not found in environment"))
+        env::var(CLOUDFLARE_ACCOUNT_ID_ENV).map_err(|_| {
+            anyhow::anyhow!(
+                "Cloudflare Account ID not found. Set {} environment variable.\n\
+                Find your Account ID in Cloudflare Dashboard → Workers & Pages (in URL or sidebar)",
+                CLOUDFLARE_ACCOUNT_ID_ENV
+            )
+        })
     }
 }
 
 const CLOUDFLARE_API_TOKEN_ENV: &str = "CLOUDFLARE_API_TOKEN";
 const CLOUDFLARE_ACCOUNT_ID_ENV: &str = "CLOUDFLARE_ACCOUNT_ID";
+const CLOUDFLARE_API_URL_ENV: &str = "CLOUDFLARE_API_URL";
+
+fn default_cloudflare_api_url(account_id: &str) -> String {
+    format!(
+        "https://api.cloudflare.com/client/v4/accounts/{}/ai/v1/chat/completions",
+        account_id
+    )
+}
 
 #[async_trait::async_trait]
 impl AiProvider for CloudflareWorkersAiProvider {
@@ -58,22 +95,7 @@ impl AiProvider for CloudflareWorkersAiProvider {
     }
 
     fn supports_model(&self, model: &str) -> bool {
-        // Cloudflare Workers AI supported models (case-insensitive)
-        let model_lower = normalize_model_name(model);
-        model_lower.contains("llama")
-            || model_lower.contains("mistral")
-            || model_lower.contains("qwen")
-            || model_lower.contains("phi")
-            || model_lower.contains("tinyllama")
-            || model_lower.contains("gemma")
-            || model_lower.contains("codellama")
-            || model_lower.contains("deepseek")
-            || model_lower.contains("neural-chat")
-            || model_lower.contains("openchat")
-            || model_lower.contains("starling")
-            || model_lower.contains("zephyr")
-            || model.starts_with("@cf/")
-            || model.starts_with("@hf/")
+        !model.is_empty()
     }
 
     fn get_api_key(&self) -> Result<String> {
@@ -87,8 +109,17 @@ impl AiProvider for CloudflareWorkersAiProvider {
         false
     }
 
-    fn supports_vision(&self, _model: &str) -> bool {
-        false
+    fn supports_vision(&self, model: &str) -> bool {
+        let model_lower = normalize_model_name(model);
+        model_lower.contains("vision")
+            || model_lower.contains("vl")
+            || model_lower.contains("llava")
+            || model_lower.contains("@cf/llava")
+            || model_lower.contains("qwen-vl")
+    }
+
+    fn supports_structured_output(&self, _model: &str) -> bool {
+        true
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {
@@ -111,10 +142,25 @@ impl AiProvider for CloudflareWorkersAiProvider {
         }
     }
 
-    async fn chat_completion(&self, _params: ChatCompletionParams) -> Result<ProviderResponse> {
-        Err(anyhow::anyhow!(
-            "Cloudflare Workers AI provider not fully implemented in octolib"
-        ))
+    async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
+        let api_key = self.get_api_key()?;
+        let account_id = self.get_account_id()?;
+        let api_url = get_api_url(
+            CLOUDFLARE_API_URL_ENV,
+            &default_cloudflare_api_url(&account_id),
+        );
+
+        openai_compat_chat_completion(
+            OpenAiCompatConfig {
+                provider_name: "cloudflare",
+                usage_fallback_cost: None,
+                use_response_cost: true,
+            },
+            api_key,
+            api_url,
+            params,
+        )
+        .await
     }
 }
 
@@ -126,16 +172,15 @@ mod tests {
     fn test_supports_model() {
         let provider = CloudflareWorkersAiProvider::new();
 
-        // Cloudflare Workers AI supported models
+        // Cloudflare Workers AI accepts any non-empty model identifier
         assert!(provider.supports_model("llama-3.1-70b-instruct"));
         assert!(provider.supports_model("@cf/meta/llama-3.1-70b-instruct"));
         assert!(provider.supports_model("@hf/meta/llama-3.1-8b-instruct"));
         assert!(provider.supports_model("mistral-7b-instruct-v0.1"));
         assert!(provider.supports_model("gemma-2-27b-it"));
-
-        // Unsupported models
-        assert!(!provider.supports_model("gpt-4"));
-        assert!(!provider.supports_model("claude-3"));
+        assert!(provider.supports_model("gpt-4"));
+        assert!(provider.supports_model("claude-3"));
+        assert!(!provider.supports_model(""));
     }
 
     #[test]

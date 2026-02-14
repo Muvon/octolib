@@ -13,13 +13,24 @@
 // limitations under the License.
 
 //! Google Vertex AI provider implementation
+//!
+//! Authentication: Uses service account JSON key file for authentication.
+//! Set GOOGLE_APPLICATION_CREDENTIALS or GOOGLE_CREDENTIAL_FILE to the path of your service account JSON file.
+//!
+//! To create a service account:
+//! 1. Go to Google Cloud Console → IAM & Admin → Service Accounts
+//! 2. Create a service account with "Vertex AI User" role
+//! 3. Create and download a JSON key file
+//! 4. Set environment variable: export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
 
+use crate::llm::providers::openai_compat::{
+    chat_completion as openai_compat_chat_completion, OpenAiCompatConfig,
+};
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderResponse};
-use crate::llm::utils::{
-    get_model_pricing, is_model_in_pricing_table, normalize_model_name, PricingTuple,
-};
-use anyhow::Result;
+use crate::llm::utils::normalize_model_name;
+use anyhow::{Context, Result};
+use serde::Deserialize;
 use std::env;
 
 /// Google Vertex AI provider
@@ -38,37 +49,109 @@ impl GoogleVertexProvider {
     }
 }
 
+const GOOGLE_CREDENTIAL_FILE_ENV: &str = "GOOGLE_CREDENTIAL_FILE";
 const GOOGLE_APPLICATION_CREDENTIALS_ENV: &str = "GOOGLE_APPLICATION_CREDENTIALS";
-const GOOGLE_API_KEY_ENV: &str = "GOOGLE_API_KEY";
+const GOOGLE_CLOUD_PROJECT_ID_ENV: &str = "GOOGLE_CLOUD_PROJECT_ID";
+const GOOGLE_CLOUD_LOCATION_ENV: &str = "GOOGLE_CLOUD_LOCATION";
+const GOOGLE_API_URL_ENV: &str = "GOOGLE_API_URL";
+const GOOGLE_VERTEX_API_URL_TEMPLATE: &str =
+    "https://aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/endpoints/openapi/chat/completions";
 
-#[allow(dead_code)] // Pricing table ready for when implementation is completed
-/// Format: (model, input, output, cache_write, cache_read)
-/// Note: Google/Gemini does NOT support caching, so cache_write and cache_read = input price
-const PRICING: &[PricingTuple] = &[
-    // Gemini 3 (Released Nov 18, 2025)
-    ("gemini-3-pro", 2.00, 12.00, 2.00, 2.00),
-    ("gemini-3-pro-preview", 2.00, 12.00, 2.00, 2.00),
-    // Gemini 2.5
-    ("gemini-2.5-pro", 1.25, 5.00, 1.25, 1.25),
-    ("gemini-2.5-flash", 0.075, 0.30, 0.075, 0.075),
-    ("gemini-2.5-flash-lite", 0.10, 0.30, 0.10, 0.10),
-    // Gemini 2.0
-    ("gemini-2.0-flash", 0.10, 0.40, 0.10, 0.10),
-    ("gemini-2.0-flash-lite", 0.10, 0.30, 0.10, 0.10),
-    ("gemini-2.0-flash-live", 0.35, 1.50, 0.35, 0.35),
-    // Gemini 1.5
-    ("gemini-1.5-pro", 1.25, 5.00, 1.25, 1.25),
-    ("gemini-1.5-flash", 0.075, 0.30, 0.075, 0.075),
-    // Gemini 1.0
-    ("gemini-1.0-pro", 0.50, 1.50, 0.50, 0.50),
-    // Legacy PaLM 2 models (deprecated but still supported)
-    ("text-bison", 0.25, 0.50, 0.25, 0.25),
-    ("text-bison-32k", 0.25, 0.50, 0.25, 0.25),
-    ("chat-bison", 0.25, 0.50, 0.25, 0.25),
-    ("chat-bison-32k", 0.25, 0.50, 0.25, 0.25),
-    ("gemini-pro", 0.50, 1.50, 0.50, 0.50),
-    ("gemini-pro-vision", 0.50, 1.50, 0.50, 0.50),
-];
+fn default_vertex_api_url(project: &str, location: &str) -> String {
+    GOOGLE_VERTEX_API_URL_TEMPLATE
+        .replace("{project}", project)
+        .replace("{location}", location)
+}
+
+#[derive(Debug, Deserialize)]
+struct GoogleServiceAccountFile {
+    project_id: Option<String>,
+}
+
+/// Resolve the path to the Google service account credentials file
+fn resolve_credentials_file() -> Result<String> {
+    // Try GOOGLE_CREDENTIAL_FILE first (our preferred env var)
+    if let Ok(path) = env::var(GOOGLE_CREDENTIAL_FILE_ENV) {
+        let path = path.trim().to_string();
+        if !path.is_empty() {
+            return Ok(path);
+        }
+    }
+
+    // Fall back to standard GOOGLE_APPLICATION_CREDENTIALS
+    if let Ok(path) = env::var(GOOGLE_APPLICATION_CREDENTIALS_ENV) {
+        let path = path.trim().to_string();
+        if !path.is_empty() {
+            return Ok(path);
+        }
+    }
+
+    Err(anyhow::anyhow!(
+        "Google service account credentials file not found. Set {} (preferred) or {}. \
+        Download a service account JSON key from Google Cloud Console → IAM & Admin → Service Accounts.",
+        GOOGLE_CREDENTIAL_FILE_ENV,
+        GOOGLE_APPLICATION_CREDENTIALS_ENV
+    ))
+}
+
+/// Generate an access token from service account JSON file using JWT authentication
+async fn generate_access_token(credentials_file: &str) -> Result<String> {
+    // Read service account JSON file
+    let client_json = std::fs::read_to_string(credentials_file).context(format!(
+        "Failed to read service account file '{}'",
+        credentials_file
+    ))?;
+
+    // Build AuthConfig with Cloud Platform scope
+    let config = google_jwt_auth::AuthConfig::build(
+        &client_json,
+        &google_jwt_auth::usage::Usage::CloudPlatform,
+    )
+    .context("Failed to build auth config from service account JSON")?;
+
+    // Generate token with 3600 seconds (1 hour) lifetime
+    let token = config
+        .generate_auth_token(3600)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to generate OAuth access token: {}", e))?;
+
+    Ok(token)
+}
+
+/// Extract project ID from service account JSON file or environment variable
+fn resolve_vertex_project_id(credentials_file: &str) -> Result<String> {
+    // Try environment variable first
+    if let Ok(project) = env::var(GOOGLE_CLOUD_PROJECT_ID_ENV) {
+        let project = project.trim().to_string();
+        if !project.is_empty() {
+            return Ok(project);
+        }
+    }
+
+    // Parse service account JSON to extract project_id
+    let file_content = std::fs::read_to_string(credentials_file).context(format!(
+        "Failed to read Google service account file '{}'",
+        credentials_file
+    ))?;
+
+    let creds: GoogleServiceAccountFile = serde_json::from_str(&file_content).context(format!(
+        "Failed to parse Google service account JSON file '{}'",
+        credentials_file
+    ))?;
+
+    if let Some(project) = creds.project_id {
+        let project = project.trim().to_string();
+        if !project.is_empty() {
+            return Ok(project);
+        }
+    }
+
+    Err(anyhow::anyhow!(
+        "Google Cloud project ID not found. Set {} or ensure 'project_id' field exists in service account file '{}'.",
+        GOOGLE_CLOUD_PROJECT_ID_ENV,
+        credentials_file
+    ))
+}
 
 #[async_trait::async_trait]
 impl AiProvider for GoogleVertexProvider {
@@ -77,33 +160,18 @@ impl AiProvider for GoogleVertexProvider {
     }
 
     fn supports_model(&self, model: &str) -> bool {
-        // Google Vertex AI (Gemini) models - check against pricing table (strict)
-        is_model_in_pricing_table(model, PRICING)
+        !model.is_empty()
     }
 
     fn get_api_key(&self) -> Result<String> {
-        // Google Vertex AI can use either API key or service account credentials
-        if let Ok(key) = env::var(GOOGLE_API_KEY_ENV) {
-            Ok(key)
-        } else if let Ok(_credentials) = env::var(GOOGLE_APPLICATION_CREDENTIALS_ENV) {
-            // Service account credentials file path is available
-            // In a full implementation, we would use this to authenticate
-            Ok("service_account_auth".to_string()) // Placeholder
-        } else {
-            Err(anyhow::anyhow!(
-                "Google authentication not found. Set either {} or {}",
-                GOOGLE_API_KEY_ENV,
-                GOOGLE_APPLICATION_CREDENTIALS_ENV
-            ))
-        }
+        // For Google Vertex AI, we just validate that credentials file exists
+        // The actual token generation happens in chat_completion (async)
+        resolve_credentials_file()?;
+        Ok(String::new()) // Return empty string as placeholder
     }
 
-    fn supports_caching(&self, model: &str) -> bool {
-        // Google Vertex AI caching (case-insensitive)
-        let normalized = normalize_model_name(model);
-        normalized.contains("gemini-1.5")
-            || normalized.contains("gemini-2")
-            || normalized.contains("gemini-3")
+    fn supports_caching(&self, _model: &str) -> bool {
+        false
     }
 
     fn supports_vision(&self, model: &str) -> bool {
@@ -111,16 +179,8 @@ impl AiProvider for GoogleVertexProvider {
         normalize_model_name(model).contains("gemini")
     }
 
-    fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
-        let (input_price, output_price, cache_write_price, cache_read_price) =
-            get_model_pricing(model, PRICING)?;
-
-        Some(crate::llm::types::ModelPricing::new(
-            input_price,
-            output_price,
-            cache_write_price,
-            cache_read_price,
-        ))
+    fn supports_structured_output(&self, _model: &str) -> bool {
+        true
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {
@@ -141,10 +201,33 @@ impl AiProvider for GoogleVertexProvider {
         }
     }
 
-    async fn chat_completion(&self, _params: ChatCompletionParams) -> Result<ProviderResponse> {
-        Err(anyhow::anyhow!(
-            "Google Vertex AI provider not fully implemented in octolib"
-        ))
+    async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
+        // Generate access token from service account
+        let credentials_file = resolve_credentials_file()?;
+        let api_key = generate_access_token(&credentials_file).await?;
+
+        let api_url = if let Ok(url) = env::var(GOOGLE_API_URL_ENV) {
+            url
+        } else {
+            let project = resolve_vertex_project_id(&credentials_file)?;
+            let location = env::var(GOOGLE_CLOUD_LOCATION_ENV)
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or_else(|| "us-central1".to_string());
+            default_vertex_api_url(&project, &location)
+        };
+
+        openai_compat_chat_completion(
+            OpenAiCompatConfig {
+                provider_name: "google",
+                usage_fallback_cost: None,
+                use_response_cost: true,
+            },
+            api_key,
+            api_url,
+            params,
+        )
+        .await
     }
 }
 
@@ -156,15 +239,14 @@ mod tests {
     fn test_supports_model() {
         let provider = GoogleVertexProvider::new();
 
-        // Google models should be supported
+        // Generic provider: accept any non-empty model identifier
         assert!(provider.supports_model("gemini-1.5-pro"));
         assert!(provider.supports_model("gemini-2.0-flash"));
         assert!(provider.supports_model("gemini-1.0-pro"));
         assert!(provider.supports_model("text-bison"));
-
-        // Unsupported models
-        assert!(!provider.supports_model("gpt-4"));
-        assert!(!provider.supports_model("claude-3"));
+        assert!(provider.supports_model("gpt-4"));
+        assert!(provider.supports_model("claude-3"));
+        assert!(!provider.supports_model(""));
     }
 
     #[test]
@@ -180,15 +262,9 @@ mod tests {
     }
 
     #[test]
-    fn test_supports_caching_case_insensitive() {
+    fn test_supports_caching_default_false() {
         let provider = GoogleVertexProvider::new();
-
-        // Test lowercase
-        assert!(provider.supports_caching("gemini-1.5-pro"));
-        assert!(provider.supports_caching("gemini-2.0-flash"));
-
-        // Test uppercase
-        assert!(provider.supports_caching("GEMINI-1.5-PRO"));
-        assert!(provider.supports_caching("Gemini-2.0-Flash"));
+        assert!(!provider.supports_caching("gemini-1.5-pro"));
+        assert!(!provider.supports_caching("Gemini-2.0-Flash"));
     }
 }

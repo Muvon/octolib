@@ -49,6 +49,48 @@ pub fn contains_ignore_ascii_case(model: &str, substring: &str) -> bool {
         .contains(&substring.to_ascii_lowercase())
 }
 
+fn is_model_in_pricing_names<'a, I>(model: &str, pricing_names: I) -> bool
+where
+    I: IntoIterator<Item = &'a str>,
+{
+    let normalized = normalize_model_name(model);
+    pricing_names
+        .into_iter()
+        .any(|name| normalized.contains(&normalize_model_name(name)))
+}
+
+/// Check if a model is supported based on the pricing table.
+///
+/// For known providers (OpenAI, Anthropic, DeepSeek, Moonshot, MiniMax, Google, Zai),
+/// we have a complete pricing table. If a model is not in the pricing table,
+/// it's NOT supported by that provider.
+///
+/// Returns true if the model name is found in the pricing table (case-insensitive contains match).
+///
+/// # Arguments
+/// * `model` - The model name to check
+/// * `pricing` - The pricing table slice (array of tuples with model name as first element)
+pub fn is_model_in_pricing_table(model: &str, pricing: &[(&str, f64, f64)]) -> bool {
+    is_model_in_pricing_names(model, pricing.iter().map(|(name, _, _)| *name))
+}
+
+/// Check if a model is supported based on the pricing table (3-tuple pricing).
+///
+/// Variant for pricing tables with 3 values (cache hit, cache miss, output).
+pub fn is_model_in_pricing_table_3tuple(model: &str, pricing: &[(&str, f64, f64, f64)]) -> bool {
+    is_model_in_pricing_names(model, pricing.iter().map(|(name, _, _, _)| *name))
+}
+
+/// Check if a model is supported based on the pricing table (optional cache pricing).
+///
+/// Variant for pricing tables with `Option<f64>` for cached input price.
+pub fn is_model_in_pricing_table_optional_cache(
+    model: &str,
+    pricing: &[(&str, f64, Option<f64>, f64)],
+) -> bool {
+    is_model_in_pricing_names(model, pricing.iter().map(|(name, _, _, _)| *name))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -110,5 +152,44 @@ mod tests {
         assert!(!contains_ignore_ascii_case("", "gpt"));
         // Both empty
         assert!(contains_ignore_ascii_case("", ""));
+    }
+
+    #[test]
+    fn test_is_model_in_pricing_table() {
+        // Test with simple 2-tuple pricing
+        let pricing = &[("gpt-4o", 2.50, 10.0), ("gpt-4o-mini", 0.15, 0.60)];
+        assert!(is_model_in_pricing_table("gpt-4o", pricing));
+        assert!(is_model_in_pricing_table("GPT-4O", pricing));
+        assert!(is_model_in_pricing_table("gpt-4o-mini", pricing));
+        assert!(!is_model_in_pricing_table("gpt-5", pricing));
+        assert!(!is_model_in_pricing_table("unknown-model", pricing));
+    }
+
+    #[test]
+    fn test_is_model_in_pricing_table_3tuple() {
+        // Test with 3-tuple pricing (cache hit, cache miss, output)
+        let pricing = &[
+            ("deepseek-chat", 0.07, 0.27, 1.10),
+            ("deepseek-reasoner", 0.14, 0.55, 2.19),
+        ];
+        assert!(is_model_in_pricing_table_3tuple("deepseek-chat", pricing));
+        assert!(is_model_in_pricing_table_3tuple("DEEPSEEK-CHAT", pricing));
+        assert!(!is_model_in_pricing_table_3tuple("deepseek-coder", pricing));
+    }
+
+    #[test]
+    fn test_is_model_in_pricing_table_optional_cache() {
+        // Test with optional cache pricing
+        let pricing = &[
+            ("gpt-4o", 2.50, Some(1.25), 10.0),
+            ("gpt-4o-mini", 0.15, Some(0.075), 0.60),
+        ];
+        assert!(is_model_in_pricing_table_optional_cache("gpt-4o", pricing));
+        assert!(is_model_in_pricing_table_optional_cache("GPT-4O", pricing));
+        assert!(is_model_in_pricing_table_optional_cache(
+            "gpt-4o-mini",
+            pricing
+        ));
+        assert!(!is_model_in_pricing_table_optional_cache("gpt-5", pricing));
     }
 }

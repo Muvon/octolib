@@ -16,7 +16,9 @@
 
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderResponse};
-use crate::llm::utils::{contains_ignore_ascii_case, normalize_model_name};
+use crate::llm::utils::{
+    contains_ignore_ascii_case, is_model_in_pricing_table, normalize_model_name,
+};
 use anyhow::Result;
 use std::env;
 
@@ -59,6 +61,13 @@ const PRICING: &[(&str, f64, f64)] = &[
     ("gemini-1.5-flash", 0.075, 0.30),
     // Gemini 1.0
     ("gemini-1.0-pro", 0.50, 1.50),
+    // Legacy PaLM 2 models (deprecated but still supported)
+    ("text-bison", 0.25, 0.50),        // PaLM 2 Text
+    ("text-bison-32k", 0.25, 0.50),    // PaLM 2 Text 32K
+    ("chat-bison", 0.25, 0.50),        // PaLM 2 Chat
+    ("chat-bison-32k", 0.25, 0.50),    // PaLM 2 Chat 32K
+    ("gemini-pro", 0.50, 1.50),        // Original Gemini Pro (legacy)
+    ("gemini-pro-vision", 0.50, 1.50), // Gemini Pro Vision (legacy)
 ];
 
 #[async_trait::async_trait]
@@ -68,14 +77,8 @@ impl AiProvider for GoogleVertexProvider {
     }
 
     fn supports_model(&self, model: &str) -> bool {
-        // Google Vertex AI models (case-insensitive)
-        let normalized = normalize_model_name(model);
-        normalized.starts_with("text-")
-            || normalized.starts_with("chat-")
-            || normalized.contains("gemini")
-            || normalized.contains("palm")
-            || normalized.contains("text-bison")
-            || normalized.contains("chat-bison")
+        // Google Vertex AI (Gemini) models - check against pricing table (strict)
+        is_model_in_pricing_table(model, PRICING)
     }
 
     fn get_api_key(&self) -> Result<String> {

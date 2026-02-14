@@ -31,6 +31,9 @@ repos:
         files: \.rs$
         args: ['--all-targets', '--all-features']
 
+  # Local hooks for cargo doc
+  - repo: local
+    hooks:
       # Check documentation builds without warnings
       - id: rust-doc
         name: cargo doc
@@ -40,10 +43,11 @@ repos:
         args: ['-c', 'RUSTDOCFLAGS="-D warnings" cargo doc --all-features --no-deps']
         pass_filenames: false
         always_run: true
+        types: [rust]
 
   # General hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.4.0
+    rev: v6.0.0
     hooks:
       # Remove trailing whitespace
       - id: trailing-whitespace

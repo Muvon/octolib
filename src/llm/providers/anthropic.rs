@@ -21,38 +21,50 @@ use crate::llm::types::{
     ChatCompletionParams, Message, ProviderExchange, ProviderResponse, ThinkingBlock, TokenUsage,
     ToolCall,
 };
-use crate::llm::utils::{contains_ignore_ascii_case, normalize_model_name};
+use crate::llm::utils::{
+    contains_ignore_ascii_case, is_model_in_pricing_table, normalize_model_name,
+};
 use anyhow::Result;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::env;
 
 /// Anthropic pricing constants (per 1M tokens in USD)
-/// Source: https://docs.anthropic.com/en/docs/about-claude/pricing (as of Feb 2026)
+/// Model IDs sourced from `GET /v1/models` (fetched Feb 14, 2026).
+/// Prices sourced from Anthropic pricing docs (Feb 2026).
 const PRICING: &[(&str, f64, f64)] = &[
     // Model, Input price per 1M tokens, Output price per 1M tokens
-    // Source: https://docs.anthropic.com/en/docs/about-claude/pricing (as of Feb 2026)
-    // Claude 4.6 (Latest - Feb 2026)
+    // Source: https://docs.anthropic.com/en/docs/about-claude/pricing
+    // Claude 4.6
     ("claude-opus-4-6", 5.00, 25.00),
-    ("claude-opus-4.6", 5.00, 25.00),
-    // Claude 4.5 (Jan 2026)
-    ("claude-opus-4-5", 5.00, 25.00), // 67% cheaper than Opus 4.1, double max output tokens
+    // Claude 4.5
+    ("claude-opus-4-5-20251101", 5.00, 25.00),
+    ("claude-haiku-4-5-20251001", 1.00, 5.00),
+    ("claude-sonnet-4-5-20250929", 3.00, 15.00),
+    // Official API aliases (hyphenated)
+    ("claude-opus-4-5", 5.00, 25.00),
     ("claude-haiku-4-5", 1.00, 5.00),
-    ("claude-sonnet-4-5", 3.00, 15.00), // Extended context: $6/$15 for >200K, $22.50 for >200K output
-    // Claude 4 (Released May 22, 2025)
+    ("claude-sonnet-4-5", 3.00, 15.00),
+    // Claude 4 / 4.1
+    ("claude-opus-4-1-20250805", 15.00, 75.00),
+    ("claude-opus-4-20250514", 15.00, 75.00),
+    ("claude-sonnet-4-20250514", 3.00, 15.00),
     ("claude-opus-4-1", 15.00, 75.00),
     ("claude-opus-4-0", 15.00, 75.00),
     ("claude-opus-4", 15.00, 75.00),
     ("claude-sonnet-4-0", 3.00, 15.00),
     ("claude-sonnet-4", 3.00, 15.00),
     // Claude 3.7
+    ("claude-3-7-sonnet-20250219", 3.00, 15.00),
     ("claude-3-7-sonnet", 3.00, 15.00),
     // Claude 3.5
     ("claude-3-5-sonnet", 3.00, 15.00),
+    ("claude-3-5-haiku-20241022", 0.80, 4.00),
     ("claude-3-5-haiku", 0.80, 4.00),
     // Claude 3
     ("claude-3-opus", 15.00, 75.00),
     ("claude-3-sonnet", 3.00, 15.00),
+    ("claude-3-haiku-20240307", 0.25, 1.25),
     ("claude-3-haiku", 0.25, 1.25),
 ];
 
@@ -180,9 +192,8 @@ impl AiProvider for AnthropicProvider {
     }
 
     fn supports_model(&self, model: &str) -> bool {
-        // Anthropic Claude models (case-insensitive)
-        let normalized = normalize_model_name(model);
-        normalized.starts_with("claude-") || normalized.contains("claude")
+        // Anthropic Claude models - check against pricing table (strict)
+        is_model_in_pricing_table(model, PRICING)
     }
 
     fn get_api_key(&self) -> Result<String> {
@@ -213,10 +224,7 @@ impl AiProvider for AnthropicProvider {
     fn supports_vision(&self, model: &str) -> bool {
         // Claude 3+ models support vision (case-insensitive)
         let model_lower = normalize_model_name(model);
-        model_lower.contains("claude-3")
-            || model_lower.contains("claude-4")
-            || model_lower.contains("claude-3.5")
-            || model_lower.contains("claude-3.7")
+        model_lower.contains("claude-3") || model_lower.contains("claude-4")
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {

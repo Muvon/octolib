@@ -22,7 +22,7 @@ use crate::llm::types::{
     ToolCall,
 };
 use crate::llm::utils::{
-    contains_ignore_ascii_case, normalize_model_name, starts_with_ignore_ascii_case,
+    contains_ignore_ascii_case, is_model_in_pricing_table_optional_cache, normalize_model_name,
 };
 use anyhow::Result;
 use reqwest::Client;
@@ -235,20 +235,8 @@ impl AiProvider for OpenAiProvider {
     }
 
     fn supports_model(&self, model: &str) -> bool {
-        // OpenAI models - current lineup (case-insensitive)
-        starts_with_ignore_ascii_case(model, "gpt-5")
-            || starts_with_ignore_ascii_case(model, "codex-mini")
-            || starts_with_ignore_ascii_case(model, "gpt-4o")
-            || starts_with_ignore_ascii_case(model, "gpt-realtime")
-            || starts_with_ignore_ascii_case(model, "gpt-audio")
-            || starts_with_ignore_ascii_case(model, "gpt-4.5")
-            || starts_with_ignore_ascii_case(model, "gpt-4.1")
-            || starts_with_ignore_ascii_case(model, "gpt-4")
-            || starts_with_ignore_ascii_case(model, "gpt-3.5")
-            || starts_with_ignore_ascii_case(model, "o1")
-            || starts_with_ignore_ascii_case(model, "o3")
-            || starts_with_ignore_ascii_case(model, "o4")
-            || model.eq_ignore_ascii_case("chatgpt-4o-latest")
+        // OpenAI models - check against pricing table (strict, if not in pricing = not supported)
+        is_model_in_pricing_table_optional_cache(model, PRICING)
     }
 
     fn get_api_key(&self) -> Result<String> {

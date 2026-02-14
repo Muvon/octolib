@@ -48,7 +48,7 @@ use crate::llm::types::{
     TokenUsage, ToolCall,
 };
 use crate::llm::utils::{
-    contains_ignore_ascii_case, normalize_model_name, starts_with_ignore_ascii_case,
+    contains_ignore_ascii_case, is_model_in_pricing_table, normalize_model_name,
 };
 use anyhow::Result;
 use async_trait::async_trait;
@@ -228,8 +228,8 @@ impl AiProvider for ZaiProvider {
     }
 
     fn supports_model(&self, model: &str) -> bool {
-        // Z.ai GLM models (case-insensitive)
-        starts_with_ignore_ascii_case(model, "glm-")
+        // Z.ai (GLM) models - check against pricing table (strict)
+        is_model_in_pricing_table(model, PRICING)
     }
 
     fn get_api_key(&self) -> Result<String> {

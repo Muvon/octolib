@@ -31,7 +31,7 @@ use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderExchange, ProviderResponse, TokenUsage};
-use crate::llm::utils::contains_ignore_ascii_case;
+use crate::llm::utils::is_model_in_pricing_table_3tuple;
 use anyhow::Result;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -47,24 +47,27 @@ const PRICING: &[(&str, f64, f64, f64)] = &[
 ];
 
 /// Get pricing for a specific model (case-insensitive)
-fn get_model_pricing(model: &str) -> (f64, f64, f64) {
+/// Returns None if the model is not in the pricing table (not supported)
+fn get_model_pricing(model: &str) -> Option<(f64, f64, f64)> {
+    let normalized = model.to_ascii_lowercase();
     for (pricing_model, cache_hit, cache_miss, output) in PRICING {
-        if contains_ignore_ascii_case(model, pricing_model) {
-            return (*cache_hit, *cache_miss, *output);
+        if normalized.contains(&pricing_model.to_ascii_lowercase()) {
+            return Some((*cache_hit, *cache_miss, *output));
         }
     }
-    // Default to deepseek-chat pricing if model not found
-    (0.07, 0.27, 1.10)
+    // Model not in pricing table - not supported
+    None
 }
 
 /// Calculate cost for DeepSeek models with cache-aware pricing (Jan 2026)
+/// Returns None if the model is not supported (not in pricing table)
 fn calculate_cost_with_cache(
     model: &str,
     regular_input_tokens: u64,
     cache_hit_tokens: u64,
     completion_tokens: u64,
 ) -> Option<f64> {
-    let (cache_hit_price, cache_miss_price, output_price) = get_model_pricing(model);
+    let (cache_hit_price, cache_miss_price, output_price) = get_model_pricing(model)?;
 
     let regular_input_cost = (regular_input_tokens as f64 / 1_000_000.0) * cache_miss_price;
     let cache_hit_cost = (cache_hit_tokens as f64 / 1_000_000.0) * cache_hit_price;
@@ -162,8 +165,8 @@ impl AiProvider for DeepSeekProvider {
     }
 
     fn supports_model(&self, model: &str) -> bool {
-        model.eq_ignore_ascii_case("deepseek-chat")
-            || model.eq_ignore_ascii_case("deepseek-reasoner")
+        // DeepSeek models - check against pricing table (strict)
+        is_model_in_pricing_table_3tuple(model, PRICING)
     }
 
     fn get_api_key(&self) -> Result<String> {

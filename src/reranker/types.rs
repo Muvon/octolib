@@ -76,6 +76,7 @@ impl RerankProviderType {
 }
 
 /// Parse provider and model from a string in format "provider:model"
+#[must_use]
 pub fn parse_provider_model(input: &str) -> (RerankProviderType, String) {
     let (provider_str, model) = input.split_once(':').unwrap_or(("voyage", input));
 

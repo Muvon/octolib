@@ -60,6 +60,7 @@ Each provider requires its specific API key:
 export OPENAI_API_KEY="your_openai_api_key"
 export ANTHROPIC_API_KEY="your_anthropic_api_key"
 export OPENROUTER_API_KEY="your_openrouter_api_key"
+export OLLAMA_API_KEY="your_ollama_api_key"
 export MINIMAX_API_KEY="your_minimax_api_key"
 export DEEPSEEK_API_KEY="your_deepseek_api_key"
 export ZAI_API_KEY="your_zai_api_key"

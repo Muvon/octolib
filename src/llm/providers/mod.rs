@@ -23,7 +23,9 @@ pub mod google;
 pub mod local;
 pub mod minimax;
 pub mod moonshot;
+pub mod ollama;
 pub mod openai;
+mod openai_compat;
 pub mod openrouter;
 pub mod zai;
 
@@ -37,6 +39,7 @@ pub use google::GoogleVertexProvider;
 pub use local::LocalProvider;
 pub use minimax::MinimaxProvider;
 pub use moonshot::MoonshotProvider;
+pub use ollama::OllamaProvider;
 pub use openai::OpenAiProvider;
 pub use openrouter::OpenRouterProvider;
 pub use zai::ZaiProvider;

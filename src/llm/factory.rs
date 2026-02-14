@@ -17,7 +17,7 @@
 use crate::llm::providers::{
     AmazonBedrockProvider, AnthropicProvider, CliProvider, CloudflareWorkersAiProvider,
     DeepSeekProvider, GoogleVertexProvider, LocalProvider, MinimaxProvider, MoonshotProvider,
-    OpenAiProvider, OpenRouterProvider, ZaiProvider,
+    OllamaProvider, OpenAiProvider, OpenRouterProvider, ZaiProvider,
 };
 use crate::llm::traits::AiProvider;
 use anyhow::Result;
@@ -51,6 +51,7 @@ impl ProviderFactory {
             "openrouter" => Ok(Box::new(OpenRouterProvider::new())),
             "openai" => Ok(Box::new(OpenAiProvider::new())),
             "local" => Ok(Box::new(LocalProvider::new())),
+            "ollama" => Ok(Box::new(OllamaProvider::new())),
             "anthropic" => Ok(Box::new(AnthropicProvider::new())),
             "google" => Ok(Box::new(GoogleVertexProvider::new())),
             "amazon" => Ok(Box::new(AmazonBedrockProvider::new())),
@@ -62,7 +63,7 @@ impl ProviderFactory {
             "cli" => Err(anyhow::anyhow!(
                 "CLI provider requires a model string like 'cli:<backend>/<model>'. Use ProviderFactory::get_provider_for_model instead."
             )),
-            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported providers: openrouter, openai, local, anthropic, google, amazon, cloudflare, deepseek, minimax, moonshot, zai, cli", provider_name)),
+            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported providers: openrouter, openai, local, ollama, anthropic, google, amazon, cloudflare, deepseek, minimax, moonshot, zai, cli", provider_name)),
         }
     }
 
@@ -93,6 +94,7 @@ impl ProviderFactory {
             "openrouter",
             "openai",
             "local",
+            "ollama",
             "anthropic",
             "google",
             "amazon",
@@ -158,6 +160,7 @@ mod tests {
         assert!(providers.contains(&"openai"));
         assert!(providers.contains(&"anthropic"));
         assert!(providers.contains(&"openrouter"));
+        assert!(providers.contains(&"ollama"));
         assert!(providers.contains(&"google"));
         assert!(providers.contains(&"amazon"));
         assert!(providers.contains(&"cloudflare"));
@@ -182,6 +185,7 @@ mod tests {
         assert!(ProviderFactory::create_provider("openai").is_ok());
         assert!(ProviderFactory::create_provider("anthropic").is_ok());
         assert!(ProviderFactory::create_provider("openrouter").is_ok());
+        assert!(ProviderFactory::create_provider("ollama").is_ok());
         assert!(ProviderFactory::create_provider("google").is_ok());
         assert!(ProviderFactory::create_provider("amazon").is_ok());
         assert!(ProviderFactory::create_provider("cloudflare").is_ok());
@@ -195,6 +199,7 @@ mod tests {
         assert!(ProviderFactory::create_provider("ANTHROPIC").is_ok());
         assert!(ProviderFactory::create_provider("MiniMax").is_ok());
         assert!(ProviderFactory::create_provider("MOONSHOT").is_ok());
+        assert!(ProviderFactory::create_provider("OLLAMA").is_ok());
 
         // Test invalid provider
         assert!(ProviderFactory::create_provider("invalid").is_err());
@@ -219,6 +224,11 @@ mod tests {
         assert!(openrouter.supports_model("any-model"));
         assert!(openrouter.supports_vision("claude-3.5-sonnet"));
         assert!(openrouter.supports_caching("claude-3.5-sonnet"));
+
+        let ollama = ProviderFactory::create_provider("ollama").unwrap();
+        assert_eq!(ollama.name(), "ollama");
+        assert!(ollama.supports_model("llama3.2"));
+        assert!(!ollama.supports_caching("llama3.2"));
     }
 
     #[test]
@@ -250,6 +260,12 @@ mod tests {
         let (provider, model) = result.unwrap();
         assert_eq!(provider.name(), "moonshot");
         assert_eq!(model, "kimi-k2");
+
+        let result = ProviderFactory::get_provider_for_model("ollama:llama3.2");
+        assert!(result.is_ok());
+        let (provider, model) = result.unwrap();
+        assert_eq!(provider.name(), "ollama");
+        assert_eq!(model, "llama3.2");
 
         // Test invalid format
         let result = ProviderFactory::get_provider_for_model("gpt-4o");

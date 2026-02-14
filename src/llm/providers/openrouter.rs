@@ -341,9 +341,32 @@ struct OpenRouterFunction {
 
 #[derive(Deserialize, Debug)]
 struct OpenRouterUsage {
-    input_tokens: u64,
-    completion_tokens: u64,
-    total_tokens: u64,
+    #[serde(default)]
+    input_tokens: Option<u64>,
+    #[serde(default)]
+    prompt_tokens: Option<u64>,
+    #[serde(default)]
+    completion_tokens: Option<u64>,
+    #[serde(default)]
+    output_tokens: Option<u64>,
+    #[serde(default)]
+    total_tokens: Option<u64>,
+    #[serde(default)]
+    prompt_tokens_details: Option<OpenRouterPromptTokensDetails>,
+    #[serde(default)]
+    completion_tokens_details: Option<OpenRouterCompletionTokensDetails>,
+}
+
+#[derive(Deserialize, Debug)]
+struct OpenRouterPromptTokensDetails {
+    #[serde(default)]
+    cached_tokens: u64,
+}
+
+#[derive(Deserialize, Debug)]
+struct OpenRouterCompletionTokensDetails {
+    #[serde(default)]
+    reasoning_tokens: u64,
 }
 
 // Convert messages to OpenRouter format (same as OpenAI)
@@ -647,17 +670,46 @@ async fn execute_openrouter_request(
             .collect()
     });
 
-    // Estimate reasoning tokens from thinking content length (4 chars per token)
-    let reasoning_tokens = thinking.as_ref().map(|t| t.tokens).unwrap_or(0);
+    // Prefer usage reasoning tokens if present; fallback to estimation from reasoning_details
+    let reasoning_tokens = openrouter_response
+        .usage
+        .completion_tokens_details
+        .as_ref()
+        .map(|d| d.reasoning_tokens)
+        .filter(|v| *v > 0)
+        .or_else(|| thinking.as_ref().map(|t| t.tokens))
+        .unwrap_or(0);
 
-    // OpenRouter doesn't provide cache info in usage
+    let input_tokens_raw = openrouter_response
+        .usage
+        .input_tokens
+        .or(openrouter_response.usage.prompt_tokens)
+        .unwrap_or(0);
+    let output_tokens = openrouter_response
+        .usage
+        .completion_tokens
+        .or(openrouter_response.usage.output_tokens)
+        .unwrap_or(0);
+    let cache_read_tokens = openrouter_response
+        .usage
+        .prompt_tokens_details
+        .as_ref()
+        .map(|d| d.cached_tokens)
+        .unwrap_or(0);
+    let total_tokens = openrouter_response
+        .usage
+        .total_tokens
+        .unwrap_or(input_tokens_raw.saturating_add(output_tokens));
+    let input_tokens_clean = input_tokens_raw.saturating_sub(cache_read_tokens);
+
+    // Octolib semantic: input_tokens excludes cache reads
     let usage = TokenUsage {
-        input_tokens: openrouter_response.usage.input_tokens, // All input (no cache breakdown)
-        cache_read_tokens: 0,                                 // Not provided by OpenRouter
-        cache_write_tokens: 0,                                // Not provided by OpenRouter
-        output_tokens: openrouter_response.usage.completion_tokens,
+        input_tokens: input_tokens_clean,
+        cache_read_tokens,
+        cache_write_tokens: 0,
+        output_tokens,
         reasoning_tokens,
-        total_tokens: openrouter_response.usage.total_tokens,
+        total_tokens,
         cost: None, // OpenRouter doesn't provide cost
         request_time_ms: Some(request_time_ms),
     };

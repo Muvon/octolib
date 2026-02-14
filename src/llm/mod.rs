@@ -43,5 +43,5 @@ pub use types::{
 pub use providers::{
     AmazonBedrockProvider, AnthropicProvider, CliProvider, CloudflareWorkersAiProvider,
     DeepSeekProvider, GoogleVertexProvider, LocalProvider, MinimaxProvider, MoonshotProvider,
-    OpenAiProvider, OpenRouterProvider, ZaiProvider,
+    OllamaProvider, OpenAiProvider, OpenRouterProvider, ZaiProvider,
 };

@@ -166,15 +166,13 @@ struct MoonshotChoice {
     logprobs: Option<serde_json::Value>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 struct MoonshotUsage {
-    input_tokens: u64,
+    prompt_tokens: u64,
     completion_tokens: u64,
     total_tokens: u64,
-    /// Kimi K2 models return cached_tokens directly in usage object
     #[serde(default)]
     cached_tokens: u64,
-    /// Older format: cached_tokens nested in prompt_tokens_details
     #[serde(default)]
     prompt_tokens_details: Option<MoonshotPromptTokensDetails>,
 }
@@ -558,48 +556,35 @@ impl AiProvider for MoonshotProvider {
             .ok_or_else(|| anyhow::anyhow!("No choices in Moonshot response"))?;
 
         let token_usage = if let Some(usage) = moonshot_response.usage {
-            let input_tokens = usage.input_tokens;
-            let completion_tokens = usage.completion_tokens;
-            let total_tokens = usage.total_tokens;
-
-            // Moonshot returns cached_tokens in TWO formats:
-            // 1. Kimi K2 models: usage.cached_tokens (direct field)
-            // 2. Older format: usage.prompt_tokens_details.cached_tokens (nested)
-            // These are cache READ tokens (already in cache)
-            let cache_read_tokens = if usage.cached_tokens > 0 {
-                usage.cached_tokens
-            } else {
+            let cache_read_tokens = std::cmp::max(
+                usage.cached_tokens,
                 usage
                     .prompt_tokens_details
                     .as_ref()
-                    .map(|details| details.cached_tokens)
-                    .unwrap_or(0)
-            };
+                    .map(|d| d.cached_tokens)
+                    .unwrap_or(0),
+            );
 
-            // Moonshot doesn't expose cache_write separately
-            let cache_write_tokens = 0_u64;
-
-            // Calculate CLEAN input tokens (no cache)
-            let input_tokens_clean = input_tokens.saturating_sub(cache_read_tokens);
+            let input_tokens_clean = usage.prompt_tokens.saturating_sub(cache_read_tokens);
 
             let cost = if cache_read_tokens > 0 {
                 calculate_cost_with_cache(
                     &params.model,
                     input_tokens_clean,
                     cache_read_tokens,
-                    completion_tokens,
+                    usage.completion_tokens,
                 )
             } else {
-                calculate_cost(&params.model, input_tokens, completion_tokens)
+                calculate_cost(&params.model, usage.prompt_tokens, usage.completion_tokens)
             };
 
             Some(TokenUsage {
-                input_tokens: input_tokens_clean, // CLEAN input (no cache)
-                cache_read_tokens,                // Tokens read from cache
-                cache_write_tokens,               // Moonshot doesn't expose this (0)
-                output_tokens: completion_tokens,
+                input_tokens: input_tokens_clean,
+                cache_read_tokens,
+                cache_write_tokens: 0,
+                output_tokens: usage.completion_tokens,
                 reasoning_tokens: 0,
-                total_tokens,
+                total_tokens: usage.total_tokens,
                 cost,
                 request_time_ms: None,
             })

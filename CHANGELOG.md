@@ -1,33 +1,5 @@
 # Changelog
 
-## [0.8.3] - 2026-02-14
-
-### 📋 Release Summary
-
-This release improves cost tracking accuracy by fixing token calculation for cached requests and standardizing usage reporting. Enhanced pre-commit validation ensures higher code quality and documentation reliability.
-
-
-### 🔧 Improvements & Optimizations
-
-- **llm**: rename prompt_tokens to input_tokens and add cache fields `2f7f6e66`
-
-### 🐛 Bug Fixes & Stability
-
-- **llm**: correct token calculation logic for cached requests `1359bdf5`
-
-### 🔄 Other Changes
-
-- **pre-commit**: update hooks and model validation `3bc7ae08`
-- **pre-commit**: add cargo doc check to precommit hooks `62a4e00a`
-
-### 📊 Release Summary
-
-**Total commits**: 4 across 3 categories
-
-🔧 **1** improvement - *Better performance & code quality*
-🐛 **1** bug fix - *Improved stability*
-🔄 **2** other changes - *Maintenance & tooling*
-
 ## [0.8.2] - 2026-02-13
 
 ### 📋 Release Summary

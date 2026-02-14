@@ -92,8 +92,20 @@ const PRICING: &[PricingTuple] = &[
 ];
 
 /// Calculate cost for Z.ai models (case-insensitive)
-fn calculate_cost(model: &str, input_tokens: u64, completion_tokens: u64) -> Option<f64> {
-    calculate_cost_unified(model, PRICING, input_tokens, 0, 0, completion_tokens)
+fn calculate_cost(
+    model: &str,
+    regular_input_tokens: u64,
+    cache_read_tokens: u64,
+    completion_tokens: u64,
+) -> Option<f64> {
+    calculate_cost_unified(
+        model,
+        PRICING,
+        regular_input_tokens,
+        0,
+        cache_read_tokens,
+        completion_tokens,
+    )
 }
 
 /// Z.ai provider
@@ -190,7 +202,7 @@ struct ZaiChoice {
 
 #[derive(Deserialize, Debug)]
 struct ZaiUsage {
-    input_tokens: u64,
+    prompt_tokens: u64,
     completion_tokens: u64,
     total_tokens: u64,
     #[serde(default)]
@@ -494,7 +506,8 @@ async fn execute_zai_request(
 
     // Calculate cost
     let usage = zai_response.usage.as_ref();
-    let input_tokens = usage.map(|u| u.input_tokens).unwrap_or(0);
+    // Z.ai returns prompt_tokens; this is RAW input and may include cached reads.
+    let input_tokens_raw = usage.map(|u| u.prompt_tokens).unwrap_or(0);
     let completion_tokens = usage.map(|u| u.completion_tokens).unwrap_or(0);
 
     // Z.ai reports cached_tokens in prompt_tokens_details (these are cache READ tokens)
@@ -505,19 +518,21 @@ async fn execute_zai_request(
     // Z.ai doesn't expose cache_write separately
     let cache_write_tokens = 0_u64;
 
-    // Calculate CLEAN input tokens (no cache)
-    let input_tokens_clean = input_tokens.saturating_sub(cache_read_tokens);
+    // Cost needs regular (non-cached) input split from cache reads.
+    let regular_input_tokens = input_tokens_raw.saturating_sub(cache_read_tokens);
 
     let cost = calculate_cost(
         zai_response.model.as_str(),
-        input_tokens_clean,
+        regular_input_tokens,
+        cache_read_tokens,
         completion_tokens,
     );
 
     let token_usage = TokenUsage {
-        input_tokens: input_tokens_clean, // CLEAN input (no cache)
-        cache_read_tokens,                // Tokens read from cache
-        cache_write_tokens,               // Z.ai doesn't expose this (0)
+        // Z.ai prompt_tokens is raw input (includes cached reads).
+        input_tokens: input_tokens_raw,
+        cache_read_tokens,  // Tokens read from cache
+        cache_write_tokens, // Z.ai doesn't expose this (0)
         output_tokens: completion_tokens,
         reasoning_tokens: 0, // Z.ai doesn't provide reasoning token count
         total_tokens: usage.map(|u| u.total_tokens).unwrap_or(0),
@@ -654,46 +669,70 @@ mod tests {
     #[test]
     fn test_cost_calculation() {
         // Test GLM-4.5: $0.60 input, $2.20 output (UPDATED PRICING)
-        let cost = calculate_cost("glm-4.5", 1_000_000, 1_000_000);
+        let cost = calculate_cost("glm-4.5", 1_000_000, 0, 1_000_000);
         assert!((cost.unwrap() - 2.80).abs() < 0.01); // 0.60 + 2.20
 
         // Test GLM-4.7: $0.60 input, $2.20 output (UPDATED PRICING)
-        let cost = calculate_cost("glm-4.7", 1_000_000, 1_000_000);
+        let cost = calculate_cost("glm-4.7", 1_000_000, 0, 1_000_000);
         assert!((cost.unwrap() - 2.80).abs() < 0.01); // 0.60 + 2.20
 
         // Test GLM-4.6: $0.60 input, $2.20 output (UPDATED PRICING)
-        let cost = calculate_cost("glm-4.6", 1_000_000, 1_000_000);
+        let cost = calculate_cost("glm-4.6", 1_000_000, 0, 1_000_000);
         assert!((cost.unwrap() - 2.80).abs() < 0.01); // 0.60 + 2.20
 
         // Test GLM-4.7-flash: $0.07 input, $0.40 output (UPDATED PRICING)
-        let cost = calculate_cost("glm-4.7-flash", 1_000_000, 1_000_000);
+        let cost = calculate_cost("glm-4.7-flash", 1_000_000, 0, 1_000_000);
         assert!((cost.unwrap() - 0.47).abs() < 0.01); // 0.07 + 0.40
     }
 
     #[test]
     fn test_cost_calculation_case_insensitive() {
         // Test mixed case model names
-        let cost = calculate_cost("GLM-4.7", 1_000_000, 1_000_000);
+        let cost = calculate_cost("GLM-4.7", 1_000_000, 0, 1_000_000);
         assert!((cost.unwrap() - 2.80).abs() < 0.01); // Should work with uppercase
 
-        let cost = calculate_cost("gLm-4.7-FlAsH", 1_000_000, 1_000_000);
+        let cost = calculate_cost("gLm-4.7-FlAsH", 1_000_000, 0, 1_000_000);
         assert!((cost.unwrap() - 0.47).abs() < 0.01); // Should work with mixed case
 
-        let cost = calculate_cost("glm-4.5-AIR", 1_000_000, 1_000_000);
+        let cost = calculate_cost("glm-4.5-AIR", 1_000_000, 0, 1_000_000);
         assert!((cost.unwrap() - 1.30).abs() < 0.01); // 0.20 + 1.10
     }
 
     #[test]
     fn test_cost_with_partial_tokens() {
         // Test with 500K tokens each
-        let cost = calculate_cost("glm-4.5", 500_000, 500_000);
+        let cost = calculate_cost("glm-4.5", 500_000, 0, 500_000);
         assert!((cost.unwrap() - 1.40).abs() < 0.01); // 0.60 * 0.5 + 2.20 * 0.5
     }
 
     #[test]
     fn test_unknown_model() {
-        let cost = calculate_cost("unknown-model", 1_000_000, 1_000_000);
+        let cost = calculate_cost("unknown-model", 1_000_000, 0, 1_000_000);
         assert_eq!(cost, None);
+    }
+
+    #[test]
+    fn test_cost_with_cache_read_tokens() {
+        // GLM-4.7-flash pricing: input 0.07, cache_read 0.007, output 0.40
+        // regular_input=100K => 0.007
+        // cache_read=200K => 0.0014
+        // output=100K => 0.04
+        // total => 0.0484
+        let cost = calculate_cost("glm-4.7-flash", 100_000, 200_000, 100_000).unwrap();
+        assert!((cost - 0.0484).abs() < 0.0001);
+    }
+
+    #[test]
+    fn test_zai_usage_deserialize_prompt_tokens_shape() {
+        let parsed: ZaiUsage = serde_json::from_value(serde_json::json!({
+            "prompt_tokens": 173,
+            "completion_tokens": 104,
+            "total_tokens": 277,
+            "prompt_tokens_details": { "cached_tokens": 43 }
+        }))
+        .expect("prompt_tokens shape should deserialize");
+        assert_eq!(parsed.prompt_tokens, 173);
+        assert_eq!(parsed.prompt_tokens_details.cached_tokens, 43);
     }
 
     #[test]

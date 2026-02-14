@@ -529,8 +529,8 @@ async fn execute_zai_request(
     );
 
     let token_usage = TokenUsage {
-        // Z.ai prompt_tokens is raw input (includes cached reads).
-        input_tokens: input_tokens_raw,
+        // CLEAN input tokens - excludes cached reads (as per TokenUsage contract)
+        input_tokens: regular_input_tokens,
         cache_read_tokens,  // Tokens read from cache
         cache_write_tokens, // Z.ai doesn't expose this (0)
         output_tokens: completion_tokens,

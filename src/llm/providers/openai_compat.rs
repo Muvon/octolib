@@ -455,7 +455,7 @@ async fn execute_request(
     let response_cost = api_response.usage.as_ref().and_then(|u| {
         u.total_cost
             .or(u.cost)
-            .or_else(|| match (u.prompt_cost, u.completion_cost) {
+            .or(match (u.prompt_cost, u.completion_cost) {
                 (Some(a), Some(b)) => Some(a + b),
                 _ => None,
             })

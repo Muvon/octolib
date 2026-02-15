@@ -89,18 +89,21 @@ impl AiProvider for OpenRouterProvider {
     }
 
     fn supports_vision(&self, model: &str) -> bool {
-        // OpenRouter vision models (case-insensitive)
+        // OpenRouter is an aggregator - we can't know which models support vision
+        // Default to true and let the underlying provider handle it
         let normalized = normalize_model_name(model);
-        normalized.starts_with("gpt-4o")
-            || normalized.starts_with("gpt-4-turbo")
-            || normalized.starts_with("claude-3")
-            || normalized.starts_with("claude-4")
-            || normalized.contains("gemini")
-            || normalized.contains("llava")
-            || normalized.contains("qwen-vl")
-            || normalized.contains("vision")
-            || normalized.starts_with("anthropic/")
-            || normalized.starts_with("google/")
+        // For known non-vision models, return false as optimization
+        let known_non_vision = normalized.starts_with("gpt-3.5")
+            || normalized.starts_with("text-")
+            || normalized == "o1-preview"
+            || normalized == "o1-mini";
+        !known_non_vision
+    }
+
+    fn supports_video(&self, _model: &str) -> bool {
+        // OpenRouter is an aggregator - support all by default
+        // The underlying provider/model will handle the actual capability
+        true
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {
@@ -500,6 +503,30 @@ fn convert_messages(messages: &[Message]) -> Result<Vec<OpenRouterMessage>, Tool
                                     "url": format!("data:{};base64,{}", image.media_type, data)
                                 }
                             }));
+                        }
+                    }
+                }
+
+                // Add videos if present
+                if let Some(videos) = &message.videos {
+                    for video in videos {
+                        match &video.data {
+                            crate::llm::types::VideoData::Base64(data) => {
+                                content_parts.push(serde_json::json!({
+                                    "type": "video_url",
+                                    "video_url": {
+                                        "url": format!("data:{};base64,{}", video.media_type, data)
+                                    }
+                                }));
+                            }
+                            crate::llm::types::VideoData::Url(url) => {
+                                content_parts.push(serde_json::json!({
+                                    "type": "video_url",
+                                    "video_url": {
+                                        "url": url
+                                    }
+                                }));
+                            }
                         }
                     }
                 }

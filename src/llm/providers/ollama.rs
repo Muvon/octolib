@@ -67,14 +67,16 @@ impl AiProvider for OllamaProvider {
         false
     }
 
-    fn supports_vision(&self, model: &str) -> bool {
-        let m = model.to_lowercase();
-        m.contains("vision")
-            || m.contains("llava")
-            || m.contains("qwen2.5-vl")
-            || m.contains("qwen-vl")
-            || m.contains("gemma3")
-            || m.contains("pixtral")
+    fn supports_vision(&self, _model: &str) -> bool {
+        // Ollama is a local provider with many models - support all by default
+        // The actual capability depends on the specific model being used
+        true
+    }
+
+    fn supports_video(&self, _model: &str) -> bool {
+        // Ollama is a local provider - support all by default
+        // The actual capability depends on the specific model being used
+        true
     }
 
     fn get_max_input_tokens(&self, _model: &str) -> usize {
@@ -125,10 +127,22 @@ mod tests {
     }
 
     #[test]
-    fn test_supports_vision_heuristics() {
+    fn test_supports_vision_default() {
         let provider = OllamaProvider::new();
+        // Ollama supports all models by default (aggregator behavior)
         assert!(provider.supports_vision("llava:latest"));
         assert!(provider.supports_vision("qwen2.5-vl"));
-        assert!(!provider.supports_vision("llama3.2"));
+        assert!(provider.supports_vision("llama3.2"));
+        assert!(provider.supports_vision("any-model"));
+    }
+
+    #[test]
+    fn test_supports_video_default() {
+        let provider = OllamaProvider::new();
+        // Ollama supports video by default (aggregator behavior)
+        assert!(provider.supports_video("llava:latest"));
+        assert!(provider.supports_video("qwen2.5-vl"));
+        assert!(provider.supports_video("llama3.2"));
+        assert!(provider.supports_video("any-model"));
     }
 }

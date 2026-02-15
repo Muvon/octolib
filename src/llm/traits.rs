@@ -49,6 +49,12 @@ pub trait AiProvider: Send + Sync {
         false
     }
 
+    /// Check if the provider/model supports video capabilities
+    fn supports_video(&self, _model: &str) -> bool {
+        // Default implementation - providers can override
+        false
+    }
+
     /// Check if the provider supports structured output
     fn supports_structured_output(&self, _model: &str) -> bool {
         // Default implementation - providers can override

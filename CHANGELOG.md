@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.9.0] - 2026-02-15
+
+### 📋 Release Summary
+
+This release expands AI provider support with Google Vertex AI, Amazon Bedrock, Cerebras AI, and Ollama integrations, plus video capabilities for OpenRouter and Kimi K2.5 (cdb22f47, 6346769b, 6de74c29, 5e5cd014, d0a742b0). Token counting accuracy and model compatibility are improved across Anthropic, Moonshot, and ZAI providers (e6585b41, c2c14ce2, 7d6f693b, 46a52427).
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: add video support to openrouter and enable local providers by default `5e5cd014`
+- **vision**: enable video attachments for Kimi K2.5 `d0a742b0`
+- **providers**: add Google Vertex AI and Amazon Bedrock support `cdb22f47`
+- **provider**: add Cerebras AI support `6346769b`
+- **llm**: add Ollama provider with OpenAI-compatible endpoint `6de74c29`
+
+### 🐛 Bug Fixes & Stability
+
+- **zai**: estimate reasoning tokens from thinking block `e6585b41`
+- **anthropic**: exclude opus 4.6 from temperature and top p support `c2c14ce2`
+- **moonshot**: correct field name from input_tokens to prompt_tokens `7d6f693b`
+- **doc**: correct URL formatting in rustdoc comments `5ffc4d5f`
+- **openai_compat**: resolve clippy warning for or_else usage `6e2166ea`
+- **zai**: correct input token counting to exclude cached reads `46a52427`
+
+### 📊 Release Summary
+
+**Total commits**: 11 across 2 categories
+
+✨ **5** new features - *Enhanced functionality*
+🐛 **6** bug fixes - *Improved stability*
+
 ## [0.8.3] - 2026-02-14
 
 ### 📋 Release Summary

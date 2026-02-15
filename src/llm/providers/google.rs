@@ -183,6 +183,12 @@ impl AiProvider for GoogleVertexProvider {
         true
     }
 
+    fn get_model_pricing(&self, _model: &str) -> Option<crate::llm::types::ModelPricing> {
+        // Google Vertex AI has complex pricing per model - return zero for now
+        // so compression analysis can still work (will assume always beneficial)
+        Some(crate::llm::types::ModelPricing::new(0.0, 0.0, 0.0, 0.0))
+    }
+
     fn get_max_input_tokens(&self, model: &str) -> usize {
         // Google Vertex AI model context window limits (case-insensitive)
         let normalized = normalize_model_name(model);

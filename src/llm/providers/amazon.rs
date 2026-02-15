@@ -127,6 +127,12 @@ impl AiProvider for AmazonBedrockProvider {
         true
     }
 
+    fn get_model_pricing(&self, _model: &str) -> Option<crate::llm::types::ModelPricing> {
+        // Amazon Bedrock has complex pricing per model - return zero for now
+        // so compression analysis can still work (will assume always beneficial)
+        Some(crate::llm::types::ModelPricing::new(0.0, 0.0, 0.0, 0.0))
+    }
+
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
         let api_key = self.get_api_key()?;
         let api_url = get_api_url(AWS_BEDROCK_API_URL_ENV, &default_bedrock_api_url());

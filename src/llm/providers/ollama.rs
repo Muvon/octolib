@@ -87,6 +87,11 @@ impl AiProvider for OllamaProvider {
         true
     }
 
+    fn get_model_pricing(&self, _model: &str) -> Option<crate::llm::types::ModelPricing> {
+        // Ollama is local/free - return zero pricing so compression works
+        Some(crate::llm::types::ModelPricing::new(0.0, 0.0, 0.0, 0.0))
+    }
+
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
         let api_key = self.get_api_key()?;
         let api_url = get_api_url(OLLAMA_API_URL_ENV, OLLAMA_API_URL);

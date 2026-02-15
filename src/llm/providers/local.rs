@@ -91,6 +91,11 @@ impl AiProvider for LocalProvider {
         true
     }
 
+    fn get_model_pricing(&self, _model: &str) -> Option<crate::llm::types::ModelPricing> {
+        // Local provider is free (local inference) - return zero pricing
+        Some(crate::llm::types::ModelPricing::new(0.0, 0.0, 0.0, 0.0))
+    }
+
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
         let api_key = self.get_api_key()?;
         let api_url = get_api_url(LOCAL_API_URL_ENV, LOCAL_API_URL);

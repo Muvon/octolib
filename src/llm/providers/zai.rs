@@ -504,6 +504,10 @@ async fn execute_zai_request(
         })
     });
 
+    // Extract reasoning tokens from thinking block
+    // Z.ai doesn't provide reasoning_tokens in usage response, so we estimate from thinking content length
+    let reasoning_tokens = thinking.as_ref().map(|t| t.tokens).unwrap_or(0);
+
     // Calculate cost
     let usage = zai_response.usage.as_ref();
     // Z.ai returns prompt_tokens; this is RAW input and may include cached reads.
@@ -534,7 +538,7 @@ async fn execute_zai_request(
         cache_read_tokens,  // Tokens read from cache
         cache_write_tokens, // Z.ai doesn't expose this (0)
         output_tokens: completion_tokens,
-        reasoning_tokens: 0, // Z.ai doesn't provide reasoning token count
+        reasoning_tokens, // Extracted from thinking block content
         total_tokens: usage.map(|u| u.total_tokens).unwrap_or(0),
         cost,
         request_time_ms: Some(request_time_ms),

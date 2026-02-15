@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.9.1] - 2026-02-15
+
+### 📋 Release Summary
+
+This release adds support for zero-cost proxy providers, allowing seamless integration with services that don’t charge per request.
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: add zero pricing for proxy providers `f4f6d8a9`
+
+### 📊 Release Summary
+
+**Total commits**: 1 across 1 categories
+
+✨ **1** new feature - *Enhanced functionality*
+
 ## [0.9.0] - 2026-02-15
 
 ### 📋 Release Summary

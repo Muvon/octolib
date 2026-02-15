@@ -71,11 +71,20 @@ impl AiProvider for LocalProvider {
     }
 
     fn supports_vision(&self, _model: &str) -> bool {
-        false
+        // Local provider supports many models - default to true
+        // Actual capability depends on the specific model being used
+        true
+    }
+
+    fn supports_video(&self, _model: &str) -> bool {
+        // Local provider supports video depending on the model
+        // Default to true and let the underlying model handle it
+        true
     }
 
     fn get_max_input_tokens(&self, _model: &str) -> usize {
-        8_192
+        // Local models often support large contexts (128K is common)
+        128_000
     }
 
     fn supports_structured_output(&self, _model: &str) -> bool {
@@ -134,7 +143,8 @@ mod tests {
 
         assert_eq!(provider.name(), "local");
         assert!(!provider.supports_caching("any-model"));
-        assert!(!provider.supports_vision("any-model"));
-        assert_eq!(provider.get_max_input_tokens("any-model"), 8_192);
+        assert!(provider.supports_vision("any-model"));
+        assert!(provider.supports_video("any-model"));
+        assert_eq!(provider.get_max_input_tokens("any-model"), 128_000);
     }
 }

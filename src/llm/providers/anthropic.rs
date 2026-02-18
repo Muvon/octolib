@@ -87,9 +87,10 @@ fn supports_temperature_and_top_p(model: &str) -> bool {
     let unsupported_prefixes = [
         "opus-4-1",
         "sonnet-4-5",
-        "claude-haiku-4-5",
-        "claude-opus-4-5",
-        "claude-opus-4-6",
+        "haiku-4-5",
+        "sonnet-4-6",
+        "opus-4-5",
+        "opus-4-6",
     ];
 
     !unsupported_prefixes

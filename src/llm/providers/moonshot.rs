@@ -111,7 +111,7 @@ impl MoonshotProvider {
 const MOONSHOT_API_KEY_ENV: &str = "MOONSHOT_API_KEY";
 
 // Moonshot API request/response structures (OpenAI-compatible)
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 struct MoonshotRequest {
     model: String,
     messages: Vec<MoonshotMessage>,
@@ -535,19 +535,46 @@ impl AiProvider for MoonshotProvider {
             }
         }
 
-        let response = retry::cancellable(
-            async {
-                self.client
-                    .post("https://api.moonshot.ai/v1/chat/completions")
-                    .header("Authorization", format!("Bearer {}", api_key))
-                    .header("Content-Type", "application/json")
-                    .json(&request)
-                    .send()
-                    .await
-                    .map_err(anyhow::Error::from)
+        let client = self.client.clone();
+        let response = retry::retry_with_exponential_backoff(
+            || {
+                let client = client.clone();
+                let api_key = api_key.clone();
+                let request = request.clone();
+                Box::pin(async move {
+                    let response = client
+                        .post("https://api.moonshot.ai/v1/chat/completions")
+                        .header("Authorization", format!("Bearer {}", api_key))
+                        .header("Content-Type", "application/json")
+                        .json(&request)
+                        .send()
+                        .await
+                        .map_err(anyhow::Error::from)?;
+
+                    // Return Err for retryable HTTP errors so the retry loop catches them
+                    if retry::is_retryable_status(response.status().as_u16()) {
+                        let status = response.status();
+                        let error_text = response.text().await.unwrap_or_default();
+                        return Err(anyhow::anyhow!(
+                            "Moonshot AI API error {}: {}",
+                            status,
+                            error_text
+                        ));
+                    }
+
+                    Ok(response)
+                })
             },
+            params.max_retries,
+            params.retry_timeout,
             params.cancellation_token.as_ref(),
             || ProviderError::Cancelled.into(),
+            |e| {
+                matches!(
+                    e.downcast_ref::<ProviderError>(),
+                    Some(ProviderError::Cancelled)
+                )
+            },
         )
         .await?;
 

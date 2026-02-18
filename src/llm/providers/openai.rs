@@ -580,10 +580,24 @@ async fn execute_openai_request(
                     req = req.header("ChatGPT-Account-ID", id);
                 }
 
-                req.json(&request_body)
+                let response = req
+                    .json(&request_body)
                     .send()
                     .await
-                    .map_err(anyhow::Error::from)
+                    .map_err(anyhow::Error::from)?;
+
+                // Return Err for retryable HTTP errors so the retry loop catches them
+                if retry::is_retryable_status(response.status().as_u16()) {
+                    let status = response.status();
+                    let error_text = response.text().await.unwrap_or_default();
+                    return Err(anyhow::anyhow!(
+                        "OpenAI API error {}: {}",
+                        status,
+                        error_text
+                    ));
+                }
+
+                Ok(response)
             })
         },
         max_retries,

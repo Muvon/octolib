@@ -12,7 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Retry logic with exponential backoff for AI provider requests
+//! Retry logic with exponential backoff for AI provider requests.
+//!
+//! # Retry Behavior
+//!
+//! This module provides retry functionality for transient API failures:
+//!
+//! **Retryable HTTP Status Codes:**
+//! - `429` - Rate limit exceeded (temporary, will resolve)
+//! - `500-599` - Server errors (temporary infrastructure issues)
+//!
+//! **Non-Retryable Status Codes:**
+//! - `400-499` (except 429) - Client errors (won't resolve with retry)
+//! - `1xx`, `2xx`, `3xx` - Not errors
+//!
+//! # Backoff Strategy
+//!
+//! Exponential backoff with configurable base timeout:
+//! - Delay grows as: `base_timeout * 2^attempt`
+//! - Maximum delay capped at 5 minutes
+//! - Example: base 1s → 1s, 2s, 4s, 8s, 16s...
+//!
+//! # Cancellation
+//!
+//! All retry operations support optional cancellation tokens.
+//! When the token is triggered, the operation immediately returns
+//! a cancellation error without further retries.
 
 use anyhow::Result;
 use std::future::Future;
@@ -139,6 +164,13 @@ where
     Err(last_error.unwrap())
 }
 
+/// Returns true for HTTP status codes that should trigger a retry.
+/// Retries on 429 (rate limit) and all 5xx server errors.
+/// Does NOT retry on 4xx client errors (400, 401, 403, 404, etc.) since those won't resolve.
+pub fn is_retryable_status(status: u16) -> bool {
+    status == 429 || status >= 500
+}
+
 /// Helper to wrap HTTP requests in retry logic
 ///
 /// This is a convenience wrapper that creates the appropriate closure for HTTP requests.
@@ -163,4 +195,60 @@ where
         is_cancelled,
     )
     .await
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_retryable_status_429_rate_limit() {
+        // 429 (rate limit) should be retryable
+        assert!(is_retryable_status(429), "429 should be retryable");
+    }
+
+    #[test]
+    fn test_is_retryable_status_5xx_server_errors() {
+        // All 5xx server errors should be retryable
+        assert!(is_retryable_status(500), "500 should be retryable");
+        assert!(is_retryable_status(501), "501 should be retryable");
+        assert!(is_retryable_status(502), "502 should be retryable");
+        assert!(is_retryable_status(503), "503 should be retryable");
+        assert!(is_retryable_status(504), "504 should be retryable");
+        assert!(is_retryable_status(599), "599 should be retryable");
+    }
+
+    #[test]
+    fn test_is_retryable_status_4xx_client_errors_not_retryable() {
+        // 4xx client errors should NOT be retryable (except 429)
+        assert!(!is_retryable_status(400), "400 should not be retryable");
+        assert!(!is_retryable_status(401), "401 should not be retryable");
+        assert!(!is_retryable_status(403), "403 should not be retryable");
+        assert!(!is_retryable_status(404), "404 should not be retryable");
+        assert!(!is_retryable_status(405), "405 should not be retryable");
+        assert!(!is_retryable_status(408), "408 should not be retryable");
+        assert!(!is_retryable_status(418), "418 should not be retryable");
+    }
+
+    #[test]
+    fn test_is_retryable_status_2xx_success_not_retryable() {
+        // 2xx success codes should NOT be retryable (they're already successful)
+        assert!(!is_retryable_status(200), "200 should not be retryable");
+        assert!(!is_retryable_status(201), "201 should not be retryable");
+        assert!(!is_retryable_status(204), "204 should not be retryable");
+    }
+
+    #[test]
+    fn test_is_retryable_status_3xx_redirect_not_retryable() {
+        // 3xx redirect codes should NOT be retryable
+        assert!(!is_retryable_status(301), "301 should not be retryable");
+        assert!(!is_retryable_status(302), "302 should not be retryable");
+        assert!(!is_retryable_status(304), "304 should not be retryable");
+    }
+
+    #[test]
+    fn test_is_retryable_status_1xx_informational_not_retryable() {
+        // 1xx informational codes should NOT be retryable
+        assert!(!is_retryable_status(100), "100 should not be retryable");
+        assert!(!is_retryable_status(101), "101 should not be retryable");
+    }
 }

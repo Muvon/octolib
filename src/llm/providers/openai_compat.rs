@@ -298,6 +298,7 @@ async fn execute_request(
             let api_key = api_key.clone();
             let api_url = api_url.clone();
             let request_body = request_body.clone();
+            let provider_name = config.provider_name.to_string();
 
             Box::pin(async move {
                 let mut request = client
@@ -309,7 +310,21 @@ async fn execute_request(
                     request = request.header("Authorization", format!("Bearer {}", api_key));
                 }
 
-                request.send().await.map_err(anyhow::Error::from)
+                let response = request.send().await.map_err(anyhow::Error::from)?;
+
+                // Return Err for retryable HTTP errors so the retry loop catches them
+                if retry::is_retryable_status(response.status().as_u16()) {
+                    let status = response.status();
+                    let error_text = response.text().await.unwrap_or_default();
+                    return Err(anyhow::anyhow!(
+                        "{} API error {}: {}",
+                        provider_name,
+                        status,
+                        error_text
+                    ));
+                }
+
+                Ok(response)
             })
         },
         params.max_retries,

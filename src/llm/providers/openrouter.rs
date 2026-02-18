@@ -576,7 +576,7 @@ async fn execute_openrouter_request(
                 .unwrap_or_else(|_| "https://octolib.muvon.io".to_string());
 
             Box::pin(async move {
-                client
+                let response = client
                     .post(&api_url)
                     .header("Content-Type", "application/json")
                     .header("Authorization", format!("Bearer {}", api_key))
@@ -585,7 +585,20 @@ async fn execute_openrouter_request(
                     .json(&request_body)
                     .send()
                     .await
-                    .map_err(anyhow::Error::from)
+                    .map_err(anyhow::Error::from)?;
+
+                // Return Err for retryable HTTP errors so the retry loop catches them
+                if retry::is_retryable_status(response.status().as_u16()) {
+                    let status = response.status();
+                    let error_text = response.text().await.unwrap_or_default();
+                    return Err(anyhow::anyhow!(
+                        "OpenRouter API error {}: {}",
+                        status,
+                        error_text
+                    ));
+                }
+
+                Ok(response)
             })
         },
         max_retries,

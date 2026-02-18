@@ -14,6 +14,7 @@
 
 //! OpenRouter provider implementation
 
+use super::shared;
 use crate::errors::ProviderError;
 use crate::errors::ToolCallError;
 use crate::llm::retry;
@@ -388,9 +389,7 @@ fn convert_messages(messages: &[Message]) -> Result<Vec<OpenRouterMessage>, Tool
                         "type": "text",
                         "text": message.content
                     });
-                    text_content["cache_control"] = serde_json::json!({
-                        "type": "ephemeral"
-                    });
+                    text_content["cache_control"] = shared::ephemeral_cache_control();
                     serde_json::json!([text_content])
                 } else {
                     serde_json::json!(message.content)
@@ -417,9 +416,7 @@ fn convert_messages(messages: &[Message]) -> Result<Vec<OpenRouterMessage>, Tool
                     });
 
                     if message.cached {
-                        text_content["cache_control"] = serde_json::json!({
-                            "type": "ephemeral"
-                        });
+                        text_content["cache_control"] = shared::ephemeral_cache_control();
                     }
 
                     content_parts.push(text_content);
@@ -434,13 +431,13 @@ fn convert_messages(messages: &[Message]) -> Result<Vec<OpenRouterMessage>, Tool
                 };
 
                 // Convert unified GenericToolCall format to OpenRouter format
-                let generic_calls: Vec<crate::llm::tool_calls::GenericToolCall> =
-                    serde_json::from_value(message.tool_calls.clone().unwrap()).map_err(|_| {
-                        ToolCallError::InvalidFormat {
-                            provider: "openrouter".to_string(),
-                            reason: "tool_calls must be Vec<GenericToolCall>".to_string(),
-                        }
-                    })?;
+                let Some(tool_calls_value) = message.tool_calls.as_ref() else {
+                    return Err(ToolCallError::MissingField {
+                        field: "tool_calls".to_string(),
+                    });
+                };
+                let generic_calls =
+                    shared::parse_generic_tool_calls_strict(tool_calls_value, "openrouter")?;
 
                 // Extract reasoning_details from first tool call's meta (Gemini thought signatures)
                 let reasoning_details = generic_calls
@@ -458,7 +455,7 @@ fn convert_messages(messages: &[Message]) -> Result<Vec<OpenRouterMessage>, Tool
                             "type": "function",
                             "function": {
                                 "name": call.name,
-                                "arguments": serde_json::to_string(&call.arguments).unwrap_or_default()
+                                "arguments": shared::arguments_to_json_string(&call.arguments)
                             }
                         })
                     })
@@ -485,9 +482,7 @@ fn convert_messages(messages: &[Message]) -> Result<Vec<OpenRouterMessage>, Tool
 
                     // Add cache_control if needed
                     if message.cached {
-                        text_content["cache_control"] = serde_json::json!({
-                            "type": "ephemeral"
-                        });
+                        text_content["cache_control"] = shared::ephemeral_cache_control();
                     }
 
                     text_content
@@ -691,15 +686,14 @@ async fn execute_openrouter_request(
             .filter_map(|call| {
                 // Validate tool type - OpenRouter should only have "function" type
                 if call.tool_type != "function" {
-                    eprintln!(
-                        "Warning: Unexpected tool type '{}' from OpenRouter API",
+                    tracing::warn!(
+                        "Unexpected tool type '{}' from OpenRouter API",
                         call.tool_type
                     );
                     return None;
                 }
 
-                let arguments: serde_json::Value =
-                    serde_json::from_str(&call.function.arguments).unwrap_or(serde_json::json!({}));
+                let arguments = shared::parse_tool_call_arguments_lossy(&call.function.arguments);
 
                 Some(ToolCall {
                     id: call.id,
@@ -762,36 +756,18 @@ async fn execute_openrouter_request(
     if let Some(ref tc) = tool_calls {
         let reasoning_details = choice.message.reasoning_details.clone();
 
-        let generic_calls: Vec<crate::llm::tool_calls::GenericToolCall> = tc
-            .iter()
-            .map(|call| {
-                // Store reasoning_details in meta if present (for Gemini thought signatures)
-                let meta = reasoning_details.as_ref().map(|rd| {
-                    let mut meta_map = serde_json::Map::new();
-                    meta_map.insert("reasoning_details".to_string(), rd.clone());
-                    meta_map
-                });
-
-                crate::llm::tool_calls::GenericToolCall {
-                    id: call.id.clone(),
-                    name: call.name.clone(),
-                    arguments: call.arguments.clone(),
-                    meta,
-                }
-            })
-            .collect();
-
-        response_json["tool_calls"] = serde_json::to_value(&generic_calls).unwrap_or_default();
+        let reasoning_meta = reasoning_details.as_ref().map(|rd| {
+            let mut meta_map = serde_json::Map::new();
+            meta_map.insert("reasoning_details".to_string(), rd.clone());
+            meta_map
+        });
+        shared::set_response_tool_calls(&mut response_json, tc, reasoning_meta.as_ref());
     }
 
     let exchange = ProviderExchange::new(request_body, response_json, Some(usage), "openrouter");
 
     // Try to parse structured output if it was requested
-    let structured_output = if content.trim().starts_with('{') || content.trim().starts_with('[') {
-        serde_json::from_str(&content).ok()
-    } else {
-        None
-    };
+    let structured_output = shared::parse_structured_output_from_text(&content);
 
     Ok(ProviderResponse {
         content,

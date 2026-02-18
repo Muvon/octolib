@@ -28,6 +28,7 @@ pub mod ollama;
 pub mod openai;
 mod openai_compat;
 pub mod openrouter;
+mod shared;
 pub mod zai;
 
 // Re-export provider implementations

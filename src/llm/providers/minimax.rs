@@ -14,6 +14,7 @@
 
 //! MiniMax provider implementation (Anthropic-compatible API)
 
+use super::shared;
 use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
@@ -375,11 +376,7 @@ fn convert_messages(messages: &[Message]) -> Vec<MinimaxMessage> {
                 let content = vec![MinimaxContent::ToolResult {
                     tool_use_id: tool_call_id.to_string(),
                     content: message.content.clone(),
-                    cache_control: if message.cached {
-                        Some(serde_json::json!({"type": "ephemeral"}))
-                    } else {
-                        None
-                    },
+                    cache_control: shared::maybe_ephemeral_cache_control(message.cached),
                 }];
 
                 result.push(MinimaxMessage {
@@ -397,30 +394,20 @@ fn convert_messages(messages: &[Message]) -> Vec<MinimaxMessage> {
                     if !message.content.trim().is_empty() {
                         content.push(MinimaxContent::Text {
                             text: message.content.clone(),
-                            cache_control: if message.cached {
-                                Some(serde_json::json!({"type": "ephemeral"}))
-                            } else {
-                                None
-                            },
+                            cache_control: shared::maybe_ephemeral_cache_control(message.cached),
                         });
                     }
 
                     // Add tool_use blocks from stored tool_calls in unified GenericToolCall format
-                    if let Some(ref tool_calls_data) = message.tool_calls {
-                        // Parse as unified GenericToolCall format
-                        if let Ok(generic_calls) = serde_json::from_value::<
-                            Vec<crate::llm::tool_calls::GenericToolCall>,
-                        >(tool_calls_data.clone())
-                        {
-                            // Convert GenericToolCall to MiniMax format
-                            for call in generic_calls {
-                                content.push(MinimaxContent::ToolUse {
-                                    id: call.id,
-                                    name: call.name,
-                                    input: call.arguments,
-                                });
-                            }
-                        }
+                    for call in shared::parse_generic_tool_calls_lossy(
+                        message.tool_calls.as_ref(),
+                        "minimax",
+                    ) {
+                        content.push(MinimaxContent::ToolUse {
+                            id: call.id,
+                            name: call.name,
+                            input: call.arguments,
+                        });
                     }
 
                     result.push(MinimaxMessage {
@@ -431,11 +418,7 @@ fn convert_messages(messages: &[Message]) -> Vec<MinimaxMessage> {
                     // Handle regular user and assistant messages
                     let content = vec![MinimaxContent::Text {
                         text: message.content.clone(),
-                        cache_control: if message.cached {
-                            Some(serde_json::json!({"type": "ephemeral"}))
-                        } else {
-                            None
-                        },
+                        cache_control: shared::maybe_ephemeral_cache_control(message.cached),
                     }];
 
                     result.push(MinimaxMessage {
@@ -612,29 +595,12 @@ async fn execute_minimax_request(
     let mut response_json: serde_json::Value = serde_json::from_str(&response_text)?;
 
     // Store tool_calls in unified GenericToolCall format for conversation history
-    if !tool_calls.is_empty() {
-        let generic_calls: Vec<crate::llm::tool_calls::GenericToolCall> = tool_calls
-            .iter()
-            .map(|tc| crate::llm::tool_calls::GenericToolCall {
-                id: tc.id.clone(),
-                name: tc.name.clone(),
-                arguments: tc.arguments.clone(),
-                meta: None, // MiniMax doesn't use meta fields
-            })
-            .collect();
-
-        response_json["tool_calls"] = serde_json::to_value(&generic_calls).unwrap_or_default();
-    }
+    shared::set_response_tool_calls(&mut response_json, &tool_calls, None);
 
     let exchange = ProviderExchange::new(request_body, response_json, Some(usage), "minimax");
 
     // Try to parse structured output if it was requested
-    let structured_output =
-        if final_content.trim().starts_with('{') || final_content.trim().starts_with('[') {
-            serde_json::from_str(&final_content).ok()
-        } else {
-            None
-        };
+    let structured_output = shared::parse_structured_output_from_text(&final_content);
 
     Ok(ProviderResponse {
         content: final_content,

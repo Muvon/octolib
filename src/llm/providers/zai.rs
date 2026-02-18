@@ -40,6 +40,7 @@
 //!
 //! GLM-4 series:
 //! - GLM-4-32B-0414-128K: Input $0.10/1M, Output $0.10/1M
+use super::shared;
 use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
@@ -557,17 +558,7 @@ async fn execute_zai_request(
 
     // Store tool_calls in unified GenericToolCall format for conversation history
     if let Some(ref calls) = tool_calls {
-        let generic_calls: Vec<crate::llm::tool_calls::GenericToolCall> = calls
-            .iter()
-            .map(|tc| crate::llm::tool_calls::GenericToolCall {
-                id: tc.id.clone(),
-                name: tc.name.clone(),
-                arguments: tc.arguments.clone(),
-                meta: None,
-            })
-            .collect();
-
-        response_json["tool_calls"] = serde_json::to_value(&generic_calls).unwrap_or_default();
+        shared::set_response_tool_calls(&mut response_json, calls, None);
     }
 
     // Check for structured output in response

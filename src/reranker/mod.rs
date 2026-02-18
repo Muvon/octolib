@@ -159,7 +159,7 @@ pub async fn rerank(
     model: &str,
     top_k: Option<usize>,
 ) -> Result<RerankResponse> {
-    let (provider_type, _) = parse_provider_model(&format!("{}:{}", provider, model));
+    let (provider_type, _) = parse_provider_model(&format!("{}:{}", provider, model))?;
     let provider_impl = create_rerank_provider_from_parts(&provider_type, model).await?;
     provider_impl.rerank(query, documents, top_k, true).await
 }
@@ -186,7 +186,7 @@ pub async fn rerank_with_truncation(
     top_k: Option<usize>,
     truncation: bool,
 ) -> Result<RerankResponse> {
-    let (provider_type, _) = parse_provider_model(&format!("{}:{}", provider, model));
+    let (provider_type, _) = parse_provider_model(&format!("{}:{}", provider, model))?;
     let provider_impl = create_rerank_provider_from_parts(&provider_type, model).await?;
     provider_impl
         .rerank(query, documents, top_k, truncation)
@@ -199,21 +199,21 @@ mod tests {
 
     #[test]
     fn test_parse_provider_model() {
-        let (provider, model) = parse_provider_model("voyage:rerank-2.5");
+        let (provider, model) = parse_provider_model("voyage:rerank-2.5").unwrap();
         assert_eq!(provider, RerankProviderType::Voyage);
         assert_eq!(model, "rerank-2.5");
 
-        let (provider, model) = parse_provider_model("cohere:rerank-english-v3.0");
+        let (provider, model) = parse_provider_model("cohere:rerank-english-v3.0").unwrap();
         assert_eq!(provider, RerankProviderType::Cohere);
         assert_eq!(model, "rerank-english-v3.0");
 
-        let (provider, model) = parse_provider_model("jina:jina-reranker-v3");
+        let (provider, model) = parse_provider_model("jina:jina-reranker-v3").unwrap();
         assert_eq!(provider, RerankProviderType::Jina);
         assert_eq!(model, "jina-reranker-v3");
 
         #[cfg(feature = "fastembed")]
         {
-            let (provider, model) = parse_provider_model("fastembed:bge-reranker-base");
+            let (provider, model) = parse_provider_model("fastembed:bge-reranker-base").unwrap();
             assert_eq!(provider, RerankProviderType::FastEmbed);
             assert_eq!(model, "bge-reranker-base");
         }

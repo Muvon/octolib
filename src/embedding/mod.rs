@@ -24,10 +24,14 @@ pub mod provider;
 pub mod types;
 
 use anyhow::Result;
+use std::sync::LazyLock;
 use tiktoken_rs::cl100k_base;
 
 pub use provider::{create_embedding_provider_from_parts, EmbeddingProvider};
 pub use types::*;
+
+static CL100K_BPE: LazyLock<tiktoken_rs::CoreBPE> =
+    LazyLock::new(|| cl100k_base().expect("Failed to load cl100k_base tokenizer"));
 
 /// Generate embeddings using specified provider and model
 pub async fn generate_embeddings(contents: &str, provider: &str, model: &str) -> Result<Vec<f32>> {
@@ -40,8 +44,7 @@ pub async fn generate_embeddings(contents: &str, provider: &str, model: &str) ->
 
 /// Count tokens in a text using tiktoken (cl100k_base tokenizer)
 pub fn count_tokens(text: &str) -> usize {
-    let bpe = cl100k_base().expect("Failed to load cl100k_base tokenizer");
-    bpe.encode_with_special_tokens(text).len()
+    CL100K_BPE.encode_with_special_tokens(text).len()
 }
 
 /// Truncate output if it exceeds token limit

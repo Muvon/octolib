@@ -30,9 +30,10 @@ impl ProviderFactory {
     /// Parse a model string in format "provider:model" and return (provider_name, model_name)
     /// Provider prefix is now REQUIRED
     pub fn parse_model(model: &str) -> Result<(String, String)> {
+        let model = model.trim();
         if let Some(pos) = model.find(':') {
-            let provider = model[..pos].to_string();
-            let model_name = model[pos + 1..].to_string();
+            let provider = model[..pos].trim().to_string();
+            let model_name = model[pos + 1..].trim().to_string();
 
             if provider.is_empty() || model_name.is_empty() {
                 return Err(anyhow::anyhow!(
@@ -146,6 +147,13 @@ mod tests {
         let (provider, model) = result.unwrap();
         assert_eq!(provider, "deepseek");
         assert_eq!(model, "deepseek-chat");
+
+        // Test whitespace trimming
+        let result = ProviderFactory::parse_model("  openai : gpt-4o  ");
+        assert!(result.is_ok());
+        let (provider, model) = result.unwrap();
+        assert_eq!(provider, "openai");
+        assert_eq!(model, "gpt-4o");
 
         // Test invalid format (no colon)
         let result = ProviderFactory::parse_model("gpt-4o");

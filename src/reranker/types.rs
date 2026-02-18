@@ -14,6 +14,7 @@
 
 //! Reranker types and configurations
 
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
@@ -76,13 +77,25 @@ impl RerankProviderType {
 }
 
 /// Parse provider and model from a string in format "provider:model"
-#[must_use]
-pub fn parse_provider_model(input: &str) -> (RerankProviderType, String) {
-    let (provider_str, model) = input.split_once(':').unwrap_or(("voyage", input));
+pub fn parse_provider_model(input: &str) -> Result<(RerankProviderType, String)> {
+    let input = input.trim();
+    let (provider_str, model) = if let Some((provider, model)) = input.split_once(':') {
+        (provider.trim(), model.trim())
+    } else {
+        ("voyage", input)
+    };
 
-    let provider = provider_str.parse().unwrap_or(RerankProviderType::Voyage);
+    if provider_str.is_empty() || model.is_empty() {
+        return Err(anyhow::anyhow!(
+            "Model format must be 'provider:model' or just 'model' (defaults to voyage)"
+        ));
+    }
 
-    (provider, model.to_string())
+    let provider = provider_str
+        .parse()
+        .map_err(|_| anyhow::anyhow!("Unknown reranker provider: {}", provider_str))?;
+
+    Ok((provider, model.to_string()))
 }
 
 #[cfg(test)]
@@ -91,29 +104,39 @@ mod tests {
 
     #[test]
     fn test_parse_provider_model() {
-        let (provider, model) = parse_provider_model("voyage:rerank-2.5");
+        let (provider, model) = parse_provider_model("voyage:rerank-2.5").unwrap();
         assert_eq!(provider, RerankProviderType::Voyage);
         assert_eq!(model, "rerank-2.5");
 
-        let (provider, model) = parse_provider_model("cohere:rerank-english-v3.0");
+        let (provider, model) = parse_provider_model("cohere:rerank-english-v3.0").unwrap();
         assert_eq!(provider, RerankProviderType::Cohere);
         assert_eq!(model, "rerank-english-v3.0");
 
-        let (provider, model) = parse_provider_model("jina:jina-reranker-v3");
+        let (provider, model) = parse_provider_model("jina:jina-reranker-v3").unwrap();
         assert_eq!(provider, RerankProviderType::Jina);
         assert_eq!(model, "jina-reranker-v3");
 
         #[cfg(feature = "fastembed")]
         {
-            let (provider, model) = parse_provider_model("fastembed:bge-reranker-base");
+            let (provider, model) = parse_provider_model("fastembed:bge-reranker-base").unwrap();
             assert_eq!(provider, RerankProviderType::FastEmbed);
             assert_eq!(model, "bge-reranker-base");
         }
 
         // Default to voyage if no provider specified
-        let (provider, model) = parse_provider_model("rerank-2");
+        let (provider, model) = parse_provider_model("rerank-2").unwrap();
         assert_eq!(provider, RerankProviderType::Voyage);
         assert_eq!(model, "rerank-2");
+
+        // Trims surrounding whitespace
+        let (provider, model) = parse_provider_model("  cohere : rerank-english-v3.0  ").unwrap();
+        assert_eq!(provider, RerankProviderType::Cohere);
+        assert_eq!(model, "rerank-english-v3.0");
+
+        // Explicit unknown provider should error instead of silently falling back
+        assert!(parse_provider_model("unknown:rerank-2").is_err());
+        assert!(parse_provider_model(":rerank-2").is_err());
+        assert!(parse_provider_model("voyage:").is_err());
     }
 
     #[test]

@@ -627,8 +627,8 @@ fn extract_thinking(
         }
     }
 
-    // Priority 2: <function_call>...</think> tags (legacy format)
-    let think_start = "</think>";
+    // Priority 2: <think>...</think> tags (legacy format)
+    let think_start = "<think>";
     let think_end = "</think>";
 
     if let Some(start_idx) = content.find(think_start) {
@@ -695,6 +695,26 @@ mod tests {
         // Test GLM-4.7-flash: free model
         let cost = calculate_cost("glm-4.7-flash", 1_000_000, 0, 1_000_000);
         assert_eq!(cost.unwrap(), 0.0);
+    }
+
+    #[test]
+    fn test_extract_thinking_from_reasoning_content() {
+        let content = "Final answer";
+        let (thinking, clean) = extract_thinking(content, Some("step by step".to_string()));
+
+        assert_eq!(clean, "Final answer");
+        assert!(thinking.is_some());
+        assert_eq!(thinking.as_ref().unwrap().content, "step by step");
+    }
+
+    #[test]
+    fn test_extract_thinking_from_think_tags() {
+        let content = "before <think>internal reasoning</think> after";
+        let (thinking, clean) = extract_thinking(content, None);
+
+        assert_eq!(clean, "beforeafter");
+        assert!(thinking.is_some());
+        assert_eq!(thinking.as_ref().unwrap().content, "internal reasoning");
     }
 
     #[test]

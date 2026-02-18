@@ -114,9 +114,18 @@ impl Default for EmbeddingConfig {
 
 /// Parse provider and model from a string in format "provider:model"
 pub fn parse_provider_model(input: &str) -> Result<(EmbeddingProviderType, String)> {
+    let input = input.trim();
     let (provider_str, model) = input.split_once(':').ok_or_else(|| {
         anyhow::anyhow!("Model format must be 'provider:model' (e.g., 'jina:jina-embeddings-v4')")
     })?;
+    let provider_str = provider_str.trim();
+    let model = model.trim();
+
+    if provider_str.is_empty() || model.is_empty() {
+        return Err(anyhow::anyhow!(
+            "Model format must be 'provider:model' with non-empty provider and model"
+        ));
+    }
 
     let provider = match provider_str.to_lowercase().as_str() {
         "fastembed" => EmbeddingProviderType::FastEmbed,
@@ -240,6 +249,15 @@ mod tests {
         let (provider, model) = parse_provider_model("openai:text-embedding-3-small").unwrap();
         assert_eq!(provider, EmbeddingProviderType::OpenAI);
         assert_eq!(model, "text-embedding-3-small");
+
+        // Whitespace should be trimmed
+        let (provider, model) = parse_provider_model("  voyage : voyage-3.5  ").unwrap();
+        assert_eq!(provider, EmbeddingProviderType::Voyage);
+        assert_eq!(model, "voyage-3.5");
+
+        // Empty segments should fail with explicit format error
+        assert!(parse_provider_model("openai:").is_err());
+        assert!(parse_provider_model(":text-embedding-3-small").is_err());
     }
 
     #[test]

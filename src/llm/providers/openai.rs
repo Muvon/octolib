@@ -31,7 +31,7 @@ use serde::Deserialize;
 use std::env;
 
 /// OpenAI pricing constants (per 1M tokens in USD)
-/// Source: https://platform.openai.com/docs/pricing and model cards (verified Feb 13, 2026)
+/// Source: https://platform.openai.com/docs/pricing and model cards (verified Feb 18, 2026)
 /// Format: (model, input, output, cache_write, cache_read)
 /// Note: For models without caching, cache_write = input and cache_read = input
 const PRICING: &[PricingTuple] = &[
@@ -63,6 +63,7 @@ const PRICING: &[PricingTuple] = &[
     // GPT-4o / realtime / audio
     ("gpt-realtime-mini", 0.60, 2.40, 0.60, 0.06),
     ("gpt-realtime", 4.00, 16.00, 4.00, 0.40),
+    ("gpt-audio-mini", 0.15, 0.60, 0.15, 0.015),
     ("gpt-audio", 2.50, 10.00, 2.50, 2.50),
     ("gpt-4o-mini-realtime-preview", 0.60, 2.40, 0.60, 0.30),
     ("gpt-4o-realtime-preview", 5.00, 20.00, 5.00, 2.50),
@@ -905,6 +906,7 @@ mod tests {
 
         // Other models should still be supported
         assert!(provider.supports_model("gpt-4o"));
+        assert!(provider.supports_model("gpt-audio-mini"));
         assert!(provider.supports_model("gpt-4"));
         assert!(provider.supports_model("gpt-3.5-turbo"));
         assert!(provider.supports_model("o1"));

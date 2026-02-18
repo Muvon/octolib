@@ -22,8 +22,8 @@
 //!
 //! GLM-4.7 series:
 //! - GLM-4.7: Input $0.60/1M, Output $2.20/1M
-//! - GLM-4.7-Flash: Input $0.07/1M, Output $0.40/1M
-//! - GLM-4.7-FlashX: Input $0.07/1M, Output $0.40/1M
+//! - GLM-4.7-Flash: Free model
+//! - GLM-4.7-FlashX: Free model
 //!
 //! GLM-4.6 series:
 //! - GLM-4.6: Input $0.60/1M, Output $2.20/1M
@@ -58,18 +58,17 @@ use serde::{Deserialize, Serialize};
 use std::env;
 
 /// Z.ai pricing constants (per 1M tokens in USD)
-/// Source: https://docs.z.ai/guides/overview/pricing (verified Feb 13, 2026)
+/// Source: https://docs.z.ai/guides/overview/pricing (verified Feb 18, 2026)
 /// Format: (model, input, output, cache_write, cache_read)
-/// Note: Z.ai supports caching - using input price as cache price (can be updated when specific pricing is known)
 const PRICING: &[PricingTuple] = &[
     // GLM-5 series (latest generation - Feb 2026)
     ("glm-5-code", 1.20, 5.00, 1.20, 0.12),
     ("glm-5", 1.00, 3.20, 1.00, 0.10),
     // GLM-4.7 series (flagship) - more specific variants first
-    ("glm-4.7-flashx", 0.07, 0.40, 0.07, 0.007),
-    ("glm-4.7-flash", 0.07, 0.40, 0.07, 0.007),
+    ("glm-4.7-flashx", 0.00, 0.00, 0.00, 0.00), // free model
+    ("glm-4.7-flash", 0.00, 0.00, 0.00, 0.00),  // free model
     ("glm-4.7-battle", 0.60, 2.20, 0.60, 0.06),
-    ("glm-4.7", 0.60, 2.20, 0.60, 0.06),
+    ("glm-4.7", 0.60, 2.20, 0.60, 0.30),
     // GLM-4.6 series
     ("glm-4.6v-flashx", 0.04, 0.40, 0.04, 0.004),
     ("glm-4.6v-flash", 0.04, 0.40, 0.04, 0.004),
@@ -77,13 +76,13 @@ const PRICING: &[PricingTuple] = &[
     ("glm-4.6-flash", 0.60, 2.20, 0.60, 0.06),
     ("glm-4.6", 0.60, 2.20, 0.60, 0.06),
     // GLM-4.5 series - most specific first
-    ("glm-4.5-airx", 1.10, 4.50, 1.10, 0.11),
-    ("glm-4.5-air-plus", 0.20, 1.10, 0.20, 0.02),
-    ("glm-4.5-air", 0.20, 1.10, 0.20, 0.02),
-    ("glm-4.5v", 0.60, 1.80, 0.60, 0.06),
-    ("glm-4.5-x", 2.20, 8.90, 2.20, 0.22),
-    ("glm-4.5-flash", 0.60, 2.20, 0.60, 0.06),
-    ("glm-4.5", 0.60, 2.20, 0.60, 0.06),
+    ("glm-4.5-airx", 1.10, 4.50, 1.10, 0.50),
+    ("glm-4.5-air-plus", 0.20, 1.10, 0.20, 0.10),
+    ("glm-4.5-air", 0.20, 1.10, 0.20, 0.10),
+    ("glm-4.5v", 0.60, 1.80, 0.60, 0.30),
+    ("glm-4.5-x", 2.20, 8.90, 2.20, 1.10),
+    ("glm-4.5-flash", 0.60, 2.20, 0.60, 0.30),
+    ("glm-4.5", 0.60, 2.20, 0.60, 0.30),
     // GLM-4 series
     ("glm-4-32b-0414-128k", 0.10, 0.10, 0.10, 0.01),
     ("glm-4-32b", 0.10, 0.10, 0.10, 0.01),
@@ -684,9 +683,9 @@ mod tests {
         let cost = calculate_cost("glm-4.6", 1_000_000, 0, 1_000_000);
         assert!((cost.unwrap() - 2.80).abs() < 0.01); // 0.60 + 2.20
 
-        // Test GLM-4.7-flash: $0.07 input, $0.40 output (UPDATED PRICING)
+        // Test GLM-4.7-flash: free model
         let cost = calculate_cost("glm-4.7-flash", 1_000_000, 0, 1_000_000);
-        assert!((cost.unwrap() - 0.47).abs() < 0.01); // 0.07 + 0.40
+        assert_eq!(cost.unwrap(), 0.0);
     }
 
     #[test]
@@ -696,7 +695,7 @@ mod tests {
         assert!((cost.unwrap() - 2.80).abs() < 0.01); // Should work with uppercase
 
         let cost = calculate_cost("gLm-4.7-FlAsH", 1_000_000, 0, 1_000_000);
-        assert!((cost.unwrap() - 0.47).abs() < 0.01); // Should work with mixed case
+        assert_eq!(cost.unwrap(), 0.0); // Should work with mixed case
 
         let cost = calculate_cost("glm-4.5-AIR", 1_000_000, 0, 1_000_000);
         assert!((cost.unwrap() - 1.30).abs() < 0.01); // 0.20 + 1.10
@@ -717,13 +716,13 @@ mod tests {
 
     #[test]
     fn test_cost_with_cache_read_tokens() {
-        // GLM-4.7-flash pricing: input 0.07, cache_read 0.007, output 0.40
-        // regular_input=100K => 0.007
-        // cache_read=200K => 0.0014
-        // output=100K => 0.04
-        // total => 0.0484
-        let cost = calculate_cost("glm-4.7-flash", 100_000, 200_000, 100_000).unwrap();
-        assert!((cost - 0.0484).abs() < 0.0001);
+        // GLM-4.7 pricing: input 0.60, cache_read 0.30, output 2.20
+        // regular_input=100K => 0.06
+        // cache_read=200K => 0.06
+        // output=100K => 0.22
+        // total => 0.34
+        let cost = calculate_cost("glm-4.7", 100_000, 200_000, 100_000).unwrap();
+        assert!((cost - 0.34).abs() < 0.0001);
     }
 
     #[test]

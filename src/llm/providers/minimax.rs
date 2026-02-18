@@ -31,11 +31,14 @@ use serde::{Deserialize, Serialize};
 use std::env;
 
 /// MiniMax pricing constants (per 1M tokens in USD)
-/// Source: https://www.minimax.io/news/minimax-m25 (as of Feb 2026)
+/// Source: https://www.minimax.io/platform/price (verified Feb 18, 2026)
 /// Format: (model, input, output, cache_write, cache_read)
 const PRICING: &[PricingTuple] = &[
-    ("MiniMax-M2.5-lightning", 0.15, 2.40, 0.15, 0.015),
-    ("MiniMax-M2.5", 0.30, 1.20, 0.30, 0.03),
+    // MiniMax M2.5 (latest generation)
+    ("MiniMax-M2.5-highspeed", 0.60, 2.40, 0.75, 0.06),
+    ("MiniMax-M2.5-lightning", 0.60, 2.40, 0.75, 0.06), // backward-compatible alias
+    ("MiniMax-M2.5", 0.30, 1.20, 0.375, 0.03),
+    // Legacy entries kept for compatibility
     ("MiniMax-M2.1-lightning", 0.30, 2.40, 0.30, 0.03),
     ("MiniMax-M2.1", 0.27, 0.95, 0.27, 0.027),
     ("MiniMax-M2", 0.255, 1.00, 0.255, 0.0255),
@@ -643,6 +646,7 @@ mod tests {
     fn test_model_support() {
         let provider = MinimaxProvider::new();
         assert!(provider.supports_model("MiniMax-M2.5"));
+        assert!(provider.supports_model("MiniMax-M2.5-highspeed"));
         assert!(provider.supports_model("MiniMax-M2.5-lightning"));
         assert!(provider.supports_model("MiniMax-M2.1"));
         assert!(provider.supports_model("MiniMax-M2.1-lightning"));
@@ -656,6 +660,7 @@ mod tests {
         let provider = MinimaxProvider::new();
         // Test lowercase
         assert!(provider.supports_model("minimax-m2.5"));
+        assert!(provider.supports_model("minimax-m2.5-highspeed"));
         assert!(provider.supports_model("minimax-m2.5-lightning"));
         assert!(provider.supports_model("minimax-m2.1"));
         assert!(provider.supports_model("minimax-m2.1-lightning"));
@@ -675,9 +680,13 @@ mod tests {
         let cost = calculate_minimax_cost("MiniMax-M2.5", 1_000_000, 1_000_000, 0, 0);
         assert_eq!(cost, Some(1.50)); // 0.30 + 1.20
 
-        // Test MiniMax-M2.5-lightning: $0.15 input, $2.40 output (Feb 2026)
+        // Test MiniMax-M2.5-highspeed: $0.60 input, $2.40 output (Feb 2026)
+        let cost = calculate_minimax_cost("MiniMax-M2.5-highspeed", 1_000_000, 1_000_000, 0, 0);
+        assert_eq!(cost, Some(3.00)); // 0.60 + 2.40
+
+        // Test MiniMax-M2.5-lightning alias: same as highspeed
         let cost = calculate_minimax_cost("MiniMax-M2.5-lightning", 1_000_000, 1_000_000, 0, 0);
-        assert_eq!(cost, Some(2.55)); // 0.15 + 2.40
+        assert_eq!(cost, Some(3.00)); // 0.60 + 2.40
 
         // Test MiniMax-M2.1: $0.27 input, $0.95 output
         let cost = calculate_minimax_cost("MiniMax-M2.1", 1_000_000, 1_000_000, 0, 0);

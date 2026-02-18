@@ -30,11 +30,13 @@ use serde::{Deserialize, Serialize};
 use std::env;
 
 /// Anthropic pricing constants (per 1M tokens in USD)
-/// Model IDs sourced from `GET /v1/models` (fetched Feb 14, 2026).
-/// Prices sourced from Anthropic pricing docs (Feb 2026).
+/// Model IDs sourced from Anthropic model docs / models API.
+/// Prices sourced from Anthropic pricing docs (verified Feb 18, 2026).
 /// Format: (model, input, output, cache_write, cache_read)
 const PRICING: &[PricingTuple] = &[
     // Claude 4.6
+    ("claude-sonnet-4-6-20260217", 3.00, 15.00, 3.00, 0.30),
+    ("claude-sonnet-4-6", 3.00, 15.00, 3.00, 0.30),
     ("claude-opus-4-6", 5.00, 25.00, 5.00, 0.50),
     // Claude 4.5
     ("claude-opus-4-5-20251101", 5.00, 25.00, 5.00, 0.50),
@@ -87,7 +89,7 @@ fn supports_temperature_and_top_p(model: &str) -> bool {
         "sonnet-4-5",
         "claude-haiku-4-5",
         "claude-opus-4-5",
-        "claude_opus-4-6",
+        "claude-opus-4-6",
     ];
 
     !unsupported_prefixes
@@ -884,10 +886,12 @@ mod tests {
         // Test lowercase (already working)
         assert!(provider.supports_model("claude-3-haiku"));
         assert!(provider.supports_model("claude-3-5-sonnet"));
+        assert!(provider.supports_model("claude-sonnet-4-6"));
 
         // Test uppercase
         assert!(provider.supports_model("CLAUDE-3-HAIKU"));
         assert!(provider.supports_model("CLAUDE-3-5-SONNET"));
+        assert!(provider.supports_model("CLAUDE-SONNET-4-6"));
         // Test mixed case
         assert!(provider.supports_model("ClaUde-3-Haiku"));
         assert!(provider.supports_model("CLAUDE-3-7-sonnet"));
@@ -911,6 +915,13 @@ mod tests {
     #[test]
     fn test_get_model_pricing() {
         let provider = AnthropicProvider::new();
+
+        // Test Sonnet 4.6 pricing
+        let pricing = provider.get_model_pricing("claude-sonnet-4-6").unwrap();
+        assert_eq!(pricing.input_price_per_1m, 3.0);
+        assert_eq!(pricing.output_price_per_1m, 15.0);
+        assert_eq!(pricing.cache_write_price_per_1m, 3.0);
+        assert_eq!(pricing.cache_read_price_per_1m, 0.30);
 
         // Test Sonnet 4 pricing (from the pricing table)
         let pricing = provider.get_model_pricing("claude-sonnet-4").unwrap();

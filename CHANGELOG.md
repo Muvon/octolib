@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.9.2] - 2026-02-18
+
+### 📋 Release Summary
+
+This release corrects pricing for GLM-4.7 flash models, ensuring they are now recognized as free across all supported providers.
+
+
+### 🐛 Bug Fixes & Stability
+
+- **zai**: set GLM-4.7 flash models to free pricing `9ca66b0a`
+
+### 📊 Release Summary
+
+**Total commits**: 1 across 1 categories
+
+🐛 **1** bug fix - *Improved stability*
+
 ## [0.9.1] - 2026-02-15
 
 ### 📋 Release Summary

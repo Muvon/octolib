@@ -28,6 +28,7 @@
 //! - Cache Miss (Input): $0.60
 //! - Output: $3.00
 
+use super::shared;
 use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
@@ -294,31 +295,31 @@ fn convert_messages(messages: &[crate::llm::types::Message], _model: &str) -> Ve
                     }
                 };
 
-                let tool_calls = if let Ok(generic_calls) =
-                    serde_json::from_value::<Vec<crate::llm::tool_calls::GenericToolCall>>(
-                        message.tool_calls.clone().unwrap(),
-                    ) {
-                    Some(
-                        generic_calls
-                            .into_iter()
-                            .map(|tc| MoonshotToolCall {
-                                id: tc.id,
-                                tool_type: "function".to_string(),
-                                function: MoonshotFunction {
-                                    name: tc.name,
-                                    arguments: serde_json::to_string(&tc.arguments)
-                                        .unwrap_or_default(),
-                                },
-                            })
-                            .collect(),
-                    )
+                let tool_calls = if let Some(tool_calls_data) = message.tool_calls.as_ref() {
+                    let generic_calls =
+                        shared::parse_generic_tool_calls_lossy(Some(tool_calls_data), "moonshot");
+
+                    if !generic_calls.is_empty() {
+                        Some(
+                            generic_calls
+                                .into_iter()
+                                .map(|tc| MoonshotToolCall {
+                                    id: tc.id,
+                                    tool_type: "function".to_string(),
+                                    function: MoonshotFunction {
+                                        name: tc.name,
+                                        arguments: shared::arguments_to_json_string(&tc.arguments),
+                                    },
+                                })
+                                .collect(),
+                        )
+                    } else {
+                        // If parsing as GenericToolCall fails, try parsing provider-specific format
+                        serde_json::from_value::<Vec<MoonshotToolCall>>(tool_calls_data.clone())
+                            .ok()
+                    }
                 } else {
-                    // If parsing as GenericToolCall fails, try parsing as MoonshotToolCall directly
-                    // This handles cases where tool_calls are stored in provider-specific format
-                    serde_json::from_value::<Vec<MoonshotToolCall>>(
-                        message.tool_calls.clone().unwrap(),
-                    )
-                    .ok()
+                    None
                 };
 
                 // Extract reasoning_content from thinking block if present.
@@ -662,16 +663,15 @@ impl AiProvider for MoonshotProvider {
                 .into_iter()
                 .filter_map(|call| {
                     if call.tool_type != "function" {
-                        eprintln!(
-                            "Warning: Unexpected tool type '{}' from Moonshot API",
+                        tracing::warn!(
+                            "Unexpected tool type '{}' from Moonshot API",
                             call.tool_type
                         );
                         return None;
                     }
 
-                    let arguments: serde_json::Value =
-                        serde_json::from_str(&call.function.arguments)
-                            .unwrap_or(serde_json::json!({}));
+                    let arguments =
+                        shared::parse_tool_call_arguments_lossy(&call.function.arguments);
 
                     Some(ToolCall {
                         id: call.id,
@@ -683,18 +683,7 @@ impl AiProvider for MoonshotProvider {
         });
 
         if let Some(ref tc) = tool_calls {
-            let generic_calls: Vec<crate::llm::tool_calls::GenericToolCall> = tc
-                .iter()
-                .map(|call| crate::llm::tool_calls::GenericToolCall {
-                    id: call.id.clone(),
-                    name: call.name.clone(),
-                    arguments: call.arguments.clone(),
-                    meta: None,
-                })
-                .collect();
-
-            response_for_exchange["tool_calls"] =
-                serde_json::to_value(&generic_calls).unwrap_or_default();
+            shared::set_response_tool_calls(&mut response_for_exchange, tc, None);
         }
 
         let exchange = ProviderExchange {
@@ -710,12 +699,7 @@ impl AiProvider for MoonshotProvider {
         };
 
         // Try to parse structured output if requested
-        let structured_output =
-            if content.trim().starts_with('{') || content.trim().starts_with('[') {
-                serde_json::from_str(&content).ok()
-            } else {
-                None
-            };
+        let structured_output = shared::parse_structured_output_from_text(&content);
 
         Ok(ProviderResponse {
             content,

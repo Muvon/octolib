@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::shared;
 use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::types::{
@@ -503,7 +504,7 @@ async fn execute_request(
 
     let mut response_json: serde_json::Value = serde_json::from_str(&response_text)?;
     if let Some(ref tc) = tool_calls {
-        let meta = if config.provider_name.eq_ignore_ascii_case("local") {
+        let reasoning_meta = if config.provider_name.eq_ignore_ascii_case("local") {
             reasoning_details.as_ref().map(|rd| {
                 let mut m = serde_json::Map::new();
                 m.insert("reasoning_details".to_string(), rd.clone());
@@ -512,26 +513,12 @@ async fn execute_request(
         } else {
             None
         };
-
-        let generic_calls: Vec<crate::llm::tool_calls::GenericToolCall> = tc
-            .iter()
-            .map(|call| crate::llm::tool_calls::GenericToolCall {
-                id: call.id.clone(),
-                name: call.name.clone(),
-                arguments: call.arguments.clone(),
-                meta: meta.clone(),
-            })
-            .collect();
-        response_json["tool_calls"] = serde_json::to_value(&generic_calls).unwrap_or_default();
+        shared::set_response_tool_calls(&mut response_json, tc, reasoning_meta.as_ref());
     }
 
     let exchange = ProviderExchange::new(request_body, response_json, usage, config.provider_name);
 
-    let structured_output = if content.trim().starts_with('{') || content.trim().starts_with('[') {
-        serde_json::from_str(&content).ok()
-    } else {
-        None
-    };
+    let structured_output = shared::parse_structured_output_from_text(&content);
 
     Ok(ProviderResponse {
         content,

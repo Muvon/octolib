@@ -14,6 +14,7 @@
 
 //! OpenAI provider implementation
 
+use super::shared;
 use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
@@ -832,17 +833,7 @@ async fn execute_openai_request(
 
     // Store tool_calls in unified GenericToolCall format for conversation history
     if let Some(ref tc) = tool_calls {
-        let generic_calls: Vec<crate::llm::tool_calls::GenericToolCall> = tc
-            .iter()
-            .map(|call| crate::llm::tool_calls::GenericToolCall {
-                id: call.id.clone(),
-                name: call.name.clone(),
-                arguments: call.arguments.clone(),
-                meta: None,
-            })
-            .collect();
-
-        response_json["tool_calls"] = serde_json::to_value(&generic_calls).unwrap_or_default();
+        shared::set_response_tool_calls(&mut response_json, tc, None);
     }
 
     let exchange = if rate_limit_headers.is_empty() {
@@ -858,11 +849,7 @@ async fn execute_openai_request(
     };
 
     // Try to parse structured output if it was requested
-    let structured_output = if content.trim().starts_with('{') || content.trim().starts_with('[') {
-        serde_json::from_str(&content).ok()
-    } else {
-        None
-    };
+    let structured_output = shared::parse_structured_output_from_text(&content);
 
     Ok(ProviderResponse {
         content,

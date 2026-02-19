@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.9.3] - 2026-02-19
+
+### 📋 Release Summary
+
+This release improves reliability with automatic retry logic for network issues and delivers faster embedding performance through optimized processing. Provider management has been streamlined for better efficiency.
+
+
+### 🔧 Improvements & Optimizations
+
+- **providers**: extract cache and tool utilities `9d5939a9`
+- **embedding**: optimize tokenizer and parsing logic `8bd33aaf`
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: add retry logic for HTTP errors `378054ae`
+
+### 📊 Release Summary
+
+**Total commits**: 3 across 2 categories
+
+🔧 **2** improvements - *Better performance & code quality*
+🐛 **1** bug fix - *Improved stability*
+
 ## [0.9.2] - 2026-02-18
 
 ### 📋 Release Summary

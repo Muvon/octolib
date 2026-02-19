@@ -30,8 +30,8 @@ impl JinaProvider {
     pub fn new(model: &str) -> Result<Self> {
         let supported_models = [
             "jina-reranker-v3",
+            "jina-reranker-m0",
             "jina-reranker-v2-base-multilingual",
-            "jina-reranker-v1-base-en",
             "jina-colbert-v2",
         ];
 
@@ -127,8 +127,8 @@ impl RerankProvider for JinaProvider {
         matches!(
             self.model_name.as_str(),
             "jina-reranker-v3"
+                | "jina-reranker-m0"
                 | "jina-reranker-v2-base-multilingual"
-                | "jina-reranker-v1-base-en"
                 | "jina-colbert-v2"
         )
     }
@@ -141,9 +141,10 @@ mod tests {
     #[test]
     fn test_jina_provider_creation() {
         assert!(JinaProvider::new("jina-reranker-v3").is_ok());
+        assert!(JinaProvider::new("jina-reranker-m0").is_ok());
         assert!(JinaProvider::new("jina-reranker-v2-base-multilingual").is_ok());
-        assert!(JinaProvider::new("jina-reranker-v1-base-en").is_ok());
         assert!(JinaProvider::new("jina-colbert-v2").is_ok());
+        assert!(JinaProvider::new("jina-reranker-v1-base-en").is_err());
         assert!(JinaProvider::new("invalid-model").is_err());
     }
 
@@ -151,8 +152,8 @@ mod tests {
     fn test_jina_model_validation() {
         let models = [
             "jina-reranker-v3",
+            "jina-reranker-m0",
             "jina-reranker-v2-base-multilingual",
-            "jina-reranker-v1-base-en",
             "jina-colbert-v2",
         ];
         for model in models {

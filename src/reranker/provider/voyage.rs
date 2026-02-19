@@ -83,14 +83,18 @@ pub struct VoyageProvider;
 #[derive(Debug, Deserialize)]
 struct VoyageRerankResult {
     index: usize,
-    document: String,
     relevance_score: f64,
 }
 
 #[derive(Debug, Deserialize)]
-struct VoyageRerankResponse {
-    results: Vec<VoyageRerankResult>,
+struct VoyageUsage {
     total_tokens: usize,
+}
+
+#[derive(Debug, Deserialize)]
+struct VoyageRerankResponse {
+    data: Vec<VoyageRerankResult>,
+    usage: VoyageUsage,
 }
 
 impl VoyageProvider {
@@ -133,19 +137,20 @@ impl VoyageProvider {
         let voyage_response: VoyageRerankResponse = response.json().await?;
 
         // Convert to our response format
+        // Voyage returns no document text in response - map back from input by index
         let results = voyage_response
-            .results
+            .data
             .into_iter()
             .map(|r| RerankResult {
+                document: documents.get(r.index).cloned().unwrap_or_default(),
                 index: r.index,
-                document: r.document,
                 relevance_score: r.relevance_score,
             })
             .collect();
 
         Ok(RerankResponse {
             results,
-            total_tokens: voyage_response.total_tokens,
+            total_tokens: voyage_response.usage.total_tokens,
         })
     }
 }

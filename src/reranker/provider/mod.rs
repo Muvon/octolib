@@ -34,17 +34,25 @@ static HTTP_CLIENT: LazyLock<Client> = LazyLock::new(|| {
 
 pub mod cohere;
 pub mod jina;
+pub mod mixedbread;
 pub mod voyage;
 
 #[cfg(feature = "fastembed")]
 pub mod fastembed;
 
+#[cfg(feature = "huggingface")]
+pub mod huggingface;
+
 pub use cohere::CohereProvider;
 pub use jina::JinaProvider;
+pub use mixedbread::MixedbreadProvider;
 pub use voyage::{VoyageProvider, VoyageProviderImpl};
 
 #[cfg(feature = "fastembed")]
 pub use self::fastembed::FastEmbedProvider;
+
+#[cfg(feature = "huggingface")]
+pub use self::huggingface::HuggingFaceReranker;
 
 /// Trait for reranker providers
 #[async_trait::async_trait]
@@ -73,7 +81,10 @@ pub async fn create_rerank_provider_from_parts(
         RerankProviderType::Voyage => Ok(Box::new(VoyageProviderImpl::new(model)?)),
         RerankProviderType::Cohere => Ok(Box::new(CohereProvider::new(model)?)),
         RerankProviderType::Jina => Ok(Box::new(JinaProvider::new(model)?)),
+        RerankProviderType::MixedBread => Ok(Box::new(MixedbreadProvider::new(model)?)),
         #[cfg(feature = "fastembed")]
         RerankProviderType::FastEmbed => Ok(Box::new(FastEmbedProvider::new(model)?)),
+        #[cfg(feature = "huggingface")]
+        RerankProviderType::HuggingFace => Ok(Box::new(HuggingFaceReranker::new(model)?)),
     }
 }

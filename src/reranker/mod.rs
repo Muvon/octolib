@@ -27,18 +27,26 @@
 //!   - Requires: `VOYAGE_API_KEY` environment variable
 //!
 //! - **Cohere**: Enterprise-grade reranking with multiple language support
-//!   - Models: `rerank-english-v3.0`, `rerank-multilingual-v3.0`, `rerank-english-v2.0`, `rerank-multilingual-v2.0`
+//!   - Models: `rerank-v4.0-pro`, `rerank-v4.0-fast`, `rerank-english-v3.0`, `rerank-multilingual-v3.0`
 //!   - Requires: `COHERE_API_KEY` environment variable
 //!
 //! - **Jina AI**: Multilingual reranking with automatic chunking for long documents
-//!   - Models: `jina-reranker-v3`, `jina-reranker-v2-base-multilingual`, `jina-reranker-v1-base-en`, `jina-colbert-v2`
+//!   - Models: `jina-reranker-v3`, `jina-reranker-m0`, `jina-reranker-v2-base-multilingual`, `jina-colbert-v2`
 //!   - Requires: `JINA_API_KEY` environment variable
+//!
+//! - **Mixedbread**: Open-source-friendly reranking with strong multilingual benchmarks
+//!   - Models: `mxbai-rerank-large-v2`, `mxbai-rerank-base-v2`, `mxbai-rerank-large-v1`, `mxbai-rerank-base-v1`
+//!   - Requires: `MXBAI_API_KEY` environment variable
 //!
 //! ## Local Providers (no API keys, requires features)
 //!
 //! - **FastEmbed**: Fast local ONNX-based reranking (requires `fastembed` feature)
-//!   - Models: `bge-reranker-base`, `bge-reranker-large`, `jina-reranker-v1-turbo-en`, `jina-reranker-v2-base-multilingual`
+//!   - Models: `bge-reranker-base`, `bge-reranker-v2-m3`, `jina-reranker-v1-turbo-en`, `jina-reranker-v2-base-multilingual`
 //!   - No API key needed, runs locally with CPU
+//!
+//! - **HuggingFace**: Any BERT cross-encoder from HuggingFace Hub via Candle (requires `huggingface` feature)
+//!   - Models: `cross-encoder/ms-marco-MiniLM-L-6-v2`, `BAAI/bge-reranker-base`, `BAAI/bge-reranker-v2-m3`, etc.
+//!   - No API key needed, models downloaded and cached locally
 //!
 //! # Usage Examples
 //!

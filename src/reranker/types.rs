@@ -44,8 +44,11 @@ pub enum RerankProviderType {
     Voyage,
     Cohere,
     Jina,
+    MixedBread,
     #[cfg(feature = "fastembed")]
     FastEmbed,
+    #[cfg(feature = "huggingface")]
+    HuggingFace,
 }
 
 impl FromStr for RerankProviderType {
@@ -56,8 +59,11 @@ impl FromStr for RerankProviderType {
             "voyage" => Ok(Self::Voyage),
             "cohere" => Ok(Self::Cohere),
             "jina" => Ok(Self::Jina),
+            "mixedbread" | "mxbai" => Ok(Self::MixedBread),
             #[cfg(feature = "fastembed")]
             "fastembed" => Ok(Self::FastEmbed),
+            #[cfg(feature = "huggingface")]
+            "huggingface" | "hf" => Ok(Self::HuggingFace),
             _ => Err(format!("Unknown reranker provider: {}", s)),
         }
     }
@@ -70,8 +76,11 @@ impl RerankProviderType {
             Self::Voyage => "voyage",
             Self::Cohere => "cohere",
             Self::Jina => "jina",
+            Self::MixedBread => "mixedbread",
             #[cfg(feature = "fastembed")]
             Self::FastEmbed => "fastembed",
+            #[cfg(feature = "huggingface")]
+            Self::HuggingFace => "huggingface",
         }
     }
 }
@@ -116,6 +125,25 @@ mod tests {
         assert_eq!(provider, RerankProviderType::Jina);
         assert_eq!(model, "jina-reranker-v3");
 
+        let (provider, model) = parse_provider_model("mixedbread:mxbai-rerank-large-v2").unwrap();
+        assert_eq!(provider, RerankProviderType::MixedBread);
+        assert_eq!(model, "mxbai-rerank-large-v2");
+
+        // "mxbai" is an accepted alias for mixedbread
+        let (provider, _) = parse_provider_model("mxbai:mxbai-rerank-base-v2").unwrap();
+        assert_eq!(provider, RerankProviderType::MixedBread);
+
+        #[cfg(feature = "huggingface")]
+        {
+            let (provider, model) =
+                parse_provider_model("huggingface:cross-encoder/ms-marco-MiniLM-L-6-v2").unwrap();
+            assert_eq!(provider, RerankProviderType::HuggingFace);
+            assert_eq!(model, "cross-encoder/ms-marco-MiniLM-L-6-v2");
+
+            // "hf" is an accepted alias
+            let (provider, _) = parse_provider_model("hf:BAAI/bge-reranker-base").unwrap();
+            assert_eq!(provider, RerankProviderType::HuggingFace);
+        }
         #[cfg(feature = "fastembed")]
         {
             let (provider, model) = parse_provider_model("fastembed:bge-reranker-base").unwrap();
@@ -157,6 +185,25 @@ mod tests {
             "jina".parse::<RerankProviderType>().unwrap(),
             RerankProviderType::Jina
         );
+        assert_eq!(
+            "mixedbread".parse::<RerankProviderType>().unwrap(),
+            RerankProviderType::MixedBread
+        );
+        assert_eq!(
+            "mxbai".parse::<RerankProviderType>().unwrap(),
+            RerankProviderType::MixedBread
+        );
+        #[cfg(feature = "huggingface")]
+        {
+            assert_eq!(
+                "huggingface".parse::<RerankProviderType>().unwrap(),
+                RerankProviderType::HuggingFace
+            );
+            assert_eq!(
+                "hf".parse::<RerankProviderType>().unwrap(),
+                RerankProviderType::HuggingFace
+            );
+        }
         #[cfg(feature = "fastembed")]
         {
             assert_eq!(
@@ -169,6 +216,11 @@ mod tests {
         assert_eq!(RerankProviderType::Voyage.as_str(), "voyage");
         assert_eq!(RerankProviderType::Cohere.as_str(), "cohere");
         assert_eq!(RerankProviderType::Jina.as_str(), "jina");
+        assert_eq!(RerankProviderType::MixedBread.as_str(), "mixedbread");
+        #[cfg(feature = "huggingface")]
+        {
+            assert_eq!(RerankProviderType::HuggingFace.as_str(), "huggingface");
+        }
         #[cfg(feature = "fastembed")]
         {
             assert_eq!(RerankProviderType::FastEmbed.as_str(), "fastembed");

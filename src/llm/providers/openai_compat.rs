@@ -86,14 +86,31 @@ pub(crate) async fn chat_completion(
     }
 
     if let Some(response_format) = &params.response_format {
+        // Ollama and local servers use a top-level "format" key instead of "response_format".
+        // "format": "json" for json_object mode, "format": <schema> for structured output.
+        let is_ollama_like = config.provider_name.eq_ignore_ascii_case("ollama")
+            || config.provider_name.eq_ignore_ascii_case("local");
+
         match &response_format.format {
             crate::llm::types::OutputFormat::Json => {
-                request_body["response_format"] = serde_json::json!({
-                    "type": "json_object"
-                });
+                if is_ollama_like {
+                    request_body["format"] = serde_json::json!("json");
+                } else {
+                    request_body["response_format"] = serde_json::json!({
+                        "type": "json_object"
+                    });
+                }
             }
             crate::llm::types::OutputFormat::JsonSchema => {
-                if let Some(schema) = &response_format.schema {
+                if is_ollama_like {
+                    // Ollama accepts the JSON schema directly as the "format" value
+                    if let Some(schema) = &response_format.schema {
+                        request_body["format"] = schema.clone();
+                    } else {
+                        // No schema provided — fall back to plain JSON mode
+                        request_body["format"] = serde_json::json!("json");
+                    }
+                } else if let Some(schema) = &response_format.schema {
                     let mut format_obj = serde_json::json!({
                         "type": "json_schema",
                         "json_schema": {

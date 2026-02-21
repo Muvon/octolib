@@ -138,7 +138,7 @@ impl AiProvider for MinimaxProvider {
     }
 
     fn supports_structured_output(&self, _model: &str) -> bool {
-        true // MiniMax supports structured output via response_format
+        false // MiniMax uses Anthropic-compat endpoint which ignores response_format
     }
 
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {

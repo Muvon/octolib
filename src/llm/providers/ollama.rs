@@ -84,7 +84,7 @@ impl AiProvider for OllamaProvider {
     }
 
     fn supports_structured_output(&self, _model: &str) -> bool {
-        true
+        false
     }
 
     fn get_model_pricing(&self, _model: &str) -> Option<crate::llm::types::ModelPricing> {
@@ -127,7 +127,7 @@ mod tests {
         let provider = OllamaProvider::new();
         assert_eq!(provider.name(), "ollama");
         assert!(!provider.supports_caching("any-model"));
-        assert!(provider.supports_structured_output("any-model"));
+        assert!(!provider.supports_structured_output("any-model"));
         assert_eq!(provider.get_max_input_tokens("any-model"), 128_000);
     }
 

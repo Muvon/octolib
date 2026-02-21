@@ -528,10 +528,28 @@ impl AiProvider for MoonshotProvider {
                     }));
                 }
                 crate::llm::types::OutputFormat::JsonSchema => {
-                    // Moonshot supports JSON mode; fall back to json_object for schema requests
-                    request.response_format = Some(serde_json::json!({
-                        "type": "json_object"
-                    }));
+                    // Moonshot's OpenAI-compat endpoint supports json_schema just like OpenAI
+                    // but requires the "name" field in json_schema
+                    if let Some(schema) = &response_format.schema {
+                        let mut format_obj = serde_json::json!({
+                            "type": "json_schema",
+                            "json_schema": {
+                                "name": "schema",
+                                "schema": schema
+                            }
+                        });
+                        if matches!(
+                            response_format.mode,
+                            crate::llm::types::ResponseMode::Strict
+                        ) {
+                            format_obj["json_schema"]["strict"] = serde_json::json!(true);
+                        }
+                        request.response_format = Some(format_obj);
+                    } else {
+                        request.response_format = Some(serde_json::json!({
+                            "type": "json_object"
+                        }));
+                    }
                 }
             }
         }

@@ -29,10 +29,14 @@ pub struct CohereProvider {
 impl CohereProvider {
     pub fn new(model: &str) -> Result<Self> {
         let supported_models = [
+            // v4 models (Dec 2025) - use /v2/rerank endpoint
+            "rerank-v4.0-pro",
+            "rerank-v4.0-fast",
+            // v3 models - use /v1/rerank endpoint
             "rerank-english-v3.0",
             "rerank-multilingual-v3.0",
-            "rerank-english-v2.0",
-            "rerank-multilingual-v2.0",
+            // Legacy alias still accepted by Cohere
+            "rerank-v3.5",
         ];
 
         if !supported_models.contains(&model) {
@@ -46,6 +50,10 @@ impl CohereProvider {
         Ok(Self {
             model_name: model.to_string(),
         })
+    }
+    /// Returns true for v4 models that use the /v2/rerank endpoint
+    fn is_v4_model(&self) -> bool {
+        self.model_name.starts_with("rerank-v4.")
     }
 }
 
@@ -73,6 +81,13 @@ impl RerankProvider for CohereProvider {
         let cohere_api_key = std::env::var("COHERE_API_KEY")
             .context("COHERE_API_KEY environment variable not set")?;
 
+        // v4 models use the v2 API endpoint; v3 and earlier use v1
+        let endpoint = if self.is_v4_model() {
+            "https://api.cohere.com/v2/rerank"
+        } else {
+            "https://api.cohere.com/v1/rerank"
+        };
+
         let mut request_body = json!({
             "query": query,
             "documents": documents,
@@ -84,7 +99,7 @@ impl RerankProvider for CohereProvider {
         }
 
         let response = HTTP_CLIENT
-            .post("https://api.cohere.com/v1/rerank")
+            .post(endpoint)
             .header("Authorization", format!("Bearer {}", cohere_api_key))
             .header("Content-Type", "application/json")
             .json(&request_body)
@@ -98,7 +113,7 @@ impl RerankProvider for CohereProvider {
 
         let cohere_response: CohereRerankResponse = response.json().await?;
 
-        // Cohere doesn't return documents in response, so we need to map them back
+        // Cohere doesn't return documents in response, so we map them back by index
         let results = cohere_response
             .results
             .into_iter()
@@ -118,10 +133,11 @@ impl RerankProvider for CohereProvider {
     fn is_model_supported(&self) -> bool {
         matches!(
             self.model_name.as_str(),
-            "rerank-english-v3.0"
+            "rerank-v4.0-pro"
+                | "rerank-v4.0-fast"
+                | "rerank-english-v3.0"
                 | "rerank-multilingual-v3.0"
-                | "rerank-english-v2.0"
-                | "rerank-multilingual-v2.0"
+                | "rerank-v3.5"
         )
     }
 }
@@ -132,20 +148,37 @@ mod tests {
 
     #[test]
     fn test_cohere_provider_creation() {
+        assert!(CohereProvider::new("rerank-v4.0-pro").is_ok());
+        assert!(CohereProvider::new("rerank-v4.0-fast").is_ok());
         assert!(CohereProvider::new("rerank-english-v3.0").is_ok());
         assert!(CohereProvider::new("rerank-multilingual-v3.0").is_ok());
-        assert!(CohereProvider::new("rerank-english-v2.0").is_ok());
-        assert!(CohereProvider::new("rerank-multilingual-v2.0").is_ok());
+        assert!(CohereProvider::new("rerank-v3.5").is_ok());
         assert!(CohereProvider::new("invalid-model").is_err());
+        // Removed deprecated v2 models
+        assert!(CohereProvider::new("rerank-english-v2.0").is_err());
+        assert!(CohereProvider::new("rerank-multilingual-v2.0").is_err());
+    }
+
+    #[test]
+    fn test_cohere_v4_endpoint_routing() {
+        let v4_pro = CohereProvider::new("rerank-v4.0-pro").unwrap();
+        assert!(v4_pro.is_v4_model());
+
+        let v4_fast = CohereProvider::new("rerank-v4.0-fast").unwrap();
+        assert!(v4_fast.is_v4_model());
+
+        let v3 = CohereProvider::new("rerank-english-v3.0").unwrap();
+        assert!(!v3.is_v4_model());
     }
 
     #[test]
     fn test_cohere_model_validation() {
         let models = [
+            "rerank-v4.0-pro",
+            "rerank-v4.0-fast",
             "rerank-english-v3.0",
             "rerank-multilingual-v3.0",
-            "rerank-english-v2.0",
-            "rerank-multilingual-v2.0",
+            "rerank-v3.5",
         ];
         for model in models {
             let provider = CohereProvider::new(model).unwrap();

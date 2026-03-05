@@ -101,7 +101,9 @@ pub async fn create_embedding_provider_from_parts(
         EmbeddingProviderType::Voyage => Ok(Box::new(VoyageProviderImpl::new(model)?)),
         EmbeddingProviderType::Google => Ok(Box::new(GoogleProviderImpl::new(model)?)),
         EmbeddingProviderType::OpenAI => Ok(Box::new(OpenAIProviderImpl::new(model)?)),
-        EmbeddingProviderType::OpenRouter => Ok(Box::new(OpenRouterProviderImpl::new(model)?)),
+        EmbeddingProviderType::OpenRouter => {
+            Ok(Box::new(OpenRouterProviderImpl::new(model).await?))
+        }
         EmbeddingProviderType::HuggingFace => {
             #[cfg(feature = "huggingface")]
             {

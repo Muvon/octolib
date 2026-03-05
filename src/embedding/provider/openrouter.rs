@@ -16,38 +16,88 @@
 
 use anyhow::{Context, Result};
 use serde_json::{json, Value};
+use std::sync::OnceLock;
 
 use super::super::types::InputType;
 use super::{EmbeddingProvider, HTTP_CLIENT};
 
-/// Known OpenRouter embedding models with their dimensions.
-/// OpenRouter proxies many providers - dimensions are model-specific.
-const KNOWN_MODELS: &[(&str, usize)] = &[
-    ("qwen/qwen3-embedding-8b", 4096),
-    ("qwen/qwen3-embedding-4b", 2560),
-    ("qwen/qwen3-embedding-0.6b", 1024),
-    ("text-embedding-3-small", 1536),
-    ("text-embedding-3-large", 3072),
-    ("text-embedding-ada-002", 1536),
-];
+/// Cached set of valid embedding model IDs fetched from the OpenRouter API.
+/// Populated once on first use; subsequent calls reuse the cached value.
+static SUPPORTED_MODELS: OnceLock<Vec<String>> = OnceLock::new();
 
-/// Fallback dimension when model is not in the known list.
-/// OpenRouter supports arbitrary models, so we allow unknown ones with a sensible default.
-const FALLBACK_DIMENSION: usize = 1536;
+/// Fetch the list of supported embedding model IDs from OpenRouter.
+/// Returns an empty vec on failure so callers degrade gracefully.
+async fn fetch_supported_models() -> Vec<String> {
+    let Ok(api_key) = std::env::var("OPENROUTER_API_KEY") else {
+        return Vec::new();
+    };
 
-/// OpenRouter provider implementation for trait
+    let Ok(response) = HTTP_CLIENT
+        .get("https://openrouter.ai/api/v1/embeddings/models")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .send()
+        .await
+    else {
+        return Vec::new();
+    };
+
+    let Ok(json) = response.json::<Value>().await else {
+        return Vec::new();
+    };
+
+    json["data"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|m| m["id"].as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Returns the cached model list, fetching it on first call.
+async fn supported_models() -> &'static Vec<String> {
+    // OnceLock only supports sync init, so we check and set manually for async.
+    if let Some(models) = SUPPORTED_MODELS.get() {
+        return models;
+    }
+    let models = fetch_supported_models().await;
+    // Another task may have raced us — ignore the error if already set.
+    let _ = SUPPORTED_MODELS.set(models);
+    SUPPORTED_MODELS.get().unwrap()
+}
+
+/// OpenRouter provider implementation for trait.
+/// The supported model list is fetched once from the API and cached.
+/// Dimension is probed at construction time since the API does not expose it.
 pub struct OpenRouterProviderImpl {
     model_name: String,
     dimension: usize,
 }
 
 impl OpenRouterProviderImpl {
-    pub fn new(model: &str) -> Result<Self> {
-        let dimension = KNOWN_MODELS
-            .iter()
-            .find(|(name, _)| *name == model)
-            .map(|(_, dim)| *dim)
-            .unwrap_or(FALLBACK_DIMENSION);
+    pub async fn new(model: &str) -> Result<Self> {
+        // Populate the model cache and validate in one shot
+        let models = supported_models().await;
+        // Only reject if the cache is non-empty and the model isn't in it.
+        // Empty cache means the API was unreachable — allow through to let the
+        // actual embedding call surface the real error.
+        if !models.is_empty() && !models.iter().any(|m| m == model) {
+            return Err(anyhow::anyhow!(
+                "Unsupported OpenRouter embedding model '{}'. Run `curl https://openrouter.ai/api/v1/embeddings/models` to see available models.",
+                model
+            ));
+        }
+
+        // Probe the actual dimension — the API has no dimension field.
+        let probe = OpenRouterProvider::generate_embeddings("probe", model).await?;
+        let dimension = probe.len();
+        if dimension == 0 {
+            return Err(anyhow::anyhow!(
+                "OpenRouter model '{}' returned zero-length embedding",
+                model
+            ));
+        }
 
         Ok(Self {
             model_name: model.to_string(),
@@ -75,7 +125,7 @@ impl EmbeddingProvider for OpenRouterProviderImpl {
     }
 
     fn is_model_supported(&self) -> bool {
-        // OpenRouter proxies many providers - we allow any non-empty model name
+        // Checked at construction time against the live model list
         !self.model_name.is_empty()
     }
 }
@@ -151,32 +201,24 @@ impl OpenRouterProvider {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_openrouter_provider_creation() {
-        // Known models should resolve correct dimensions
-        let provider = OpenRouterProviderImpl::new("qwen/qwen3-embedding-8b").unwrap();
+    #[tokio::test]
+    async fn test_openrouter_provider_dimension_probe() {
+        if std::env::var("OPENROUTER_API_KEY").is_err() {
+            return;
+        }
+        let provider = OpenRouterProviderImpl::new("qwen/qwen3-embedding-8b")
+            .await
+            .unwrap();
         assert_eq!(provider.get_dimension(), 4096);
-
-        let provider = OpenRouterProviderImpl::new("text-embedding-3-small").unwrap();
-        assert_eq!(provider.get_dimension(), 1536);
-
-        let provider = OpenRouterProviderImpl::new("text-embedding-3-large").unwrap();
-        assert_eq!(provider.get_dimension(), 3072);
+        assert!(provider.is_model_supported());
     }
 
-    #[test]
-    fn test_unknown_model_fallback_dimension() {
-        // Unknown models should fall back to FALLBACK_DIMENSION, not error
-        let provider = OpenRouterProviderImpl::new("some/future-model").unwrap();
-        assert_eq!(provider.get_dimension(), FALLBACK_DIMENSION);
-    }
-
-    #[test]
-    fn test_model_supported() {
-        let provider = OpenRouterProviderImpl::new("qwen/qwen3-embedding-8b").unwrap();
-        assert!(provider.is_model_supported());
-
-        let provider = OpenRouterProviderImpl::new("any/arbitrary-model").unwrap();
-        assert!(provider.is_model_supported());
+    #[tokio::test]
+    async fn test_openrouter_invalid_model_rejected() {
+        if std::env::var("OPENROUTER_API_KEY").is_err() {
+            return;
+        }
+        let result = OpenRouterProviderImpl::new("not/a-real-model-xyz").await;
+        assert!(result.is_err());
     }
 }

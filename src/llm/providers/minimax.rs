@@ -685,6 +685,6 @@ mod tests {
         let provider = MinimaxProvider::new();
         assert!(provider.supports_caching("MiniMax-M2.1"));
         assert!(!provider.supports_vision("MiniMax-M2.1"));
-        assert!(provider.supports_structured_output("MiniMax-M2.1"));
+        assert!(!provider.supports_structured_output("MiniMax-M2.1"));
     }
 }

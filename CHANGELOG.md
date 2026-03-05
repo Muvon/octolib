@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.10.0] - 2026-03-05
+
+### 📋 Release Summary
+
+This release expands reranking capabilities with new Mixedbread, HuggingFace, and Cohere v4 providers (f75d35d2). Multiple provider integrations are now more reliable with fixes for structured outputs and API compatibility across Minimax, Moonshot, Ollama, and Voyage (5366a204, b8bd46aa, 77512136, 6d551189).
+
+
+### ✨ New Features & Enhancements
+
+- **reranker**: add Mixedbread, HuggingFace providers and Cohere v4 `f75d35d2`
+
+### 🐛 Bug Fixes & Stability
+
+- **minimax**: correct structured output support test `5366a204`
+- **minimax**: correct structured output support flag `b8bd46aa`
+- **llm**: correct schema handling for Moonshot and Ollama providers `77512136`
+- **voyage**: adapt to new API response structure `6d551189`
+
+### 🔄 Other Changes
+
+- update dependencies `f67e17f2`
+- update dependencies `5e162605`
+
+### 📊 Release Summary
+
+**Total commits**: 7 across 3 categories
+
+✨ **1** new feature - *Enhanced functionality*
+🐛 **4** bug fixes - *Improved stability*
+🔄 **2** other changes - *Maintenance & tooling*
+
 ## [0.9.3] - 2026-02-19
 
 ### 📋 Release Summary

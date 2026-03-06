@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.10.1] - 2026-03-06
+
+### 📋 Release Summary
+
+This release expands embedding capabilities with OpenRouter provider support and delivers more reliable model availability through live API integration (839ad88e, 08db93d4).
+
+
+### ✨ New Features & Enhancements
+
+- **embedding**: add OpenRouter provider `839ad88e`
+
+### 🔧 Improvements & Optimizations
+
+- **openrouter**: replace hardcoded model list with live API fetch `08db93d4`
+
+### 📊 Release Summary
+
+**Total commits**: 2 across 2 categories
+
+✨ **1** new feature - *Enhanced functionality*
+🔧 **1** improvement - *Better performance & code quality*
+
 ## [0.10.0] - 2026-03-05
 
 ### 📋 Release Summary

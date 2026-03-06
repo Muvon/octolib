@@ -161,16 +161,16 @@ jobs:
       if: runner.os != 'Windows'
       run: cargo build --release --all-features
 
-    - name: Test build with no default features
-      run: cargo build --release --no-default-features
+    - name: Test build with default features
+      run: cargo build --release
 
     - name: Run tests (all features, non-Windows)
       if: runner.os != 'Windows'
       run: cargo test --release --all-features
 
-    - name: Run tests (no default features, Windows)
+    - name: Run tests (Windows)
       if: runner.os == 'Windows'
-      run: cargo test --release --no-default-features
+      run: cargo test --release
 
   publish-crate:
     name: Publish to Crates.io

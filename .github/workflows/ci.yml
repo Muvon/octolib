@@ -117,8 +117,8 @@ jobs:
       if: runner.os != 'Windows'
       run: cargo test --verbose --lib --all-features
 
-    - name: Run tests (default features)
-      run: cargo test --verbose --lib
+    - name: Run tests (no default features)
+      run: cargo test --verbose --lib --no-default-features
 
     - name: Run tests (fastembed only)
       if: runner.os != 'Windows'

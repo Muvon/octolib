@@ -896,8 +896,6 @@ dependencies = [
 [[package]]
 name = "esaxx-rs"
 version = "0.1.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d817e038c30374a4bcb22f94d0a8a0e216958d4c3dcde369b1439fec4bdda6e6"
 dependencies = [
  "cc",
 ]
@@ -2277,7 +2275,7 @@ checksum = "830b246a0e5f20af87141b25c173cd1b609bd7779a4617d6ec582abaf90870f3"
 
 [[package]]
 name = "octolib"
-version = "0.10.1"
+version = "0.10.2"
 dependencies = [
  "anyhow",
  "async-trait",

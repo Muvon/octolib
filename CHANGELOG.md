@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.10.2] - 2026-03-08
+
+### 📋 Release Summary
+
+This release resolves Windows compatibility issues and ensures reliable builds across all platforms (5c1803b1). Dependency updates enhance overall stability and performance (06f0a237).
+
+
+### 🐛 Bug Fixes & Stability
+
+- **build**: resolve Windows build failures and CI configuration `5c1803b1`
+
+### 🔄 Other Changes
+
+- update dependencies `06f0a237`
+
+### 📊 Release Summary
+
+**Total commits**: 2 across 2 categories
+
+🐛 **1** bug fix - *Improved stability*
+🔄 **1** other change - *Maintenance & tooling*
+
 ## [0.10.1] - 2026-03-06
 
 ### 📋 Release Summary

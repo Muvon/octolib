@@ -20,7 +20,6 @@ use crate::llm::types::{
     ToolCall,
 };
 use anyhow::Result;
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy)]
@@ -307,7 +306,7 @@ async fn execute_request(
     request_body: serde_json::Value,
     params: ChatCompletionParams,
 ) -> Result<ProviderResponse> {
-    let client = Client::new();
+    let client = shared::http_client();
     let start_time = std::time::Instant::now();
 
     let response = retry::retry_with_exponential_backoff(

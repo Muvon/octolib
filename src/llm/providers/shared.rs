@@ -17,6 +17,18 @@
 use crate::errors::ToolCallError;
 use crate::llm::tool_calls::GenericToolCall;
 use crate::llm::types::ToolCall;
+use std::sync::OnceLock;
+
+/// Returns the process-wide shared HTTP client.
+///
+/// `reqwest::Client` holds a connection pool internally — reusing it across
+/// all provider requests enables TCP keep-alive, HTTP/2 multiplexing, and
+/// avoids the per-request TLS handshake overhead that causes connection-reset
+/// errors under load.
+pub(super) fn http_client() -> &'static reqwest::Client {
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    CLIENT.get_or_init(reqwest::Client::new)
+}
 
 const MAX_JSON_INPUT_BYTES: usize = 1_000_000;
 

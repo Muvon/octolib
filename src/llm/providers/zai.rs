@@ -54,7 +54,6 @@ use crate::llm::utils::{
 };
 use anyhow::Result;
 use async_trait::async_trait;
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::env;
 
@@ -403,7 +402,7 @@ async fn execute_zai_request(
     base_timeout: std::time::Duration,
     cancellation_token: Option<&tokio::sync::watch::Receiver<bool>>,
 ) -> Result<ProviderResponse> {
-    let client = Client::new();
+    let client = shared::http_client();
     let start_time = std::time::Instant::now();
 
     let response = retry::retry_with_exponential_backoff(

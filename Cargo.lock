@@ -2277,7 +2277,7 @@ checksum = "830b246a0e5f20af87141b25c173cd1b609bd7779a4617d6ec582abaf90870f3"
 
 [[package]]
 name = "octolib"
-version = "0.10.2"
+version = "0.10.3"
 dependencies = [
  "anyhow",
  "async-trait",

@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.10.3] - 2026-03-10
+
+### 📋 Release Summary
+
+This release improves performance and reliability across the library. Core optimizations include more efficient provider connections and streamlined resource management (0878ccae).
+
+
+### 🔧 Improvements & Optimizations
+
+- **llm**: replace per-request Client with shared instance `0878ccae`
+
+### 🔄 Other Changes
+
+- **build**: resolve Windows build failures and CI configuration" `49be6fb8`
+
+### 📊 Release Summary
+
+**Total commits**: 2 across 2 categories
+
+🔧 **1** improvement - *Better performance & code quality*
+🔄 **1** other change - *Maintenance & tooling*
+
 ## [0.10.2] - 2026-03-08
 
 ### 📋 Release Summary

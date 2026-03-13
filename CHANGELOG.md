@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.10.4] - 2026-03-13
+
+### 📋 Release Summary
+
+This release improves authentication reliability and system compatibility. The Google provider now uses a more robust authentication method, and Windows system dependencies have been updated for better stability.
+
+
+### 🔧 Improvements & Optimizations
+
+- **google**: replace google-jwt-auth with jsonwebtoken `40823d2a`
+
+### 🔄 Other Changes
+
+- **deps**: downgrade windows-sys from 0.61.2 to 0.59.0 `3251d654`
+
+### 📊 Release Summary
+
+**Total commits**: 2 across 2 categories
+
+🔧 **1** improvement - *Better performance & code quality*
+🔄 **1** other change - *Maintenance & tooling*
+
 ## [0.10.3] - 2026-03-10
 
 ### 📋 Release Summary

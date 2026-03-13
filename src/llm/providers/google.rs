@@ -30,8 +30,10 @@ use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderResponse};
 use crate::llm::utils::normalize_model_name;
 use anyhow::{Context, Result};
-use serde::Deserialize;
+use jsonwebtoken::{Algorithm, EncodingKey, Header};
+use serde::{Deserialize, Serialize};
 use std::env;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Google Vertex AI provider
 #[derive(Debug, Clone)]
@@ -66,6 +68,24 @@ fn default_vertex_api_url(project: &str, location: &str) -> String {
 #[derive(Debug, Deserialize)]
 struct GoogleServiceAccountFile {
     project_id: Option<String>,
+    client_email: String,
+    private_key: String,
+    private_key_id: String,
+}
+
+#[derive(Serialize)]
+struct JwtClaims {
+    iss: String,
+    sub: String,
+    aud: String,
+    scope: String,
+    iat: u64,
+    exp: u64,
+}
+
+#[derive(Deserialize)]
+struct TokenResponse {
+    access_token: String,
 }
 
 /// Resolve the path to the Google service account credentials file
@@ -96,26 +116,47 @@ fn resolve_credentials_file() -> Result<String> {
 
 /// Generate an access token from service account JSON file using JWT authentication
 async fn generate_access_token(credentials_file: &str) -> Result<String> {
-    // Read service account JSON file
     let client_json = std::fs::read_to_string(credentials_file).context(format!(
         "Failed to read service account file '{}'",
         credentials_file
     ))?;
 
-    // Build AuthConfig with Cloud Platform scope
-    let config = google_jwt_auth::AuthConfig::build(
-        &client_json,
-        &google_jwt_auth::usage::Usage::CloudPlatform,
-    )
-    .context("Failed to build auth config from service account JSON")?;
+    let creds: GoogleServiceAccountFile =
+        serde_json::from_str(&client_json).context("Failed to parse service account JSON")?;
 
-    // Generate token with 3600 seconds (1 hour) lifetime
-    let token = config
-        .generate_auth_token(3600)
+    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+    let claims = JwtClaims {
+        iss: creds.client_email.clone(),
+        sub: creds.client_email,
+        aud: "https://oauth2.googleapis.com/token".to_string(),
+        scope: "https://www.googleapis.com/auth/cloud-platform".to_string(),
+        iat: now,
+        exp: now + 3600,
+    };
+
+    let mut header = Header::new(Algorithm::RS256);
+    header.kid = Some(creds.private_key_id);
+    let key = EncodingKey::from_rsa_pem(creds.private_key.as_bytes())
+        .context("Failed to parse RSA private key from service account")?;
+    let jwt = jsonwebtoken::encode(&header, &claims, &key).context("Failed to sign JWT")?;
+
+    // Exchange JWT for OAuth2 access token using octolib's shared HTTP client
+    let body = format!(
+        "grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion={}",
+        jwt
+    );
+    let resp: TokenResponse = super::shared::http_client()
+        .post("https://oauth2.googleapis.com/token")
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .body(body)
+        .send()
         .await
-        .map_err(|e| anyhow::anyhow!("Failed to generate OAuth access token: {}", e))?;
+        .context("Failed to send token request to Google OAuth2 endpoint")?
+        .json()
+        .await
+        .context("Failed to parse token response from Google OAuth2 endpoint")?;
 
-    Ok(token)
+    Ok(resp.access_token)
 }
 
 /// Extract project ID from service account JSON file or environment variable

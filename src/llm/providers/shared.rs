@@ -18,6 +18,7 @@ use crate::errors::ToolCallError;
 use crate::llm::tool_calls::GenericToolCall;
 use crate::llm::types::ToolCall;
 use std::sync::OnceLock;
+use std::time::Duration;
 
 /// Returns the process-wide shared HTTP client.
 ///
@@ -25,9 +26,21 @@ use std::sync::OnceLock;
 /// all provider requests enables TCP keep-alive, HTTP/2 multiplexing, and
 /// avoids the per-request TLS handshake overhead that causes connection-reset
 /// errors under load.
+///
+/// No request timeout is set — LLM responses can legitimately take minutes.
+/// Instead we configure:
+/// - `tcp_keepalive`: OS-level probes detect dead connections before reuse
+/// - `pool_idle_timeout`: evict idle pooled connections before NAT/firewall
+///   silently drops them, preventing hangs on stale sockets
 pub(super) fn http_client() -> &'static reqwest::Client {
     static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
-    CLIENT.get_or_init(reqwest::Client::new)
+    CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .tcp_keepalive(Duration::from_secs(60))
+            .pool_idle_timeout(Duration::from_secs(90))
+            .build()
+            .expect("failed to build HTTP client")
+    })
 }
 
 const MAX_JSON_INPUT_BYTES: usize = 1_000_000;

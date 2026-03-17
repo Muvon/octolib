@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.10.5] - 2026-03-17
+
+### 📋 Release Summary
+
+This release improves connection reliability and resource efficiency for all AI provider interactions.
+
+
+### 🐛 Bug Fixes & Stability
+
+- **http**: add tcp keepalive and pool idle timeout to shared client `fba0963e`
+
+### 📊 Release Summary
+
+**Total commits**: 1 across 1 categories
+
+🐛 **1** bug fix - *Improved stability*
+
 ## [0.10.4] - 2026-03-13
 
 ### 📋 Release Summary

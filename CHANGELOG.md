@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.10.6] - 2026-03-18
+
+### 📋 Release Summary
+
+This release updates pricing data to March 2026 and corrects cached pricing values, ensuring accurate cost tracking across all supported providers.
+
+
+### 🐛 Bug Fixes & Stability
+
+- **pricing**: correct cache pricing values in tests `8a85b4d1`
+- **llm**: update pricing data to March 2026 `55b99cea`
+
+### 🔄 Other Changes
+
+- update dependencies `4dde9ebb`
+
+### 📊 Release Summary
+
+**Total commits**: 3 across 2 categories
+
+🐛 **2** bug fixes - *Improved stability*
+🔄 **1** other change - *Maintenance & tooling*
+
 ## [0.10.5] - 2026-03-17
 
 ### 📋 Release Summary

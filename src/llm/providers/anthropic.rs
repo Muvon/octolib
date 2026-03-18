@@ -905,22 +905,22 @@ mod tests {
         let pricing = provider.get_model_pricing("claude-sonnet-4-6").unwrap();
         assert_eq!(pricing.input_price_per_1m, 3.0);
         assert_eq!(pricing.output_price_per_1m, 15.0);
-        assert_eq!(pricing.cache_write_price_per_1m, 3.0);
+        assert_eq!(pricing.cache_write_price_per_1m, 3.75);
         assert_eq!(pricing.cache_read_price_per_1m, 0.30);
 
         // Test Sonnet 4 pricing (from the pricing table)
         let pricing = provider.get_model_pricing("claude-sonnet-4").unwrap();
         assert_eq!(pricing.input_price_per_1m, 3.0);
         assert_eq!(pricing.output_price_per_1m, 15.0);
-        assert_eq!(pricing.cache_write_price_per_1m, 3.0); // from pricing table
+        assert_eq!(pricing.cache_write_price_per_1m, 3.75); // from pricing table
         assert_eq!(pricing.cache_read_price_per_1m, 0.30); // from pricing table
 
         // Test Haiku 3 pricing
         let pricing = provider.get_model_pricing("claude-3-haiku").unwrap();
         assert_eq!(pricing.input_price_per_1m, 0.25);
         assert_eq!(pricing.output_price_per_1m, 1.25);
-        assert_eq!(pricing.cache_write_price_per_1m, 0.25); // from pricing table
-        assert_eq!(pricing.cache_read_price_per_1m, 0.025); // from pricing table
+        assert_eq!(pricing.cache_write_price_per_1m, 0.30); // from pricing table
+        assert_eq!(pricing.cache_read_price_per_1m, 0.03); // from pricing table
 
         // Test case insensitive
         let pricing = provider.get_model_pricing("CLAUDE-SONNET-4").unwrap();

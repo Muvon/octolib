@@ -737,13 +737,13 @@ mod tests {
 
     #[test]
     fn test_cost_with_cache_read_tokens() {
-        // GLM-4.7 pricing: input 0.60, cache_read 0.30, output 2.20
+        // GLM-4.7 pricing: input 0.60, cache_read 0.11, output 2.20
         // regular_input=100K => 0.06
-        // cache_read=200K => 0.06
+        // cache_read=200K => 0.022
         // output=100K => 0.22
-        // total => 0.34
+        // total => 0.302
         let cost = calculate_cost("glm-4.7", 100_000, 200_000, 100_000).unwrap();
-        assert!((cost - 0.34).abs() < 0.0001);
+        assert!((cost - 0.302).abs() < 0.0001);
     }
 
     #[test]

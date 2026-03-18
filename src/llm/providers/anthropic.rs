@@ -31,45 +31,46 @@ use std::env;
 
 /// Anthropic pricing constants (per 1M tokens in USD)
 /// Model IDs sourced from Anthropic model docs / models API.
-/// Prices sourced from Anthropic pricing docs (verified Feb 18, 2026).
+/// Prices sourced from Anthropic pricing docs (verified Mar 18, 2026).
 /// Format: (model, input, output, cache_write, cache_read)
 const PRICING: &[PricingTuple] = &[
     // Claude 4.6
-    ("claude-sonnet-4-6-20260217", 3.00, 15.00, 3.00, 0.30),
-    ("claude-sonnet-4-6", 3.00, 15.00, 3.00, 0.30),
-    ("claude-opus-4-6", 5.00, 25.00, 5.00, 0.50),
+    ("claude-sonnet-4-6-20260217", 3.00, 15.00, 3.75, 0.30),
+    ("claude-sonnet-4-6", 3.00, 15.00, 3.75, 0.30),
+    ("claude-opus-4-6-20260217", 5.00, 25.00, 6.25, 0.50),
+    ("claude-opus-4-6", 5.00, 25.00, 6.25, 0.50),
     // Claude 4.5
-    ("claude-opus-4-5-20251101", 5.00, 25.00, 5.00, 0.50),
-    ("claude-haiku-4-5-20251001", 1.00, 5.00, 1.00, 0.10),
-    ("claude-sonnet-4-5-20250929", 3.00, 15.00, 3.00, 0.30),
+    ("claude-opus-4-5-20251101", 5.00, 25.00, 6.25, 0.50),
+    ("claude-haiku-4-5-20251001", 1.00, 5.00, 1.25, 0.10),
+    ("claude-sonnet-4-5-20250929", 3.00, 15.00, 3.75, 0.30),
     // Official API aliases (hyphenated)
-    ("claude-opus-4-5", 5.00, 25.00, 5.00, 0.50),
-    ("claude-haiku-4-5", 1.00, 5.00, 1.00, 0.10),
-    ("claude-sonnet-4-5", 3.00, 15.00, 3.00, 0.30),
+    ("claude-opus-4-5", 5.00, 25.00, 6.25, 0.50),
+    ("claude-haiku-4-5", 1.00, 5.00, 1.25, 0.10),
+    ("claude-sonnet-4-5", 3.00, 15.00, 3.75, 0.30),
     // Claude 4 / 4.1
-    ("claude-opus-4-1-20250805", 15.00, 75.00, 15.00, 1.50),
-    ("claude-opus-4-20250514", 15.00, 75.00, 15.00, 1.50),
-    ("claude-sonnet-4-20250514", 3.00, 15.00, 3.00, 0.30),
-    ("claude-opus-4-1", 15.00, 75.00, 15.00, 1.50),
-    ("claude-opus-4-0", 15.00, 75.00, 15.00, 1.50),
-    ("claude-opus-4", 15.00, 75.00, 15.00, 1.50),
-    ("claude-sonnet-4-0", 3.00, 15.00, 3.00, 0.30),
-    ("claude-sonnet-4", 3.00, 15.00, 3.00, 0.30),
+    ("claude-opus-4-1-20250805", 15.00, 75.00, 18.75, 1.50),
+    ("claude-opus-4-20250514", 15.00, 75.00, 18.75, 1.50),
+    ("claude-sonnet-4-20250514", 3.00, 15.00, 3.75, 0.30),
+    ("claude-opus-4-1", 15.00, 75.00, 18.75, 1.50),
+    ("claude-opus-4-0", 15.00, 75.00, 18.75, 1.50),
+    ("claude-opus-4", 15.00, 75.00, 18.75, 1.50),
+    ("claude-sonnet-4-0", 3.00, 15.00, 3.75, 0.30),
+    ("claude-sonnet-4", 3.00, 15.00, 3.75, 0.30),
     // Claude 3.7
-    ("claude-3-7-sonnet-20250219", 3.00, 15.00, 3.00, 0.30),
-    ("claude-3-7-sonnet", 3.00, 15.00, 3.00, 0.30),
+    ("claude-3-7-sonnet-20250219", 3.00, 15.00, 3.75, 0.30),
+    ("claude-3-7-sonnet", 3.00, 15.00, 3.75, 0.30),
     // Claude 3.5 (hyphenated format)
-    ("claude-3-5-sonnet", 3.00, 15.00, 3.00, 0.30),
-    ("claude-3-5-haiku-20241022", 0.80, 4.00, 0.80, 0.08),
-    ("claude-3-5-haiku", 0.80, 4.00, 0.80, 0.08),
+    ("claude-3-5-sonnet", 3.00, 15.00, 3.75, 0.30),
+    ("claude-3-5-haiku-20241022", 0.80, 4.00, 1.00, 0.08),
+    ("claude-3-5-haiku", 0.80, 4.00, 1.00, 0.08),
     // Claude 3.5 (dot notation aliases - common user format)
-    ("claude-3.5-sonnet", 3.00, 15.00, 3.00, 0.30),
-    ("claude-3.5-haiku", 0.80, 4.00, 0.80, 0.08),
+    ("claude-3.5-sonnet", 3.00, 15.00, 3.75, 0.30),
+    ("claude-3.5-haiku", 0.80, 4.00, 1.00, 0.08),
     // Claude 3
-    ("claude-3-opus", 15.00, 75.00, 15.00, 1.50),
-    ("claude-3-sonnet", 3.00, 15.00, 3.00, 0.30),
-    ("claude-3-haiku-20240307", 0.25, 1.25, 0.25, 0.025),
-    ("claude-3-haiku", 0.25, 1.25, 0.25, 0.025),
+    ("claude-3-opus", 15.00, 75.00, 18.75, 1.50),
+    ("claude-3-sonnet", 3.00, 15.00, 3.75, 0.30),
+    ("claude-3-haiku-20240307", 0.25, 1.25, 0.30, 0.03),
+    ("claude-3-haiku", 0.25, 1.25, 0.30, 0.03),
 ];
 
 /// Token usage breakdown for cache-aware pricing

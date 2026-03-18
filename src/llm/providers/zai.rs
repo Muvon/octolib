@@ -14,29 +14,31 @@
 
 //! Z.ai (Zhipu AI) provider implementation
 //!
-//! PRICING UPDATE: February 2026 (from <https://docs.z.ai/guides/overview/pricing>)
+//! PRICING UPDATE: March 2026 (from <https://docs.z.ai/guides/overview/pricing>)
 //!
 //! GLM-5 series (NEW - Feb 2026):
-//! - GLM-5: Input $1.00/1M, Output $3.20/1M
-//! - GLM-5-Code: Input $1.20/1M, Output $5.00/1M
+//! - GLM-5: Input $1.00/1M, Cached $0.20/1M, Output $3.20/1M
+//! - GLM-5-Code: Input $1.20/1M, Cached $0.30/1M, Output $5.00/1M
 //!
 //! GLM-4.7 series:
-//! - GLM-4.7: Input $0.60/1M, Output $2.20/1M
+//! - GLM-4.7: Input $0.60/1M, Cached $0.11/1M, Output $2.20/1M
 //! - GLM-4.7-Flash: Free model
-//! - GLM-4.7-FlashX: Free model
+//! - GLM-4.7-FlashX: Input $0.07/1M, Cached $0.01/1M, Output $0.40/1M
 //!
 //! GLM-4.6 series:
-//! - GLM-4.6: Input $0.60/1M, Output $2.20/1M
-//! - GLM-4.6V: Input $0.30/1M, Output $0.90/1M
-//! - GLM-4.6V-Flash: Input $0.04/1M, Output $0.40/1M
-//! - GLM-4.6V-FlashX: Input $0.04/1M, Output $0.40/1M
+//! - GLM-4.6: Input $0.60/1M, Cached $0.11/1M, Output $2.20/1M
+//! - GLM-4.6V: Input $0.30/1M, Cached $0.05/1M, Output $0.90/1M
+//! - GLM-4.6V-Flash: Free model
+//! - GLM-4.6V-FlashX: Input $0.04/1M, Cached $0.004/1M, Output $0.40/1M
+//! - GLM-OCR: Input $0.03/1M, Output $0.03/1M
 //!
 //! GLM-4.5 series:
-//! - GLM-4.5: Input $0.60/1M, Output $2.20/1M
-//! - GLM-4.5V: Input $0.60/1M, Output $1.80/1M
-//! - GLM-4.5-X: Input $2.20/1M, Output $8.90/1M
-//! - GLM-4.5-Air: Input $0.20/1M, Output $1.10/1M
-//! - GLM-4.5-AirX: Input $1.10/1M, Output $4.50/1M
+//! - GLM-4.5: Input $0.60/1M, Cached $0.11/1M, Output $2.20/1M
+//! - GLM-4.5V: Input $0.60/1M, Cached $0.11/1M, Output $1.80/1M
+//! - GLM-4.5-X: Input $2.20/1M, Cached $0.45/1M, Output $8.90/1M
+//! - GLM-4.5-Air: Input $0.20/1M, Cached $0.03/1M, Output $1.10/1M
+//! - GLM-4.5-AirX: Input $1.10/1M, Cached $0.22/1M, Output $4.50/1M
+//! - GLM-4.5-Flash: Free model
 //!
 //! GLM-4 series:
 //! - GLM-4-32B-0414-128K: Input $0.10/1M, Output $0.10/1M
@@ -58,36 +60,36 @@ use serde::{Deserialize, Serialize};
 use std::env;
 
 /// Z.ai pricing constants (per 1M tokens in USD)
-/// Source: https://docs.z.ai/guides/overview/pricing (verified Feb 18, 2026)
+/// Source: https://docs.z.ai/guides/overview/pricing (verified Mar 18, 2026)
 /// Format: (model, input, output, cache_write, cache_read)
 const PRICING: &[PricingTuple] = &[
-    // GLM-5 series (latest generation - Feb 2026)
-    ("glm-5-code", 1.20, 5.00, 1.20, 0.12),
-    ("glm-5", 1.00, 3.20, 1.00, 0.10),
+    // GLM-5 series (latest generation)
+    ("glm-5-code", 1.20, 5.00, 0.00, 0.30),
+    ("glm-5", 1.00, 3.20, 0.00, 0.20),
     // GLM-4.7 series (flagship) - more specific variants first
-    ("glm-4.7-flashx", 0.00, 0.00, 0.00, 0.00), // free model
-    ("glm-4.7-flash", 0.00, 0.00, 0.00, 0.00),  // free model
-    ("glm-4.7-battle", 0.60, 2.20, 0.60, 0.06),
-    ("glm-4.7", 0.60, 2.20, 0.60, 0.30),
+    ("glm-4.7-flashx", 0.07, 0.40, 0.00, 0.01),
+    ("glm-4.7-flash", 0.00, 0.00, 0.00, 0.00), // free model
+    ("glm-4.7-battle", 0.60, 2.20, 0.00, 0.11),
+    ("glm-4.7", 0.60, 2.20, 0.00, 0.11),
     // GLM-4.6 series
-    ("glm-4.6v-flashx", 0.04, 0.40, 0.04, 0.004),
-    ("glm-4.6v-flash", 0.04, 0.40, 0.04, 0.004),
-    ("glm-4.6v", 0.30, 0.90, 0.30, 0.03),
-    ("glm-4.6-flash", 0.60, 2.20, 0.60, 0.06),
-    ("glm-4.6", 0.60, 2.20, 0.60, 0.06),
+    ("glm-4.6v-flashx", 0.04, 0.40, 0.00, 0.004),
+    ("glm-4.6v-flash", 0.00, 0.00, 0.00, 0.00), // free model
+    ("glm-4.6v", 0.30, 0.90, 0.00, 0.05),
+    ("glm-ocr", 0.03, 0.03, 0.00, 0.00),
+    ("glm-4.6", 0.60, 2.20, 0.00, 0.11),
     // GLM-4.5 series - most specific first
-    ("glm-4.5-airx", 1.10, 4.50, 1.10, 0.50),
-    ("glm-4.5-air-plus", 0.20, 1.10, 0.20, 0.10),
-    ("glm-4.5-air", 0.20, 1.10, 0.20, 0.10),
-    ("glm-4.5v", 0.60, 1.80, 0.60, 0.30),
-    ("glm-4.5-x", 2.20, 8.90, 2.20, 1.10),
-    ("glm-4.5-flash", 0.60, 2.20, 0.60, 0.30),
-    ("glm-4.5", 0.60, 2.20, 0.60, 0.30),
+    ("glm-4.5-airx", 1.10, 4.50, 0.00, 0.22),
+    ("glm-4.5-air-plus", 0.20, 1.10, 0.00, 0.03),
+    ("glm-4.5-air", 0.20, 1.10, 0.00, 0.03),
+    ("glm-4.5-flash", 0.00, 0.00, 0.00, 0.00), // free model
+    ("glm-4.5v", 0.60, 1.80, 0.00, 0.11),
+    ("glm-4.5-x", 2.20, 8.90, 0.00, 0.45),
+    ("glm-4.5", 0.60, 2.20, 0.00, 0.11),
     // GLM-4 series
-    ("glm-4-32b-0414-128k", 0.10, 0.10, 0.10, 0.01),
-    ("glm-4-32b", 0.10, 0.10, 0.10, 0.01),
-    ("glm-4-flash", 0.60, 2.20, 0.60, 0.06),
-    ("glm-4", 0.60, 2.20, 0.60, 0.06),
+    ("glm-4-32b-0414-128k", 0.10, 0.10, 0.00, 0.01),
+    ("glm-4-32b", 0.10, 0.10, 0.00, 0.01),
+    ("glm-4-flash", 0.60, 2.20, 0.00, 0.06),
+    ("glm-4", 0.60, 2.20, 0.00, 0.06),
 ];
 
 /// Calculate cost for Z.ai models (case-insensitive)

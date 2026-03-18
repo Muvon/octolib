@@ -31,10 +31,13 @@ use serde::Deserialize;
 use std::env;
 
 /// OpenAI pricing constants (per 1M tokens in USD)
-/// Source: https://platform.openai.com/docs/pricing and model cards (verified Feb 18, 2026)
+/// Source: https://platform.openai.com/docs/pricing and model cards (verified Mar 18, 2026)
 /// Format: (model, input, output, cache_write, cache_read)
 /// Note: For models without caching, cache_write = input and cache_read = input
 const PRICING: &[PricingTuple] = &[
+    // GPT-5.4 family
+    ("gpt-5.4-mini", 0.25, 2.00, 0.25, 0.025),
+    ("gpt-5.4", 2.50, 15.00, 2.50, 0.25),
     // GPT-5.2 family
     ("gpt-5.3-codex", 1.75, 14.00, 1.75, 0.175),
     ("gpt-5.2-pro", 21.00, 168.00, 21.00, 21.00),

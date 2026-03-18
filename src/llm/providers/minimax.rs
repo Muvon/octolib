@@ -31,13 +31,18 @@ use serde::{Deserialize, Serialize};
 use std::env;
 
 /// MiniMax pricing constants (per 1M tokens in USD)
-/// Source: https://www.minimax.io/platform/price (verified Feb 18, 2026)
+/// Source: https://www.minimax.io/platform/price (verified Mar 18, 2026)
 /// Format: (model, input, output, cache_write, cache_read)
 const PRICING: &[PricingTuple] = &[
-    // MiniMax M2.5 (latest generation)
-    ("MiniMax-M2.5-highspeed", 0.60, 2.40, 0.75, 0.06),
-    ("MiniMax-M2.5-lightning", 0.60, 2.40, 0.75, 0.06), // backward-compatible alias
+    // MiniMax M2.7 (latest generation)
+    ("MiniMax-M2.7-highspeed", 0.60, 2.40, 0.75, 0.06),
+    ("MiniMax-M2.7", 0.30, 1.20, 0.375, 0.06),
+    // MiniMax M2.5
+    ("MiniMax-M2.5-highspeed", 0.60, 2.40, 0.75, 0.03),
+    ("MiniMax-M2.5-lightning", 0.60, 2.40, 0.75, 0.03), // backward-compatible alias
     ("MiniMax-M2.5", 0.30, 1.20, 0.375, 0.03),
+    // M2-her (no caching)
+    ("M2-her", 0.30, 1.20, 0.0, 0.0),
     // Legacy entries kept for compatibility
     ("MiniMax-M2.1-lightning", 0.30, 2.40, 0.30, 0.03),
     ("MiniMax-M2.1", 0.27, 0.95, 0.27, 0.027),

@@ -352,12 +352,19 @@ impl HuggingFaceModel {
         hidden_states: &Tensor,
         attention_mask: &Tensor,
     ) -> Result<Vec<f32>> {
-        // Convert attention mask to f32 and expand for broadcasting
-        let mask_f32 = attention_mask.to_dtype(DType::F32)?.unsqueeze(2)?; // (1, seq_len, 1)
-        let masked = hidden_states.mul(&mask_f32)?;
-        let sum_hidden = masked.sum(1)?; // (1, hidden_size)
-        let sum_mask = mask_f32.sum(1)?; // (1, 1)
-        let mean_pooled = sum_hidden.div(&sum_mask)?; // (1, hidden_size)
+        // Convert attention mask to f32.
+        // candle's mul requires exact shape match (no implicit broadcasting), so we expand the mask
+        // to (batch, seq_len, hidden_size) before multiplying with hidden_states.
+        // We keep the unexpanded mask to compute the token count for mean pooling.
+        let mask_f32 = attention_mask.to_dtype(DType::F32)?; // (batch, seq_len)
+        let mask_expanded = mask_f32
+            .unsqueeze(2)? // (batch, seq_len, 1)
+            .expand(hidden_states.shape())?; // (batch, seq_len, hidden_size)
+        let masked = hidden_states.mul(&mask_expanded)?;
+        let sum_hidden = masked.sum(1)?; // (batch, hidden_size)
+                                         // Sum non-padding tokens per batch item, keep dim for broadcasting with sum_hidden
+        let sum_mask = mask_f32.sum_keepdim(1)?; // (batch, 1)
+        let mean_pooled = sum_hidden.div(&sum_mask)?; // (batch, hidden_size)
 
         // L2 normalize
         let norm = mean_pooled.sqr()?.sum_keepdim(1)?.sqrt()?;

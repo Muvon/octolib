@@ -146,6 +146,88 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "huggingface")]
+    async fn test_create_huggingface_qwen2_provider() {
+        // Test Qwen2 model loading (jina-code-embeddings-1.5b uses Qwen2 architecture)
+        let result = create_embedding_provider_from_parts(
+            &EmbeddingProviderType::HuggingFace,
+            "jinaai/jina-code-embeddings-1.5b",
+        )
+        .await;
+
+        match result {
+            Ok(provider) => {
+                assert!(provider.get_dimension() > 0);
+                assert!(provider.is_model_supported());
+            }
+            Err(e) => {
+                // HuggingFace might fail due to model download issues in CI
+                println!("HuggingFace Qwen2 test failed (expected in CI): {}", e);
+            }
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "huggingface")]
+    fn test_model_architecture_detection() {
+        use serde_json::json;
+
+        // Test BERT detection
+        let bert_config = json!({
+            "architectures": ["BertModel"],
+            "position_embedding_type": "absolute"
+        });
+        let config_str = serde_json::to_string(&bert_config).unwrap();
+        let parsed: crate::embedding::provider::huggingface::ModelConfig =
+            serde_json::from_str(&config_str).unwrap();
+        let arch = crate::embedding::provider::huggingface::ModelArchitecture::from_config(&parsed);
+        assert!(matches!(
+            arch,
+            Ok(crate::embedding::provider::huggingface::ModelArchitecture::Bert)
+        ));
+
+        // Test JinaBert detection (via position_embedding_type)
+        let jina_config = json!({
+            "architectures": ["BertModel"],
+            "position_embedding_type": "alibi"
+        });
+        let config_str = serde_json::to_string(&jina_config).unwrap();
+        let parsed: crate::embedding::provider::huggingface::ModelConfig =
+            serde_json::from_str(&config_str).unwrap();
+        let arch = crate::embedding::provider::huggingface::ModelArchitecture::from_config(&parsed);
+        assert!(matches!(
+            arch,
+            Ok(crate::embedding::provider::huggingface::ModelArchitecture::JinaBert)
+        ));
+
+        // Test Qwen2 detection
+        let qwen2_config = json!({
+            "architectures": ["Qwen2ForCausalLM"]
+        });
+        let config_str = serde_json::to_string(&qwen2_config).unwrap();
+        let parsed: crate::embedding::provider::huggingface::ModelConfig =
+            serde_json::from_str(&config_str).unwrap();
+        let arch = crate::embedding::provider::huggingface::ModelArchitecture::from_config(&parsed);
+        assert!(matches!(
+            arch,
+            Ok(crate::embedding::provider::huggingface::ModelArchitecture::Qwen2)
+        ));
+
+        // Test Qwen3 detection
+        let qwen3_config = json!({
+            "architectures": ["Qwen3ForCausalLM"]
+        });
+        let config_str = serde_json::to_string(&qwen3_config).unwrap();
+        let parsed: crate::embedding::provider::huggingface::ModelConfig =
+            serde_json::from_str(&config_str).unwrap();
+        let arch = crate::embedding::provider::huggingface::ModelArchitecture::from_config(&parsed);
+        assert!(matches!(
+            arch,
+            Ok(crate::embedding::provider::huggingface::ModelArchitecture::Qwen3)
+        ));
+    }
+
+    #[tokio::test]
     #[cfg(not(feature = "fastembed"))]
     async fn test_fastembed_disabled() {
         let result =
@@ -165,6 +247,95 @@ mod tests {
 
         assert!(result.is_err());
         assert!(result.err().unwrap().to_string().contains("not compiled"));
+    }
+
+    #[tokio::test]
+    #[cfg(feature = "huggingface")]
+    async fn test_huggingface_qwen2_embedding_generation() {
+        // Test actual embedding generation with Qwen2 model
+        // This test downloads the model on first run
+        let result = create_embedding_provider_from_parts(
+            &EmbeddingProviderType::HuggingFace,
+            "jinaai/jina-code-embeddings-1.5b",
+        )
+        .await;
+
+        match result {
+            Ok(provider) => {
+                // Test single embedding
+                let text = "fn main() { println!(\"Hello, world!\"); }";
+                let embedding = provider.generate_embedding(text).await;
+
+                match embedding {
+                    Ok(vec) => {
+                        assert!(!vec.is_empty(), "Embedding should not be empty");
+                        assert!(
+                            vec.iter().all(|v| v.is_finite()),
+                            "All values should be finite"
+                        );
+                        println!(
+                            "✓ Qwen2 embedding generated successfully, dimension: {}",
+                            vec.len()
+                        );
+                    }
+                    Err(e) => {
+                        println!("Embedding generation failed: {}", e);
+                        panic!("Embedding generation should succeed for Qwen2 model");
+                    }
+                }
+            }
+            Err(e) => {
+                // HuggingFace might fail due to model download issues in CI
+                println!(
+                    "HuggingFace Qwen2 embedding test failed (expected in CI): {}",
+                    e
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    #[cfg(feature = "huggingface")]
+    async fn test_huggingface_bert_embedding_generation() {
+        // Test actual embedding generation with BERT model
+        let result = create_embedding_provider_from_parts(
+            &EmbeddingProviderType::HuggingFace,
+            "sentence-transformers/all-MiniLM-L6-v2",
+        )
+        .await;
+
+        match result {
+            Ok(provider) => {
+                // Test single embedding
+                let text = "This is a test sentence for embedding.";
+                let embedding = provider.generate_embedding(text).await;
+
+                match embedding {
+                    Ok(vec) => {
+                        assert!(!vec.is_empty(), "Embedding should not be empty");
+                        assert!(
+                            vec.iter().all(|v| v.is_finite()),
+                            "All values should be finite"
+                        );
+                        println!(
+                            "✓ BERT embedding generated successfully, dimension: {}",
+                            vec.len()
+                        );
+                    }
+                    Err(e) => {
+                        println!("Embedding generation failed: {}", e);
+                        panic!("Embedding generation should succeed for BERT model");
+                    }
+                }
+            }
+            Err(e) => {
+                // HuggingFace might fail due to model download issues in CI
+                println!(
+                    "HuggingFace BERT embedding test failed (expected in CI): {}",
+                    e
+                );
+            }
+        }
     }
 
     #[tokio::test]

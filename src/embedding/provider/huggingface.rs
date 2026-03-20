@@ -18,18 +18,23 @@
  * This module provides local embedding generation using HuggingFace models via the Candle library.
  * It supports multiple model architectures with safetensors format from the HuggingFace Hub.
  *
+ * Supported architectures:
+ * - BERT: Standard BERT models (bert-base-uncased, sentence-transformers/all-mpnet-base-v2)
+ * - JinaBert: Jina embedding models with ALiBi position embeddings (jinaai/jina-embeddings-v2-base-*)
+ * - Qwen2: Qwen2 decoder models for embeddings (jinaai/jina-code-embeddings-1.5b)
+ *
  * Key features:
+ * - Automatic architecture detection from config.json
  * - Automatic model downloading and caching
  * - Local CPU-based inference (GPU support can be added)
  * - Thread-safe model cache for efficient reuse
  * - Mean pooling and L2 normalization for sentence embeddings
  * - Full compatibility with provider:model syntax
- * - Dynamic model architecture detection
  *
  * Usage:
  * - Set provider: `octocode config --embedding-provider huggingface`
  * - Set models: `octocode config --code-embedding-model "huggingface:jinaai/jina-embeddings-v2-base-code"`
- * - Popular models: jinaai/jina-embeddings-v2-base-code, sentence-transformers/all-mpnet-base-v2
+ * - Popular models: jinaai/jina-embeddings-v2-base-code, jinaai/jina-code-embeddings-1.5b
  *
  * Models are automatically downloaded to the system cache directory and reused across sessions.
  */
@@ -40,12 +45,21 @@ use anyhow::{Context, Result};
 #[cfg(feature = "huggingface")]
 use candle_core::{DType, Device, Tensor};
 #[cfg(feature = "huggingface")]
+use candle_nn::Module;
+#[cfg(feature = "huggingface")]
 use candle_nn::VarBuilder;
 #[cfg(feature = "huggingface")]
 use candle_transformers::models::bert::{BertModel, Config as BertConfig};
-use candle_transformers::models::jina_bert::Config as JinaBertConfig;
+#[cfg(feature = "huggingface")]
+use candle_transformers::models::jina_bert::{
+    BertModel as JinaBertModel, Config as JinaBertConfig,
+};
+#[cfg(feature = "huggingface")]
+use candle_transformers::models::qwen2::{Config as Qwen2Config, Model as Qwen2Model};
 #[cfg(feature = "huggingface")]
 use hf_hub::{api::tokio::Api, Repo, RepoType};
+#[cfg(feature = "huggingface")]
+use serde::Deserialize;
 #[cfg(feature = "huggingface")]
 use std::collections::HashMap;
 #[cfg(feature = "huggingface")]
@@ -55,12 +69,86 @@ use tokenizers::Tokenizer;
 #[cfg(feature = "huggingface")]
 use tokio::sync::RwLock;
 
+/// Model architecture types supported by this provider
 #[cfg(feature = "huggingface")]
-/// HuggingFace model instance
-pub struct HuggingFaceModel {
-    model: BertModel,
-    tokenizer: Tokenizer,
-    device: Device,
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum ModelArchitecture {
+    /// Standard BERT models
+    Bert,
+    /// Jina BERT models with ALiBi position embeddings
+    JinaBert,
+    /// Qwen2 decoder models
+    Qwen2,
+    /// Qwen3 decoder models
+    Qwen3,
+}
+
+/// Configuration parsed from HuggingFace config.json
+#[cfg(feature = "huggingface")]
+#[derive(Debug, Deserialize)]
+pub(crate) struct ModelConfig {
+    pub(crate) architectures: Option<Vec<String>>,
+    pub(crate) position_embedding_type: Option<String>,
+}
+
+#[cfg(feature = "huggingface")]
+impl ModelArchitecture {
+    /// Detect architecture from config.json architectures field
+    pub(crate) fn from_config(config: &ModelConfig) -> Result<Self> {
+        let architectures = config
+            .architectures
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("No 'architectures' field in config.json"))?;
+
+        if architectures.is_empty() {
+            anyhow::bail!("Empty 'architectures' field in config.json");
+        }
+
+        let arch = &architectures[0];
+        match arch.as_str() {
+            // BERT variants — check position_embedding_type to distinguish Jina (ALiBi) from standard BERT
+            "BertModel"
+            | "BertForMaskedLM"
+            | "BertForSequenceClassification"
+            | "BertForTokenClassification" => {
+                if config
+                    .position_embedding_type
+                    .as_deref()
+                    .map(|t| t == "alibi")
+                    .unwrap_or(false)
+                {
+                    Ok(Self::JinaBert)
+                } else {
+                    Ok(Self::Bert)
+                }
+            }
+
+            // Jina BERT variants (explicit Jina architecture names)
+            "JinaBertModel"
+            | "JinaBertForMaskedLM"
+            | "JinaBertForSequenceClassification" => Ok(Self::JinaBert),
+
+            // Qwen2 variants
+            "Qwen2ForCausalLM" | "Qwen2Model" | "Qwen2ForSequenceClassification" => Ok(Self::Qwen2),
+
+            // Qwen3 variants
+            "Qwen3ForCausalLM" | "Qwen3Model" | "Qwen3ForSequenceClassification" => Ok(Self::Qwen3),
+
+            _ => Err(anyhow::anyhow!(
+                "Unsupported model architecture: '{}'. Supported: BertModel, JinaBertModel, Qwen2ForCausalLM",
+                arch
+            )),
+        }
+    }
+}
+
+#[cfg(feature = "huggingface")]
+/// HuggingFace model instance supporting multiple architectures
+pub enum HuggingFaceModel {
+    Bert(BertModel, Tokenizer, Device),
+    JinaBert(JinaBertModel, Tokenizer, Device),
+    // Qwen2Model::forward takes &mut self, so wrap in Mutex for shared access
+    Qwen2(std::sync::Mutex<Qwen2Model>, Tokenizer, Device),
 }
 
 #[cfg(feature = "huggingface")]
@@ -140,8 +228,8 @@ impl HuggingFaceModel {
             } else {
                 return Err(anyhow::anyhow!(
                     "Could not find tokenizer files for model: {}. \
-					Expected either tokenizer.json or (vocab.json + merges.txt). \
-					This model may not be compatible.",
+                    Expected either tokenizer.json or (vocab.json + merges.txt). \
+                    This model may not be compatible.",
                     model_name
                 ));
             }
@@ -158,9 +246,12 @@ impl HuggingFaceModel {
             ));
         };
 
-        // Load configuration
-        let config_content = std::fs::read_to_string(config_path)?;
-        let config: BertConfig = serde_json::from_str(&config_content)?;
+        // Load configuration and detect architecture
+        let config_content = std::fs::read_to_string(&config_path)?;
+        let model_config: ModelConfig = serde_json::from_str(&config_content)
+            .with_context(|| "Failed to parse config.json for architecture detection")?;
+
+        let architecture = ModelArchitecture::from_config(&model_config)?;
 
         // Load model weights - only support safetensors for now
         let weights = if weights_path.to_string_lossy().ends_with(".safetensors") {
@@ -171,14 +262,32 @@ impl HuggingFaceModel {
 
         let var_builder = VarBuilder::from_tensors(weights, DType::F32, &device);
 
-        // Create model
-        let model = BertModel::load(var_builder, &config)?;
+        // Create model based on detected architecture
+        let model = match architecture {
+            ModelArchitecture::Bert => {
+                let config: BertConfig = serde_json::from_str(&config_content)
+                    .with_context(|| "Failed to parse config.json as BERT config")?;
+                let model = BertModel::load(var_builder, &config)
+                    .with_context(|| "Failed to load BERT model")?;
+                HuggingFaceModel::Bert(model, tokenizer, device)
+            }
+            ModelArchitecture::JinaBert => {
+                let config: JinaBertConfig = serde_json::from_str(&config_content)
+                    .with_context(|| "Failed to parse config.json as JinaBert config")?;
+                let model = JinaBertModel::new(var_builder, &config)
+                    .with_context(|| "Failed to load JinaBert model")?;
+                HuggingFaceModel::JinaBert(model, tokenizer, device)
+            }
+            ModelArchitecture::Qwen2 | ModelArchitecture::Qwen3 => {
+                let config: Qwen2Config = serde_json::from_str(&config_content)
+                    .with_context(|| "Failed to parse config.json as Qwen2 config")?;
+                let model = Qwen2Model::new(&config, var_builder)
+                    .with_context(|| "Failed to load Qwen2 model")?;
+                HuggingFaceModel::Qwen2(std::sync::Mutex::new(model), tokenizer, device)
+            }
+        };
 
-        Ok(Self {
-            model,
-            tokenizer,
-            device,
-        })
+        Ok(model)
     }
 
     /// Generate embeddings for a single text
@@ -192,60 +301,69 @@ impl HuggingFaceModel {
         let mut all_embeddings = Vec::new();
 
         for text in texts {
-            // Tokenize input - convert String to &str
-            let encoding = self
-                .tokenizer
-                .encode(text.as_str(), true)
-                .map_err(|e| anyhow::anyhow!("Tokenization failed: {}", e))?;
-
-            let tokens = encoding.get_ids();
-            let token_ids = Tensor::new(tokens, &self.device)?.unsqueeze(0)?; // Add batch dimension
-
-            // Create attention mask (all 1s for valid tokens)
-            let attention_mask = Tensor::ones((1, tokens.len()), DType::U8, &self.device)?;
-
-            // Run through model - BertModel.forward takes 3 arguments: input_ids, attention_mask, token_type_ids
-            let output = self.model.forward(&token_ids, &attention_mask, None)?;
-
-            // Apply mean pooling to get sentence embedding
-            let embeddings = self.mean_pooling(&output, &attention_mask)?;
-
-            // Normalize embeddings
-            let normalized = self.normalize(&embeddings)?;
-
-            // Convert to Vec<f32>
-            let embedding_vec = normalized.to_vec1::<f32>()?;
-            all_embeddings.push(embedding_vec);
+            let embedding = match self {
+                HuggingFaceModel::Bert(model, tokenizer, device) => {
+                    let encoding = tokenizer
+                        .encode(text.as_str(), true)
+                        .map_err(|e| anyhow::anyhow!("Tokenization failed: {}", e))?;
+                    let tokens = encoding.get_ids();
+                    let token_ids = Tensor::new(tokens, device)?.unsqueeze(0)?;
+                    // BertModel.forward: (input_ids, token_type_ids, attention_mask)
+                    let token_type_ids = Tensor::zeros_like(&token_ids)?;
+                    let attention_mask = Tensor::ones((1, tokens.len()), DType::U8, device)?;
+                    let output =
+                        model.forward(&token_ids, &token_type_ids, Some(&attention_mask))?;
+                    Self::mean_pool_and_normalize(&output, &attention_mask)?
+                }
+                HuggingFaceModel::JinaBert(model, tokenizer, device) => {
+                    let encoding = tokenizer
+                        .encode(text.as_str(), true)
+                        .map_err(|e| anyhow::anyhow!("Tokenization failed: {}", e))?;
+                    let tokens = encoding.get_ids();
+                    let token_ids = Tensor::new(tokens, device)?.unsqueeze(0)?;
+                    // JinaBertModel.forward: (input_ids) only
+                    let output = model.forward(&token_ids)?;
+                    let attention_mask = Tensor::ones((1, tokens.len()), DType::U8, device)?;
+                    Self::mean_pool_and_normalize(&output, &attention_mask)?
+                }
+                HuggingFaceModel::Qwen2(model, tokenizer, device) => {
+                    let encoding = tokenizer
+                        .encode(text.as_str(), true)
+                        .map_err(|e| anyhow::anyhow!("Tokenization failed: {}", e))?;
+                    let tokens = encoding.get_ids();
+                    let token_ids = Tensor::new(tokens, device)?.unsqueeze(0)?;
+                    // Qwen2Model.forward takes &mut self, so lock the mutex
+                    let output = model
+                        .lock()
+                        .map_err(|e| anyhow::anyhow!("Qwen2 model mutex poisoned: {}", e))?
+                        .forward(&token_ids, 0, None)?;
+                    let attention_mask = Tensor::ones((1, tokens.len()), DType::U8, device)?;
+                    Self::mean_pool_and_normalize(&output, &attention_mask)?
+                }
+            };
+            all_embeddings.push(embedding);
         }
 
         Ok(all_embeddings)
     }
 
-    /// Mean pooling operation
-    fn mean_pooling(&self, hidden_states: &Tensor, attention_mask: &Tensor) -> Result<Tensor> {
-        // Convert attention mask to f32 and expand dimensions
-        let attention_mask = attention_mask.to_dtype(DType::F32)?;
-        let attention_mask = attention_mask.unsqueeze(2)?; // (batch_size, seq_len, 1)
+    /// Mean pooling + L2 normalization to produce a sentence embedding
+    fn mean_pool_and_normalize(
+        hidden_states: &Tensor,
+        attention_mask: &Tensor,
+    ) -> Result<Vec<f32>> {
+        // Convert attention mask to f32 and expand for broadcasting
+        let mask_f32 = attention_mask.to_dtype(DType::F32)?.unsqueeze(2)?; // (1, seq_len, 1)
+        let masked = hidden_states.mul(&mask_f32)?;
+        let sum_hidden = masked.sum(1)?; // (1, hidden_size)
+        let sum_mask = mask_f32.sum(1)?; // (1, 1)
+        let mean_pooled = sum_hidden.div(&sum_mask)?; // (1, hidden_size)
 
-        // Apply attention mask to hidden states
-        let masked_hidden_states = hidden_states.mul(&attention_mask)?;
+        // L2 normalize
+        let norm = mean_pooled.sqr()?.sum_keepdim(1)?.sqrt()?;
+        let normalized = mean_pooled.div(&norm)?;
 
-        // Sum along sequence dimension
-        let sum_hidden_states = masked_hidden_states.sum(1)?; // (batch_size, hidden_size)
-
-        // Sum attention mask to get actual sequence lengths
-        let sum_mask = attention_mask.sum(1)?; // (batch_size, 1)
-
-        // Compute mean
-        let mean_pooled = sum_hidden_states.div(&sum_mask)?;
-
-        Ok(mean_pooled)
-    }
-
-    /// Normalize embeddings to unit vectors
-    fn normalize(&self, embeddings: &Tensor) -> Result<Tensor> {
-        let norm = embeddings.sqr()?.sum_keepdim(1)?.sqrt()?;
-        Ok(embeddings.div(&norm)?)
+        Ok(normalized.squeeze(0)?.to_vec1::<f32>()?)
     }
 }
 

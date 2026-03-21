@@ -362,13 +362,13 @@ impl HuggingFaceModel {
             .expand(hidden_states.shape())?; // (batch, seq_len, hidden_size)
         let masked = hidden_states.mul(&mask_expanded)?;
         let sum_hidden = masked.sum(1)?; // (batch, hidden_size)
-                                         // Sum non-padding tokens per batch item, keep dim for broadcasting with sum_hidden
+                                         // sum_mask is (batch, 1) — use broadcast_div since candle's Div requires exact shape match
         let sum_mask = mask_f32.sum_keepdim(1)?; // (batch, 1)
-        let mean_pooled = sum_hidden.div(&sum_mask)?; // (batch, hidden_size)
+        let mean_pooled = sum_hidden.broadcast_div(&sum_mask)?; // (batch, hidden_size)
 
-        // L2 normalize
+        // L2 normalize — norm is (batch, 1), broadcast_div handles the shape mismatch
         let norm = mean_pooled.sqr()?.sum_keepdim(1)?.sqrt()?;
-        let normalized = mean_pooled.div(&norm)?;
+        let normalized = mean_pooled.broadcast_div(&norm)?;
 
         Ok(normalized.squeeze(0)?.to_vec1::<f32>()?)
     }

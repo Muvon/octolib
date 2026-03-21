@@ -254,11 +254,30 @@ impl HuggingFaceModel {
         let architecture = ModelArchitecture::from_config(&model_config)?;
 
         // Load model weights - only support safetensors for now
-        let weights = if weights_path.to_string_lossy().ends_with(".safetensors") {
+        let mut weights = if weights_path.to_string_lossy().ends_with(".safetensors") {
             candle_core::safetensors::load(&weights_path, &device)?
         } else {
             return Err(anyhow::anyhow!("PyTorch .bin format not supported in this implementation. Please use a model with safetensors format."));
         };
+
+        // For Qwen2/Qwen3 models, check if tensors need "model." prefix
+        // Some SentenceTransformer models save weights without the "model." prefix
+        // but Candle's Qwen2Model::new() expects tensors with "model." prefix
+        if matches!(
+            architecture,
+            ModelArchitecture::Qwen2 | ModelArchitecture::Qwen3
+        ) {
+            let needs_prefix = weights
+                .keys()
+                .any(|k| k.starts_with("embed_tokens") || k.starts_with("layers."));
+            if needs_prefix {
+                let mut prefixed_weights = HashMap::new();
+                for (key, value) in weights.into_iter() {
+                    prefixed_weights.insert(format!("model.{}", key), value);
+                }
+                weights = prefixed_weights;
+            }
+        }
 
         let var_builder = VarBuilder::from_tensors(weights, DType::F32, &device);
 

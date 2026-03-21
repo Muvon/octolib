@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.11.0] - 2026-03-21
+
+### 📋 Release Summary
+
+This release adds support for multiple HuggingFace embedding architectures, letting you use a wider range of models without extra setup (e5eac966). Several fixes improve batch embedding accuracy and ensure Qwen2/Qwen3 models load correctly (bd446fd5, a5da5ea1, f0676607).
+
+
+### ✨ New Features & Enhancements
+
+- **embedding**: add multi-architecture support for HuggingFace models `e5eac966`
+
+### 🐛 Bug Fixes & Stability
+
+- **huggingface**: add model prefix for Qwen2/Qwen3 tensor loading `bd446fd5`
+- **embedding**: use broadcast_div for shape compatibility `a5da5ea1`
+- **embedding**: correct mean pooling mask broadcasting for batch processing `f0676607`
+
+### 🔄 Other Changes
+
+- **deps**: bump rustls-webpki from 0.103.9 to 0.103.10 `2013f610`
+
+### 📊 Release Summary
+
+**Total commits**: 5 across 3 categories
+
+✨ **1** new feature - *Enhanced functionality*
+🐛 **3** bug fixes - *Improved stability*
+🔄 **1** other change - *Maintenance & tooling*
+
 ## [0.10.6] - 2026-03-18
 
 ### 📋 Release Summary

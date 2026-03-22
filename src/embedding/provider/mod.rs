@@ -44,6 +44,7 @@ pub mod huggingface;
 // Always available provider modules
 pub mod google;
 pub mod jina;
+pub mod octohub;
 pub mod openai;
 pub mod openrouter;
 pub mod voyage;
@@ -57,6 +58,7 @@ pub use huggingface::{HuggingFaceProvider, HuggingFaceProviderImpl};
 // Always available provider re-exports
 pub use google::{GoogleProvider, GoogleProviderImpl};
 pub use jina::{JinaProvider, JinaProviderImpl};
+pub use octohub::OctoHubEmbeddingProvider;
 pub use openai::{OpenAIProvider, OpenAIProviderImpl};
 
 pub use openrouter::{OpenRouterProvider, OpenRouterProviderImpl};
@@ -104,6 +106,7 @@ pub async fn create_embedding_provider_from_parts(
         EmbeddingProviderType::OpenRouter => {
             Ok(Box::new(OpenRouterProviderImpl::new(model).await?))
         }
+        EmbeddingProviderType::OctoHub => Ok(Box::new(OctoHubEmbeddingProvider::new(model)?)),
         EmbeddingProviderType::HuggingFace => {
             #[cfg(feature = "huggingface")]
             {

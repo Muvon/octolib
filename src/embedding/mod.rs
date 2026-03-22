@@ -27,7 +27,9 @@ use anyhow::Result;
 use std::sync::LazyLock;
 use tiktoken_rs::cl100k_base;
 
-pub use provider::{create_embedding_provider_from_parts, EmbeddingProvider};
+pub use provider::{
+    create_embedding_provider_from_parts, EmbeddingProvider, OctoHubEmbeddingProvider,
+};
 pub use types::*;
 
 static CL100K_BPE: LazyLock<tiktoken_rs::CoreBPE> =

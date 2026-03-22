@@ -17,8 +17,8 @@
 use crate::llm::providers::{
     AmazonBedrockProvider, AnthropicProvider, CerebrasProvider, CliProvider,
     CloudflareWorkersAiProvider, DeepSeekProvider, GoogleVertexProvider, LocalProvider,
-    MinimaxProvider, MoonshotProvider, OllamaProvider, OpenAiProvider, OpenRouterProvider,
-    ZaiProvider,
+    MinimaxProvider, MoonshotProvider, OctoHubProvider, OllamaProvider, OpenAiProvider,
+    OpenRouterProvider, ZaiProvider,
 };
 use crate::llm::traits::AiProvider;
 use anyhow::Result;
@@ -65,11 +65,12 @@ impl ProviderFactory {
             "deepseek" => Ok(Box::new(DeepSeekProvider::new())),
             "minimax" => Ok(Box::new(MinimaxProvider::new())),
             "moonshot" | "kimi" => Ok(Box::new(MoonshotProvider::new())),
+            "octohub" => Ok(Box::new(OctoHubProvider::new())),
             "zai" => Ok(Box::new(ZaiProvider::new())),
             "cli" => Err(anyhow::anyhow!(
                 "CLI provider requires a model string like 'cli:<backend>/<model>'. Use ProviderFactory::get_provider_for_model instead."
             )),
-_ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported: openai, anthropic, openrouter, cerebras, local, ollama, google, amazon, cloudflare, deepseek, minimax, moonshot, zai, cli", provider_name))
+_ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported: openai, anthropic, openrouter, cerebras, local, ollama, google, amazon, cloudflare, deepseek, minimax, moonshot, octohub, zai, cli", provider_name))
         }
     }
 
@@ -109,6 +110,7 @@ _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported: openai, anthropic
             "deepseek",
             "minimax",
             "moonshot",
+            "octohub",
             "zai",
             "cli",
         ]

@@ -66,6 +66,7 @@ pub enum EmbeddingProviderType {
     HuggingFace,
     OpenAI,
     OpenRouter,
+    OctoHub,
 }
 
 #[allow(clippy::derivable_impls)]
@@ -136,9 +137,10 @@ pub fn parse_provider_model(input: &str) -> Result<(EmbeddingProviderType, Strin
         "huggingface" | "hf" => EmbeddingProviderType::HuggingFace,
         "openai" => EmbeddingProviderType::OpenAI,
         "openrouter" => EmbeddingProviderType::OpenRouter,
+        "octohub" => EmbeddingProviderType::OctoHub,
         unknown => {
             return Err(anyhow::anyhow!(
-                "Unknown embedding provider '{}'. Supported: fastembed, jina, voyage, google, huggingface, openai, openrouter. \
+                "Unknown embedding provider '{}'. Supported: fastembed, jina, voyage, google, huggingface, openai, openrouter, octohub. \
                  This is a programming error - the provider should be validated before calling parse_provider_model.",
                 unknown
             ));

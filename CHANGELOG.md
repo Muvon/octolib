@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.12.1] - 2026-03-23
+
+### 📋 Release Summary
+
+This release adds automatic cost tracking for OpenRouter usage, giving users real-time visibility into their AI spending.
+
+
+### ✨ New Features & Enhancements
+
+- **openrouter**: capture cost field from usage response `8b20af51`
+
+### 📊 Release Summary
+
+**Total commits**: 1 across 1 categories
+
+✨ **1** new feature - *Enhanced functionality*
+
 ## [0.12.0] - 2026-03-23
 
 ### 📋 Release Summary

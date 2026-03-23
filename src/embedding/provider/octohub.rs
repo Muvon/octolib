@@ -94,20 +94,34 @@ impl OctoHubEmbeddingProvider {
             .context("Failed to parse OctoHub embedding response")
     }
 
-    fn extract_embeddings(response: &Value) -> Result<Vec<Vec<f32>>> {
-        let data = response["data"]
+    fn parse_single(response: &Value) -> Result<Vec<f32>> {
+        response
             .as_array()
-            .context("Missing 'data' array in response")?;
+            .context("Expected a JSON array for single embedding response")?
+            .iter()
+            .map(|v| {
+                v.as_f64()
+                    .map(|f| f as f32)
+                    .context("Embedding value is not a number")
+            })
+            .collect()
+    }
 
-        data.iter()
-            .map(|item| {
-                let embedding = item["embedding"]
-                    .as_array()
-                    .context("Missing 'embedding' in data item")?;
-                Ok(embedding
+    fn parse_batch(response: &Value) -> Result<Vec<Vec<f32>>> {
+        response
+            .as_array()
+            .context("Expected a JSON array for batch embedding response")?
+            .iter()
+            .map(|row| {
+                row.as_array()
+                    .context("Expected inner array in batch embedding response")?
                     .iter()
-                    .map(|v| v.as_f64().unwrap_or_default() as f32)
-                    .collect())
+                    .map(|v| {
+                        v.as_f64()
+                            .map(|f| f as f32)
+                            .context("Embedding value is not a number")
+                    })
+                    .collect()
             })
             .collect()
     }
@@ -117,11 +131,7 @@ impl OctoHubEmbeddingProvider {
 impl EmbeddingProvider for OctoHubEmbeddingProvider {
     async fn generate_embedding(&self, text: &str) -> Result<Vec<f32>> {
         let response = self.call_api(json!(text)).await?;
-        let embeddings = Self::extract_embeddings(&response)?;
-        embeddings
-            .into_iter()
-            .next()
-            .context("No embeddings returned from OctoHub")
+        Self::parse_single(&response)
     }
 
     async fn generate_embeddings_batch(
@@ -133,7 +143,7 @@ impl EmbeddingProvider for OctoHubEmbeddingProvider {
             return Ok(Vec::new());
         }
         let response = self.call_api(json!(texts)).await?;
-        Self::extract_embeddings(&response)
+        Self::parse_batch(&response)
     }
 
     /// Dimension is unknown until the underlying provider responds;
@@ -165,14 +175,16 @@ mod tests {
     }
 
     #[test]
-    fn test_extract_embeddings() {
-        let response = json!({
-            "data": [
-                {"embedding": [0.1, 0.2, 0.3], "index": 0},
-                {"embedding": [0.4, 0.5, 0.6], "index": 1}
-            ]
-        });
-        let result = OctoHubEmbeddingProvider::extract_embeddings(&response).unwrap();
+    fn test_parse_single() {
+        let response = json!([0.1, 0.2, 0.3]);
+        let result = OctoHubEmbeddingProvider::parse_single(&response).unwrap();
+        assert_eq!(result, vec![0.1_f32, 0.2, 0.3]);
+    }
+
+    #[test]
+    fn test_parse_batch() {
+        let response = json!([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]);
+        let result = OctoHubEmbeddingProvider::parse_batch(&response).unwrap();
         assert_eq!(result.len(), 2);
         assert_eq!(result[0], vec![0.1_f32, 0.2, 0.3]);
         assert_eq!(result[1], vec![0.4_f32, 0.5, 0.6]);

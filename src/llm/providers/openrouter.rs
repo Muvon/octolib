@@ -358,6 +358,8 @@ struct OpenRouterUsage {
     prompt_tokens_details: Option<OpenRouterPromptTokensDetails>,
     #[serde(default)]
     completion_tokens_details: Option<OpenRouterCompletionTokensDetails>,
+    #[serde(default)]
+    cost: Option<f64>, // OpenRouter returns cost directly in usage object
 }
 
 #[derive(Deserialize, Debug)]
@@ -743,7 +745,7 @@ async fn execute_openrouter_request(
         output_tokens,
         reasoning_tokens,
         total_tokens,
-        cost: None, // OpenRouter doesn't provide cost
+        cost: openrouter_response.usage.cost, // OpenRouter returns cost directly in usage object
         request_time_ms: Some(request_time_ms),
     };
 

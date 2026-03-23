@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.12.0] - 2026-03-23
+
+### 📋 Release Summary
+
+This release introduces OctoHub, a new AI provider that brings both chat and embedding capabilities to the library (83bc4858, d22adc32, 61d06e3c). Users can now access additional AI models through OctoHub while maintaining the same simple interface for conversations and text embeddings.
+
+
+### ✨ New Features & Enhancements
+
+- **octohub**: add standalone Responses API client implementation `83bc4858`
+- **embedding**: add OctoHub provider support `d22adc32`
+- **llm**: add OctoHub provider support `61d06e3c`
+
+### 🐛 Bug Fixes & Stability
+
+- **octohub**: handle single and batch embedding response formats separately `48afd110`
+
+### 🔄 Other Changes
+
+- update dependencies `4d7d2b04`
+
+### 📊 Release Summary
+
+**Total commits**: 5 across 3 categories
+
+✨ **3** new features - *Enhanced functionality*
+🐛 **1** bug fix - *Improved stability*
+🔄 **1** other change - *Maintenance & tooling*
+
 ## [0.11.0] - 2026-03-21
 
 ### 📋 Release Summary

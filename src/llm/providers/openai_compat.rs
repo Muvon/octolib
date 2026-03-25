@@ -283,9 +283,49 @@ fn convert_messages(messages: &[Message]) -> Vec<OpenAiCompatMessage> {
                 });
             }
             "user" | "assistant" | "system" => {
+                let has_images = message.images.as_ref().is_some_and(|imgs| !imgs.is_empty());
+                let has_videos = message.videos.as_ref().is_some_and(|vids| !vids.is_empty());
+
+                let content = if has_images || has_videos {
+                    let mut content_parts = vec![serde_json::json!({
+                        "type": "text",
+                        "text": message.content
+                    })];
+
+                    if let Some(images) = &message.images {
+                        for image in images {
+                            if let crate::llm::types::ImageData::Base64(data) = &image.data {
+                                content_parts.push(serde_json::json!({
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": format!("data:{};base64,{}", image.media_type, data)
+                                    }
+                                }));
+                            }
+                        }
+                    }
+
+                    if let Some(videos) = &message.videos {
+                        for video in videos {
+                            if let crate::llm::types::VideoData::Base64(data) = &video.data {
+                                content_parts.push(serde_json::json!({
+                                    "type": "video_url",
+                                    "video_url": {
+                                        "url": format!("data:{};base64,{}", video.media_type, data)
+                                    }
+                                }));
+                            }
+                        }
+                    }
+
+                    Some(serde_json::json!(content_parts))
+                } else {
+                    Some(serde_json::json!(message.content))
+                };
+
                 result.push(OpenAiCompatMessage {
                     role: message.role.clone(),
-                    content: Some(serde_json::json!(message.content)),
+                    content,
                     tool_calls: None,
                     tool_call_id: None,
                 });

@@ -67,6 +67,7 @@ pub enum EmbeddingProviderType {
     OpenAI,
     OpenRouter,
     OctoHub,
+    Together,
 }
 
 #[allow(clippy::derivable_impls)]
@@ -138,9 +139,10 @@ pub fn parse_provider_model(input: &str) -> Result<(EmbeddingProviderType, Strin
         "openai" => EmbeddingProviderType::OpenAI,
         "openrouter" => EmbeddingProviderType::OpenRouter,
         "octohub" => EmbeddingProviderType::OctoHub,
+        "together" => EmbeddingProviderType::Together,
         unknown => {
             return Err(anyhow::anyhow!(
-                "Unknown embedding provider '{}'. Supported: fastembed, jina, voyage, google, huggingface, openai, openrouter, octohub. \
+                "Unknown embedding provider '{}'. Supported: fastembed, jina, voyage, google, huggingface, openai, openrouter, octohub, together. \
                  This is a programming error - the provider should be validated before calling parse_provider_model.",
                 unknown
             ));
@@ -156,13 +158,13 @@ impl EmbeddingConfig {
         let (provider, _) = parse_provider_model(&self.code_model)?;
         Ok(provider)
     }
-
     /// Get API key for a specific provider (from environment variables only)
     pub fn get_api_key(&self, provider: &EmbeddingProviderType) -> Option<String> {
         match provider {
             EmbeddingProviderType::Jina => std::env::var("JINA_API_KEY").ok(),
             EmbeddingProviderType::Voyage => std::env::var("VOYAGE_API_KEY").ok(),
             EmbeddingProviderType::Google => std::env::var("GOOGLE_API_KEY").ok(),
+            EmbeddingProviderType::Together => std::env::var("TOGETHER_API_KEY").ok(),
             _ => None, // FastEmbed and SentenceTransformer don't need API keys
         }
     }

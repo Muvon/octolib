@@ -30,6 +30,7 @@ pub mod openai;
 mod openai_compat;
 pub mod openrouter;
 mod shared;
+pub mod together;
 pub mod zai;
 
 // Re-export provider implementations
@@ -47,4 +48,5 @@ pub use octohub::OctoHubProvider;
 pub use ollama::OllamaProvider;
 pub use openai::OpenAiProvider;
 pub use openrouter::OpenRouterProvider;
+pub use together::TogetherProvider;
 pub use zai::ZaiProvider;

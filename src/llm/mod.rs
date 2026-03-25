@@ -44,5 +44,5 @@ pub use providers::{
     AmazonBedrockProvider, AnthropicProvider, CerebrasProvider, CliProvider,
     CloudflareWorkersAiProvider, DeepSeekProvider, GoogleVertexProvider, LocalProvider,
     MinimaxProvider, MoonshotProvider, OctoHubProvider, OllamaProvider, OpenAiProvider,
-    OpenRouterProvider, ZaiProvider,
+    OpenRouterProvider, TogetherProvider, ZaiProvider,
 };

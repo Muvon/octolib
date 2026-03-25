@@ -47,8 +47,8 @@ pub mod jina;
 pub mod octohub;
 pub mod openai;
 pub mod openrouter;
+pub mod together;
 pub mod voyage;
-
 // Re-export providers
 #[cfg(feature = "fastembed")]
 pub use fastembed::{FastEmbedProvider, FastEmbedProviderImpl};
@@ -60,10 +60,9 @@ pub use google::{GoogleProvider, GoogleProviderImpl};
 pub use jina::{JinaProvider, JinaProviderImpl};
 pub use octohub::OctoHubEmbeddingProvider;
 pub use openai::{OpenAIProvider, OpenAIProviderImpl};
-
 pub use openrouter::{OpenRouterProvider, OpenRouterProviderImpl};
+pub use together::{TogetherProvider, TogetherProviderImpl};
 pub use voyage::{VoyageProvider, VoyageProviderImpl};
-
 /// Trait for embedding providers
 #[async_trait::async_trait]
 pub trait EmbeddingProvider: Send + Sync {
@@ -106,6 +105,7 @@ pub async fn create_embedding_provider_from_parts(
         EmbeddingProviderType::OpenRouter => {
             Ok(Box::new(OpenRouterProviderImpl::new(model).await?))
         }
+        EmbeddingProviderType::Together => Ok(Box::new(TogetherProviderImpl::new(model)?)),
         EmbeddingProviderType::OctoHub => Ok(Box::new(OctoHubEmbeddingProvider::new(model)?)),
         EmbeddingProviderType::HuggingFace => {
             #[cfg(feature = "huggingface")]

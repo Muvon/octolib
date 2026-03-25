@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.12.2] - 2026-03-25
+
+### 📋 Release Summary
+
+This release improves response reliability by adding performance monitoring to DeepSeek and Moonshot providers, ensuring more consistent AI interactions.
+
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: add request timing metrics to deepseek and moonshot providers `6ff4cb91`
+
+### 📊 Release Summary
+
+**Total commits**: 1 across 1 categories
+
+🐛 **1** bug fix - *Improved stability*
+
 ## [0.12.1] - 2026-03-23
 
 ### 📋 Release Summary

@@ -555,6 +555,7 @@ impl AiProvider for MoonshotProvider {
         }
 
         let client = self.client.clone();
+        let start_time = std::time::Instant::now();
         let response = retry::retry_with_exponential_backoff(
             || {
                 let client = client.clone();
@@ -596,6 +597,7 @@ impl AiProvider for MoonshotProvider {
             },
         )
         .await?;
+        let request_time_ms = start_time.elapsed().as_millis() as u64;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -658,7 +660,7 @@ impl AiProvider for MoonshotProvider {
                 reasoning_tokens: 0,
                 total_tokens: usage.total_tokens,
                 cost,
-                request_time_ms: None,
+                request_time_ms: Some(request_time_ms),
             })
         } else {
             None

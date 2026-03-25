@@ -244,6 +244,7 @@ impl AiProvider for DeepSeekProvider {
         }
 
         let client = self.client.clone();
+        let start_time = std::time::Instant::now();
         let response = retry::retry_with_exponential_backoff(
             || {
                 let client = client.clone();
@@ -285,6 +286,7 @@ impl AiProvider for DeepSeekProvider {
             },
         )
         .await?;
+        let request_time_ms = start_time.elapsed().as_millis() as u64;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -376,7 +378,7 @@ impl AiProvider for DeepSeekProvider {
                 reasoning_tokens,
                 total_tokens,
                 cost,
-                request_time_ms: None,
+                request_time_ms: Some(request_time_ms),
             })
         } else {
             None

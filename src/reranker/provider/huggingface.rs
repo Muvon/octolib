@@ -40,7 +40,7 @@ use hf_hub::{api::tokio::Api, Repo, RepoType};
 #[cfg(feature = "huggingface")]
 use std::collections::HashMap;
 #[cfg(feature = "huggingface")]
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 #[cfg(feature = "huggingface")]
 use tokenizers::Tokenizer;
 #[cfg(feature = "huggingface")]
@@ -150,10 +150,9 @@ impl CrossEncoderModel {
 }
 
 #[cfg(feature = "huggingface")]
-lazy_static::lazy_static! {
-    static ref MODEL_CACHE: Arc<RwLock<HashMap<String, Arc<CrossEncoderModel>>>> =
-        Arc::new(RwLock::new(HashMap::new()));
-}
+#[allow(clippy::type_complexity)]
+static MODEL_CACHE: LazyLock<Arc<RwLock<HashMap<String, Arc<CrossEncoderModel>>>>> =
+    LazyLock::new(|| Arc::new(RwLock::new(HashMap::new())));
 
 #[cfg(feature = "huggingface")]
 async fn get_or_load_model(model_name: &str) -> Result<Arc<CrossEncoderModel>> {

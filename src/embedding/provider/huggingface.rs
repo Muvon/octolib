@@ -39,7 +39,6 @@
  * Models are automatically downloaded to the system cache directory and reused across sessions.
  */
 
-// When huggingface feature is enabled
 #[cfg(feature = "huggingface")]
 use anyhow::{Context, Result};
 #[cfg(feature = "huggingface")]
@@ -63,7 +62,7 @@ use serde::Deserialize;
 #[cfg(feature = "huggingface")]
 use std::collections::HashMap;
 #[cfg(feature = "huggingface")]
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 #[cfg(feature = "huggingface")]
 use tokenizers::Tokenizer;
 #[cfg(feature = "huggingface")]
@@ -392,13 +391,10 @@ impl HuggingFaceModel {
         Ok(normalized.squeeze(0)?.to_vec1::<f32>()?)
     }
 }
-
 #[cfg(feature = "huggingface")]
-// Global cache for loaded models using async-compatible RwLock
-lazy_static::lazy_static! {
-    static ref MODEL_CACHE: Arc<RwLock<HashMap<String, Arc<HuggingFaceModel>>>> =
-        Arc::new(RwLock::new(HashMap::new()));
-}
+#[allow(clippy::type_complexity)]
+static MODEL_CACHE: LazyLock<Arc<RwLock<HashMap<String, Arc<HuggingFaceModel>>>>> =
+    LazyLock::new(|| Arc::new(RwLock::new(HashMap::new())));
 
 #[cfg(feature = "huggingface")]
 /// HuggingFace provider implementation

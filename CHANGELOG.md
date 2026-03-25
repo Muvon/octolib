@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.13.0] - 2026-03-25
+
+### 📋 Release Summary
+
+This release adds Together AI as a new provider for both chat and embedding models, giving you more choice and competitive pricing. Images and videos can now be sent alongside text when using any OpenAI-compatible endpoint.
+
+
+### ✨ New Features & Enhancements
+
+- **together**: add Together AI provider for LLM and embedding `cd56d1ab`
+- **openai_compat**: add multimodal support for images and videos `c7357eb4`
+
+### 📚 Documentation & Examples
+
+- add Together AI and OctoHub provider support `3bf459a5`
+
+### 📊 Release Summary
+
+**Total commits**: 3 across 2 categories
+
+✨ **2** new features - *Enhanced functionality*
+📚 **1** documentation update - *Better developer experience*
+
 ## [0.12.2] - 2026-03-25
 
 ### 📋 Release Summary

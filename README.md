@@ -11,18 +11,18 @@ Octolib is a comprehensive, self-sufficient AI provider library that provides a 
 
 ## ✨ Key Features
 
-- **🔌 Multi-Provider Support**: OpenAI, Anthropic, OpenRouter, Cerebras, Ollama, Google, Amazon, Cloudflare, DeepSeek, MiniMax, Moonshot AI (Kimi), Z.ai, Local, CLI proxies
+- **🔌 Multi-Provider Support**: OpenAI, Anthropic, OpenRouter, Cerebras, Ollama, Together, Google, Amazon, Cloudflare, DeepSeek, MiniMax, Moonshot AI (Kimi), Z.ai, OctoHub, Local, CLI proxies
 - **🛡️ Unified Interface**: Consistent API across different providers
 - **🔍 Intelligent Model Validation**: Strict `provider:model` format parsing with case-insensitive model support
-- **📋 Structured Output**: JSON and JSON Schema support for OpenAI, OpenRouter, and DeepSeek
+- **📋 Structured Output**: JSON and JSON Schema support for OpenAI, OpenRouter, DeepSeek, Together, and Z.ai
 - **💰 Cost Tracking**: Automatic token usage and cost calculation
 - **🖼️ Vision Support**: Image and video attachment handling for compatible models (Moonshot Kimi K2.5)
 - **🧰 Tool Calling**: Cross-provider tool call standardization
 - **🧩 CLI Provider**: Use `cli:<backend>/<model>` (e.g. `cli:codex/gpt-5.2-codex`). Proxy-only: tools/MCP are not used or controllable.
 - **⏱️ Retry Management**: Configurable exponential backoff
 - **🔒 Secure Design**: Environment-based API key management
-- **🎯 Embedding Support**: Multi-provider embedding generation with Jina, Voyage, Google, OpenAI, FastEmbed, and HuggingFace
-- **🔄 Reranking**: Document relevance scoring with cross-encoder models (Voyage AI, Cohere, Jina AI)
+- **🎯 Embedding Support**: Multi-provider embedding generation with Jina, Voyage, Google, OpenAI, Together, OctoHub, FastEmbed, and HuggingFace
+- **🔄 Reranking**: Document relevance scoring with cross-encoder models (Voyage AI, Cohere, Jina AI, Mixedbread, HuggingFace)
 
 ## 📦 Quick Installation
 

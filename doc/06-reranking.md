@@ -26,6 +26,7 @@ Cross-encoders process query and document together, enabling deeper semantic und
 | Provider | Models | Features |
 |----------|--------|----------|
 | **FastEmbed** | bge-reranker-base, bge-reranker-large, jina-reranker-v1-turbo-en, jina-reranker-v2-base-multilingual | ONNX-based, CPU-friendly, no API costs |
+| **HuggingFace** | bge-reranker-base, bge-reranker-large | Sentence-transformers models via HuggingFace Hub |
 
 ### 📝 Model Details
 

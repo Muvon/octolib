@@ -9,8 +9,11 @@
 | OpenRouter | ✅ Full Support | Multi-Provider Proxy, Vision, Caching, Structured Output |
 | DeepSeek | ✅ Full Support | Open-Source AI Models, Structured Output, Caching |
 | Moonshot AI (Kimi) | ✅ Full Support | Kimi K2 Series, Vision (kimi-k2.5), Tools, Structured Output, Caching, Thinking |
-| MiniMax | ✅ Full Support | Anthropic-Compatible API, Tools, Caching, Thinking, Structured Output |
+| MiniMax | ✅ Full Support | Anthropic-Compatible API, Tools, Caching, Thinking |
 | Z.ai | ✅ Full Support | GLM Models, Caching, Structured Output |
+| Together AI | ✅ Full Support | Multi-Provider Proxy, Vision, Tools, Structured Output |
+| Cerebras | ✅ Full Support | Fast Inference, Structured Output |
+| OctoHub | ✅ Supported | Local AI Serving |
 | Google Vertex AI | ✅ Supported | Enterprise AI Integration |
 | Amazon Bedrock | ✅ Supported | Cloud AI Services |
 | Cloudflare Workers AI | ✅ Supported | Edge AI Compute |

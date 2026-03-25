@@ -81,6 +81,7 @@ Cross-provider tool call standardization:
 - Amazon Bedrock
 - Cloudflare Workers AI
 - Local (Ollama, LM Studio, LocalAI, Jan, vLLM)
+- OctoHub (local)
 - CLI proxies (codex, claude, gemini, cursor)
 
 ### Embedding Providers
@@ -88,6 +89,8 @@ Cross-provider tool call standardization:
 - Voyage AI
 - Google (Gemini)
 - OpenAI
+- Together AI
+- OctoHub (local)
 - FastEmbed (local, feature-gated)
 - HuggingFace (local, feature-gated)
 
@@ -95,7 +98,9 @@ Cross-provider tool call standardization:
 - Voyage AI
 - Cohere
 - Jina AI
+- Mixedbread (MXBAI)
 - FastEmbed (local, feature-gated)
+- HuggingFace (local, feature-gated)
 
 ## Use Cases
 

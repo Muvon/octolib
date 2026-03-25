@@ -10,6 +10,9 @@ Octolib provides a unified interface for generating embeddings across multiple p
 | **Voyage** | voyage-4-large/4/4-lite (1024d, MRL), voyage-3.5 (1024d), voyage-code-3 (1024d), voyage-context-3 (1024d), voyage-multimodal-3.5 (1024d) | Specialized models, MRL support, contextualized chunks | ✅ VOYAGE_API_KEY |
 | **Google** | gemini-embedding-001 (3072d), text-embedding-005 (768d), text-multilingual-embedding-002 (768d) | Google AI embeddings, multilingual | ✅ GOOGLE_API_KEY |
 | **OpenAI** | text-embedding-3-small (1536d), text-embedding-3-large (3072d), text-embedding-ada-002 (1536d) | OpenAI embeddings, reliable | ✅ OPENAI_API_KEY |
+| **OpenRouter** | intfloat/multilingual-e5-large-instruct, and more | OpenRouter proxy models | ✅ OPENROUTER_API_KEY |
+| **Together AI** | intfloat/multilingual-e5-large-instruct, and more | Together proxy models | ✅ TOGETHER_API_KEY |
+| **OctoHub** | Any embedding model through OctoHub | Local serving via OctoHub | ✅ OCTOHUB_API_KEY |
 | **FastEmbed** | Local sentence-transformers models | Local processing | ❌ No API key |
 | **HuggingFace** | sentence-transformers models | HuggingFace Hub | ❌ No API key |
 

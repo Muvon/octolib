@@ -1,0 +1,7 @@
+# target-cpu=native for release-local is applied via RUSTFLAGS env var since
+# per-profile rustflags in config.toml requires nightly (profile-rustflags feature).
+#
+# Use release-local with native CPU tuning:
+#   RUSTFLAGS="-C target-cpu=native" cargo build --profile release-local --features metal   (macOS)
+#   RUSTFLAGS="-C target-cpu=native" cargo build --profile release-local --features mkl     (Intel + MKL)
+#   RUSTFLAGS="-C target-cpu=native" cargo build --profile release-local --features cuda    (NVIDIA)

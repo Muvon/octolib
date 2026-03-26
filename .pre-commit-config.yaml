@@ -14,22 +14,24 @@ repos:
         args: ['--all', '--']
 
       # Run cargo clippy for linting
+      # Note: cuda/cudnn/mkl excluded — hardware-specific, require native toolchains
       - id: clippy
         name: cargo clippy
         description: Lint Rust code with cargo clippy
         entry: cargo clippy
         language: system
         files: \.rs$
-        args: ['--all-targets', '--all-features', '--', '-D', 'warnings']
+        args: ['--all-targets', '--features', 'fastembed,huggingface,metal,accelerate', '--', '-D', 'warnings']
 
       # Check that code compiles
+      # Note: cuda/cudnn/mkl excluded — hardware-specific, require native toolchains
       - id: cargo-check
         name: cargo check
         description: Check that Rust code compiles
         entry: cargo check
         language: system
         files: \.rs$
-        args: ['--all-targets', '--all-features']
+        args: ['--all-targets', '--features', 'fastembed,huggingface,metal,accelerate']
 
   # Local hooks for cargo doc
   - repo: local
@@ -40,7 +42,7 @@ repos:
         description: Check Rust documentation builds without warnings
         entry: bash
         language: system
-        args: ['-c', 'RUSTDOCFLAGS="-D warnings" cargo doc --all-features --no-deps']
+        args: ['-c', 'RUSTDOCFLAGS="-D warnings" cargo doc --features fastembed,huggingface,metal,accelerate --no-deps']
         pass_filenames: false
         always_run: true
         types: [rust]

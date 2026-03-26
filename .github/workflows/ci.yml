@@ -35,7 +35,7 @@ jobs:
           ${{ runner.os }}-cargo-
 
     - name: Run cargo check
-      run: cargo check --all-targets --all-features
+      run: cargo check --all-targets --features fastembed,huggingface
 
   fmt:
     name: Rustfmt
@@ -76,7 +76,7 @@ jobs:
           ${{ runner.os }}-cargo-
 
     - name: Run cargo clippy
-      run: cargo clippy --all-targets --all-features -- -D warnings
+      run: cargo clippy --all-targets --features fastembed,huggingface -- -D warnings
 
   test:
     name: Test Suite
@@ -113,9 +113,9 @@ jobs:
           ${{ runner.os }}-${{ matrix.rust }}-cargo-
           ${{ runner.os }}-cargo-
 
-    - name: Run tests (all features)
+    - name: Run tests (portable features)
       if: runner.os != 'Windows'
-      run: cargo test --verbose --lib --all-features
+      run: cargo test --verbose --lib --features fastembed,huggingface
 
     - name: Run tests (no default features)
       run: cargo test --verbose --lib --no-default-features
@@ -150,7 +150,7 @@ jobs:
           ${{ runner.os }}-cargo-
 
     - name: Check documentation
-      run: cargo doc --all-features --no-deps
+      run: cargo doc --features fastembed,huggingface --no-deps
       env:
         RUSTDOCFLAGS: -D warnings
 

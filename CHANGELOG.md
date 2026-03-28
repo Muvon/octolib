@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.13.1] - 2026-03-28
+
+### 📋 Release Summary
+
+This release adds hardware acceleration and image processing capabilities for faster, richer AI workflows (ac41f4cf). Under-the-hood updates streamline dependencies and CI, ensuring quicker, more reliable updates with no action required on your part (cf8d4280, 25d54055).
+
+
+### ✨ New Features & Enhancements
+
+- **build**: add hardware acceleration and image processing support `ac41f4cf`
+
+### 🔄 Other Changes
+
+2 maintenance, dependency, and tooling updates not listed individually.
+
 ## [0.13.0] - 2026-03-25
 
 ### 📋 Release Summary

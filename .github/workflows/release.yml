@@ -157,16 +157,16 @@ jobs:
           ${{ runner.os }}-${{ matrix.rust }}-cargo-
           ${{ runner.os }}-cargo-
 
-    - name: Test build with all features (non-Windows)
+    - name: Test build with portable features (non-Windows)
       if: runner.os != 'Windows'
-      run: cargo build --release --all-features
+      run: cargo build --release --features fastembed,huggingface
 
     - name: Test build with no default features
       run: cargo build --release --no-default-features
 
-    - name: Run tests (all features, non-Windows)
+    - name: Run tests (portable features, non-Windows)
       if: runner.os != 'Windows'
-      run: cargo test --release --all-features
+      run: cargo test --release --features fastembed,huggingface
 
     - name: Run tests (no default features, Windows)
       if: runner.os == 'Windows'
@@ -228,7 +228,7 @@ jobs:
       if: steps.check_published.outputs.already_published == 'false'
       run: |
         echo "🔍 Running dry-run publish to validate package..."
-        cargo publish --dry-run --all-features
+        cargo publish --dry-run --features fastembed,huggingface
       env:
         CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
@@ -236,7 +236,7 @@ jobs:
       if: steps.check_published.outputs.already_published == 'false'
       run: |
         echo "🚀 Publishing to crates.io..."
-        cargo publish --all-features
+        cargo publish --features fastembed,huggingface
         echo "✅ Successfully published to crates.io!"
       env:
         CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

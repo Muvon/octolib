@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.13.2] - 2026-03-31
+
+### 📋 Release Summary
+
+This release improves pricing reliability with enhanced fallback handling for provider pricing and updates all provider rates to March 2026 (f54bb20e, cf8ad0c7).
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: add reference pricing fallback for providers `f54bb20e`
+
+### 🔧 Improvements & Optimizations
+
+- **llm**: update provider pricing to March 2026 rates `cf8ad0c7`
+
 ## [0.13.1] - 2026-03-28
 
 ### 📋 Release Summary

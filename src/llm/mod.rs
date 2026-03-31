@@ -20,6 +20,7 @@
 pub mod config;
 pub mod factory;
 pub mod providers;
+pub mod reference_pricing;
 pub mod retry;
 pub mod strategies;
 pub mod tool_calls;

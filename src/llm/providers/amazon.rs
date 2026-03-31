@@ -127,10 +127,9 @@ impl AiProvider for AmazonBedrockProvider {
         true
     }
 
-    fn get_model_pricing(&self, _model: &str) -> Option<crate::llm::types::ModelPricing> {
-        // Amazon Bedrock has complex pricing per model - return zero for now
-        // so compression analysis can still work (will assume always beneficial)
-        Some(crate::llm::types::ModelPricing::new(0.0, 0.0, 0.0, 0.0))
+    fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
+        // Try reference pricing based on underlying model
+        crate::llm::reference_pricing::get_reference_pricing(model)
     }
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {

@@ -161,9 +161,10 @@ mod tests {
     #[test]
     fn test_supports_model() {
         let provider = CerebrasProvider::new();
-        assert!(provider.supports_model("llama-3.3-70b"));
         assert!(provider.supports_model("gpt-oss-120b"));
-        assert!(provider.supports_model("QWEN-3-32B"));
+        assert!(provider.supports_model("llama-3.1-8b"));
+        assert!(provider.supports_model("QWEN-3-235B-A22B-INSTRUCT-2507"));
+        assert!(provider.supports_model("zai-glm-4.7"));
         assert!(!provider.supports_model(""));
         assert!(!provider.supports_model("random-model"));
     }
@@ -182,10 +183,11 @@ mod tests {
     fn test_pricing_support_partial() {
         let provider = CerebrasProvider::new();
         assert!(provider.get_model_pricing("llama-3.1-8b").is_some());
+        assert!(provider.get_model_pricing("gpt-oss-120b").is_some());
+        assert!(provider.get_model_pricing("zai-glm-4.7").is_some());
         assert!(provider
-            .get_model_pricing("qwen-3-235b-a22b-thinking-2507")
+            .get_model_pricing("qwen-3-235b-a22b-instruct-2507")
             .is_some());
-        assert!(provider.get_model_pricing("llama-3.3-70b").is_none());
         assert!(crate::llm::utils::is_model_in_pricing_table(
             "LLAMA-3.1-8B",
             PRICING

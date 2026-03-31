@@ -253,8 +253,8 @@ mod tests {
 
         let cerebras = ProviderFactory::create_provider("cerebras").unwrap();
         assert_eq!(cerebras.name(), "cerebras");
-        assert!(cerebras.supports_model("llama-3.3-70b"));
-        assert!(!cerebras.supports_caching("llama-3.3-70b"));
+        assert!(cerebras.supports_model("gpt-oss-120b"));
+        assert!(!cerebras.supports_caching("gpt-oss-120b"));
     }
 
     #[test]

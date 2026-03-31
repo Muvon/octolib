@@ -461,29 +461,27 @@ mod tests {
         assert!(cost.is_some());
         let cost_value = cost.unwrap();
 
-        // Expected: (1M * $0.27) + (0.5M * $1.10) = $0.27 + $0.55 = $0.82
-        let expected = 0.27 + (0.5 * 1.10);
-        assert!((cost_value - expected).abs() < 0.01); // Allow small floating point differences
+        // V3.2 pricing: Input: $0.28/1M, Output: $0.42/1M
+        // Expected: (1M * $0.28) + (0.5M * $0.42) = $0.28 + $0.21 = $0.49
+        let expected = 0.28 + (0.5 * 0.42);
+        assert!((cost_value - expected).abs() < 0.01);
 
-        // Test with reasoner model - different pricing
-        // deepseek-reasoner: Input: $0.55/1M, Output: $2.19/1M
+        // Both models now share the same V3.2 pricing
         let cost2 = calculate_cost("deepseek-reasoner", 1_000_000, 500_000);
         assert!(cost2.is_some());
-        let expected2 = 0.55 + (0.5 * 2.19);
-        assert!((cost2.unwrap() - expected2).abs() < 0.01);
+        assert!((cost2.unwrap() - expected).abs() < 0.01);
     }
 
     #[test]
     fn test_calculate_cost_with_cache() {
-        // Test cache-aware cost calculation with Jan 2026 pricing
-        // deepseek-chat: Cache hit: $0.07/1M, Cache miss: $0.27/1M, Output: $1.10/1M
+        // V3.2 pricing: Cache hit: $0.028/1M, Cache miss: $0.28/1M, Output: $0.42/1M
         let cost = calculate_cost_with_cache("deepseek-chat", 500_000, 500_000, 250_000);
         assert!(cost.is_some());
         let cost_value = cost.unwrap();
 
-        // Expected: (0.5M * $0.27) + (0.5M * $0.07) + (0.25M * $1.10)
-        //         = $0.135 + $0.035 + $0.275 = $0.445
-        let expected = (0.5 * 0.27) + (0.5 * 0.07) + (0.25 * 1.10);
+        // Expected: (0.5M * $0.28) + (0.5M * $0.028) + (0.25M * $0.42)
+        //         = $0.14 + $0.014 + $0.105 = $0.259
+        let expected = (0.5 * 0.28) + (0.5 * 0.028) + (0.25 * 0.42);
         assert!((cost_value - expected).abs() < 0.01);
 
         // Cost with cache should be less than without cache for same total input

@@ -77,9 +77,9 @@ impl AiProvider for TogetherProvider {
         true
     }
 
-    fn get_model_pricing(&self, _model: &str) -> Option<crate::llm::types::ModelPricing> {
-        // Together.ai returns cost directly in usage — no static pricing table needed
-        None
+    fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
+        // Try reference pricing for cost estimation based on the underlying model
+        crate::llm::reference_pricing::get_reference_pricing(model)
     }
 
     fn get_max_input_tokens(&self, _model: &str) -> usize {
@@ -446,7 +446,16 @@ async fn execute_together_request(
         cache_read_tokens: 0,
         reasoning_tokens: 0,
         total_tokens,
-        cost: None, // Together.ai doesn't return cost in usage
+        cost: request_body
+            .get("model")
+            .and_then(|m| m.as_str())
+            .and_then(|model| {
+                crate::llm::reference_pricing::calculate_reference_cost(
+                    model,
+                    input_tokens,
+                    output_tokens,
+                )
+            }),
         request_time_ms: Some(request_time_ms),
     };
 

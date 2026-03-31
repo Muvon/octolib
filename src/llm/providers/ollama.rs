@@ -87,16 +87,17 @@ impl AiProvider for OllamaProvider {
         false
     }
 
-    fn get_model_pricing(&self, _model: &str) -> Option<crate::llm::types::ModelPricing> {
-        // Ollama is local/free - return zero pricing so compression works
-        Some(crate::llm::types::ModelPricing::new(0.0, 0.0, 0.0, 0.0))
+    fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
+        // Try reference pricing for cloud-equivalent cost estimation
+        crate::llm::reference_pricing::get_reference_pricing(model)
     }
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
         let api_key = self.get_api_key()?;
         let api_url = get_api_url(OLLAMA_API_URL_ENV, OLLAMA_API_URL);
+        let model = params.model.clone();
 
-        openai_compat_chat_completion(
+        let mut response = openai_compat_chat_completion(
             OpenAiCompatConfig {
                 provider_name: "ollama",
                 usage_fallback_cost: None,
@@ -106,7 +107,20 @@ impl AiProvider for OllamaProvider {
             api_url,
             params,
         )
-        .await
+        .await?;
+
+        // Fill cost from reference pricing if the API didn't return one
+        if let Some(ref mut usage) = response.exchange.usage {
+            if usage.cost.is_none() {
+                usage.cost = crate::llm::reference_pricing::calculate_reference_cost(
+                    &model,
+                    usage.input_tokens,
+                    usage.output_tokens,
+                );
+            }
+        }
+
+        Ok(response)
     }
 }
 

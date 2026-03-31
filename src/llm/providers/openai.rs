@@ -31,15 +31,19 @@ use serde::Deserialize;
 use std::env;
 
 /// OpenAI pricing constants (per 1M tokens in USD)
-/// Source: https://platform.openai.com/docs/pricing and model cards (verified Mar 18, 2026)
+/// Source: https://developers.openai.com/api/docs/pricing (verified Mar 31, 2026)
 /// Format: (model, input, output, cache_write, cache_read)
 /// Note: For models without caching, cache_write = input and cache_read = input
 const PRICING: &[PricingTuple] = &[
     // GPT-5.4 family
-    ("gpt-5.4-mini", 0.25, 2.00, 0.25, 0.025),
+    ("gpt-5.4-pro", 30.00, 180.00, 30.00, 30.00),
     ("gpt-5.4", 2.50, 15.00, 2.50, 0.25),
-    // GPT-5.2 family
+    ("gpt-5.4-mini", 0.75, 4.50, 0.75, 0.075),
+    ("gpt-5.4-nano", 0.20, 1.25, 0.20, 0.02),
+    // GPT-5.3 family
     ("gpt-5.3-codex", 1.75, 14.00, 1.75, 0.175),
+    ("gpt-5.3-chat-latest", 1.75, 14.00, 1.75, 0.175),
+    // GPT-5.2 family
     ("gpt-5.2-pro", 21.00, 168.00, 21.00, 21.00),
     ("gpt-5.2-codex", 1.75, 14.00, 1.75, 0.175),
     ("gpt-5.2-chat-latest", 1.75, 14.00, 1.75, 0.175),
@@ -63,9 +67,14 @@ const PRICING: &[PricingTuple] = &[
     ("gpt-4.1-mini", 0.40, 1.60, 0.40, 0.10),
     ("gpt-4.1-nano", 0.10, 0.40, 0.10, 0.025),
     ("gpt-4.1", 2.00, 8.00, 2.00, 0.50),
+    // Open-weight models
+    ("gpt-oss-120b", 0.039, 0.10, 0.039, 0.039),
+    ("gpt-oss-20b", 0.03, 0.10, 0.03, 0.03),
     // GPT-4o / realtime / audio
+    ("gpt-realtime-1.5", 4.00, 16.00, 4.00, 0.40),
     ("gpt-realtime-mini", 0.60, 2.40, 0.60, 0.06),
     ("gpt-realtime", 4.00, 16.00, 4.00, 0.40),
+    ("gpt-audio-1.5", 2.50, 10.00, 2.50, 0.25),
     ("gpt-audio-mini", 0.15, 0.60, 0.15, 0.015),
     ("gpt-audio", 2.50, 10.00, 2.50, 2.50),
     ("gpt-4o-mini-realtime-preview", 0.60, 2.40, 0.60, 0.30),
@@ -81,9 +90,9 @@ const PRICING: &[PricingTuple] = &[
     ("o3", 2.00, 8.00, 2.00, 0.50),
     ("o3-pro", 20.00, 80.00, 20.00, 20.00),
     ("o3-mini", 1.10, 4.40, 1.10, 0.55),
-    ("o3-deep-research", 10.00, 40.00, 10.00, 2.50),
+    ("o3-deep-research", 5.00, 20.00, 5.00, 1.25),
     ("o4-mini", 1.10, 4.40, 1.10, 0.275),
-    ("o4-mini-deep-research", 2.00, 8.00, 2.00, 0.50),
+    ("o4-mini-deep-research", 1.00, 4.00, 1.00, 0.25),
     ("gpt-4-turbo", 10.00, 30.00, 10.00, 10.00),
     ("gpt-4", 30.00, 60.00, 30.00, 30.00),
     ("gpt-4-32k", 60.00, 120.00, 60.00, 60.00),

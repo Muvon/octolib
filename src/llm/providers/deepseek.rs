@@ -14,18 +14,19 @@
 
 //! DeepSeek provider implementation
 //!
-//! PRICING UPDATE: January 2026
-//! Model-specific pricing (per 1M tokens in USD):
+//! PRICING UPDATE: March 2026
+//! Both models now correspond to DeepSeek-V3.2 (128K context limit)
+//! with identical pricing (per 1M tokens in USD):
 //!
-//! deepseek-chat (V3):
-//! - Cache Hit: $0.07
-//! - Cache Miss (Input): $0.27
-//! - Output: $1.10
+//! deepseek-chat (V3.2, non-thinking mode):
+//! - Cache Hit: $0.028
+//! - Cache Miss (Input): $0.28
+//! - Output: $0.42
 //!
-//! deepseek-reasoner (R1):
-//! - Cache Hit: $0.14
-//! - Cache Miss (Input): $0.55
-//! - Output: $2.19
+//! deepseek-reasoner (V3.2, thinking mode):
+//! - Cache Hit: $0.028
+//! - Cache Miss (Input): $0.28
+//! - Output: $0.42
 
 use crate::errors::ProviderError;
 use crate::llm::retry;
@@ -38,13 +39,13 @@ use serde::{Deserialize, Serialize};
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-// Model pricing (per 1M tokens in USD) - Updated Jan 2026
+// Model pricing (per 1M tokens in USD) - Updated Mar 2026
 // Source: https://api-docs.deepseek.com/quick_start/pricing
 /// Format: (model, input, output, cache_write, cache_read)
 /// Note: DeepSeek uses cache_hit/cache_miss model - cache_write = cache_miss (input), cache_read = cache_hit
 const PRICING: &[PricingTuple] = &[
-    ("deepseek-chat", 0.27, 1.10, 0.27, 0.07),     // V3 model
-    ("deepseek-reasoner", 0.55, 2.19, 0.55, 0.14), // R1 model
+    ("deepseek-chat", 0.28, 0.42, 0.28, 0.028), // V3.2 non-thinking
+    ("deepseek-reasoner", 0.28, 0.42, 0.28, 0.028), // V3.2 thinking
 ];
 
 /// Get pricing tuple for a specific model (case-insensitive)

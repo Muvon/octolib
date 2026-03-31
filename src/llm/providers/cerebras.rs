@@ -52,32 +52,26 @@ const CEREBRAS_API_KEY_ENV: &str = "CEREBRAS_API_KEY";
 const CEREBRAS_API_URL_ENV: &str = "CEREBRAS_API_URL";
 const CEREBRAS_API_URL: &str = "https://api.cerebras.ai/v1/chat/completions";
 
-/// Cerebras supported model IDs (Feb 2026 docs)
-/// Source: https://inference-docs.cerebras.ai/support/getting-started#supported-models
+/// Cerebras supported model IDs (Mar 2026 docs)
+/// Source: https://inference-docs.cerebras.ai/models/overview
 const SUPPORTED_MODELS: &[&str] = &[
+    // Production models
     "gpt-oss-120b",
     "llama-3.1-8b",
-    "llama-3.3-70b",
-    "qwen-3-32b",
+    // Preview models
     "qwen-3-235b-a22b-instruct-2507",
     "zai-glm-4.7",
-    // Listed on model pages and commonly available
-    "qwen-3-235b-a22b-thinking-2507",
 ];
 
 /// Cerebras model pricing (per 1M tokens in USD)
 /// Format: (model, input, output, cache_write, cache_read)
 ///
-/// Sources (checked Feb 14, 2026):
-/// - Llama 3.1 8B page: https://inference-docs.cerebras.ai/models/llama-31-8b
-/// - Qwen 3 235B Thinking page: https://inference-docs.cerebras.ai/models/qwen-3-235b-a22b-thinking-2507
-///
-/// Models without published token pricing remain absent and return no price/cost.
+/// Source: https://www.cerebras.ai/pricing (checked Mar 31, 2026)
 const PRICING: &[PricingTuple] = &[
-    // Published as $0.10 / 1M input, $0.10 / 1M output
+    ("zai-glm-4.7", 2.25, 2.75, 2.25, 2.25),
+    ("qwen-3-235b-a22b-instruct-2507", 0.60, 1.20, 0.60, 0.60),
+    ("gpt-oss-120b", 0.35, 0.75, 0.35, 0.35),
     ("llama-3.1-8b", 0.10, 0.10, 0.10, 0.10),
-    // Published as $0.60 / 1M input, $2.90 / 1M output
-    ("qwen-3-235b-a22b-thinking-2507", 0.60, 2.90, 0.60, 0.60),
 ];
 
 fn calculate_cost(model: &str, input_tokens: u64, output_tokens: u64) -> Option<f64> {

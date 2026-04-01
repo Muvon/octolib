@@ -38,8 +38,8 @@ const REFERENCE_PRICING: &[RefPricingTuple] = &[
     ("gpt-oss-120b", 0.35, 0.75, 0.35, 0.35),
     ("gpt-oss-20b", 0.03, 0.10, 0.03, 0.03),
     // --- Meta Llama 4 ---
-    ("llama-4-maverick", 0.50, 0.70, 0.50, 0.50),
-    ("llama-4-scout", 0.18, 0.35, 0.18, 0.18),
+    ("llama-4-maverick", 0.17, 0.60, 0.17, 0.17),
+    ("llama-4-scout", 0.08, 0.30, 0.08, 0.08),
     // --- Meta Llama 3.3 ---
     ("llama-3.3-70b", 0.60, 0.60, 0.60, 0.60),
     // --- Meta Llama 3.1 ---
@@ -64,13 +64,20 @@ const REFERENCE_PRICING: &[RefPricingTuple] = &[
     ("deepseek-r1", 0.28, 0.42, 0.28, 0.028),
     ("deepseek-v2", 0.14, 0.28, 0.14, 0.014),
     // --- Mistral ---
+    ("mistral-large-3", 0.50, 1.50, 0.50, 0.125),
     ("mistral-large", 2.00, 6.00, 2.00, 2.00),
+    ("mistral-medium-3", 0.40, 2.00, 0.40, 0.10),
     ("mistral-medium", 2.70, 8.10, 2.70, 2.70),
     ("mistral-small", 0.10, 0.30, 0.10, 0.10),
     ("mixtral-8x22b", 0.90, 0.90, 0.90, 0.90),
     ("mixtral-8x7b", 0.24, 0.24, 0.24, 0.24),
     ("mistral-7b", 0.05, 0.05, 0.05, 0.05),
     ("codestral", 0.30, 0.90, 0.30, 0.30),
+    // --- xAI Grok ---
+    ("grok-4.1-fast", 0.20, 0.50, 0.20, 0.05),
+    ("grok-4-fast", 0.20, 0.50, 0.20, 0.05),
+    ("grok-4", 3.00, 15.00, 3.00, 0.75),
+    ("grok-3", 3.00, 15.00, 3.00, 0.75),
     // --- Google Gemma ---
     ("gemma-3-27b", 0.20, 0.20, 0.20, 0.20),
     ("gemma-3-12b", 0.10, 0.10, 0.10, 0.10),
@@ -78,7 +85,8 @@ const REFERENCE_PRICING: &[RefPricingTuple] = &[
     ("gemma-2-27b", 0.20, 0.20, 0.20, 0.20),
     ("gemma-2-9b", 0.05, 0.05, 0.05, 0.05),
     // --- Google Gemini ---
-    ("gemini-3-flash", 0.10, 0.40, 0.10, 0.025),
+    ("gemini-3.1-pro", 2.00, 12.00, 2.00, 0.50),
+    ("gemini-3-flash", 0.50, 3.00, 0.50, 0.125),
     ("gemini-2.5-flash", 0.15, 0.60, 0.15, 0.0375),
     ("gemini-2.5-pro", 1.25, 10.00, 1.25, 0.3125),
     // --- Zhipu GLM ---
@@ -93,6 +101,9 @@ const REFERENCE_PRICING: &[RefPricingTuple] = &[
     ("minimax-m2.5", 0.30, 1.20, 0.375, 0.03),
     ("minimax-m2", 0.255, 1.00, 0.255, 0.0255),
     // --- Microsoft Phi ---
+    // --- Moonshot Kimi ---
+    ("kimi-k2.5", 0.60, 3.00, 0.60, 0.10),
+    ("kimi-k2", 0.60, 2.50, 0.60, 0.15),
     ("phi-4", 0.07, 0.14, 0.07, 0.07),
     ("phi-3", 0.05, 0.10, 0.05, 0.05),
     // --- Cohere Command ---

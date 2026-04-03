@@ -151,6 +151,18 @@ fn get_api_key(&self) -> Result<String> {
 }
 ```
 
+### Copyright Header Check
+Every `.rs` file **must** have the Apache 2.0 copyright header as the first line:
+```rust
+// Copyright <YEAR> Muvon Un Limited
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// ...
+```
+- **New files**: Add header with the current year
+- **Modified files**: Ensure the copyright year matches the current year
+- **Quick check**: `rg "Copyright 2025" --type rust` — update any file you're touching
+
 ### Development Workflow
 ```bash
 # ✅ ALWAYS this order

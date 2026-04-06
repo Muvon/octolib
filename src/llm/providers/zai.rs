@@ -14,11 +14,16 @@
 
 //! Z.ai (Zhipu AI) provider implementation
 //!
-//! PRICING UPDATE: March 2026 (from <https://docs.z.ai/guides/overview/pricing>)
+//! PRICING UPDATE: April 2026 (from <https://docs.z.ai/guides/overview/pricing>)
 //!
-//! GLM-5 series (NEW - Feb 2026):
+//! GLM-5.1 series:
+//! - GLM-5.1: Input $1.00/1M, Cached $0.20/1M, Output $3.20/1M
+//! - GLM-5.1-Turbo: Input $1.00/1M, Cached $0.20/1M, Output $3.20/1M
+//!
+//! GLM-5 series:
 //! - GLM-5: Input $1.00/1M, Cached $0.20/1M, Output $3.20/1M
-//! - GLM-5-Code: Input $1.20/1M, Cached $0.30/1M, Output $5.00/1M
+//! - GLM-5-Turbo: Input $1.20/1M, Cached $0.24/1M, Output $4.00/1M
+//! - GLM-5V-Turbo: Input $1.20/1M, Cached $0.24/1M, Output $4.00/1M (vision)
 //!
 //! GLM-4.7 series:
 //! - GLM-4.7: Input $0.60/1M, Cached $0.11/1M, Output $2.20/1M
@@ -27,14 +32,14 @@
 //!
 //! GLM-4.6 series:
 //! - GLM-4.6: Input $0.60/1M, Cached $0.11/1M, Output $2.20/1M
-//! - GLM-4.6V: Input $0.30/1M, Cached $0.05/1M, Output $0.90/1M
-//! - GLM-4.6V-Flash: Free model
-//! - GLM-4.6V-FlashX: Input $0.04/1M, Cached $0.004/1M, Output $0.40/1M
-//! - GLM-OCR: Input $0.03/1M, Output $0.03/1M
+//! - GLM-4.6V: Input $0.30/1M, Cached $0.05/1M, Output $0.90/1M (vision)
+//! - GLM-4.6V-Flash: Free model (vision)
+//! - GLM-4.6V-FlashX: Input $0.04/1M, Cached $0.004/1M, Output $0.40/1M (vision)
+//! - GLM-OCR: Input $0.03/1M, Output $0.03/1M (vision)
 //!
 //! GLM-4.5 series:
 //! - GLM-4.5: Input $0.60/1M, Cached $0.11/1M, Output $2.20/1M
-//! - GLM-4.5V: Input $0.60/1M, Cached $0.11/1M, Output $1.80/1M
+//! - GLM-4.5V: Input $0.60/1M, Cached $0.11/1M, Output $1.80/1M (vision)
 //! - GLM-4.5-X: Input $2.20/1M, Cached $0.45/1M, Output $8.90/1M
 //! - GLM-4.5-Air: Input $0.20/1M, Cached $0.03/1M, Output $1.10/1M
 //! - GLM-4.5-AirX: Input $1.10/1M, Cached $0.22/1M, Output $4.50/1M
@@ -60,36 +65,35 @@ use serde::{Deserialize, Serialize};
 use std::env;
 
 /// Z.ai pricing constants (per 1M tokens in USD)
-/// Source: https://docs.z.ai/guides/overview/pricing (verified Mar 18, 2026)
+/// Source: https://docs.z.ai/guides/overview/pricing (verified Apr 6, 2026)
 /// Format: (model, input, output, cache_write, cache_read)
 const PRICING: &[PricingTuple] = &[
-    // GLM-5 series (latest generation)
-    ("glm-5-code", 1.20, 5.00, 0.00, 0.30),
+    // GLM-5.1 series
+    ("glm-5.1-turbo", 1.00, 3.20, 0.00, 0.20),
+    ("glm-5.1", 1.00, 3.20, 0.00, 0.20),
+    // GLM-5 series
+    ("glm-5v-turbo", 1.20, 4.00, 0.00, 0.24), // vision
+    ("glm-5-turbo", 1.20, 4.00, 0.00, 0.24),
     ("glm-5", 1.00, 3.20, 0.00, 0.20),
-    // GLM-4.7 series (flagship) - more specific variants first
+    // GLM-4.7 series - more specific variants first
     ("glm-4.7-flashx", 0.07, 0.40, 0.00, 0.01),
     ("glm-4.7-flash", 0.00, 0.00, 0.00, 0.00), // free model
-    ("glm-4.7-battle", 0.60, 2.20, 0.00, 0.11),
     ("glm-4.7", 0.60, 2.20, 0.00, 0.11),
     // GLM-4.6 series
-    ("glm-4.6v-flashx", 0.04, 0.40, 0.00, 0.004),
-    ("glm-4.6v-flash", 0.00, 0.00, 0.00, 0.00), // free model
-    ("glm-4.6v", 0.30, 0.90, 0.00, 0.05),
-    ("glm-ocr", 0.03, 0.03, 0.00, 0.00),
+    ("glm-4.6v-flashx", 0.04, 0.40, 0.00, 0.004), // vision
+    ("glm-4.6v-flash", 0.00, 0.00, 0.00, 0.00),   // free, vision
+    ("glm-4.6v", 0.30, 0.90, 0.00, 0.05),         // vision
+    ("glm-ocr", 0.03, 0.03, 0.00, 0.00),          // vision
     ("glm-4.6", 0.60, 2.20, 0.00, 0.11),
     // GLM-4.5 series - most specific first
     ("glm-4.5-airx", 1.10, 4.50, 0.00, 0.22),
-    ("glm-4.5-air-plus", 0.20, 1.10, 0.00, 0.03),
     ("glm-4.5-air", 0.20, 1.10, 0.00, 0.03),
     ("glm-4.5-flash", 0.00, 0.00, 0.00, 0.00), // free model
-    ("glm-4.5v", 0.60, 1.80, 0.00, 0.11),
+    ("glm-4.5v", 0.60, 1.80, 0.00, 0.11),      // vision
     ("glm-4.5-x", 2.20, 8.90, 0.00, 0.45),
     ("glm-4.5", 0.60, 2.20, 0.00, 0.11),
     // GLM-4 series
     ("glm-4-32b-0414-128k", 0.10, 0.10, 0.00, 0.01),
-    ("glm-4-32b", 0.10, 0.10, 0.00, 0.01),
-    ("glm-4-flash", 0.60, 2.20, 0.00, 0.06),
-    ("glm-4", 0.60, 2.20, 0.00, 0.06),
 ];
 
 /// Calculate cost for Z.ai models (case-insensitive)
@@ -246,8 +250,12 @@ impl AiProvider for ZaiProvider {
         true // Z.ai supports prompt caching
     }
 
-    fn supports_vision(&self, _model: &str) -> bool {
-        false // Z.ai GLM-4 series does not support vision
+    fn supports_vision(&self, model: &str) -> bool {
+        let normalized = normalize_model_name(model);
+        normalized.contains("glm-5v")
+            || normalized.contains("glm-4.6v")
+            || normalized.contains("glm-4.5v")
+            || normalized.contains("glm-ocr")
     }
 
     fn supports_structured_output(&self, _model: &str) -> bool {
@@ -270,14 +278,18 @@ impl AiProvider for ZaiProvider {
     fn get_max_input_tokens(&self, model: &str) -> usize {
         // Z.ai model context window limits (case-insensitive)
         let model_lower = normalize_model_name(model);
-        if model_lower.contains("glm-4.7") {
+        if model_lower.contains("glm-5.1") {
+            200_000 // 200K context window for GLM-5.1
+        } else if model_lower.contains("glm-5") {
+            128_000 // 128K context window for GLM-5
+        } else if model_lower.contains("glm-4.7") {
             200_000 // 200K context window for GLM-4.7
         } else if model_lower.contains("glm-4.6") {
             128_000 // 128K context window for GLM-4.6
         } else if model_lower.contains("glm-4.5") {
             131_072 // ~128K context window for GLM-4.5
         } else {
-            128_000 // Covers glm-4 and any other model
+            128_000 // Default context window
         }
     }
 
@@ -650,11 +662,18 @@ mod tests {
     #[test]
     fn test_model_support() {
         let provider = ZaiProvider::new();
+        assert!(provider.supports_model("glm-5.1"));
+        assert!(provider.supports_model("glm-5.1-turbo"));
+        assert!(provider.supports_model("glm-5"));
+        assert!(provider.supports_model("glm-5-turbo"));
+        assert!(provider.supports_model("glm-5v-turbo"));
         assert!(provider.supports_model("glm-4.7"));
         assert!(provider.supports_model("glm-4.7-flash"));
         assert!(provider.supports_model("glm-4.6"));
         assert!(provider.supports_model("glm-4.5"));
-        assert!(provider.supports_model("glm-4"));
+        // Deprecated models
+        assert!(!provider.supports_model("glm-4"));
+        assert!(!provider.supports_model("glm-4-flash"));
         assert!(!provider.supports_model("gpt-4"));
         assert!(!provider.supports_model("claude-3"));
     }
@@ -663,8 +682,8 @@ mod tests {
     fn test_model_support_case_insensitive() {
         let provider = ZaiProvider::new();
         // Test uppercase
-        assert!(provider.supports_model("GLM-4.7"));
-        assert!(provider.supports_model("GLM-4"));
+        assert!(provider.supports_model("GLM-5-Turbo"));
+        assert!(provider.supports_model("GLM-5.1"));
         // Test mixed case
         assert!(provider.supports_model("Glm-4.7"));
         assert!(provider.supports_model("GLM-4.6"));
@@ -672,16 +691,20 @@ mod tests {
 
     #[test]
     fn test_cost_calculation() {
-        // Test GLM-4.5: $0.60 input, $2.20 output (UPDATED PRICING)
+        // Test GLM-5-Turbo: $1.20 input, $4.00 output
+        let cost = calculate_cost("glm-5-turbo", 1_000_000, 0, 1_000_000);
+        assert!((cost.unwrap() - 5.20).abs() < 0.01); // 1.20 + 4.00
+
+        // Test GLM-5.1: $1.00 input, $3.20 output (same as GLM-5)
+        let cost = calculate_cost("glm-5.1", 1_000_000, 0, 1_000_000);
+        assert!((cost.unwrap() - 4.20).abs() < 0.01); // 1.00 + 3.20
+
+        // Test GLM-4.5: $0.60 input, $2.20 output
         let cost = calculate_cost("glm-4.5", 1_000_000, 0, 1_000_000);
         assert!((cost.unwrap() - 2.80).abs() < 0.01); // 0.60 + 2.20
 
-        // Test GLM-4.7: $0.60 input, $2.20 output (UPDATED PRICING)
+        // Test GLM-4.7: $0.60 input, $2.20 output
         let cost = calculate_cost("glm-4.7", 1_000_000, 0, 1_000_000);
-        assert!((cost.unwrap() - 2.80).abs() < 0.01); // 0.60 + 2.20
-
-        // Test GLM-4.6: $0.60 input, $2.20 output (UPDATED PRICING)
-        let cost = calculate_cost("glm-4.6", 1_000_000, 0, 1_000_000);
         assert!((cost.unwrap() - 2.80).abs() < 0.01); // 0.60 + 2.20
 
         // Test GLM-4.7-flash: free model
@@ -711,12 +734,11 @@ mod tests {
 
     #[test]
     fn test_cost_calculation_case_insensitive() {
-        // Test mixed case model names
-        let cost = calculate_cost("GLM-4.7", 1_000_000, 0, 1_000_000);
-        assert!((cost.unwrap() - 2.80).abs() < 0.01); // Should work with uppercase
+        let cost = calculate_cost("GLM-5-TURBO", 1_000_000, 0, 1_000_000);
+        assert!((cost.unwrap() - 5.20).abs() < 0.01);
 
         let cost = calculate_cost("gLm-4.7-FlAsH", 1_000_000, 0, 1_000_000);
-        assert_eq!(cost.unwrap(), 0.0); // Should work with mixed case
+        assert_eq!(cost.unwrap(), 0.0);
 
         let cost = calculate_cost("glm-4.5-AIR", 1_000_000, 0, 1_000_000);
         assert!((cost.unwrap() - 1.30).abs() < 0.01); // 0.20 + 1.10
@@ -724,7 +746,6 @@ mod tests {
 
     #[test]
     fn test_cost_with_partial_tokens() {
-        // Test with 500K tokens each
         let cost = calculate_cost("glm-4.5", 500_000, 0, 500_000);
         assert!((cost.unwrap() - 1.40).abs() < 0.01); // 0.60 * 0.5 + 2.20 * 0.5
     }
@@ -732,6 +753,10 @@ mod tests {
     #[test]
     fn test_unknown_model() {
         let cost = calculate_cost("unknown-model", 1_000_000, 0, 1_000_000);
+        assert_eq!(cost, None);
+
+        // Deprecated models should return None
+        let cost = calculate_cost("glm-4", 1_000_000, 0, 1_000_000);
         assert_eq!(cost, None);
     }
 
@@ -763,7 +788,17 @@ mod tests {
     fn test_provider_capabilities() {
         let provider = ZaiProvider::new();
         assert!(provider.supports_caching("glm-4.7"));
-        assert!(!provider.supports_vision("glm-4.7"));
         assert!(provider.supports_structured_output("glm-4.7"));
+        // Vision models
+        assert!(provider.supports_vision("glm-5v-turbo"));
+        assert!(provider.supports_vision("glm-4.6v"));
+        assert!(provider.supports_vision("glm-4.6v-flash"));
+        assert!(provider.supports_vision("glm-4.5v"));
+        assert!(provider.supports_vision("glm-ocr"));
+        // Non-vision models
+        assert!(!provider.supports_vision("glm-5.1"));
+        assert!(!provider.supports_vision("glm-5-turbo"));
+        assert!(!provider.supports_vision("glm-5"));
+        assert!(!provider.supports_vision("glm-4.7"));
     }
 }

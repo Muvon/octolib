@@ -30,7 +30,7 @@ type RefPricingTuple = (&'static str, f64, f64, f64, f64);
 
 /// Baseline pricing for well-known open/open-weight models (per 1M tokens, USD).
 ///
-/// Sources: cheapest major provider for each model family (Mar 2026).
+/// Sources: cheapest major provider for each model family (Apr 2026).
 /// These are NOT authoritative — they're best-effort baselines for cost estimation
 /// when the actual provider doesn't report pricing.
 const REFERENCE_PRICING: &[RefPricingTuple] = &[
@@ -79,6 +79,11 @@ const REFERENCE_PRICING: &[RefPricingTuple] = &[
     ("grok-4", 3.00, 15.00, 3.00, 0.75),
     ("grok-3", 3.00, 15.00, 3.00, 0.75),
     // --- Google Gemma ---
+    ("gemma-4-31b", 0.20, 0.20, 0.20, 0.20),
+    ("gemma-4-26b", 0.20, 0.20, 0.20, 0.20),
+    ("gemma-4-e4b", 0.05, 0.05, 0.05, 0.05),
+    ("gemma-4-e2b", 0.02, 0.02, 0.02, 0.02),
+    ("gemma-3n-e4b", 0.02, 0.04, 0.02, 0.02),
     ("gemma-3-27b", 0.20, 0.20, 0.20, 0.20),
     ("gemma-3-12b", 0.10, 0.10, 0.10, 0.10),
     ("gemma-3-4b", 0.05, 0.05, 0.05, 0.05),
@@ -90,8 +95,10 @@ const REFERENCE_PRICING: &[RefPricingTuple] = &[
     ("gemini-2.5-flash", 0.15, 0.60, 0.15, 0.0375),
     ("gemini-2.5-pro", 1.25, 10.00, 1.25, 0.3125),
     // --- Zhipu GLM ---
-    ("glm-5-code", 1.20, 5.00, 0.00, 0.30),
-    ("glm-5-turbo", 1.00, 3.20, 0.00, 0.20),
+    ("glm-5v-turbo", 1.20, 4.00, 0.00, 0.24),
+    ("glm-5.1-turbo", 1.00, 3.20, 0.00, 0.20),
+    ("glm-5.1", 1.00, 3.20, 0.00, 0.20),
+    ("glm-5-turbo", 1.20, 4.00, 0.00, 0.24),
     ("glm-5", 1.00, 3.20, 0.00, 0.20),
     ("glm-4.7-flash", 0.00, 0.00, 0.00, 0.00),
     ("glm-4.7", 0.60, 2.20, 0.60, 0.11),
@@ -103,6 +110,9 @@ const REFERENCE_PRICING: &[RefPricingTuple] = &[
     // --- Microsoft Phi ---
     // --- Moonshot Kimi ---
     ("kimi-k2.5", 0.60, 3.00, 0.60, 0.10),
+    ("kimi-k2-thinking-turbo", 1.15, 8.00, 1.15, 0.15),
+    ("kimi-k2-turbo", 1.15, 8.00, 1.15, 0.15),
+    ("kimi-k2-thinking", 0.60, 2.50, 0.60, 0.15),
     ("kimi-k2", 0.60, 2.50, 0.60, 0.15),
     ("phi-4", 0.07, 0.14, 0.07, 0.07),
     ("phi-3", 0.05, 0.10, 0.05, 0.05),

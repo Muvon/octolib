@@ -22,18 +22,22 @@
 //! 2. Create a service account with "Vertex AI User" role
 //! 3. Create and download a JSON key file
 //! 4. Set environment variable: export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+//!
+//! Model discovery: Available models are lazy-loaded from the Vertex AI API on first
+//! chat_completion() call. The list is cached for the lifetime of the process.
 
 use crate::llm::providers::openai_compat::{
     chat_completion as openai_compat_chat_completion, OpenAiCompatConfig,
 };
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderResponse};
-use crate::llm::utils::normalize_model_name;
+use crate::llm::utils::{get_model_pricing, normalize_model_name, PricingTuple};
 use anyhow::{Context, Result};
 use jsonwebtoken::{Algorithm, EncodingKey, Header};
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::sync::OnceCell;
 
 /// Google Vertex AI provider
 #[derive(Debug, Clone)]
@@ -51,6 +55,23 @@ impl GoogleVertexProvider {
     }
 }
 
+/// Google Vertex AI / Gemini API pricing (per 1M tokens in USD)
+/// Source: https://cloud.google.com/vertex-ai/generative-ai/pricing (verified Apr 6, 2026)
+/// Using ≤200K context tier prices. Format: (model, input, output, cache_write, cache_read)
+const PRICING: &[PricingTuple] = &[
+    // Gemini 3.x series
+    ("gemini-3.1-pro", 2.00, 12.00, 2.00, 0.20),
+    ("gemini-3.1-flash-lite", 0.25, 1.50, 0.25, 0.025),
+    ("gemini-3-pro", 2.00, 12.00, 2.00, 0.20),
+    ("gemini-3-flash", 0.50, 3.00, 0.50, 0.05),
+    // Gemini 2.5 series
+    ("gemini-2.5-flash-lite", 0.10, 0.40, 0.10, 0.01),
+    ("gemini-2.5-flash", 0.30, 2.50, 0.30, 0.03),
+    ("gemini-2.5-pro", 1.25, 10.00, 1.25, 0.125),
+    // Gemini 2.0 series
+    ("gemini-2.0-flash", 0.10, 0.40, 0.10, 0.025),
+];
+
 const GOOGLE_CREDENTIAL_FILE_ENV: &str = "GOOGLE_CREDENTIAL_FILE";
 const GOOGLE_APPLICATION_CREDENTIALS_ENV: &str = "GOOGLE_APPLICATION_CREDENTIALS";
 const GOOGLE_CLOUD_PROJECT_ID_ENV: &str = "GOOGLE_CLOUD_PROJECT_ID";
@@ -64,6 +85,92 @@ fn default_vertex_api_url(project: &str, location: &str) -> String {
         .replace("{project}", project)
         .replace("{location}", location)
 }
+
+// --- Lazy model discovery ---
+
+/// Cached model from the API
+#[derive(Debug, Clone)]
+struct CachedModel {
+    id: String,
+    input_token_limit: Option<usize>,
+}
+
+/// Process-wide cache of available models, populated on first chat_completion()
+static MODELS_CACHE: OnceCell<Vec<CachedModel>> = OnceCell::const_new();
+
+/// OpenAI-compat /models response
+#[derive(Deserialize)]
+struct ModelsListResponse {
+    #[serde(default)]
+    data: Vec<ApiModelEntry>,
+}
+
+#[derive(Deserialize)]
+struct ApiModelEntry {
+    id: String,
+    #[serde(default)]
+    input_token_limit: Option<usize>,
+}
+
+/// Fetch available models from the OpenAI-compat /models endpoint.
+/// Derives the URL from the chat completions URL by replacing the path suffix.
+async fn fetch_available_models(access_token: &str, chat_url: &str) -> Result<Vec<CachedModel>> {
+    let models_url = chat_url.replace("/chat/completions", "/models");
+
+    let response = super::shared::http_client()
+        .get(&models_url)
+        .header("Authorization", format!("Bearer {}", access_token))
+        .send()
+        .await
+        .context("Failed to fetch models list from Google API")?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let text = response.text().await.unwrap_or_default();
+        return Err(anyhow::anyhow!(
+            "Google models API error {}: {}",
+            status,
+            text
+        ));
+    }
+
+    let list: ModelsListResponse = response
+        .json()
+        .await
+        .context("Failed to parse models list response")?;
+
+    Ok(list
+        .data
+        .into_iter()
+        .map(|m| CachedModel {
+            id: m.id,
+            input_token_limit: m.input_token_limit,
+        })
+        .collect())
+}
+
+/// Check if a model exists in the cached model list (case-insensitive)
+fn is_model_cached(model: &str) -> Option<bool> {
+    let models = MODELS_CACHE.get()?;
+    let normalized = normalize_model_name(model);
+    Some(
+        models
+            .iter()
+            .any(|m| normalize_model_name(&m.id) == normalized),
+    )
+}
+
+/// Get cached input token limit for a model
+fn get_cached_input_limit(model: &str) -> Option<usize> {
+    let models = MODELS_CACHE.get()?;
+    let normalized = normalize_model_name(model);
+    models
+        .iter()
+        .find(|m| normalize_model_name(&m.id) == normalized)
+        .and_then(|m| m.input_token_limit)
+}
+
+// --- Auth ---
 
 #[derive(Debug, Deserialize)]
 struct GoogleServiceAccountFile {
@@ -201,7 +308,11 @@ impl AiProvider for GoogleVertexProvider {
     }
 
     fn supports_model(&self, model: &str) -> bool {
-        !model.is_empty()
+        if model.is_empty() {
+            return false;
+        }
+        // Use cached model list if available (populated on first chat_completion)
+        is_model_cached(model).unwrap_or(true)
     }
 
     fn get_api_key(&self) -> Result<String> {
@@ -211,8 +322,9 @@ impl AiProvider for GoogleVertexProvider {
         Ok(String::new()) // Return empty string as placeholder
     }
 
-    fn supports_caching(&self, _model: &str) -> bool {
-        false
+    fn supports_caching(&self, model: &str) -> bool {
+        let normalized = normalize_model_name(model);
+        normalized.contains("gemini-3") || normalized.contains("gemini-2.5")
     }
 
     fn supports_vision(&self, model: &str) -> bool {
@@ -224,25 +336,32 @@ impl AiProvider for GoogleVertexProvider {
         true
     }
 
-    fn get_model_pricing(&self, _model: &str) -> Option<crate::llm::types::ModelPricing> {
-        // Google Vertex AI has complex pricing per model - return zero for now
-        // so compression analysis can still work (will assume always beneficial)
-        Some(crate::llm::types::ModelPricing::new(0.0, 0.0, 0.0, 0.0))
+    fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
+        let (input_price, output_price, cache_write_price, cache_read_price) =
+            get_model_pricing(model, PRICING)?;
+        Some(crate::llm::types::ModelPricing::new(
+            input_price,
+            output_price,
+            cache_write_price,
+            cache_read_price,
+        ))
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {
-        // Google Vertex AI model context window limits (case-insensitive)
+        // Prefer cached value from API if available
+        if let Some(limit) = get_cached_input_limit(model) {
+            return limit;
+        }
+        // Fallback to hardcoded limits
         let normalized = normalize_model_name(model);
-        if normalized.contains("gemini-3") {
-            1_048_576 // Gemini 3.0 has ~1M context
-        } else if normalized.contains("gemini-2") {
-            2_000_000 // Gemini 2.0 has 2M context
+        if normalized.contains("gemini-3") || normalized.contains("gemini-2") {
+            1_048_576 // Gemini 2.x/3.x has ~1M context
         } else if normalized.contains("gemini-1.5") {
             1_000_000 // Gemini 1.5 has 1M context
         } else if normalized.contains("gemini-1.0") || normalized.contains("bison-32k") {
-            32_768 // Gemini 1.0 and 32K variants have 32K context
+            32_768
         } else if normalized.contains("bison") {
-            8_192 // Standard Bison models
+            8_192
         } else {
             32_768 // Conservative default
         }
@@ -264,6 +383,13 @@ impl AiProvider for GoogleVertexProvider {
             default_vertex_api_url(&project, &location)
         };
 
+        // Lazy-load available models on first call (errors silently ignored; retries next call)
+        let token = api_key.clone();
+        let url = api_url.clone();
+        let _ = MODELS_CACHE
+            .get_or_try_init(|| async move { fetch_available_models(&token, &url).await })
+            .await;
+
         openai_compat_chat_completion(
             OpenAiCompatConfig {
                 provider_name: "google",
@@ -283,35 +409,48 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_supports_model() {
+    fn test_supports_model_before_cache() {
         let provider = GoogleVertexProvider::new();
 
-        // Generic provider: accept any non-empty model identifier
+        // Before cache is populated, accept any non-empty model
         assert!(provider.supports_model("gemini-1.5-pro"));
         assert!(provider.supports_model("gemini-2.0-flash"));
-        assert!(provider.supports_model("gemini-1.0-pro"));
-        assert!(provider.supports_model("text-bison"));
-        assert!(provider.supports_model("gpt-4"));
-        assert!(provider.supports_model("claude-3"));
+        assert!(provider.supports_model("anything-goes"));
         assert!(!provider.supports_model(""));
     }
 
     #[test]
-    fn test_supports_model_case_insensitive() {
+    fn test_supports_caching() {
         let provider = GoogleVertexProvider::new();
-
-        // Test uppercase
-        assert!(provider.supports_model("GEMINI-1.5-PRO"));
-        assert!(provider.supports_model("GEMINI-2.0-FLASH"));
-        // Test mixed case
-        assert!(provider.supports_model("Gemini-1.5-Pro"));
-        assert!(provider.supports_model("GEMINI-1.0-pro"));
+        assert!(provider.supports_caching("gemini-3-flash"));
+        assert!(provider.supports_caching("gemini-2.5-pro"));
+        assert!(provider.supports_caching("gemini-2.5-flash"));
+        assert!(!provider.supports_caching("gemini-2.0-flash"));
+        assert!(!provider.supports_caching("gemini-1.5-pro"));
     }
 
     #[test]
-    fn test_supports_caching_default_false() {
+    fn test_model_pricing() {
         let provider = GoogleVertexProvider::new();
-        assert!(!provider.supports_caching("gemini-1.5-pro"));
-        assert!(!provider.supports_caching("Gemini-2.0-Flash"));
+
+        let p = provider.get_model_pricing("gemini-3.1-pro").unwrap();
+        assert_eq!(p.input_price_per_1m, 2.00);
+        assert_eq!(p.output_price_per_1m, 12.00);
+
+        let p = provider.get_model_pricing("gemini-2.5-flash").unwrap();
+        assert_eq!(p.input_price_per_1m, 0.30);
+        assert_eq!(p.output_price_per_1m, 2.50);
+
+        // Unknown models return None (no fallback to zero)
+        assert!(provider.get_model_pricing("gemma-3-27b").is_none());
+    }
+
+    #[test]
+    fn test_max_input_tokens_fallback() {
+        let provider = GoogleVertexProvider::new();
+        assert_eq!(provider.get_max_input_tokens("gemini-3-flash"), 1_048_576);
+        assert_eq!(provider.get_max_input_tokens("gemini-2.5-pro"), 1_048_576);
+        assert_eq!(provider.get_max_input_tokens("gemini-1.5-pro"), 1_000_000);
+        assert_eq!(provider.get_max_input_tokens("text-bison"), 8_192);
     }
 }

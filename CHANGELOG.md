@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.13.3] - 2026-04-06
+
+### 📋 Release Summary
+
+This release significantly expands model support with new Grok, Kimi, Mistral, GLM-5.1, Gemma-4, and Kimi-K2 models across multiple providers (922b1d38, 1c9c5a3c). Google provider now includes lazy model discovery and real-time pricing for improved cost transparency (dc0fdccd).
+
+
+### ✨ New Features & Enhancements
+
+- **google**: add lazy model discovery and real pricing `dc0fdccd`
+- **zai**: add GLM-5.1, Gemma-4, Kimi-K2 models `1c9c5a3c`
+- **llm**: add Grok, Kimi, and Mistral models `922b1d38`
+
+### 🔄 Other Changes
+
+1 maintenance, dependency, and tooling update not listed individually.
+
 ## [0.13.2] - 2026-03-31
 
 ### 📋 Release Summary

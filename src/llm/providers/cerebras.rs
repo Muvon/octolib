@@ -104,13 +104,8 @@ impl AiProvider for CerebrasProvider {
         false
     }
 
-    fn supports_vision(&self, _model: &str) -> bool {
-        false
-    }
-
-    fn get_max_input_tokens(&self, _model: &str) -> usize {
-        128_000
-    }
+    // supports_vision, supports_video, get_max_input_tokens
+    // are resolved via reference capabilities (trait defaults)
 
     fn supports_structured_output(&self, _model: &str) -> bool {
         true
@@ -174,9 +169,9 @@ mod tests {
         let provider = CerebrasProvider::new();
         assert_eq!(provider.name(), "cerebras");
         assert!(!provider.supports_caching("any-model"));
-        assert!(!provider.supports_vision("any-model"));
+        assert!(!provider.supports_vision("llama-3.1-8b"));
         assert!(provider.supports_structured_output("any-model"));
-        assert_eq!(provider.get_max_input_tokens("any-model"), 128_000);
+        assert_eq!(provider.get_max_input_tokens("llama-3.1-8b"), 131_072);
     }
 
     #[test]

@@ -110,12 +110,15 @@ impl AiProvider for CloudflareWorkersAiProvider {
     }
 
     fn supports_vision(&self, model: &str) -> bool {
+        // Check Cloudflare-specific naming patterns first
         let model_lower = normalize_model_name(model);
-        model_lower.contains("vision")
-            || model_lower.contains("vl")
-            || model_lower.contains("llava")
-            || model_lower.contains("@cf/llava")
-            || model_lower.contains("qwen-vl")
+        if model_lower.contains("vision") || model_lower.contains("@cf/llava") {
+            return true;
+        }
+        // Fall back to reference capabilities for the underlying model
+        crate::llm::reference_capabilities::get_reference_capabilities(model)
+            .map(|c| c.vision)
+            .unwrap_or(false)
     }
 
     fn supports_structured_output(&self, _model: &str) -> bool {
@@ -128,23 +131,10 @@ impl AiProvider for CloudflareWorkersAiProvider {
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {
-        // Cloudflare Workers AI model context window limits (case-insensitive)
-        let model_lower = normalize_model_name(model);
-        if model_lower.contains("llama-3.1") || model_lower.contains("llama-3.2") {
-            32_768 // Llama 3.1 and 3.2 models have 32K context
-        } else if model_lower.contains("llama-2") {
-            4_096 // Llama 2 models have 4K context
-        } else if model_lower.contains("mistral-7b") {
-            8_192 // Mistral 7B has 8K context
-        } else if model_lower.contains("qwen1.5") {
-            32_768 // Qwen 1.5 models have 32K context
-        } else if model_lower.contains("codellama") {
-            16_384 // CodeLlama has 16K context
-        } else if model_lower.contains("gemma") {
-            8_192 // Gemma models have 8K context
-        } else {
-            4_096 // Conservative default for smaller models
-        }
+        // Use reference capabilities for model-specific context windows
+        crate::llm::reference_capabilities::get_reference_capabilities(model)
+            .map(|c| c.max_input_tokens)
+            .unwrap_or(4_096) // Conservative default for Cloudflare's smaller models
     }
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {

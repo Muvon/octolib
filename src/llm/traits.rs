@@ -35,30 +35,36 @@ pub trait AiProvider: Send + Sync {
 
     /// Check if the provider/model supports caching
     fn supports_caching(&self, _model: &str) -> bool {
-        // Default implementation - providers can override
         false
     }
 
     /// Get maximum input tokens for a model (actual context window size)
     /// This is what we can send to the API - the provider handles output limits internally
-    fn get_max_input_tokens(&self, model: &str) -> usize;
+    fn get_max_input_tokens(&self, model: &str) -> usize {
+        crate::llm::reference_capabilities::get_reference_capabilities(model)
+            .map(|c| c.max_input_tokens)
+            .unwrap_or(8_192)
+    }
 
     /// Check if the provider/model supports vision capabilities
-    fn supports_vision(&self, _model: &str) -> bool {
-        // Default implementation - providers can override
-        false
+    fn supports_vision(&self, model: &str) -> bool {
+        crate::llm::reference_capabilities::get_reference_capabilities(model)
+            .map(|c| c.vision)
+            .unwrap_or(false)
     }
 
     /// Check if the provider/model supports video capabilities
-    fn supports_video(&self, _model: &str) -> bool {
-        // Default implementation - providers can override
-        false
+    fn supports_video(&self, model: &str) -> bool {
+        crate::llm::reference_capabilities::get_reference_capabilities(model)
+            .map(|c| c.video)
+            .unwrap_or(false)
     }
 
     /// Check if the provider supports structured output
-    fn supports_structured_output(&self, _model: &str) -> bool {
-        // Default implementation - providers can override
-        false
+    fn supports_structured_output(&self, model: &str) -> bool {
+        crate::llm::reference_capabilities::get_reference_capabilities(model)
+            .map(|c| c.structured_output)
+            .unwrap_or(false)
     }
 
     /// Get pricing information for a model

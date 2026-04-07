@@ -89,58 +89,68 @@ impl AiProvider for OpenRouterProvider {
     }
 
     fn supports_vision(&self, model: &str) -> bool {
-        // OpenRouter is an aggregator - we can't know which models support vision
-        // Default to true and let the underlying provider handle it
-        let normalized = normalize_model_name(model);
-        // For known non-vision models, return false as optimization
-        let known_non_vision = normalized.starts_with("gpt-3.5")
-            || normalized.starts_with("text-")
-            || normalized == "o1-preview"
-            || normalized == "o1-mini";
-        !known_non_vision
-    }
-
-    fn supports_video(&self, _model: &str) -> bool {
-        // OpenRouter is an aggregator - support all by default
-        // The underlying provider/model will handle the actual capability
+        // Try reference capabilities first for accurate model-level detection
+        if let Some(caps) = crate::llm::reference_capabilities::get_reference_capabilities(model) {
+            return caps.vision;
+        }
+        // For provider-prefixed models, try stripping the prefix
+        if let Some(slash_pos) = model.find('/') {
+            if let Some(caps) = crate::llm::reference_capabilities::get_reference_capabilities(
+                &model[slash_pos + 1..],
+            ) {
+                return caps.vision;
+            }
+        }
+        // Unknown model — default true (aggregator, let API handle)
         true
     }
 
-    fn get_max_input_tokens(&self, model: &str) -> usize {
-        // Auto-generated from OpenRouter API (case-insensitive)
-        let normalized = normalize_model_name(model);
-        match normalized.as_str() {
-            // claude models
-            _ if normalized.starts_with("claude") => 200_000,
-            // gpt-4o models
-            _ if normalized.starts_with("gpt-4o") => 128_000,
-            // gpt-4-turbo models
-            _ if normalized.starts_with("gpt-4-turbo") => 128_000,
-            // o1/o3 models
-            _ if normalized.starts_with("o1") || normalized.starts_with("o3") => 200_000,
-            // gpt-4 models
-            _ if normalized.starts_with("gpt-4") && !normalized.starts_with("gpt-4o") => 8_192,
-            // gpt-3.5-turbo models
-            _ if normalized.starts_with("gpt-3.5-turbo") => 16_384,
-            // llama models
-            _ if normalized.starts_with("llama-3") => 131_072,
-            _ if normalized.starts_with("llama-4") => 200_000,
-            // gemini models
-            _ if normalized.starts_with("gemini-1.5-pro") => 2_000_000,
-            _ if normalized.starts_with("gemini-1.5-flash") => 1_000_000,
-            _ if normalized.starts_with("gemini-2") => 1_048_576,
-            // mistral models
-            _ if normalized.starts_with("mistral-large") => 128_000,
-            _ if normalized.starts_with("mistral-small") => 32_000,
-            // deepseek models
-            _ if normalized.starts_with("deepseek") => 128_000,
-            // Fallback
-            _ => 2_000_000,
+    fn supports_video(&self, model: &str) -> bool {
+        if let Some(caps) = crate::llm::reference_capabilities::get_reference_capabilities(model) {
+            return caps.video;
         }
+        if let Some(slash_pos) = model.find('/') {
+            if let Some(caps) = crate::llm::reference_capabilities::get_reference_capabilities(
+                &model[slash_pos + 1..],
+            ) {
+                return caps.video;
+            }
+        }
+        false
     }
 
-    fn supports_structured_output(&self, _model: &str) -> bool {
-        true // All OpenRouter models support structured output
+    fn get_max_input_tokens(&self, model: &str) -> usize {
+        // Try reference capabilities first
+        if let Some(caps) = crate::llm::reference_capabilities::get_reference_capabilities(model) {
+            return caps.max_input_tokens;
+        }
+        // For provider-prefixed models (anthropic/claude-3, openai/gpt-4o, etc.)
+        if let Some(slash_pos) = model.find('/') {
+            if let Some(caps) = crate::llm::reference_capabilities::get_reference_capabilities(
+                &model[slash_pos + 1..],
+            ) {
+                return caps.max_input_tokens;
+            }
+        }
+        // OpenRouter-specific known families not in reference table
+        let normalized = normalize_model_name(model);
+        if normalized.contains("claude") {
+            return 200_000;
+        }
+        if normalized.contains("gpt-4o") || normalized.contains("gpt-4-turbo") {
+            return 128_000;
+        }
+        if normalized.starts_with("o1") || normalized.starts_with("o3") {
+            return 200_000;
+        }
+        128_000 // Conservative default for OpenRouter
+    }
+
+    fn supports_structured_output(&self, model: &str) -> bool {
+        // Try reference capabilities; default true for OpenRouter aggregator
+        crate::llm::reference_capabilities::get_reference_capabilities(model)
+            .map(|c| c.structured_output)
+            .unwrap_or(true)
     }
 
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {

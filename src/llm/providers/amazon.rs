@@ -98,29 +98,34 @@ impl AiProvider for AmazonBedrockProvider {
     }
 
     fn supports_vision(&self, model: &str) -> bool {
-        // Claude models on Bedrock support vision (case-insensitive)
+        // Bedrock-specific known models
         let model_lower = normalize_model_name(model);
-        model_lower.contains("claude-3")
+        if model_lower.contains("claude-3")
             || model_lower.contains("claude-4")
             || model_lower.contains("anthropic.claude")
             || model_lower.contains("nova")
+        {
+            return true;
+        }
+        // Fall back to reference capabilities for other models on Bedrock
+        crate::llm::reference_capabilities::get_reference_capabilities(model)
+            .map(|c| c.vision)
+            .unwrap_or(false)
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {
-        // Amazon Bedrock model context window limits (case-insensitive)
+        // Bedrock-specific known models
         let model_lower = normalize_model_name(model);
         if model_lower.contains("claude") || model_lower.contains("anthropic.claude") {
-            200_000 // Claude models have 200K context
-        } else if model_lower.contains("llama3-2-90b") || model_lower.contains("meta.llama3-2-90b")
-        {
-            128_000 // Llama 3.2 90B has 128K context
-        } else if model_lower.contains("llama") || model_lower.contains("meta.llama") {
-            32_768 // Other Llama models typically 32K
-        } else if model_lower.contains("titan") || model_lower.contains("amazon.titan") {
-            32_000 // Titan models have 32K context
-        } else {
-            32_768 // Conservative default
+            return 200_000;
         }
+        if model_lower.contains("titan") || model_lower.contains("amazon.titan") {
+            return 32_000;
+        }
+        // Fall back to reference capabilities for other models on Bedrock
+        crate::llm::reference_capabilities::get_reference_capabilities(model)
+            .map(|c| c.max_input_tokens)
+            .unwrap_or(32_768)
     }
 
     fn supports_structured_output(&self, _model: &str) -> bool {

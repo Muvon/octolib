@@ -20,6 +20,7 @@
 pub mod config;
 pub mod factory;
 pub mod providers;
+pub mod reference_capabilities;
 pub mod reference_pricing;
 pub mod retry;
 pub mod strategies;
@@ -31,6 +32,7 @@ pub mod utils;
 // Re-export main types and traits for easy access
 pub use config::{CacheConfig, CacheTTL, CacheType};
 pub use factory::ProviderFactory;
+pub use reference_capabilities::ModelCapabilities;
 pub use strategies::{ModelLimits, ProviderStrategy, StrategyFactory, ToolResult};
 pub use tool_calls::{GenericToolCall, ProviderToolCalls};
 pub use traits::AiProvider;

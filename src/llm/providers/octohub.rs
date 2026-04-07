@@ -82,21 +82,8 @@ impl AiProvider for OctoHubProvider {
         true // Depends on underlying provider
     }
 
-    fn supports_vision(&self, _model: &str) -> bool {
-        true // Depends on underlying model
-    }
-
-    fn supports_video(&self, _model: &str) -> bool {
-        false
-    }
-
-    fn get_max_input_tokens(&self, _model: &str) -> usize {
-        128_000 // Conservative default
-    }
-
-    fn supports_structured_output(&self, _model: &str) -> bool {
-        true
-    }
+    // supports_vision, supports_video, supports_structured_output, get_max_input_tokens
+    // are resolved via reference capabilities (trait defaults)
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
         let base_url = Self::base_url();
@@ -545,10 +532,13 @@ mod tests {
     fn test_capabilities() {
         let provider = OctoHubProvider::new();
         assert!(provider.supports_caching("any"));
-        assert!(provider.supports_vision("any"));
-        assert!(!provider.supports_video("any"));
-        assert!(provider.supports_structured_output("any"));
-        assert_eq!(provider.get_max_input_tokens("any"), 128_000);
+        // Vision/video/structured_output now resolved via reference capabilities
+        assert!(provider.supports_vision("llava:latest"));
+        assert!(!provider.supports_vision("llama-3.1-8b"));
+        assert!(provider.supports_video("qwen-2.5-vl-72b"));
+        assert!(!provider.supports_video("llama-3.1-8b"));
+        assert!(provider.supports_structured_output("llama-3.1-8b"));
+        assert_eq!(provider.get_max_input_tokens("llama-3.1-8b"), 131_072);
     }
 
     #[test]

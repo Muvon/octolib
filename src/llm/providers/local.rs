@@ -70,26 +70,8 @@ impl AiProvider for LocalProvider {
         false
     }
 
-    fn supports_vision(&self, _model: &str) -> bool {
-        // Local provider supports many models - default to true
-        // Actual capability depends on the specific model being used
-        true
-    }
-
-    fn supports_video(&self, _model: &str) -> bool {
-        // Local provider supports video depending on the model
-        // Default to true and let the underlying model handle it
-        true
-    }
-
-    fn get_max_input_tokens(&self, _model: &str) -> usize {
-        // Local models often support large contexts (128K is common)
-        128_000
-    }
-
-    fn supports_structured_output(&self, _model: &str) -> bool {
-        true
-    }
+    // supports_vision, supports_video, supports_structured_output, get_max_input_tokens
+    // are resolved via reference capabilities (trait defaults)
 
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
         // Try reference pricing for cloud-equivalent cost estimation
@@ -151,19 +133,25 @@ mod tests {
     }
 
     #[test]
-    fn test_supports_structured_output() {
+    fn test_default_capabilities() {
         let provider = LocalProvider::new();
-        assert!(provider.supports_structured_output("any-model"));
+        assert_eq!(provider.name(), "local");
+        assert!(!provider.supports_caching("any-model"));
     }
 
     #[test]
-    fn test_default_capabilities() {
+    fn test_capabilities_model_specific() {
         let provider = LocalProvider::new();
-
-        assert_eq!(provider.name(), "local");
-        assert!(!provider.supports_caching("any-model"));
-        assert!(provider.supports_vision("any-model"));
-        assert!(provider.supports_video("any-model"));
-        assert_eq!(provider.get_max_input_tokens("any-model"), 128_000);
+        // Vision models
+        assert!(provider.supports_vision("llava:latest"));
+        assert!(provider.supports_vision("gemma-3-27b"));
+        // Text-only models
+        assert!(!provider.supports_vision("llama-3.1-8b"));
+        // Structured output
+        assert!(provider.supports_structured_output("llama-3.1-8b"));
+        assert!(!provider.supports_structured_output("mistral-7b"));
+        // Context windows
+        assert_eq!(provider.get_max_input_tokens("llama-3.1-8b"), 131_072);
+        assert_eq!(provider.get_max_input_tokens("mistral-7b"), 32_768);
     }
 }

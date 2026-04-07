@@ -67,25 +67,8 @@ impl AiProvider for OllamaProvider {
         false
     }
 
-    fn supports_vision(&self, _model: &str) -> bool {
-        // Ollama is a local provider with many models - support all by default
-        // The actual capability depends on the specific model being used
-        true
-    }
-
-    fn supports_video(&self, _model: &str) -> bool {
-        // Ollama is a local provider - support all by default
-        // The actual capability depends on the specific model being used
-        true
-    }
-
-    fn get_max_input_tokens(&self, _model: &str) -> usize {
-        128_000
-    }
-
-    fn supports_structured_output(&self, _model: &str) -> bool {
-        false
-    }
+    // supports_vision, supports_video, supports_structured_output, get_max_input_tokens
+    // are resolved via reference capabilities (trait defaults)
 
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
         // Try reference pricing for cloud-equivalent cost estimation
@@ -141,27 +124,45 @@ mod tests {
         let provider = OllamaProvider::new();
         assert_eq!(provider.name(), "ollama");
         assert!(!provider.supports_caching("any-model"));
-        assert!(!provider.supports_structured_output("any-model"));
-        assert_eq!(provider.get_max_input_tokens("any-model"), 128_000);
     }
 
     #[test]
-    fn test_supports_vision_default() {
+    fn test_vision_model_specific() {
         let provider = OllamaProvider::new();
-        // Ollama supports all models by default (aggregator behavior)
+        // Vision models detected via reference capabilities
         assert!(provider.supports_vision("llava:latest"));
-        assert!(provider.supports_vision("qwen2.5-vl"));
-        assert!(provider.supports_vision("llama3.2"));
-        assert!(provider.supports_vision("any-model"));
+        assert!(provider.supports_vision("qwen2.5-vl:72b"));
+        assert!(provider.supports_vision("gemma3:27b"));
+        // Text-only models correctly report no vision
+        assert!(!provider.supports_vision("llama3.1:8b"));
+        assert!(!provider.supports_vision("mistral:7b"));
+        // Unknown models default to false
+        assert!(!provider.supports_vision("unknown-model"));
     }
 
     #[test]
-    fn test_supports_video_default() {
+    fn test_video_model_specific() {
         let provider = OllamaProvider::new();
-        // Ollama supports video by default (aggregator behavior)
-        assert!(provider.supports_video("llava:latest"));
-        assert!(provider.supports_video("qwen2.5-vl"));
-        assert!(provider.supports_video("llama3.2"));
-        assert!(provider.supports_video("any-model"));
+        // Only VL models support video
+        assert!(provider.supports_video("qwen2.5-vl:72b"));
+        assert!(!provider.supports_video("llama3.1:8b"));
+        assert!(!provider.supports_video("llava:latest"));
+    }
+
+    #[test]
+    fn test_structured_output_model_specific() {
+        let provider = OllamaProvider::new();
+        assert!(provider.supports_structured_output("llama3.1:8b"));
+        assert!(provider.supports_structured_output("qwen2.5:72b"));
+        assert!(!provider.supports_structured_output("mistral:7b"));
+    }
+
+    #[test]
+    fn test_context_window_model_specific() {
+        let provider = OllamaProvider::new();
+        assert_eq!(provider.get_max_input_tokens("llama3.1:8b"), 131_072);
+        assert_eq!(provider.get_max_input_tokens("mistral:7b"), 32_768);
+        // Unknown models get conservative default
+        assert_eq!(provider.get_max_input_tokens("unknown-model"), 8_192);
     }
 }

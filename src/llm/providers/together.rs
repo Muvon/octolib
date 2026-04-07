@@ -64,28 +64,15 @@ impl AiProvider for TogetherProvider {
         false
     }
 
-    fn supports_vision(&self, _model: &str) -> bool {
-        // Together.ai is an aggregator — default to true, let the API handle it
-        true
-    }
-
-    fn supports_video(&self, _model: &str) -> bool {
-        true
-    }
-
-    fn supports_structured_output(&self, _model: &str) -> bool {
-        true
-    }
+    // supports_vision, supports_video, supports_structured_output
+    // are resolved via reference capabilities (trait defaults)
 
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
         // Try reference pricing for cost estimation based on the underlying model
         crate::llm::reference_pricing::get_reference_pricing(model)
     }
 
-    fn get_max_input_tokens(&self, _model: &str) -> usize {
-        // Conservative default; Together.ai hosts many models with varying context windows
-        131_072
-    }
+    // get_max_input_tokens resolved via reference capabilities (trait default)
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
         let api_key = self.get_api_key()?;

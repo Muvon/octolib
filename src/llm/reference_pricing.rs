@@ -21,7 +21,7 @@
 //! These are approximate — actual costs vary by provider and billing tier.
 
 use crate::llm::types::ModelPricing;
-use crate::llm::utils::normalize_model_name;
+use crate::llm::utils::{normalize_model_name, sanitize_model_name};
 
 /// Reference pricing entry: (pattern, input, output, cache_write, cache_read)
 /// Patterns are matched case-insensitively via substring against the model name.
@@ -157,54 +157,9 @@ pub fn calculate_reference_cost(model: &str, input_tokens: u64, output_tokens: u
     Some(pricing.calculate_cost(input_tokens, 0, 0, output_tokens))
 }
 
-/// Sanitize provider-specific model name formats into a canonical form
-/// for matching against reference patterns.
-///
-/// Handles:
-/// - Ollama format: `llama3.3:70b` → `llama-3.3-70b`
-/// - HuggingFace/Together: `meta-llama/llama-3.3-70b-instruct` → strips org prefix irrelevant to matching
-/// - Version dots without dashes: `qwen2.5` → `qwen-2.5`
-fn sanitize_model_name(name: &str) -> String {
-    let mut s = name.to_string();
-    // Replace colons with dashes (Ollama uses `model:size`)
-    s = s.replace(':', "-");
-    // Insert dashes between letters and digits where missing (e.g., `llama3` → `llama-3`)
-    let mut result = String::with_capacity(s.len() + 4);
-    let chars: Vec<char> = s.chars().collect();
-    for i in 0..chars.len() {
-        result.push(chars[i]);
-        if i + 1 < chars.len() {
-            let curr = chars[i];
-            let next = chars[i + 1];
-            // letter→digit or digit→letter boundary, but NOT around dots/dashes
-            if (curr.is_ascii_alphabetic() && next.is_ascii_digit())
-                || (curr.is_ascii_digit() && next.is_ascii_alphabetic())
-            {
-                // Only insert dash if there isn't already a separator
-                if curr != '-' && curr != '.' && next != '-' && next != '.' {
-                    result.push('-');
-                }
-            }
-        }
-    }
-    result
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_sanitize_model_name() {
-        assert_eq!(sanitize_model_name("llama3.3:70b"), "llama-3.3-70-b");
-        assert_eq!(sanitize_model_name("qwen2.5-72b"), "qwen-2.5-72-b");
-        assert_eq!(
-            sanitize_model_name("meta-llama/llama-3.3-70b-instruct"),
-            "meta-llama/llama-3.3-70-b-instruct"
-        );
-        assert_eq!(sanitize_model_name("phi4"), "phi-4");
-        assert_eq!(sanitize_model_name("deepseek-r1"), "deepseek-r-1");
-    }
 
     #[test]
     fn test_reference_pricing_exact() {

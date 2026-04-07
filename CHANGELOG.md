@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.13.4] - 2026-04-07
+
+### 📋 Release Summary
+
+This release includes internal improvements to model capability handling for more reliable multi-provider AI interactions, along with updated documentation.
+
+
+### 🔧 Improvements & Optimizations
+
+- **llm**: centralize model capability lookup `92da1004`
+
 ## [0.13.3] - 2026-04-06
 
 ### 📋 Release Summary

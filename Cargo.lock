@@ -2579,7 +2579,7 @@ dependencies = [
 
 [[package]]
 name = "octolib"
-version = "0.13.3"
+version = "0.13.4"
 dependencies = [
  "anyhow",
  "async-trait",

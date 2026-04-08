@@ -267,6 +267,7 @@ impl AiProvider for OpenRouterProvider {
                         let mut format_obj = serde_json::json!({
                             "type": "json_schema",
                             "json_schema": {
+                                "name": "response",
                                 "schema": schema
                             }
                         });

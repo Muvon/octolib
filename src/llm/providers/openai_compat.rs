@@ -113,6 +113,7 @@ pub(crate) async fn chat_completion(
                     let mut format_obj = serde_json::json!({
                         "type": "json_schema",
                         "json_schema": {
+                            "name": "response",
                             "schema": schema
                         }
                     });

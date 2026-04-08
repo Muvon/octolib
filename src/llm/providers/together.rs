@@ -122,7 +122,7 @@ impl AiProvider for TogetherProvider {
                     if let Some(schema) = &response_format.schema {
                         let mut format_obj = serde_json::json!({
                             "type": "json_schema",
-                            "json_schema": { "schema": schema }
+                            "json_schema": { "name": "response", "schema": schema }
                         });
                         if matches!(
                             response_format.mode,

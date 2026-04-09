@@ -19,7 +19,8 @@
  * It supports multiple model architectures with safetensors format from the HuggingFace Hub.
  *
  * Supported architectures:
- * - BERT: Standard BERT models (bert-base-uncased, sentence-transformers/all-mpnet-base-v2)
+ * - BERT: Standard BERT models (bert-base-uncased, sentence-transformers/all-MiniLM-L6-v2)
+ * - RoBERTa: RoBERTa/XLM-RoBERTa models (microsoft/codebert-base, xlm-roberta-base)
  * - JinaBert: Jina embedding models with ALiBi position embeddings (jinaai/jina-embeddings-v2-base-*)
  * - Qwen2: Qwen2 decoder models for embeddings (jinaai/jina-code-embeddings-1.5b)
  *
@@ -56,6 +57,8 @@ use candle_transformers::models::jina_bert::{
 #[cfg(feature = "huggingface")]
 use candle_transformers::models::qwen2::{Config as Qwen2Config, Model as Qwen2Model};
 #[cfg(feature = "huggingface")]
+use candle_transformers::models::xlm_roberta::{Config as XLMRobertaConfig, XLMRobertaModel};
+#[cfg(feature = "huggingface")]
 use hf_hub::{api::tokio::Api, Repo, RepoType};
 #[cfg(feature = "huggingface")]
 use serde::Deserialize;
@@ -74,6 +77,8 @@ use tokio::sync::RwLock;
 pub(crate) enum ModelArchitecture {
     /// Standard BERT models
     Bert,
+    /// RoBERTa / XLM-RoBERTa models
+    Roberta,
     /// Jina BERT models with ALiBi position embeddings
     JinaBert,
     /// Qwen2 decoder models
@@ -122,6 +127,14 @@ impl ModelArchitecture {
                 }
             }
 
+            // RoBERTa / XLM-RoBERTa variants
+            "RobertaModel"
+            | "RobertaForMaskedLM"
+            | "RobertaForSequenceClassification"
+            | "XLMRobertaModel"
+            | "XLMRobertaForMaskedLM"
+            | "XLMRobertaForSequenceClassification" => Ok(Self::Roberta),
+
             // Jina BERT variants (explicit Jina architecture names)
             "JinaBertModel"
             | "JinaBertForMaskedLM"
@@ -134,7 +147,7 @@ impl ModelArchitecture {
             "Qwen3ForCausalLM" | "Qwen3Model" | "Qwen3ForSequenceClassification" => Ok(Self::Qwen3),
 
             _ => Err(anyhow::anyhow!(
-                "Unsupported model architecture: '{}'. Supported: BertModel, JinaBertModel, Qwen2ForCausalLM",
+                "Unsupported model architecture: '{}'. Supported: BertModel, RobertaModel, XLMRobertaModel, JinaBertModel, Qwen2ForCausalLM, Qwen3ForCausalLM",
                 arch
             )),
         }
@@ -145,6 +158,7 @@ impl ModelArchitecture {
 /// HuggingFace model instance supporting multiple architectures
 pub enum HuggingFaceModel {
     Bert(BertModel, Tokenizer, Device),
+    Roberta(XLMRobertaModel, Tokenizer, Device),
     JinaBert(JinaBertModel, Tokenizer, Device),
     // Qwen2Model::forward takes &mut self, so wrap in Mutex for shared access
     Qwen2(std::sync::Mutex<Qwen2Model>, Tokenizer, Device),
@@ -289,6 +303,13 @@ impl HuggingFaceModel {
                     .with_context(|| "Failed to load BERT model")?;
                 HuggingFaceModel::Bert(model, tokenizer, device)
             }
+            ModelArchitecture::Roberta => {
+                let config: XLMRobertaConfig = serde_json::from_str(&config_content)
+                    .with_context(|| "Failed to parse config.json as RoBERTa config")?;
+                let model = XLMRobertaModel::new(&config, var_builder)
+                    .with_context(|| "Failed to load RoBERTa model")?;
+                HuggingFaceModel::Roberta(model, tokenizer, device)
+            }
             ModelArchitecture::JinaBert => {
                 let config: JinaBertConfig = serde_json::from_str(&config_content)
                     .with_context(|| "Failed to parse config.json as JinaBert config")?;
@@ -332,6 +353,26 @@ impl HuggingFaceModel {
                     let output =
                         model.forward(&token_ids, &token_type_ids, Some(&attention_mask))?;
                     Self::mean_pool_and_normalize(&output, &attention_mask)?
+                }
+                HuggingFaceModel::Roberta(model, tokenizer, device) => {
+                    let encoding = tokenizer
+                        .encode(text.as_str(), true)
+                        .map_err(|e| anyhow::anyhow!("Tokenization failed: {}", e))?;
+                    let tokens = encoding.get_ids();
+                    let token_ids = Tensor::new(tokens, device)?.unsqueeze(0)?;
+                    let token_type_ids = Tensor::zeros_like(&token_ids)?;
+                    let attention_mask = Tensor::ones((1, tokens.len()), DType::F32, device)?;
+                    // XLMRobertaModel.forward: (input_ids, attention_mask, token_type_ids, ...)
+                    let output = model.forward(
+                        &token_ids,
+                        &attention_mask,
+                        &token_type_ids,
+                        None,
+                        None,
+                        None,
+                    )?;
+                    let attention_mask_u8 = Tensor::ones((1, tokens.len()), DType::U8, device)?;
+                    Self::mean_pool_and_normalize(&output, &attention_mask_u8)?
                 }
                 HuggingFaceModel::JinaBert(model, tokenizer, device) => {
                     let encoding = tokenizer

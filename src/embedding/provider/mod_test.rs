@@ -200,6 +200,32 @@ mod tests {
             Ok(crate::embedding::provider::huggingface::ModelArchitecture::JinaBert)
         ));
 
+        // Test RoBERTa detection
+        let roberta_config = json!({
+            "architectures": ["RobertaModel"]
+        });
+        let config_str = serde_json::to_string(&roberta_config).unwrap();
+        let parsed: crate::embedding::provider::huggingface::ModelConfig =
+            serde_json::from_str(&config_str).unwrap();
+        let arch = crate::embedding::provider::huggingface::ModelArchitecture::from_config(&parsed);
+        assert!(matches!(
+            arch,
+            Ok(crate::embedding::provider::huggingface::ModelArchitecture::Roberta)
+        ));
+
+        // Test XLMRoberta detection
+        let xlm_roberta_config = json!({
+            "architectures": ["XLMRobertaModel"]
+        });
+        let config_str = serde_json::to_string(&xlm_roberta_config).unwrap();
+        let parsed: crate::embedding::provider::huggingface::ModelConfig =
+            serde_json::from_str(&config_str).unwrap();
+        let arch = crate::embedding::provider::huggingface::ModelArchitecture::from_config(&parsed);
+        assert!(matches!(
+            arch,
+            Ok(crate::embedding::provider::huggingface::ModelArchitecture::Roberta)
+        ));
+
         // Test Qwen2 detection
         let qwen2_config = json!({
             "architectures": ["Qwen2ForCausalLM"]

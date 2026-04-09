@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.14.0] - 2026-04-09
+
+### 📋 Release Summary
+
+This release adds RoBERTa and XLM-RoBERTa embedding models, expanding supported embedding options. Additionally, JSON schema format handling has been improved for better system compatibility.
+
+
+### ✨ New Features & Enhancements
+
+- **embedding**: add RoBERTa/XLM-RoBERTa support `08b8c97a`
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: add missing name field to JSON schema format `9ae86184`
+
 ## [0.13.4] - 2026-04-07
 
 ### 📋 Release Summary

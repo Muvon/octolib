@@ -226,6 +226,50 @@ mod tests {
             Ok(crate::embedding::provider::huggingface::ModelArchitecture::Roberta)
         ));
 
+        // Test JinaCodeBert detection (via BertModel + alibi + qk-post-norm _name_or_path)
+        let jina_code_config = json!({
+            "architectures": ["BertModel"],
+            "position_embedding_type": "alibi",
+            "_name_or_path": "jinaai/jina-bert-v2-qk-post-norm"
+        });
+        let config_str = serde_json::to_string(&jina_code_config).unwrap();
+        let parsed: crate::embedding::provider::huggingface::ModelConfig =
+            serde_json::from_str(&config_str).unwrap();
+        let arch = crate::embedding::provider::huggingface::ModelArchitecture::from_config(&parsed);
+        assert!(matches!(
+            arch,
+            Ok(crate::embedding::provider::huggingface::ModelArchitecture::JinaCodeBert)
+        ));
+
+        // Test JinaCodeBert detection (via explicit JinaBertModel + qk-post-norm)
+        let jina_code_explicit_config = json!({
+            "architectures": ["JinaBertModel"],
+            "_name_or_path": "jinaai/jina-bert-v2-qk-post-norm"
+        });
+        let config_str = serde_json::to_string(&jina_code_explicit_config).unwrap();
+        let parsed: crate::embedding::provider::huggingface::ModelConfig =
+            serde_json::from_str(&config_str).unwrap();
+        let arch = crate::embedding::provider::huggingface::ModelArchitecture::from_config(&parsed);
+        assert!(matches!(
+            arch,
+            Ok(crate::embedding::provider::huggingface::ModelArchitecture::JinaCodeBert)
+        ));
+
+        // Test that JinaBert (non-qk-post-norm) is NOT detected as JinaCodeBert
+        let jina_standard_config = json!({
+            "architectures": ["BertModel"],
+            "position_embedding_type": "alibi",
+            "_name_or_path": "jinaai/jina-embeddings-v2-base-en"
+        });
+        let config_str = serde_json::to_string(&jina_standard_config).unwrap();
+        let parsed: crate::embedding::provider::huggingface::ModelConfig =
+            serde_json::from_str(&config_str).unwrap();
+        let arch = crate::embedding::provider::huggingface::ModelArchitecture::from_config(&parsed);
+        assert!(matches!(
+            arch,
+            Ok(crate::embedding::provider::huggingface::ModelArchitecture::JinaBert)
+        ));
+
         // Test Qwen2 detection
         let qwen2_config = json!({
             "architectures": ["Qwen2ForCausalLM"]
@@ -364,6 +408,92 @@ mod tests {
                     "HuggingFace BERT embedding test failed (expected in CI): {}",
                     e
                 );
+            }
+        }
+    }
+
+    #[tokio::test]
+    #[cfg(feature = "huggingface")]
+    async fn test_create_huggingface_jina_code_bert_provider() {
+        // Test JinaCodeBert model loading (jina-embeddings-v2-base-code uses QK-post-norm architecture)
+        let result = create_embedding_provider_from_parts(
+            &EmbeddingProviderType::HuggingFace,
+            "jinaai/jina-embeddings-v2-base-code",
+        )
+        .await;
+
+        match result {
+            Ok(provider) => {
+                assert!(provider.get_dimension() > 0);
+                assert!(provider.is_model_supported());
+            }
+            Err(e) => {
+                // HuggingFace might fail due to model download issues in CI
+                println!(
+                    "HuggingFace JinaCodeBert test failed (expected in CI): {}",
+                    e
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    #[cfg(feature = "huggingface")]
+    async fn test_huggingface_jina_code_bert_embedding_generation() {
+        // Test actual embedding generation with JinaCodeBert (QK-post-norm) model
+        // This test downloads the model on first run
+        let result = create_embedding_provider_from_parts(
+            &EmbeddingProviderType::HuggingFace,
+            "jinaai/jina-embeddings-v2-base-code",
+        )
+        .await;
+
+        match result {
+            Ok(provider) => {
+                eprintln!("JinaCodeBert provider created successfully");
+                // Test single embedding with code snippet
+                let text = "fn main() { println!(\"Hello, world!\"); }";
+                let embedding = provider.generate_embedding(text).await;
+
+                match embedding {
+                    Ok(vec) => {
+                        assert!(!vec.is_empty(), "Embedding should not be empty");
+                        assert_eq!(
+                            vec.len(),
+                            768,
+                            "jina-embeddings-v2-base-code should produce 768-dim vectors"
+                        );
+                        assert!(
+                            vec.iter().all(|v| v.is_finite()),
+                            "All values should be finite"
+                        );
+                        // Verify the embedding is normalized (L2 norm ≈ 1.0)
+                        let norm: f32 = vec.iter().map(|v| v * v).sum::<f32>().sqrt();
+                        assert!(
+                            (norm - 1.0).abs() < 0.01,
+                            "Embedding should be L2-normalized, got norm: {}",
+                            norm
+                        );
+                        println!(
+                            "✓ JinaCodeBert embedding generated successfully, dimension: {}",
+                            vec.len()
+                        );
+                    }
+                    Err(e) => {
+                        // Model loading can fail in CI due to network/resource constraints
+                        eprintln!("JinaCodeBert embedding generation failed:");
+                        for cause in e.chain() {
+                            eprintln!("  Caused by: {}", cause);
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                // HuggingFace might fail due to model download issues in CI
+                eprintln!("HuggingFace JinaCodeBert provider creation failed:");
+                for cause in e.chain() {
+                    eprintln!("  Caused by: {}", cause);
+                }
             }
         }
     }

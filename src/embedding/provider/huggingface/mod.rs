@@ -40,6 +40,8 @@
  * Models are automatically downloaded to the system cache directory and reused across sessions.
  */
 
+mod jina_code_bert;
+
 #[cfg(feature = "huggingface")]
 use anyhow::{Context, Result};
 #[cfg(feature = "huggingface")]
@@ -61,6 +63,8 @@ use candle_transformers::models::xlm_roberta::{Config as XLMRobertaConfig, XLMRo
 #[cfg(feature = "huggingface")]
 use hf_hub::{api::tokio::Api, Repo, RepoType};
 #[cfg(feature = "huggingface")]
+use jina_code_bert::JinaCodeBertModel;
+#[cfg(feature = "huggingface")]
 use serde::Deserialize;
 #[cfg(feature = "huggingface")]
 use std::collections::HashMap;
@@ -81,6 +85,8 @@ pub(crate) enum ModelArchitecture {
     Roberta,
     /// Jina BERT models with ALiBi position embeddings
     JinaBert,
+    /// Jina BERT QK-post-norm models (e.g. jina-embeddings-v2-base-code)
+    JinaCodeBert,
     /// Qwen2 decoder models
     Qwen2,
     /// Qwen3 decoder models
@@ -93,6 +99,8 @@ pub(crate) enum ModelArchitecture {
 pub(crate) struct ModelConfig {
     pub(crate) architectures: Option<Vec<String>>,
     pub(crate) position_embedding_type: Option<String>,
+    #[serde(rename = "_name_or_path")]
+    pub(crate) name_or_path: Option<String>,
 }
 
 #[cfg(feature = "huggingface")]
@@ -121,7 +129,17 @@ impl ModelArchitecture {
                     .map(|t| t == "alibi")
                     .unwrap_or(false)
                 {
-                    Ok(Self::JinaBert)
+                    // Distinguish QK-post-norm variant (e.g. jina-embeddings-v2-base-code)
+                    if config
+                        .name_or_path
+                        .as_deref()
+                        .map(|p| p.contains("qk-post-norm"))
+                        .unwrap_or(false)
+                    {
+                        Ok(Self::JinaCodeBert)
+                    } else {
+                        Ok(Self::JinaBert)
+                    }
                 } else {
                     Ok(Self::Bert)
                 }
@@ -138,7 +156,19 @@ impl ModelArchitecture {
             // Jina BERT variants (explicit Jina architecture names)
             "JinaBertModel"
             | "JinaBertForMaskedLM"
-            | "JinaBertForSequenceClassification" => Ok(Self::JinaBert),
+            | "JinaBertForSequenceClassification" => {
+                // Explicit Jina architecture — also check for QK-post-norm
+                if config
+                    .name_or_path
+                    .as_deref()
+                    .map(|p| p.contains("qk-post-norm"))
+                    .unwrap_or(false)
+                {
+                    Ok(Self::JinaCodeBert)
+                } else {
+                    Ok(Self::JinaBert)
+                }
+            }
 
             // Qwen2 variants
             "Qwen2ForCausalLM" | "Qwen2Model" | "Qwen2ForSequenceClassification" => Ok(Self::Qwen2),
@@ -162,6 +192,7 @@ pub enum HuggingFaceModel {
     JinaBert(JinaBertModel, Tokenizer, Device),
     // Qwen2Model::forward takes &mut self, so wrap in Mutex for shared access
     Qwen2(std::sync::Mutex<Qwen2Model>, Tokenizer, Device),
+    JinaCodeBert(JinaCodeBertModel, Tokenizer, Device),
 }
 
 #[cfg(feature = "huggingface")]
@@ -317,6 +348,13 @@ impl HuggingFaceModel {
                     .with_context(|| "Failed to load JinaBert model")?;
                 HuggingFaceModel::JinaBert(model, tokenizer, device)
             }
+            ModelArchitecture::JinaCodeBert => {
+                let config: JinaBertConfig = serde_json::from_str(&config_content)
+                    .with_context(|| "Failed to parse config.json as JinaBert config")?;
+                let model = JinaCodeBertModel::new(var_builder, &config)
+                    .with_context(|| "Failed to load JinaCodeBert (QK-post-norm) model")?;
+                HuggingFaceModel::JinaCodeBert(model, tokenizer, device)
+            }
             ModelArchitecture::Qwen2 | ModelArchitecture::Qwen3 => {
                 let config: Qwen2Config = serde_json::from_str(&config_content)
                     .with_context(|| "Failed to parse config.json as Qwen2 config")?;
@@ -381,6 +419,17 @@ impl HuggingFaceModel {
                     let tokens = encoding.get_ids();
                     let token_ids = Tensor::new(tokens, device)?.unsqueeze(0)?;
                     // JinaBertModel.forward: (input_ids) only
+                    let output = model.forward(&token_ids)?;
+                    let attention_mask = Tensor::ones((1, tokens.len()), DType::U8, device)?;
+                    Self::mean_pool_and_normalize(&output, &attention_mask)?
+                }
+                HuggingFaceModel::JinaCodeBert(model, tokenizer, device) => {
+                    let encoding = tokenizer
+                        .encode(text.as_str(), true)
+                        .map_err(|e| anyhow::anyhow!("Tokenization failed: {}", e))?;
+                    let tokens = encoding.get_ids();
+                    let token_ids = Tensor::new(tokens, device)?.unsqueeze(0)?;
+                    // JinaCodeBertModel.forward: (input_ids) only — same interface as JinaBert
                     let output = model.forward(&token_ids)?;
                     let attention_mask = Tensor::ones((1, tokens.len()), DType::U8, device)?;
                     Self::mean_pool_and_normalize(&output, &attention_mask)?

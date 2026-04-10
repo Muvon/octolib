@@ -21,6 +21,7 @@
  * Supported architectures:
  * - BERT: Standard BERT models (bert-base-uncased, sentence-transformers/all-MiniLM-L6-v2)
  * - RoBERTa: RoBERTa/XLM-RoBERTa models (microsoft/codebert-base, xlm-roberta-base)
+ * - MPNet: MPNet models with relative position bias (sentence-transformers/all-mpnet-base-v2)
  * - JinaBert: Jina embedding models with ALiBi position embeddings (jinaai/jina-embeddings-v2-base-*)
  * - Qwen2: Qwen2 decoder models for embeddings (jinaai/jina-code-embeddings-1.5b)
  *
@@ -41,6 +42,7 @@
  */
 
 mod jina_code_bert;
+mod mpnet;
 
 #[cfg(feature = "huggingface")]
 use anyhow::{Context, Result};
@@ -64,6 +66,8 @@ use candle_transformers::models::xlm_roberta::{Config as XLMRobertaConfig, XLMRo
 use hf_hub::{api::tokio::Api, Repo, RepoType};
 #[cfg(feature = "huggingface")]
 use jina_code_bert::JinaCodeBertModel;
+#[cfg(feature = "huggingface")]
+use mpnet::{MPNetConfig, MPNetModel};
 #[cfg(feature = "huggingface")]
 use serde::Deserialize;
 #[cfg(feature = "huggingface")]
@@ -91,6 +95,8 @@ pub(crate) enum ModelArchitecture {
     Qwen2,
     /// Qwen3 decoder models
     Qwen3,
+    /// MPNet models with relative position bias
+    MPNet,
 }
 
 /// Configuration parsed from HuggingFace config.json
@@ -176,8 +182,14 @@ impl ModelArchitecture {
             // Qwen3 variants
             "Qwen3ForCausalLM" | "Qwen3Model" | "Qwen3ForSequenceClassification" => Ok(Self::Qwen3),
 
+            // MPNet variants
+            "MPNetModel"
+            | "MPNetForMaskedLM"
+            | "MPNetForSequenceClassification"
+            | "MPNetForTokenClassification" => Ok(Self::MPNet),
+
             _ => Err(anyhow::anyhow!(
-                "Unsupported model architecture: '{}'. Supported: BertModel, RobertaModel, XLMRobertaModel, JinaBertModel, Qwen2ForCausalLM, Qwen3ForCausalLM",
+                "Unsupported model architecture: '{}'. Supported: BertModel, RobertaModel, XLMRobertaModel, JinaBertModel, MPNetModel, Qwen2ForCausalLM, Qwen3ForCausalLM",
                 arch
             )),
         }
@@ -193,6 +205,7 @@ pub enum HuggingFaceModel {
     // Qwen2Model::forward takes &mut self, so wrap in Mutex for shared access
     Qwen2(std::sync::Mutex<Qwen2Model>, Tokenizer, Device),
     JinaCodeBert(JinaCodeBertModel, Tokenizer, Device),
+    MPNet(MPNetModel, Tokenizer, Device),
 }
 
 #[cfg(feature = "huggingface")]
@@ -323,6 +336,24 @@ impl HuggingFaceModel {
             }
         }
 
+        // For MPNet models, strip "mpnet." prefix if present
+        // sentence-transformers models store weights as "mpnet.embeddings.*", "mpnet.encoder.*"
+        // but our MPNetModel expects "embeddings.*", "encoder.*"
+        if matches!(architecture, ModelArchitecture::MPNet) {
+            let has_prefix = weights.keys().any(|k| k.starts_with("mpnet."));
+            if has_prefix {
+                let mut stripped_weights = HashMap::new();
+                for (key, value) in weights.into_iter() {
+                    let new_key = key
+                        .strip_prefix("mpnet.")
+                        .map(|s| s.to_string())
+                        .unwrap_or(key);
+                    stripped_weights.insert(new_key, value);
+                }
+                weights = stripped_weights;
+            }
+        }
+
         let var_builder = VarBuilder::from_tensors(weights, DType::F32, &device);
 
         // Create model based on detected architecture
@@ -361,6 +392,13 @@ impl HuggingFaceModel {
                 let model = Qwen2Model::new(&config, var_builder)
                     .with_context(|| "Failed to load Qwen2 model")?;
                 HuggingFaceModel::Qwen2(std::sync::Mutex::new(model), tokenizer, device)
+            }
+            ModelArchitecture::MPNet => {
+                let config: MPNetConfig = serde_json::from_str(&config_content)
+                    .with_context(|| "Failed to parse config.json as MPNet config")?;
+                let model = MPNetModel::new(var_builder, &config)
+                    .with_context(|| "Failed to load MPNet model")?;
+                HuggingFaceModel::MPNet(model, tokenizer, device)
             }
         };
 
@@ -445,6 +483,17 @@ impl HuggingFaceModel {
                         .lock()
                         .map_err(|e| anyhow::anyhow!("Qwen2 model mutex poisoned: {}", e))?
                         .forward(&token_ids, 0, None)?;
+                    let attention_mask = Tensor::ones((1, tokens.len()), DType::U8, device)?;
+                    Self::mean_pool_and_normalize(&output, &attention_mask)?
+                }
+                HuggingFaceModel::MPNet(model, tokenizer, device) => {
+                    let encoding = tokenizer
+                        .encode(text.as_str(), true)
+                        .map_err(|e| anyhow::anyhow!("Tokenization failed: {}", e))?;
+                    let tokens = encoding.get_ids();
+                    let token_ids = Tensor::new(tokens, device)?.unsqueeze(0)?;
+                    // MPNetModel.forward: (input_ids) only — position bias computed internally
+                    let output = model.forward(&token_ids)?;
                     let attention_mask = Tensor::ones((1, tokens.len()), DType::U8, device)?;
                     Self::mean_pool_and_normalize(&output, &attention_mask)?
                 }

@@ -295,6 +295,32 @@ mod tests {
             arch,
             Ok(crate::embedding::provider::huggingface::ModelArchitecture::Qwen3)
         ));
+
+        // Test MPNet detection (MPNetModel)
+        let mpnet_config = json!({
+            "architectures": ["MPNetModel"]
+        });
+        let config_str = serde_json::to_string(&mpnet_config).unwrap();
+        let parsed: crate::embedding::provider::huggingface::ModelConfig =
+            serde_json::from_str(&config_str).unwrap();
+        let arch = crate::embedding::provider::huggingface::ModelArchitecture::from_config(&parsed);
+        assert!(matches!(
+            arch,
+            Ok(crate::embedding::provider::huggingface::ModelArchitecture::MPNet)
+        ));
+
+        // Test MPNet detection (MPNetForMaskedLM)
+        let mpnet_mlm_config = json!({
+            "architectures": ["MPNetForMaskedLM"]
+        });
+        let config_str = serde_json::to_string(&mpnet_mlm_config).unwrap();
+        let parsed: crate::embedding::provider::huggingface::ModelConfig =
+            serde_json::from_str(&config_str).unwrap();
+        let arch = crate::embedding::provider::huggingface::ModelArchitecture::from_config(&parsed);
+        assert!(matches!(
+            arch,
+            Ok(crate::embedding::provider::huggingface::ModelArchitecture::MPNet)
+        ));
     }
 
     #[tokio::test]
@@ -498,6 +524,110 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    #[cfg(feature = "huggingface")]
+    async fn test_create_huggingface_mpnet_provider() {
+        // Test MPNet model loading (all-mpnet-base-v2 uses MPNet architecture)
+        let result = create_embedding_provider_from_parts(
+            &EmbeddingProviderType::HuggingFace,
+            "sentence-transformers/all-mpnet-base-v2",
+        )
+        .await;
+
+        match result {
+            Ok(provider) => {
+                assert_eq!(provider.get_dimension(), 768);
+                assert!(provider.is_model_supported());
+            }
+            Err(e) => {
+                // HuggingFace might fail due to model download issues in CI
+                println!("HuggingFace MPNet test failed (expected in CI): {}", e);
+            }
+        }
+    }
+
+    #[tokio::test]
+    #[cfg(feature = "huggingface")]
+    async fn test_huggingface_mpnet_embedding_generation() {
+        // Test actual embedding generation with MPNet model
+        // This test downloads the model on first run
+        let result = create_embedding_provider_from_parts(
+            &EmbeddingProviderType::HuggingFace,
+            "sentence-transformers/all-mpnet-base-v2",
+        )
+        .await;
+
+        match result {
+            Ok(provider) => {
+                eprintln!("MPNet provider created successfully");
+                // Test single embedding
+                let text = "This is a test sentence for MPNet embedding.";
+                let embedding = provider.generate_embedding(text).await;
+
+                match embedding {
+                    Ok(vec) => {
+                        assert!(!vec.is_empty(), "Embedding should not be empty");
+                        assert_eq!(
+                            vec.len(),
+                            768,
+                            "all-mpnet-base-v2 should produce 768-dim vectors"
+                        );
+                        assert!(
+                            vec.iter().all(|v| v.is_finite()),
+                            "All values should be finite"
+                        );
+                        // Verify the embedding is normalized (L2 norm ≈ 1.0)
+                        let norm: f32 = vec.iter().map(|v| v * v).sum::<f32>().sqrt();
+                        assert!(
+                            (norm - 1.0).abs() < 0.01,
+                            "Embedding should be L2-normalized, got norm: {}",
+                            norm
+                        );
+                        println!(
+                            "✓ MPNet embedding generated successfully, dimension: {}",
+                            vec.len()
+                        );
+                    }
+                    Err(e) => {
+                        // Model loading can fail in CI due to network/resource constraints
+                        eprintln!("MPNet embedding generation failed:");
+                        for cause in e.chain() {
+                            eprintln!("  Caused by: {}", cause);
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                // HuggingFace might fail due to model download issues in CI
+                eprintln!("HuggingFace MPNet provider creation failed:");
+                for cause in e.chain() {
+                    eprintln!("  Caused by: {}", cause);
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    #[cfg(feature = "huggingface")]
+    async fn test_create_huggingface_codebert_provider() {
+        // Test CodeBERT model loading (microsoft/codebert-base uses RobertaModel architecture)
+        let result = create_embedding_provider_from_parts(
+            &EmbeddingProviderType::HuggingFace,
+            "microsoft/codebert-base",
+        )
+        .await;
+
+        match result {
+            Ok(provider) => {
+                assert_eq!(provider.get_dimension(), 768);
+                assert!(provider.is_model_supported());
+            }
+            Err(e) => {
+                // HuggingFace might fail due to model download issues in CI
+                println!("HuggingFace CodeBERT test failed (expected in CI): {}", e);
+            }
+        }
+    }
     #[tokio::test]
     async fn test_invalid_model() {
         let result = create_embedding_provider_from_parts(

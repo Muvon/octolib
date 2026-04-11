@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.15.0] - 2026-04-11
+
+### 📋 Release Summary
+
+This release enhances cache management with extended TTL support for improved prompt retention and context reuse (719fa94c, 25fb1818, a2d18bb1). New embedding model support includes MPNet and JinaCodeBert, expanding model flexibility for diverse use cases (ae22ff9f, f93efaa0).
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: add use_long_cache parameter for extended prompt cache retention `719fa94c`
+- **anthropic**: add extended cache TTL support `25fb1818`
+- **embedding**: add MPNet model support `ae22ff9f`
+- **embedding**: add JinaCodeBert QK-post-norm support `f93efaa0`
+
+### 🔧 Improvements & Optimizations
+
+- **embedding**: add JinaCodeBert detection and embedding tests `93395a28`
+
+### 🐛 Bug Fixes & Stability
+
+- **anthropic**: use system message cache TTL when set `a2d18bb1`
+
+### 🔄 Other Changes
+
+1 maintenance, dependency, and tooling update not listed individually.
+
 ## [0.14.0] - 2026-04-09
 
 ### 📋 Release Summary

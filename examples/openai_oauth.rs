@@ -135,6 +135,7 @@ async fn main() -> anyhow::Result<()> {
         retry_timeout: std::time::Duration::from_secs(10),
         cancellation_token: None,
         previous_id: None,
+        use_long_cache: false,
     };
 
     // Make the API call

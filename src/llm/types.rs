@@ -726,6 +726,8 @@ pub struct ChatCompletionParams {
     pub response_format: Option<StructuredOutputRequest>,
     /// Previous response ID for multi-turn conversations (OpenAI Responses API)
     pub previous_id: Option<String>,
+    /// Enable long-lived cache (provider-specific: OpenAI "24h" retention, Anthropic 1h TTL)
+    pub use_long_cache: bool,
 }
 
 impl ChatCompletionParams {
@@ -751,7 +753,14 @@ impl ChatCompletionParams {
             tools: None,
             response_format: None,
             previous_id: None,
+            use_long_cache: false,
         }
+    }
+
+    /// Enable long-lived cache for this request
+    pub fn with_long_cache(mut self, enabled: bool) -> Self {
+        self.use_long_cache = enabled;
+        self
     }
 
     /// Set maximum retry attempts

@@ -484,6 +484,11 @@ impl AiProvider for OpenAiProvider {
             }
         }
 
+        // Enable extended prompt cache retention when long cache is configured
+        if params.use_long_cache {
+            request_body["prompt_cache_retention"] = serde_json::json!("24h");
+        }
+
         // Execute the request with retry logic
         let account_id_header = oauth_account_id.as_ref().map(|(_, id)| id.clone());
         let api_url = env::var(OPENAI_API_URL_ENV).unwrap_or_else(|_| OPENAI_API_URL.to_string());

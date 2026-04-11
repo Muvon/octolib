@@ -50,9 +50,31 @@ pub(super) fn ephemeral_cache_control() -> serde_json::Value {
     serde_json::json!({ "type": "ephemeral" })
 }
 
+/// Return ephemeral cache control with optional TTL override.
+/// When `ttl` is Some (e.g. "1h"), includes it in the cache_control block.
+/// Only Anthropic supports TTL — other providers ignore the field.
+pub(super) fn ephemeral_cache_control_with_ttl(ttl: Option<&str>) -> serde_json::Value {
+    match ttl {
+        Some(t) => serde_json::json!({ "type": "ephemeral", "ttl": t }),
+        None => serde_json::json!({ "type": "ephemeral" }),
+    }
+}
+
 /// Return ephemeral cache control metadata when a message is marked cached.
 pub(super) fn maybe_ephemeral_cache_control(cached: bool) -> Option<serde_json::Value> {
     cached.then(ephemeral_cache_control)
+}
+
+/// Return cache control with optional TTL when message is cached.
+pub(super) fn maybe_cache_control_with_ttl(
+    cached: bool,
+    ttl: Option<&str>,
+) -> Option<serde_json::Value> {
+    if cached {
+        Some(ephemeral_cache_control_with_ttl(ttl))
+    } else {
+        None
+    }
 }
 
 /// Parse stored tool calls in our unified history format.

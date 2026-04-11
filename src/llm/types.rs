@@ -32,6 +32,8 @@ pub struct Message {
     pub timestamp: u64,
     #[serde(default = "default_cache_marker")]
     pub cached: bool, // Marks if this message is a cache breakpoint
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<String>, // Cache TTL override (e.g. "1h") — only Anthropic supports this
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_call_id: Option<String>, // For tool messages: the ID of the tool call
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -60,6 +62,7 @@ impl Message {
             content: content.to_string(),
             timestamp: current_timestamp(),
             cached: false,
+            cache_ttl: None,
             tool_call_id: None,
             name: None,
             tool_calls: None,
@@ -77,6 +80,7 @@ impl Message {
             content: content.to_string(),
             timestamp: current_timestamp(),
             cached: false,
+            cache_ttl: None,
             tool_call_id: None,
             name: None,
             tool_calls: None,
@@ -94,6 +98,7 @@ impl Message {
             content: content.to_string(),
             timestamp: current_timestamp(),
             cached: false,
+            cache_ttl: None,
             tool_call_id: None,
             name: None,
             tool_calls: None,
@@ -111,6 +116,7 @@ impl Message {
             content: content.to_string(),
             timestamp: current_timestamp(),
             cached: false,
+            cache_ttl: None,
             tool_call_id: Some(tool_call_id.to_string()),
             name: Some(name.to_string()),
             tool_calls: None,
@@ -158,6 +164,7 @@ pub struct MessageBuilder {
     content: Option<String>,
     timestamp: Option<u64>,
     cached: bool,
+    cache_ttl: Option<String>,
     tool_call_id: Option<String>,
     name: Option<String>,
     tool_calls: Option<serde_json::Value>,
@@ -197,6 +204,12 @@ impl MessageBuilder {
     /// Mark as cached
     pub fn cached(mut self) -> Self {
         self.cached = true;
+        self
+    }
+
+    /// Set cache TTL (e.g. "1h" for long-lived, only Anthropic supports this)
+    pub fn cache_ttl<S: Into<String>>(mut self, ttl: S) -> Self {
+        self.cache_ttl = Some(ttl.into());
         self
     }
 
@@ -302,6 +315,7 @@ impl MessageBuilder {
             content,
             timestamp: self.timestamp.unwrap_or_else(current_timestamp),
             cached: self.cached,
+            cache_ttl: self.cache_ttl,
             tool_call_id: self.tool_call_id,
             name: self.name,
             tool_calls: self.tool_calls,

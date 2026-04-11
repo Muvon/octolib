@@ -844,6 +844,7 @@ mod tests {
             content: "I'll help you with that.".to_string(),
             timestamp: 0,
             cached: false,
+            cache_ttl: None,
             tool_call_id: None,
             name: None,
             tool_calls: Some(serde_json::json!([{
@@ -881,6 +882,7 @@ mod tests {
             content: "I'll help you with that.".to_string(),
             timestamp: 0,
             cached: false,
+            cache_ttl: None,
             tool_call_id: None,
             name: None,
             tool_calls: Some(serde_json::json!([{
@@ -912,6 +914,7 @@ mod tests {
             content: "Hello, how can I help?".to_string(),
             timestamp: 0,
             cached: false,
+            cache_ttl: None,
             tool_call_id: None,
             name: None,
             tool_calls: None,
@@ -936,6 +939,7 @@ mod tests {
             content: "Weather is sunny".to_string(),
             timestamp: 0,
             cached: false,
+            cache_ttl: None,
             tool_call_id: Some("call_123".to_string()),
             name: Some("get_weather".to_string()),
             tool_calls: None,

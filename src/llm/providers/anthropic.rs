@@ -359,6 +359,9 @@ impl AiProvider for AnthropicProvider {
             }
         }
 
+        // Check if any message uses extended cache TTL
+        let needs_extended_cache = params.messages.iter().any(|m| m.cache_ttl.is_some());
+
         // Execute the request with retry logic
         let api_url =
             env::var(ANTHROPIC_API_URL_ENV).unwrap_or_else(|_| ANTHROPIC_API_URL.to_string());
@@ -371,6 +374,7 @@ impl AiProvider for AnthropicProvider {
             params.max_retries,
             params.retry_timeout,
             params.cancellation_token.as_ref(),
+            needs_extended_cache,
         )
         .await?;
 
@@ -475,7 +479,10 @@ fn convert_messages(messages: &[Message]) -> Vec<AnthropicMessage> {
                 let content = vec![AnthropicContent::ToolResult {
                     tool_use_id: tool_call_id.to_string(),
                     content: message.content.clone(),
-                    cache_control: shared::maybe_ephemeral_cache_control(message.cached),
+                    cache_control: shared::maybe_cache_control_with_ttl(
+                        message.cached,
+                        message.cache_ttl.as_deref(),
+                    ),
                 }];
 
                 result.push(AnthropicMessage {
@@ -493,7 +500,10 @@ fn convert_messages(messages: &[Message]) -> Vec<AnthropicMessage> {
                     if !message.content.trim().is_empty() {
                         content.push(AnthropicContent::Text {
                             text: message.content.clone(),
-                            cache_control: shared::maybe_ephemeral_cache_control(message.cached),
+                            cache_control: shared::maybe_cache_control_with_ttl(
+                                message.cached,
+                                message.cache_ttl.as_deref(),
+                            ),
                         });
                     }
 
@@ -517,7 +527,10 @@ fn convert_messages(messages: &[Message]) -> Vec<AnthropicMessage> {
                     // Handle regular user and assistant messages
                     let mut content = vec![AnthropicContent::Text {
                         text: message.content.clone(),
-                        cache_control: shared::maybe_ephemeral_cache_control(message.cached),
+                        cache_control: shared::maybe_cache_control_with_ttl(
+                            message.cached,
+                            message.cache_ttl.as_deref(),
+                        ),
                     }];
 
                     // Add images if present
@@ -549,6 +562,7 @@ fn convert_messages(messages: &[Message]) -> Vec<AnthropicMessage> {
 }
 
 // Execute a single Anthropic HTTP request with smart retry delay calculation
+#[allow(clippy::too_many_arguments)]
 async fn execute_anthropic_request(
     auth_header_name: String,
     auth_header_value: String,
@@ -557,9 +571,17 @@ async fn execute_anthropic_request(
     max_retries: u32,
     base_timeout: std::time::Duration,
     cancellation_token: Option<&tokio::sync::watch::Receiver<bool>>,
+    extended_cache_ttl: bool,
 ) -> Result<ProviderResponse> {
     let client = shared::http_client();
     let start_time = std::time::Instant::now();
+
+    // Build beta header: always include prompt-caching, add extended-cache-ttl when needed
+    let beta_header = if extended_cache_ttl {
+        "prompt-caching-2024-07-31,extended-cache-ttl-2025-04-11"
+    } else {
+        "prompt-caching-2024-07-31"
+    };
 
     let response = retry::retry_with_exponential_backoff(
         || {
@@ -568,13 +590,14 @@ async fn execute_anthropic_request(
             let auth_header_value = auth_header_value.clone();
             let api_url = api_url.clone();
             let request_body = request_body.clone();
+            let beta_header = beta_header.to_string();
             Box::pin(async move {
                 let response = client
                     .post(&api_url)
                     .header("Content-Type", "application/json")
                     .header(&auth_header_name, &auth_header_value)
                     .header("anthropic-version", "2023-06-01")
-                    .header("anthropic-beta", "prompt-caching-2024-07-31")
+                    .header("anthropic-beta", &beta_header)
                     .json(&request_body)
                     .send()
                     .await

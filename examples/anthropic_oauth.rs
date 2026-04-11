@@ -85,6 +85,7 @@ async fn main() -> anyhow::Result<()> {
             images: None,
             videos: None,
             cached: false,
+            cache_ttl: None,
             timestamp: 0,
             thinking: None,
             id: None,

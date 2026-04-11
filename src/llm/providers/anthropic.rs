@@ -317,7 +317,11 @@ impl AiProvider for AnthropicProvider {
 
         // Add system message with cache control if needed
         if system_cached {
-            let cache_ttl = crate::llm::config::CacheTTL::short();
+            let system_msg = params.messages.iter().find(|m| m.role == "system");
+            let cache_ttl = system_msg
+                .and_then(|m| m.cache_ttl.as_deref())
+                .and_then(|t| crate::llm::config::CacheTTL::from_string(t).ok())
+                .unwrap_or_else(crate::llm::config::CacheTTL::short);
             request_body["system"] = serde_json::json!([{
                 "type": "text",
                 "text": system_message,

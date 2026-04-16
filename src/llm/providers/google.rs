@@ -61,6 +61,7 @@ impl GoogleVertexProvider {
 const PRICING: &[PricingTuple] = &[
     // Gemini 3.x series
     ("gemini-3.1-pro", 2.00, 12.00, 2.00, 0.20),
+    ("gemini-3.1-flash", 0.50, 3.00, 0.50, 0.05),
     ("gemini-3.1-flash-lite", 0.25, 1.50, 0.25, 0.025),
     ("gemini-3-pro", 2.00, 12.00, 2.00, 0.20),
     ("gemini-3-flash", 0.50, 3.00, 0.50, 0.05),

@@ -41,6 +41,7 @@ const PRICING: &[PricingTuple] = &[
     ("gpt-5.4-mini", 0.75, 4.50, 0.75, 0.075),
     ("gpt-5.4-nano", 0.20, 1.25, 0.20, 0.02),
     // GPT-5.3 family
+    ("gpt-5.3-instant", 1.75, 14.00, 0.175, 0.175),
     ("gpt-5.3-codex", 1.75, 14.00, 1.75, 0.175),
     ("gpt-5.3-chat-latest", 1.75, 14.00, 1.75, 0.175),
     // GPT-5.2 family
@@ -302,6 +303,10 @@ impl AiProvider for OpenAiProvider {
         // These are the actual context windows - API handles output limits
         let normalized = normalize_model_name(model);
 
+        // GPT-5.3 Instant: 128K context window
+        if normalized.starts_with("gpt-5.3-instant") {
+            return 128_000;
+        }
         // GPT-5 family: 400K context window
         if normalized.starts_with("gpt-5") {
             return 400_000;

@@ -34,6 +34,8 @@ use std::env;
 /// Prices sourced from Anthropic pricing docs (verified Mar 18, 2026).
 /// Format: (model, input, output, cache_write, cache_read)
 const PRICING: &[PricingTuple] = &[
+    // Claude 4.7
+    ("claude-opus-4-7", 5.00, 25.00, 6.25, 0.50),
     // Claude 4.6
     ("claude-sonnet-4-6-20260217", 3.00, 15.00, 3.75, 0.30),
     ("claude-sonnet-4-6", 3.00, 15.00, 3.75, 0.30),
@@ -83,10 +85,11 @@ struct CacheTokenUsage {
 }
 
 /// Check if a model supports temperature parameter
-/// All Claude models support temperature except opus-4-1
+/// All Claude models support temperature except opus-4-1 and opus-4-7+
 fn supports_temperature_and_top_p(model: &str) -> bool {
     let unsupported_prefixes = [
         "opus-4-1",
+        "opus-4-7",
         "sonnet-4-5",
         "haiku-4-5",
         "sonnet-4-6",
@@ -233,7 +236,10 @@ impl AiProvider for AnthropicProvider {
     fn get_max_input_tokens(&self, model: &str) -> usize {
         // Anthropic model context window limits (case-insensitive)
         let model_lower = normalize_model_name(model);
-        if model_lower.contains("claude-opus-4")
+        if model_lower.contains("claude-opus-4-7") {
+            // Claude Opus 4.7 has 1M context window
+            1_000_000
+        } else if model_lower.contains("claude-opus-4")
             || model_lower.contains("claude-sonnet-4")
             || model_lower.contains("claude-haiku-4")
         {
@@ -899,11 +905,13 @@ mod tests {
         assert!(provider.supports_model("claude-3-haiku"));
         assert!(provider.supports_model("claude-3-5-sonnet"));
         assert!(provider.supports_model("claude-sonnet-4-6"));
+        assert!(provider.supports_model("claude-opus-4-7"));
 
         // Test uppercase
         assert!(provider.supports_model("CLAUDE-3-HAIKU"));
         assert!(provider.supports_model("CLAUDE-3-5-SONNET"));
         assert!(provider.supports_model("CLAUDE-SONNET-4-6"));
+        assert!(provider.supports_model("CLAUDE-OPUS-4-7"));
         // Test mixed case
         assert!(provider.supports_model("ClaUde-3-Haiku"));
         assert!(provider.supports_model("CLAUDE-3-7-sonnet"));
@@ -934,6 +942,19 @@ mod tests {
         assert_eq!(pricing.output_price_per_1m, 15.0);
         assert_eq!(pricing.cache_write_price_per_1m, 3.75);
         assert_eq!(pricing.cache_read_price_per_1m, 0.30);
+
+        // Test Opus 4.7 pricing
+        let pricing = provider.get_model_pricing("claude-opus-4-7").unwrap();
+        assert_eq!(pricing.input_price_per_1m, 5.0);
+        assert_eq!(pricing.output_price_per_1m, 25.0);
+        assert_eq!(pricing.cache_write_price_per_1m, 6.25);
+        assert_eq!(pricing.cache_read_price_per_1m, 0.50);
+
+        // Test Opus 4.7 context window
+        assert_eq!(provider.get_max_input_tokens("claude-opus-4-7"), 1_000_000);
+
+        // Test Opus 4.7 does not support temperature
+        assert!(!supports_temperature_and_top_p("claude-opus-4-7"));
 
         // Test Sonnet 4 pricing (from the pricing table)
         let pricing = provider.get_model_pricing("claude-sonnet-4").unwrap();

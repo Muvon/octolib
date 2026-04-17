@@ -50,7 +50,7 @@ candle-nn = { version = "0.9.2", optional = true }
 candle-transformers = { version = "0.9.2", optional = true }
 tokenizers = { version = "0.22.2", optional = true }
 # HuggingFace Hub - use rustls-tls to avoid native-tls dependency
-hf-hub = { version = "0.4.3", default-features = false, features = ["tokio", "rustls-tls"], optional = true }
+hf-hub = { version = "0.5.0", default-features = false, features = ["tokio", "rustls-tls"], optional = true }
 
 [dev-dependencies]
 serial_test = "3.4.0"
@@ -74,3 +74,13 @@ opt-level = 3
 
 [profile.release-local.package."*"]
 opt-level = 3
+
+
+[patch.crates-io]
+# Patch hf-hub 0.4.3 to use indicatif 0.18 (eliminates number_prefix unmaintained warning)
+# This commit updates indicatif from 0.17 to 0.18 while keeping crate version at 0.4.3
+# See: https://github.com/huggingface/hf-hub/pull/126
+hf-hub = { git = "https://github.com/huggingface/hf-hub", rev = "65fb0347d9" }
+# Replace unmaintained paste (RUSTSEC-2024-0436) with paste-complete shim
+# paste-complete is a fork with identical code and an active maintainer
+paste = { path = "patches/paste" }

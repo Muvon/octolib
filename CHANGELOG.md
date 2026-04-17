@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.15.1] - 2026-04-17
+
+### 📋 Release Summary
+
+This release expands model support to include Moonshot kimi-k2.6, Claude 4.7, Gemini 3.1, and GPT-5.3 (8f2d5c56, 23d1517f). Core performance and stability are further enhanced through optimized updates to the candle, hf-hub, and async crate ecosystems (dd5c2537, 0f69d51f).
+
+
+### ✨ New Features & Enhancements
+
+- **moonshot**: add kimi-k2.6 model support `8f2d5c56`
+- **llm**: add Claude 4.7, Gemini 3.1, GPT-5.3 `23d1517f`
+
+### 🔄 Other Changes
+
+2 maintenance, dependency, and tooling updates not listed individually.
+
 ## [0.15.0] - 2026-04-11
 
 ### 📋 Release Summary

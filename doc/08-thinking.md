@@ -112,6 +112,12 @@ let (provider, model) = ProviderFactory::get_provider_for_model("moonshot:kimi-k
 let response = provider.chat_completion(params).await?;
 ```
 
+**Kimi K2.6 (Code Preview):**
+```rust
+let (provider, model) = ProviderFactory::get_provider_for_model("moonshot:kimi-k2.6")?;
+let response = provider.chat_completion(params).await?;
+```
+
 ### OpenAI o-series
 
 OpenAI o1, o3, and o4 models use `reasoning_content` field:

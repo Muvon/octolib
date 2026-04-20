@@ -19,8 +19,8 @@ use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, ThinkingBlock, TokenUsage,
-    ToolCall,
+    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, SamplingParams,
+    ThinkingBlock, TokenUsage, ToolCall,
 };
 use crate::llm::utils::{
     get_model_pricing, is_model_in_pricing_table, normalize_model_name, PricingTuple,
@@ -84,23 +84,19 @@ struct CacheTokenUsage {
     output_tokens: u64,
 }
 
-/// Check if a model supports temperature parameter
-/// All Claude models support temperature except opus-4-1 and opus-4-7+
-fn supports_temperature_and_top_p(model: &str) -> bool {
-    let unsupported_prefixes = [
-        "opus-4-1",
-        "opus-4-7",
-        "sonnet-4-5",
-        "haiku-4-5",
-        "sonnet-4-6",
-        "opus-4-5",
-        "opus-4-6",
-    ];
+/// Models that reject ALL sampling parameters (temperature, top_p, top_k).
+const NO_SAMPLING_MODELS: &[&str] = &["opus-4-7"];
 
-    !unsupported_prefixes
-        .iter()
-        .any(|prefix| model.contains(prefix))
-}
+/// Models that reject top_p but accept temperature and top_k.
+const NO_TOP_P_MODELS: &[&str] = &[
+    "opus-4-1",
+    "opus-4-7",
+    "sonnet-4-5",
+    "haiku-4-5",
+    "sonnet-4-6",
+    "opus-4-5",
+    "opus-4-6",
+];
 
 /// Calculate cost for Anthropic models with cache-aware pricing (case-insensitive)
 /// - cache_creation_tokens: charged at 1.25x normal price (5m cache)
@@ -273,6 +269,20 @@ impl AiProvider for AnthropicProvider {
         ))
     }
 
+    fn supported_sampling_params(&self, model: &str) -> SamplingParams {
+        let rejects_all = NO_SAMPLING_MODELS.iter().any(|p| model.contains(p));
+        if rejects_all {
+            return SamplingParams::none();
+        }
+
+        let rejects_top_p = NO_TOP_P_MODELS.iter().any(|p| model.contains(p));
+        SamplingParams {
+            temperature: Some(1.0),
+            top_p: if rejects_top_p { None } else { Some(1.0) },
+            top_k: Some(50),
+        }
+    }
+
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
         // Check for OAuth token first (priority), otherwise use API key
         let (auth_header_name, auth_header_value) =
@@ -307,14 +317,17 @@ impl AiProvider for AnthropicProvider {
             "model": params.model,
             "messages": anthropic_messages,
         });
-        request_body["temperature"] = serde_json::json!(params.temperature);
-
-        // Opus 4.1 doesn't support using temperature and top_p together, so we do this instead
-        if supports_temperature_and_top_p(&params.model) {
-            request_body["top_p"] = serde_json::json!(params.top_p);
+        // Apply sampling parameters based on model support
+        let sampling = self.effective_sampling_params(&params);
+        if let Some(temp) = sampling.temperature {
+            request_body["temperature"] = serde_json::json!(temp);
         }
-
-        request_body["top_k"] = serde_json::json!(params.top_k);
+        if let Some(top_p) = sampling.top_p {
+            request_body["top_p"] = serde_json::json!(top_p);
+        }
+        if let Some(top_k) = sampling.top_k {
+            request_body["top_k"] = serde_json::json!(top_k);
+        }
 
         // Add max_tokens if specified (0 means don't include it in request)
         if params.max_tokens > 0 {
@@ -953,8 +966,21 @@ mod tests {
         // Test Opus 4.7 context window
         assert_eq!(provider.get_max_input_tokens("claude-opus-4-7"), 1_000_000);
 
-        // Test Opus 4.7 does not support temperature
-        assert!(!supports_temperature_and_top_p("claude-opus-4-7"));
+        // Test Opus 4.7 does not support any sampling parameters
+        let sp = provider.supported_sampling_params("claude-opus-4-7");
+        assert_eq!(sp, SamplingParams::none());
+
+        // Test Opus 4.1 supports temperature+top_k but not top_p
+        let sp = provider.supported_sampling_params("claude-opus-4-1");
+        assert!(sp.temperature.is_some());
+        assert!(sp.top_p.is_none());
+        assert!(sp.top_k.is_some());
+
+        // Test older Claude 3 supports all sampling params
+        let sp = provider.supported_sampling_params("claude-3-haiku");
+        assert!(sp.temperature.is_some());
+        assert!(sp.top_p.is_some());
+        assert!(sp.top_k.is_some());
 
         // Test Sonnet 4 pricing (from the pricing table)
         let pricing = provider.get_model_pricing("claude-sonnet-4").unwrap();

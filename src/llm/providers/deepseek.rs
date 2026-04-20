@@ -32,7 +32,9 @@ use crate::errors::ProviderError;
 use crate::llm::providers::shared;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
-use crate::llm::types::{ChatCompletionParams, ProviderExchange, ProviderResponse, TokenUsage};
+use crate::llm::types::{
+    ChatCompletionParams, ProviderExchange, ProviderResponse, SamplingParams, TokenUsage,
+};
 use crate::llm::utils::{is_model_in_pricing_table, PricingTuple};
 use anyhow::Result;
 
@@ -194,6 +196,21 @@ impl AiProvider for DeepSeekProvider {
         64_000 // DeepSeek context window
     }
 
+    fn supported_sampling_params(&self, model: &str) -> SamplingParams {
+        let model_lower = crate::llm::utils::normalize_model_name(model);
+        // DeepSeek API only supports temperature (no top_p, no top_k).
+        // The reasoner model silently ignores temperature, so omit it.
+        SamplingParams {
+            temperature: if model_lower.contains("reasoner") {
+                None
+            } else {
+                Some(1.0)
+            },
+            top_p: None,
+            top_k: None,
+        }
+    }
+
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
         let api_key = self.get_api_key()?;
 
@@ -211,7 +228,7 @@ impl AiProvider for DeepSeekProvider {
         let mut request = DeepSeekRequest {
             model: params.model.clone(),
             messages,
-            temperature: Some(params.temperature),
+            temperature: self.effective_sampling_params(&params).temperature,
             max_tokens: Some(params.max_tokens),
             stream: Some(false), // We don't support streaming in octolib yet
             response_format: None,

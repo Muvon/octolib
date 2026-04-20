@@ -42,7 +42,6 @@ use crate::llm::types::{
 };
 use crate::llm::utils::{contains_ignore_ascii_case, is_model_in_pricing_table, PricingTuple};
 use anyhow::Result;
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -98,22 +97,12 @@ fn calculate_cost(model: &str, input_tokens: u64, completion_tokens: u64) -> Opt
 }
 
 /// Moonshot AI (Kimi) provider
-#[derive(Debug, Clone)]
-pub struct MoonshotProvider {
-    client: Client,
-}
-
-impl Default for MoonshotProvider {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+#[derive(Debug, Clone, Default)]
+pub struct MoonshotProvider;
 
 impl MoonshotProvider {
     pub fn new() -> Self {
-        Self {
-            client: Client::new(),
-        }
+        Self
     }
 }
 
@@ -578,11 +567,10 @@ impl AiProvider for MoonshotProvider {
             }
         }
 
-        let client = self.client.clone();
         let start_time = std::time::Instant::now();
         let response = retry::retry_with_exponential_backoff(
             || {
-                let client = client.clone();
+                let client = shared::http_client();
                 let api_key = api_key.clone();
                 let request = request.clone();
                 Box::pin(async move {

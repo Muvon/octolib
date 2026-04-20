@@ -700,60 +700,87 @@ pub struct ProviderResponse {
 ///
 /// This struct groups all parameters needed for AI provider chat completion calls,
 /// following best practices for parameter passing and future extensibility.
-/// Sampling parameters for controlling model output randomness.
-///
-/// Each field is `Option` — `Some(value)` means the parameter is supported and should
-/// be sent with that value; `None` means the parameter is not supported by the model
-/// and must be omitted from the API request.
+/// Declares which sampling parameters a model supports.
 ///
 /// Providers return this from `supported_sampling_params()` to declare what a model accepts.
-/// The `effective_sampling_params()` helper merges user-requested values with provider support.
-#[derive(Debug, Clone, PartialEq)]
-pub struct SamplingParams {
-    /// Sampling temperature (typically 0.0 to 2.0). None = model doesn't support it.
-    pub temperature: Option<f32>,
-    /// Top-p nucleus sampling (0.0 to 1.0). None = model doesn't support it.
-    pub top_p: Option<f32>,
-    /// Top-k sampling (1 to infinity). None = model doesn't support it.
-    pub top_k: Option<u32>,
+/// Each field is a simple boolean — `true` means the parameter is supported, `false` means
+/// it must be omitted from API requests.
+///
+/// This is intentionally separate from the values themselves: support is a property of the
+/// model, while values come from user configuration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SamplingSupport {
+    /// Whether the model accepts the temperature parameter.
+    pub temperature: bool,
+    /// Whether the model accepts the top_p parameter.
+    pub top_p: bool,
+    /// Whether the model accepts the top_k parameter.
+    pub top_k: bool,
 }
 
-impl SamplingParams {
-    /// All sampling parameters supported with the given values
-    pub fn all(temperature: f32, top_p: f32, top_k: u32) -> Self {
-        Self {
-            temperature: Some(temperature),
-            top_p: Some(top_p),
-            top_k: Some(top_k),
-        }
-    }
+impl SamplingSupport {
+    /// All sampling parameters supported.
+    pub const ALL: Self = Self {
+        temperature: true,
+        top_p: true,
+        top_k: true,
+    };
 
-    /// No sampling parameters supported (reasoning models)
-    pub fn none() -> Self {
-        Self {
-            temperature: None,
-            top_p: None,
-            top_k: None,
-        }
-    }
+    /// No sampling parameters supported (e.g., reasoning models).
+    pub const NONE: Self = Self {
+        temperature: false,
+        top_p: false,
+        top_k: false,
+    };
 
-    /// Merge user-requested values with provider support.
-    /// For each parameter: if the provider supports it (Some), use the user's value;
-    /// if the provider doesn't support it (None), return None regardless of user's value.
-    pub fn effective(self, temperature: f32, top_p: f32, top_k: u32) -> Self {
-        Self {
-            temperature: self.temperature.map(|_| temperature),
-            top_p: self.top_p.map(|_| top_p),
-            top_k: self.top_k.map(|_| top_k),
+    /// Only temperature supported (no top_p, no top_k).
+    pub const TEMPERATURE_ONLY: Self = Self {
+        temperature: true,
+        top_p: false,
+        top_k: false,
+    };
+
+    /// Temperature and top_p supported, but not top_k (common for OpenAI-compatible APIs).
+    pub const TEMPERATURE_AND_TOP_P: Self = Self {
+        temperature: true,
+        top_p: true,
+        top_k: false,
+    };
+
+    /// Merge user-requested values with this support mask.
+    ///
+    /// Returns `EffectiveSamplingParams` where supported parameters carry the user's value
+    /// and unsupported parameters are `None` (to be omitted from API requests).
+    pub fn effective(self, temperature: f32, top_p: f32, top_k: u32) -> EffectiveSamplingParams {
+        EffectiveSamplingParams {
+            temperature: self.temperature.then_some(temperature),
+            top_p: self.top_p.then_some(top_p),
+            top_k: self.top_k.then_some(top_k),
         }
     }
 }
 
-impl Default for SamplingParams {
-    /// Default: all parameters supported with standard defaults
+impl Default for SamplingSupport {
+    /// Default: all parameters supported.
     fn default() -> Self {
-        Self::all(1.0, 1.0, 50)
+        Self::ALL
     }
+}
+
+/// The result of merging user-requested sampling values with model support.
+///
+/// Each field is `Option` — `Some(value)` means the parameter should be sent with that value,
+/// `None` means it must be omitted from the API request entirely.
+///
+/// Construct this via `SamplingSupport::effective()` or `AiProvider::effective_sampling_params()`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct EffectiveSamplingParams {
+    /// Temperature to send, or None to omit.
+    pub temperature: Option<f32>,
+    /// Top-p to send, or None to omit.
+    pub top_p: Option<f32>,
+    /// Top-k to send, or None to omit.
+    pub top_k: Option<u32>,
 }
 
 #[derive(Clone)]
@@ -1093,48 +1120,48 @@ mod tests {
     }
 
     #[test]
-    fn test_sampling_params_all() {
-        let sp = SamplingParams::all(0.7, 0.9, 40);
-        assert_eq!(sp.temperature, Some(0.7));
-        assert_eq!(sp.top_p, Some(0.9));
-        assert_eq!(sp.top_k, Some(40));
+    fn test_sampling_support_all() {
+        let sp = SamplingSupport::ALL;
+        assert!(sp.temperature);
+        assert!(sp.top_p);
+        assert!(sp.top_k);
     }
 
     #[test]
-    fn test_sampling_params_none() {
-        let sp = SamplingParams::none();
-        assert_eq!(sp.temperature, None);
-        assert_eq!(sp.top_p, None);
-        assert_eq!(sp.top_k, None);
+    fn test_sampling_support_none() {
+        let sp = SamplingSupport::NONE;
+        assert!(!sp.temperature);
+        assert!(!sp.top_p);
+        assert!(!sp.top_k);
     }
 
     #[test]
-    fn test_sampling_params_default() {
-        let sp = SamplingParams::default();
-        assert_eq!(sp.temperature, Some(1.0));
-        assert_eq!(sp.top_p, Some(1.0));
-        assert_eq!(sp.top_k, Some(50));
+    fn test_sampling_support_default() {
+        let sp = SamplingSupport::default();
+        assert!(sp.temperature);
+        assert!(sp.top_p);
+        assert!(sp.top_k);
     }
 
     #[test]
-    fn test_sampling_params_effective() {
+    fn test_effective_sampling_params() {
         // All supported — user values pass through
-        let sp = SamplingParams::all(1.0, 1.0, 50).effective(0.3, 0.8, 10);
+        let sp = SamplingSupport::ALL.effective(0.3, 0.8, 10);
         assert_eq!(sp.temperature, Some(0.3));
         assert_eq!(sp.top_p, Some(0.8));
         assert_eq!(sp.top_k, Some(10));
 
         // None supported — user values are ignored
-        let sp = SamplingParams::none().effective(0.3, 0.8, 10);
+        let sp = SamplingSupport::NONE.effective(0.3, 0.8, 10);
         assert_eq!(sp.temperature, None);
         assert_eq!(sp.top_p, None);
         assert_eq!(sp.top_k, None);
 
         // Partial support — only supported params pass through
-        let sp = SamplingParams {
-            temperature: Some(1.0),
-            top_p: None,
-            top_k: Some(50),
+        let sp = SamplingSupport {
+            temperature: true,
+            top_p: false,
+            top_k: true,
         }
         .effective(0.5, 0.9, 20);
         assert_eq!(sp.temperature, Some(0.5));

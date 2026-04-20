@@ -19,7 +19,7 @@ use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, SamplingParams,
+    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, SamplingSupport,
     ThinkingBlock, TokenUsage, ToolCall,
 };
 use crate::llm::utils::{
@@ -269,17 +269,17 @@ impl AiProvider for AnthropicProvider {
         ))
     }
 
-    fn supported_sampling_params(&self, model: &str) -> SamplingParams {
+    fn supported_sampling_params(&self, model: &str) -> SamplingSupport {
         let rejects_all = NO_SAMPLING_MODELS.iter().any(|p| model.contains(p));
         if rejects_all {
-            return SamplingParams::none();
+            return SamplingSupport::NONE;
         }
 
         let rejects_top_p = NO_TOP_P_MODELS.iter().any(|p| model.contains(p));
-        SamplingParams {
-            temperature: Some(1.0),
-            top_p: if rejects_top_p { None } else { Some(1.0) },
-            top_k: Some(50),
+        SamplingSupport {
+            temperature: true,
+            top_p: !rejects_top_p,
+            top_k: true,
         }
     }
 
@@ -968,19 +968,19 @@ mod tests {
 
         // Test Opus 4.7 does not support any sampling parameters
         let sp = provider.supported_sampling_params("claude-opus-4-7");
-        assert_eq!(sp, SamplingParams::none());
+        assert_eq!(sp, SamplingSupport::NONE);
 
         // Test Opus 4.1 supports temperature+top_k but not top_p
         let sp = provider.supported_sampling_params("claude-opus-4-1");
-        assert!(sp.temperature.is_some());
-        assert!(sp.top_p.is_none());
-        assert!(sp.top_k.is_some());
+        assert!(sp.temperature);
+        assert!(!sp.top_p);
+        assert!(sp.top_k);
 
         // Test older Claude 3 supports all sampling params
         let sp = provider.supported_sampling_params("claude-3-haiku");
-        assert!(sp.temperature.is_some());
-        assert!(sp.top_p.is_some());
-        assert!(sp.top_k.is_some());
+        assert!(sp.temperature);
+        assert!(sp.top_p);
+        assert!(sp.top_k);
 
         // Test Sonnet 4 pricing (from the pricing table)
         let pricing = provider.get_model_pricing("claude-sonnet-4").unwrap();

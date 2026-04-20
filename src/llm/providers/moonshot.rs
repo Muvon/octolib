@@ -38,7 +38,7 @@ use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-    ChatCompletionParams, ProviderExchange, ProviderResponse, SamplingParams, TokenUsage, ToolCall,
+    ChatCompletionParams, ProviderExchange, ProviderResponse, SamplingSupport, TokenUsage, ToolCall,
 };
 use crate::llm::utils::{contains_ignore_ascii_case, is_model_in_pricing_table, PricingTuple};
 use anyhow::Result;
@@ -489,15 +489,15 @@ impl AiProvider for MoonshotProvider {
         128_000
     }
 
-    fn supported_sampling_params(&self, model: &str) -> SamplingParams {
+    fn supported_sampling_params(&self, model: &str) -> SamplingSupport {
         // Kimi K2.5 and K2.6 only accept temperature=1.0 — not user-controllable.
         // Other Moonshot models support temperature. None support top_p or top_k.
         let fixed_temp = contains_ignore_ascii_case(model, "kimi-k2.5")
             || contains_ignore_ascii_case(model, "kimi-k2.6");
-        SamplingParams {
-            temperature: if fixed_temp { None } else { Some(1.0) },
-            top_p: None,
-            top_k: None,
+        SamplingSupport {
+            temperature: !fixed_temp,
+            top_p: false,
+            top_k: false,
         }
     }
 

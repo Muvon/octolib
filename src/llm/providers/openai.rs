@@ -19,7 +19,7 @@ use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, SamplingParams,
+    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, SamplingSupport,
     ThinkingBlock, TokenUsage, ToolCall,
 };
 use crate::llm::utils::{
@@ -362,14 +362,14 @@ impl AiProvider for OpenAiProvider {
         ))
     }
 
-    fn supported_sampling_params(&self, model: &str) -> SamplingParams {
+    fn supported_sampling_params(&self, model: &str) -> SamplingSupport {
         // OpenAI never supports top_k.
         // Reasoning models (o1/o2/o3/o4/gpt-5) also reject temperature and top_p.
         let is_reasoning = NO_TEMPERATURE_PREFIXES.iter().any(|p| model.starts_with(p));
-        SamplingParams {
-            temperature: if is_reasoning { None } else { Some(1.0) },
-            top_p: if is_reasoning { None } else { Some(1.0) },
-            top_k: None, // OpenAI API doesn't support top_k
+        SamplingSupport {
+            temperature: !is_reasoning,
+            top_p: !is_reasoning,
+            top_k: false, // OpenAI API doesn't support top_k
         }
     }
 
@@ -903,44 +903,44 @@ mod tests {
 
         // Models that should support temperature/top_p (but never top_k)
         let sp = provider.supported_sampling_params("gpt-4");
-        assert!(sp.temperature.is_some());
-        assert!(sp.top_p.is_some());
-        assert!(sp.top_k.is_none()); // OpenAI never supports top_k
+        assert!(sp.temperature);
+        assert!(sp.top_p);
+        assert!(!sp.top_k); // OpenAI never supports top_k
 
         let sp = provider.supported_sampling_params("gpt-4o");
-        assert!(sp.temperature.is_some());
-        assert!(sp.top_p.is_some());
+        assert!(sp.temperature);
+        assert!(sp.top_p);
 
         let sp = provider.supported_sampling_params("gpt-4o-mini");
-        assert!(sp.temperature.is_some());
+        assert!(sp.temperature);
 
         let sp = provider.supported_sampling_params("chatgpt-4o-latest");
-        assert!(sp.temperature.is_some());
+        assert!(sp.temperature);
 
         // Reasoning models should NOT support temperature/top_p
         let sp = provider.supported_sampling_params("o1");
-        assert!(sp.temperature.is_none());
-        assert!(sp.top_p.is_none());
-        assert!(sp.top_k.is_none());
+        assert!(!sp.temperature);
+        assert!(!sp.top_p);
+        assert!(!sp.top_k);
 
         let sp = provider.supported_sampling_params("o1-preview");
-        assert!(sp.temperature.is_none());
+        assert!(!sp.temperature);
 
         let sp = provider.supported_sampling_params("o3");
-        assert!(sp.temperature.is_none());
+        assert!(!sp.temperature);
 
         let sp = provider.supported_sampling_params("o4");
-        assert!(sp.temperature.is_none());
+        assert!(!sp.temperature);
 
         let sp = provider.supported_sampling_params("gpt-5");
-        assert!(sp.temperature.is_none());
-        assert!(sp.top_p.is_none());
+        assert!(!sp.temperature);
+        assert!(!sp.top_p);
 
         let sp = provider.supported_sampling_params("gpt-5-mini");
-        assert!(sp.temperature.is_none());
+        assert!(!sp.temperature);
 
         let sp = provider.supported_sampling_params("gpt-5-nano");
-        assert!(sp.temperature.is_none());
+        assert!(!sp.temperature);
     }
 
     #[test]

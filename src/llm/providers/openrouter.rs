@@ -20,8 +20,8 @@ use crate::errors::ToolCallError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, ThinkingBlock, TokenUsage,
-    ToolCall,
+    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, SamplingSupport,
+    ThinkingBlock, TokenUsage, ToolCall,
 };
 use crate::llm::utils::normalize_model_name;
 use anyhow::Result;
@@ -47,10 +47,16 @@ impl OpenRouterProvider {
 const OPENROUTER_API_KEY_ENV: &str = "OPENROUTER_API_KEY";
 const OPENROUTER_API_URL_ENV: &str = "OPENROUTER_API_URL";
 const OPENROUTER_API_URL: &str = "https://openrouter.ai/api/v1/chat/completions";
+
 #[async_trait::async_trait]
 impl AiProvider for OpenRouterProvider {
     fn name(&self) -> &str {
         "openrouter"
+    }
+
+    fn supported_sampling_params(&self, _model: &str) -> SamplingSupport {
+        // OpenRouter uses OpenAI-compatible API — supports temperature and top_p, not top_k.
+        SamplingSupport::TEMPERATURE_AND_TOP_P
     }
 
     fn supports_model(&self, model: &str) -> bool {
@@ -193,13 +199,13 @@ impl AiProvider for OpenRouterProvider {
         // Convert messages to OpenRouter format (same as OpenAI)
         let messages = convert_messages(&params.messages)?;
 
+        // Apply sampling parameters based on model support
+        let sampling = self.effective_sampling_params(&params);
+
         // Create the request body
         let mut request_body = serde_json::json!({
             "model": params.model,
             "messages": messages,
-            "temperature": params.temperature,
-            "top_p": params.top_p,
-            "top_k": params.top_k,
             "repetition_penalty": 1.1,
             "usage": {
                 "include": true  // Always enable usage tracking for all requests
@@ -217,13 +223,15 @@ impl AiProvider for OpenRouterProvider {
                 "allow_fallbacks": true,
             },
         });
+        if let Some(temp) = sampling.temperature {
+            request_body["temperature"] = serde_json::json!(temp);
+        }
+        if let Some(top_p) = sampling.top_p {
+            request_body["top_p"] = serde_json::json!(top_p);
+        }
+        // Note: OpenRouter doesn't support top_k
 
         // Add max_tokens if specified (0 means don't include it in request)
-        if params.max_tokens > 0 {
-            request_body["max_tokens"] = serde_json::json!(params.max_tokens);
-        }
-
-        // Add max_tokens if specified
         if params.max_tokens > 0 {
             request_body["max_tokens"] = serde_json::json!(params.max_tokens);
         }

@@ -52,8 +52,8 @@ use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-    ChatCompletionParams, ProviderExchange, ProviderResponse, ResponseMode, ThinkingBlock,
-    TokenUsage, ToolCall,
+    ChatCompletionParams, ProviderExchange, ProviderResponse, ResponseMode, SamplingSupport,
+    ThinkingBlock, TokenUsage, ToolCall,
 };
 use crate::llm::utils::{
     calculate_cost_from_pricing_table, get_model_pricing, is_model_in_pricing_table,
@@ -242,6 +242,11 @@ impl AiProvider for ZaiProvider {
         is_model_in_pricing_table(model, PRICING)
     }
 
+    fn supported_sampling_params(&self, _model: &str) -> SamplingSupport {
+        // Z.ai supports temperature and top_p, not top_k
+        SamplingSupport::TEMPERATURE_AND_TOP_P
+    }
+
     fn get_api_key(&self) -> Result<String> {
         env::var(ZAI_API_KEY_ENV)
             .map_err(|_| anyhow::anyhow!("{} not found in environment", ZAI_API_KEY_ENV))
@@ -311,15 +316,18 @@ impl AiProvider for ZaiProvider {
 
         // Build request
         // Z.ai API is strict about floating point precision - convert f32 to f64 and round to 2 decimal places
-        let temperature = (params.temperature as f64 * 100.0).round() / 100.0;
-        let top_p = (params.top_p as f64 * 100.0).round() / 100.0;
+        let sampling = self.effective_sampling_params(&params);
+        let temperature = sampling
+            .temperature
+            .map(|t| (t as f64 * 100.0).round() / 100.0);
+        let top_p = sampling.top_p.map(|p| (p as f64 * 100.0).round() / 100.0);
 
         let request = ZaiRequest {
             model: params.model.clone(),
             messages,
-            do_sample: Some(params.temperature > 0.0),
-            temperature: Some(temperature),
-            top_p: Some(top_p),
+            do_sample: Some(sampling.temperature.is_some_and(|t| t > 0.0)),
+            temperature,
+            top_p,
             max_tokens: Some(params.max_tokens),
             stream: Some(false),
             stop: None,

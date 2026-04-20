@@ -47,7 +47,6 @@ impl AiProvider for TogetherProvider {
     }
 
     fn supports_model(&self, model: &str) -> bool {
-        // Together.ai is an aggregator — accept any non-empty model string, let the API validate
         !model.is_empty()
     }
 
@@ -78,12 +77,20 @@ impl AiProvider for TogetherProvider {
         let api_key = self.get_api_key()?;
         let messages = convert_messages(&params.messages)?;
 
+        // Apply sampling parameters based on model support
+        let sampling = self.effective_sampling_params(&params);
+
         let mut request_body = serde_json::json!({
             "model": params.model,
             "messages": messages,
-            "temperature": params.temperature,
-            "top_p": params.top_p,
         });
+        if let Some(temp) = sampling.temperature {
+            request_body["temperature"] = serde_json::json!(temp);
+        }
+        if let Some(top_p) = sampling.top_p {
+            request_body["top_p"] = serde_json::json!(top_p);
+        }
+        // Note: Together doesn't support top_k
 
         if params.max_tokens > 0 {
             request_body["max_tokens"] = serde_json::json!(params.max_tokens);

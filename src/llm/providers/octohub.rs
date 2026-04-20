@@ -19,16 +19,12 @@
 //! multi-turn, `instructions` for system messages, and `output` array in
 //! responses.
 //!
-//! Configuration:
-//! - `OCTOHUB_API_KEY`: Optional API key for authentication
-//! - `OCTOHUB_API_URL`: Server base URL (default: `http://127.0.0.1:8080`)
-
-use crate::llm::providers::shared;
+use super::shared;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, ThinkingBlock, TokenUsage,
-    ToolCall,
+    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, SamplingSupport,
+    ThinkingBlock, TokenUsage, ToolCall,
 };
 use anyhow::Result;
 use serde::Deserialize;
@@ -47,7 +43,6 @@ impl Default for OctoHubProvider {
         Self::new()
     }
 }
-
 impl OctoHubProvider {
     pub fn new() -> Self {
         Self
@@ -66,6 +61,11 @@ impl OctoHubProvider {
 impl AiProvider for OctoHubProvider {
     fn name(&self) -> &str {
         "octohub"
+    }
+
+    fn supported_sampling_params(&self, _model: &str) -> SamplingSupport {
+        // OctoHub uses OpenAI-compatible API — supports temperature and top_p, not top_k.
+        SamplingSupport::TEMPERATURE_AND_TOP_P
     }
 
     /// OctoHub accepts any model — it routes to the appropriate provider.
@@ -119,7 +119,15 @@ impl AiProvider for OctoHubProvider {
             request_body["previous_completion_id"] = serde_json::json!(prev_id);
         }
 
-        request_body["temperature"] = serde_json::json!(params.temperature);
+        // Apply sampling parameters based on model support
+        let sampling = self.effective_sampling_params(&params);
+        if let Some(temp) = sampling.temperature {
+            request_body["temperature"] = serde_json::json!(temp);
+        }
+        if let Some(top_p) = sampling.top_p {
+            request_body["top_p"] = serde_json::json!(top_p);
+        }
+        // Note: OctoHub doesn't support top_k
 
         if params.max_tokens > 0 {
             request_body["max_output_tokens"] = serde_json::json!(params.max_tokens);

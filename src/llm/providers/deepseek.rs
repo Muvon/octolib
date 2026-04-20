@@ -33,7 +33,7 @@ use crate::llm::providers::shared;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-    ChatCompletionParams, ProviderExchange, ProviderResponse, SamplingParams, TokenUsage,
+    ChatCompletionParams, ProviderExchange, ProviderResponse, SamplingSupport, TokenUsage,
 };
 use crate::llm::utils::{is_model_in_pricing_table, PricingTuple};
 use anyhow::Result;
@@ -196,18 +196,14 @@ impl AiProvider for DeepSeekProvider {
         64_000 // DeepSeek context window
     }
 
-    fn supported_sampling_params(&self, model: &str) -> SamplingParams {
+    fn supported_sampling_params(&self, model: &str) -> SamplingSupport {
         let model_lower = crate::llm::utils::normalize_model_name(model);
         // DeepSeek API only supports temperature (no top_p, no top_k).
         // The reasoner model silently ignores temperature, so omit it.
-        SamplingParams {
-            temperature: if model_lower.contains("reasoner") {
-                None
-            } else {
-                Some(1.0)
-            },
-            top_p: None,
-            top_k: None,
+        SamplingSupport {
+            temperature: !model_lower.contains("reasoner"),
+            top_p: false,
+            top_k: false,
         }
     }
 

@@ -14,7 +14,9 @@
 
 //! AI Provider trait definition
 
-use crate::llm::types::{ChatCompletionParams, ProviderResponse, SamplingParams};
+use crate::llm::types::{
+    ChatCompletionParams, EffectiveSamplingParams, ProviderResponse, SamplingSupport,
+};
 use anyhow::Result;
 
 /// Trait that all AI providers must implement
@@ -35,18 +37,20 @@ pub trait AiProvider: Send + Sync {
 
     /// Which sampling parameters this model supports.
     ///
-    /// Returns `SamplingParams` where `Some(default)` means the parameter is supported
-    /// and `None` means it must be omitted from API requests.
+    /// Returns `SamplingSupport` — a boolean mask declaring which parameters the model accepts.
+    /// Use `SamplingSupport::ALL` (default), `SamplingSupport::NONE`, or construct custom masks.
     ///
-    /// Default: all parameters supported (temperature, top_p, top_k).
-    /// Override in providers where specific models reject sampling parameters.
-    fn supported_sampling_params(&self, _model: &str) -> SamplingParams {
-        SamplingParams::default()
+    /// The `effective_sampling_params()` helper merges this with user-requested values.
+    fn supported_sampling_params(&self, _model: &str) -> SamplingSupport {
+        SamplingSupport::default()
     }
 
     /// Compute effective sampling parameters by merging user-requested values
     /// with what the model actually supports.
-    fn effective_sampling_params(&self, params: &ChatCompletionParams) -> SamplingParams {
+    ///
+    /// Returns `EffectiveSamplingParams` where supported parameters carry the user's value
+    /// and unsupported parameters are `None` (to be omitted from API requests).
+    fn effective_sampling_params(&self, params: &ChatCompletionParams) -> EffectiveSamplingParams {
         self.supported_sampling_params(&params.model).effective(
             params.temperature,
             params.top_p,

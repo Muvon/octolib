@@ -199,6 +199,7 @@ impl AiProvider for CliProvider {
                             Some(ProviderError::Cancelled)
                         )
                     },
+                    |_: &anyhow::Error| false,
                 )
                 .await?;
 
@@ -234,6 +235,7 @@ impl AiProvider for CliProvider {
                             Some(ProviderError::Cancelled)
                         )
                     },
+                    |_: &anyhow::Error| false,
                 )
                 .await?;
 
@@ -261,6 +263,7 @@ impl AiProvider for CliProvider {
                             Some(ProviderError::Cancelled)
                         )
                     },
+                    |_: &anyhow::Error| false,
                 )
                 .await?;
 
@@ -288,6 +291,7 @@ impl AiProvider for CliProvider {
                             Some(ProviderError::Cancelled)
                         )
                     },
+                    |_: &anyhow::Error| false,
                 )
                 .await?;
 
@@ -315,6 +319,7 @@ impl AiProvider for CliProvider {
                             Some(ProviderError::Cancelled)
                         )
                     },
+                    |_: &anyhow::Error| false,
                 )
                 .await?;
 

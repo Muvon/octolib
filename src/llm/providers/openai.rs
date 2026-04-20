@@ -581,12 +581,11 @@ async fn execute_openai_request(
     base_timeout: std::time::Duration,
     cancellation_token: Option<&tokio::sync::watch::Receiver<bool>>,
 ) -> Result<ProviderResponse> {
-    let client = shared::http_client();
     let start_time = std::time::Instant::now();
 
     let response = retry::retry_with_exponential_backoff(
         || {
-            let client = client.clone();
+            let client = shared::http_client();
             let auth_token = auth_token.clone();
             let account_id = account_id.clone();
             let api_url = api_url.clone();
@@ -632,6 +631,7 @@ async fn execute_openai_request(
                 Some(ProviderError::Cancelled)
             )
         },
+        |e: &anyhow::Error| shared::is_connection_error(e),
     )
     .await?;
 

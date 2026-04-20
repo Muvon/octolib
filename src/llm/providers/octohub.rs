@@ -179,13 +179,12 @@ impl AiProvider for OctoHubProvider {
         }
 
         // Execute request with retry
-        let client = shared::http_client();
         let api_key = Self::api_key();
         let start_time = std::time::Instant::now();
 
         let response = retry::retry_with_exponential_backoff(
             || {
-                let client = client.clone();
+                let client = shared::http_client();
                 let api_key = api_key.clone();
                 let api_url = api_url.clone();
                 let request_body = request_body.clone();
@@ -229,6 +228,7 @@ impl AiProvider for OctoHubProvider {
                     Some(crate::errors::ProviderError::Cancelled)
                 )
             },
+            |e: &anyhow::Error| shared::is_connection_error(e),
         )
         .await?;
 

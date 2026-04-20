@@ -446,12 +446,11 @@ async fn execute_minimax_request(
     base_timeout: std::time::Duration,
     cancellation_token: Option<&tokio::sync::watch::Receiver<bool>>,
 ) -> Result<ProviderResponse> {
-    let client = shared::http_client();
     let start_time = std::time::Instant::now();
 
     let response = retry::retry_with_exponential_backoff(
         || {
-            let client = client.clone();
+            let client = shared::http_client();
             let api_key = api_key.clone();
             let api_url = api_url.clone();
             let request_body = request_body.clone();
@@ -490,6 +489,7 @@ async fn execute_minimax_request(
                 Some(ProviderError::Cancelled)
             )
         },
+        |e: &anyhow::Error| shared::is_connection_error(e),
     )
     .await?;
 

@@ -103,6 +103,13 @@ where
 /// This function implements exponential backoff with a configurable base timeout.
 /// The delay grows as: base_timeout * 2^attempt, capped at 5 minutes.
 ///
+/// # Connection Error Recovery
+///
+/// When a connection-level error is detected (DNS failure, TCP reset, TLS handshake
+/// failure, network unreachable), the shared HTTP client is atomically refreshed
+/// before the next retry attempt. This ensures retries use a fresh connection pool
+/// instead of reusing stale/broken connections.
+///
 /// # Arguments
 /// * `operation` - The async operation to retry (must return Result<T, E>)
 /// * `max_retries` - Maximum number of retry attempts (0 = no retries, just one attempt)
@@ -119,6 +126,7 @@ pub async fn retry_with_exponential_backoff<F, T, E>(
     cancellation_token: Option<&watch::Receiver<bool>>,
     on_cancel: impl Fn() -> E + Copy,
     is_cancelled: impl Fn(&E) -> bool + Copy,
+    on_connection_error: impl Fn(&E) -> bool + Copy,
 ) -> Result<T, E>
 where
     F: FnMut() -> Pin<Box<dyn Future<Output = Result<T, E>> + Send>>,
@@ -143,6 +151,16 @@ where
 
                 // Simple debug logging without external dependencies
                 tracing::debug!("API request attempt {} failed: {}", attempt + 1, e);
+
+                // On connection errors, refresh the shared HTTP client so the
+                // next retry uses a fresh connection pool instead of stale/broken
+                // connections from the old pool.
+                if on_connection_error(&e) {
+                    tracing::debug!(
+                        "Connection error detected, refreshing HTTP client before retry"
+                    );
+                    crate::llm::providers::shared::refresh_http_client();
+                }
 
                 last_error = Some(e);
 
@@ -181,6 +199,7 @@ pub async fn retry_http_request<T, E>(
     cancellation_token: Option<&watch::Receiver<bool>>,
     on_cancel: impl Fn() -> E + Copy,
     is_cancelled: impl Fn(&E) -> bool + Copy,
+    on_connection_error: impl Fn(&E) -> bool + Copy,
     request_builder: impl Fn() -> Pin<Box<dyn Future<Output = Result<T, E>> + Send>>,
 ) -> Result<T, E>
 where
@@ -193,6 +212,7 @@ where
         cancellation_token,
         on_cancel,
         is_cancelled,
+        on_connection_error,
     )
     .await
 }

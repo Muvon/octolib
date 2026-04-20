@@ -583,7 +583,6 @@ async fn execute_anthropic_request(
     cancellation_token: Option<&tokio::sync::watch::Receiver<bool>>,
     extended_cache_ttl: bool,
 ) -> Result<ProviderResponse> {
-    let client = shared::http_client();
     let start_time = std::time::Instant::now();
 
     // Build beta header: always include prompt-caching, add extended-cache-ttl when needed
@@ -595,7 +594,7 @@ async fn execute_anthropic_request(
 
     let response = retry::retry_with_exponential_backoff(
         || {
-            let client = client.clone();
+            let client = shared::http_client();
             let auth_header_name = auth_header_name.clone();
             let auth_header_value = auth_header_value.clone();
             let api_url = api_url.clone();
@@ -637,6 +636,7 @@ async fn execute_anthropic_request(
                 Some(ProviderError::Cancelled)
             )
         },
+        |e: &anyhow::Error| shared::is_connection_error(e),
     )
     .await?;
 

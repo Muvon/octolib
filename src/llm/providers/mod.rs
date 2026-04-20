@@ -29,7 +29,7 @@ pub mod ollama;
 pub mod openai;
 mod openai_compat;
 pub mod openrouter;
-mod shared;
+pub(crate) mod shared;
 pub mod together;
 pub mod zai;
 

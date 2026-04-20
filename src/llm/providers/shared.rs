@@ -17,30 +17,74 @@
 use crate::errors::ToolCallError;
 use crate::llm::tool_calls::GenericToolCall;
 use crate::llm::types::ToolCall;
-use std::sync::OnceLock;
+use arc_swap::ArcSwap;
+use std::sync::LazyLock;
 use std::time::Duration;
 
-/// Returns the process-wide shared HTTP client.
+/// Process-wide shared HTTP client, swappable on connection errors.
 ///
 /// `reqwest::Client` holds a connection pool internally — reusing it across
 /// all provider requests enables TCP keep-alive, HTTP/2 multiplexing, and
 /// avoids the per-request TLS handshake overhead that causes connection-reset
 /// errors under load.
 ///
+/// When a connection error is detected (DNS failure, TCP reset, TLS handshake
+/// failure, network unreachable), `refresh_http_client()` atomically swaps
+/// in a fresh client with a new connection pool, so subsequent retries don't
+/// reuse stale/broken connections.
+///
 /// No request timeout is set — LLM responses can legitimately take minutes.
 /// Instead we configure:
 /// - `tcp_keepalive`: OS-level probes detect dead connections before reuse
 /// - `pool_idle_timeout`: evict idle pooled connections before NAT/firewall
 ///   silently drops them, preventing hangs on stale sockets
-pub(super) fn http_client() -> &'static reqwest::Client {
-    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
-    CLIENT.get_or_init(|| {
-        reqwest::Client::builder()
-            .tcp_keepalive(Duration::from_secs(60))
-            .pool_idle_timeout(Duration::from_secs(90))
-            .build()
-            .expect("failed to build HTTP client")
-    })
+static HTTP_CLIENT: LazyLock<ArcSwap<reqwest::Client>> =
+    LazyLock::new(|| ArcSwap::from_pointee(build_http_client()));
+
+fn build_http_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .tcp_keepalive(Duration::from_secs(60))
+        .pool_idle_timeout(Duration::from_secs(90))
+        .build()
+        .expect("failed to build HTTP client")
+}
+
+/// Returns a cloned handle to the process-wide shared HTTP client.
+///
+/// `reqwest::Client` is internally `Arc`-based, so cloning is cheap and
+/// always points to the current client (even after `refresh_http_client()`
+/// swaps the global).
+pub(super) fn http_client() -> reqwest::Client {
+    // load_full() clones the Arc (cheap atomic increment),
+    // then dereference and clone the Client (cheap — Client is Arc internally)
+    (*HTTP_CLIENT.load_full()).clone()
+}
+
+/// Atomically replace the shared HTTP client with a fresh instance.
+///
+/// Call this when a connection error is detected (DNS failure, TCP reset,
+/// TLS handshake failure, network unreachable). The new client gets a fresh
+/// connection pool, so subsequent requests — including retry attempts —
+/// won't reuse stale/broken connections from the old pool.
+///
+/// The old client is dropped once all outstanding references to it are gone,
+/// which closes its idle connections.
+pub(crate) fn refresh_http_client() {
+    let fresh = build_http_client();
+    HTTP_CLIENT.store(std::sync::Arc::new(fresh));
+    tracing::debug!("HTTP client refreshed with new connection pool");
+}
+
+/// Returns true if the error is a connection-level failure that indicates
+/// the HTTP client's connection pool may contain stale/broken connections.
+///
+/// Such errors include: DNS resolution failure, TCP connection refused/reset,
+/// TLS handshake failure, network unreachable, and similar transport errors.
+/// Retrying on the same client may reuse the same broken connection, so
+/// callers should call `refresh_http_client()` before retrying.
+pub(crate) fn is_connection_error(err: &anyhow::Error) -> bool {
+    err.downcast_ref::<reqwest::Error>()
+        .is_some_and(|e| e.is_connect())
 }
 
 const MAX_JSON_INPUT_BYTES: usize = 1_000_000;

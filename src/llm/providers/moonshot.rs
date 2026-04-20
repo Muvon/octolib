@@ -606,6 +606,7 @@ impl AiProvider for MoonshotProvider {
                     Some(ProviderError::Cancelled)
                 )
             },
+            |e: &anyhow::Error| shared::is_connection_error(e),
         )
         .await?;
         let request_time_ms = start_time.elapsed().as_millis() as u64;

@@ -29,12 +29,13 @@
 //! - Output: $0.42
 
 use crate::errors::ProviderError;
+use crate::llm::providers::shared;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderExchange, ProviderResponse, TokenUsage};
 use crate::llm::utils::{is_model_in_pricing_table, PricingTuple};
 use anyhow::Result;
-use reqwest::Client;
+
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -77,22 +78,12 @@ fn calculate_cost(model: &str, input_tokens: u64, completion_tokens: u64) -> Opt
 }
 
 /// DeepSeek provider
-#[derive(Debug, Clone)]
-pub struct DeepSeekProvider {
-    client: Client,
-}
-
-impl Default for DeepSeekProvider {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+#[derive(Debug, Clone, Default)]
+pub struct DeepSeekProvider;
 
 impl DeepSeekProvider {
     pub fn new() -> Self {
-        Self {
-            client: Client::new(),
-        }
+        Self
     }
 }
 
@@ -244,11 +235,10 @@ impl AiProvider for DeepSeekProvider {
             }
         }
 
-        let client = self.client.clone();
         let start_time = std::time::Instant::now();
         let response = retry::retry_with_exponential_backoff(
             || {
-                let client = client.clone();
+                let client = shared::http_client();
                 let api_key = api_key.clone();
                 let request = request.clone();
                 Box::pin(async move {
@@ -285,6 +275,7 @@ impl AiProvider for DeepSeekProvider {
                     Some(ProviderError::Cancelled)
                 )
             },
+            |e: &anyhow::Error| shared::is_connection_error(e),
         )
         .await?;
         let request_time_ms = start_time.elapsed().as_millis() as u64;

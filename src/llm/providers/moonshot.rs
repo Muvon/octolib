@@ -38,7 +38,7 @@ use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-    ChatCompletionParams, ProviderExchange, ProviderResponse, TokenUsage, ToolCall,
+    ChatCompletionParams, ProviderExchange, ProviderResponse, SamplingParams, TokenUsage, ToolCall,
 };
 use crate::llm::utils::{contains_ignore_ascii_case, is_model_in_pricing_table, PricingTuple};
 use anyhow::Result;
@@ -489,6 +489,18 @@ impl AiProvider for MoonshotProvider {
         128_000
     }
 
+    fn supported_sampling_params(&self, model: &str) -> SamplingParams {
+        // Kimi K2.5 and K2.6 only accept temperature=1.0 — not user-controllable.
+        // Other Moonshot models support temperature. None support top_p or top_k.
+        let fixed_temp = contains_ignore_ascii_case(model, "kimi-k2.5")
+            || contains_ignore_ascii_case(model, "kimi-k2.6");
+        SamplingParams {
+            temperature: if fixed_temp { None } else { Some(1.0) },
+            top_p: None,
+            top_k: None,
+        }
+    }
+
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
         let api_key = self.get_api_key()?;
 
@@ -497,19 +509,20 @@ impl AiProvider for MoonshotProvider {
         // Manual caching via /v1/caching endpoint is deprecated (returns "model family is invalid")
         let messages = convert_messages(&params.messages, &params.model);
 
-        // Kimi K2.5 and K2.6 only accept temperature=1.0. Other models use standard temperature.
+        // Kimi K2.5 and K2.6 only accept temperature=1.0; other models use user-requested value.
+        let sampling = self.effective_sampling_params(&params);
         let temperature = if contains_ignore_ascii_case(&params.model, "kimi-k2.5")
             || contains_ignore_ascii_case(&params.model, "kimi-k2.6")
         {
-            1.0
+            Some(1.0) // Fixed value — these models reject anything else
         } else {
-            params.temperature
+            sampling.temperature
         };
 
         let mut request = MoonshotRequest {
             model: params.model.clone(),
             messages,
-            temperature: Some(temperature),
+            temperature,
             max_tokens: if params.max_tokens > 0 {
                 Some(params.max_tokens)
             } else {

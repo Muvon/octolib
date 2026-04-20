@@ -14,7 +14,7 @@
 
 //! AI Provider trait definition
 
-use crate::llm::types::{ChatCompletionParams, ProviderResponse};
+use crate::llm::types::{ChatCompletionParams, ProviderResponse, SamplingParams};
 use anyhow::Result;
 
 /// Trait that all AI providers must implement
@@ -32,6 +32,27 @@ pub trait AiProvider: Send + Sync {
     /// Get API key for this provider from environment variables
     /// Each provider should implement this to check their specific environment variable
     fn get_api_key(&self) -> Result<String>;
+
+    /// Which sampling parameters this model supports.
+    ///
+    /// Returns `SamplingParams` where `Some(default)` means the parameter is supported
+    /// and `None` means it must be omitted from API requests.
+    ///
+    /// Default: all parameters supported (temperature, top_p, top_k).
+    /// Override in providers where specific models reject sampling parameters.
+    fn supported_sampling_params(&self, _model: &str) -> SamplingParams {
+        SamplingParams::default()
+    }
+
+    /// Compute effective sampling parameters by merging user-requested values
+    /// with what the model actually supports.
+    fn effective_sampling_params(&self, params: &ChatCompletionParams) -> SamplingParams {
+        self.supported_sampling_params(&params.model).effective(
+            params.temperature,
+            params.top_p,
+            params.top_k,
+        )
+    }
 
     /// Check if the provider/model supports caching
     fn supports_caching(&self, _model: &str) -> bool {

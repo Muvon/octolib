@@ -55,8 +55,9 @@ impl AiProvider for OpenRouterProvider {
     }
 
     fn supported_sampling_params(&self, _model: &str) -> SamplingSupport {
-        // OpenRouter uses OpenAI-compatible API — supports temperature and top_p, not top_k.
-        SamplingSupport::TEMPERATURE_AND_TOP_P
+        // OpenRouter supports temperature, top_p, and top_k.
+        // See: https://openrouter.ai/docs/api/reference/parameters
+        SamplingSupport::ALL
     }
 
     fn supports_model(&self, model: &str) -> bool {
@@ -229,7 +230,9 @@ impl AiProvider for OpenRouterProvider {
         if let Some(top_p) = sampling.top_p {
             request_body["top_p"] = serde_json::json!(top_p);
         }
-        // Note: OpenRouter doesn't support top_k
+        if let Some(top_k) = sampling.top_k {
+            request_body["top_k"] = serde_json::json!(top_k);
+        }
 
         // Add max_tokens if specified (0 means don't include it in request)
         if params.max_tokens > 0 {

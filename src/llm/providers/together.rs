@@ -22,7 +22,8 @@ use crate::errors::ToolCallError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, TokenUsage, ToolCall,
+    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, SamplingSupport, TokenUsage,
+    ToolCall,
 };
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -48,6 +49,10 @@ impl AiProvider for TogetherProvider {
 
     fn supports_model(&self, model: &str) -> bool {
         !model.is_empty()
+    }
+    fn supported_sampling_params(&self, _model: &str) -> SamplingSupport {
+        // Together uses OpenAI-compatible API — supports temperature and top_p, not top_k.
+        SamplingSupport::TEMPERATURE_AND_TOP_P
     }
 
     fn get_api_key(&self) -> Result<String> {

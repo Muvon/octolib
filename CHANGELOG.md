@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.15.2] - 2026-04-21
+
+### 📋 Release Summary
+
+This update introduces a redesigned sampling system that enables model-specific parameters and top_k support for providers like Together AI (1aec7419, 2789ffaf, f9baccc7, a587e054). System reliability is further enhanced with automatic client recovery during connection errors and optimized resource management across providers (afcd20a6, 8c7f2d89).
+
+
+### 🚨 Breaking Changes
+
+⚠️ **Important**: This release contains breaking changes that may require code updates.
+
+- **llm**: support provider sampling parameters `1aec7419`
+
+### ✨ New Features & Enhancements
+
+- **llm**: add top_k and Together sampling support `2789ffaf`
+- **llm**: add model-specific sampling support `f9baccc7`
+
+### 🔧 Improvements & Optimizations
+
+- **moonshot**: use shared http client `8c7f2d89`
+- **llm**: redesign sampling support `a587e054`
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: refresh client on connection errors `afcd20a6`
+
 ## [0.15.1] - 2026-04-17
 
 ### 📋 Release Summary

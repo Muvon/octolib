@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.16.0] - 2026-04-21
+
+### 📋 Release Summary
+
+This release introduces per-request timeout support for LLM calls, providing users with granular control over request durations and improved system reliability (e7e7956c). These core functionality enhancements optimize performance and stability across all supported AI providers.
+
+
+### 🚨 Breaking Changes
+
+⚠️ **Important**: This release contains breaking changes that may require code updates.
+
+- **llm**: add per-request timeout support `e7e7956c`
+
 ## [0.15.2] - 2026-04-21
 
 ### 📋 Release Summary

@@ -355,6 +355,7 @@ impl AiProvider for ZaiProvider {
             request,
             params.max_retries,
             params.retry_timeout,
+            params.request_timeout,
             params.cancellation_token.as_ref(),
         )
         .await?;
@@ -416,12 +417,14 @@ fn get_api_key_and_url() -> Result<(String, String)> {
 }
 
 /// Execute a single Z.ai HTTP request with retry logic
+#[allow(clippy::too_many_arguments)]
 async fn execute_zai_request(
     api_key: String,
     api_url: String,
     request: ZaiRequest,
     max_retries: u32,
     base_timeout: std::time::Duration,
+    request_timeout: Option<std::time::Duration>,
     cancellation_token: Option<&tokio::sync::watch::Receiver<bool>>,
 ) -> Result<ProviderResponse> {
     let start_time = std::time::Instant::now();
@@ -434,14 +437,17 @@ async fn execute_zai_request(
             let request_body = serde_json::to_value(&request).unwrap();
 
             Box::pin(async move {
-                let response = client
-                    .post(&api_url)
-                    .header("Content-Type", "application/json")
-                    .header("Authorization", format!("Bearer {}", api_key))
-                    .json(&request_body)
-                    .send()
-                    .await
-                    .map_err(anyhow::Error::from)?;
+                let response = shared::apply_request_timeout(
+                    client
+                        .post(&api_url)
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", format!("Bearer {}", api_key)),
+                    request_timeout,
+                )
+                .json(&request_body)
+                .send()
+                .await
+                .map_err(anyhow::Error::from)?;
 
                 // Return Err for retryable HTTP errors so the retry loop catches them
                 if retry::is_retryable_status(response.status().as_u16()) {

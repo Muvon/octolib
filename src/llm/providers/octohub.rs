@@ -189,6 +189,7 @@ impl AiProvider for OctoHubProvider {
         // Execute request with retry
         let api_key = Self::api_key();
         let start_time = std::time::Instant::now();
+        let request_timeout = params.request_timeout;
 
         let response = retry::retry_with_exponential_backoff(
             || {
@@ -207,11 +208,11 @@ impl AiProvider for OctoHubProvider {
                         }
                     }
 
-                    let response = req
-                        .json(&request_body)
-                        .send()
-                        .await
-                        .map_err(anyhow::Error::from)?;
+                    let response =
+                        shared::apply_request_timeout(req.json(&request_body), request_timeout)
+                            .send()
+                            .await
+                            .map_err(anyhow::Error::from)?;
 
                     if retry::is_retryable_status(response.status().as_u16()) {
                         let status = response.status();

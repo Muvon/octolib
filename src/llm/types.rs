@@ -801,6 +801,9 @@ pub struct ChatCompletionParams {
     pub max_retries: u32,
     /// Base timeout for exponential backoff retry logic
     pub retry_timeout: std::time::Duration,
+    /// Per-request HTTP timeout. `None` = no timeout (LLM may take minutes);
+    /// `Some(d)` = abort the HTTP request if it exceeds `d`.
+    pub request_timeout: Option<std::time::Duration>,
     /// Cancellation token for request abortion
     pub cancellation_token: Option<tokio::sync::watch::Receiver<bool>>,
     /// Available tools for function calling
@@ -832,6 +835,7 @@ impl ChatCompletionParams {
             max_tokens,
             max_retries: 3,                                   // Default retry attempts
             retry_timeout: std::time::Duration::from_secs(1), // Default 1 second base timeout
+            request_timeout: None,                            // No per-request timeout by default
             cancellation_token: None,
             tools: None,
             response_format: None,
@@ -855,6 +859,13 @@ impl ChatCompletionParams {
     /// Set retry timeout
     pub fn with_retry_timeout(mut self, timeout: std::time::Duration) -> Self {
         self.retry_timeout = timeout;
+        self
+    }
+
+    /// Set per-request HTTP timeout. `None` disables (LLM may take minutes);
+    /// `Some(d)` aborts the HTTP request if it exceeds `d`.
+    pub fn with_request_timeout(mut self, timeout: Option<std::time::Duration>) -> Self {
+        self.request_timeout = timeout;
         self
     }
 

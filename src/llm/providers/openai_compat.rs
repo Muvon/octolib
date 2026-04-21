@@ -348,6 +348,7 @@ async fn execute_request(
     params: ChatCompletionParams,
 ) -> Result<ProviderResponse> {
     let start_time = std::time::Instant::now();
+    let request_timeout = params.request_timeout;
 
     let response = retry::retry_with_exponential_backoff(
         || {
@@ -367,7 +368,10 @@ async fn execute_request(
                     request = request.header("Authorization", format!("Bearer {}", api_key));
                 }
 
-                let response = request.send().await.map_err(anyhow::Error::from)?;
+                let response = shared::apply_request_timeout(request, request_timeout)
+                    .send()
+                    .await
+                    .map_err(anyhow::Error::from)?;
 
                 // Return Err for retryable HTTP errors so the retry loop catches them
                 if retry::is_retryable_status(response.status().as_u16()) {

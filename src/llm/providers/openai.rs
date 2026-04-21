@@ -514,6 +514,7 @@ impl AiProvider for OpenAiProvider {
             request_body,
             params.max_retries,
             params.retry_timeout,
+            params.request_timeout,
             params.cancellation_token.as_ref(),
         )
         .await?;
@@ -581,6 +582,7 @@ struct OutputTokensDetails {
 }
 
 // Execute OpenAI HTTP request
+#[allow(clippy::too_many_arguments)]
 async fn execute_openai_request(
     auth_token: String,
     account_id: Option<String>,
@@ -588,6 +590,7 @@ async fn execute_openai_request(
     request_body: serde_json::Value,
     max_retries: u32,
     base_timeout: std::time::Duration,
+    request_timeout: Option<std::time::Duration>,
     cancellation_token: Option<&tokio::sync::watch::Receiver<bool>>,
 ) -> Result<ProviderResponse> {
     let start_time = std::time::Instant::now();
@@ -600,16 +603,18 @@ async fn execute_openai_request(
             let api_url = api_url.clone();
             let request_body = request_body.clone();
             Box::pin(async move {
-                let mut req = client
-                    .post(&api_url)
-                    .header("Content-Type", "application/json")
-                    .header("Authorization", format!("Bearer {}", auth_token));
+                let mut req = shared::apply_request_timeout(
+                    client
+                        .post(&api_url)
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", format!("Bearer {}", auth_token)),
+                    request_timeout,
+                );
 
                 // Add ChatGPT-Account-ID header if using OAuth
                 if let Some(id) = account_id {
                     req = req.header("ChatGPT-Account-ID", id);
                 }
-
                 let response = req
                     .json(&request_body)
                     .send()

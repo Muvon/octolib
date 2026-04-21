@@ -568,20 +568,24 @@ impl AiProvider for MoonshotProvider {
         }
 
         let start_time = std::time::Instant::now();
+        let request_timeout = params.request_timeout;
         let response = retry::retry_with_exponential_backoff(
             || {
                 let client = shared::http_client();
                 let api_key = api_key.clone();
                 let request = request.clone();
                 Box::pin(async move {
-                    let response = client
-                        .post("https://api.moonshot.ai/v1/chat/completions")
-                        .header("Authorization", format!("Bearer {}", api_key))
-                        .header("Content-Type", "application/json")
-                        .json(&request)
-                        .send()
-                        .await
-                        .map_err(anyhow::Error::from)?;
+                    let response = shared::apply_request_timeout(
+                        client
+                            .post("https://api.moonshot.ai/v1/chat/completions")
+                            .header("Authorization", format!("Bearer {}", api_key))
+                            .header("Content-Type", "application/json")
+                            .json(&request),
+                        request_timeout,
+                    )
+                    .send()
+                    .await
+                    .map_err(anyhow::Error::from)?;
 
                     // Return Err for retryable HTTP errors so the retry loop catches them
                     if retry::is_retryable_status(response.status().as_u16()) {

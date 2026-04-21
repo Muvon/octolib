@@ -396,6 +396,7 @@ impl AiProvider for AnthropicProvider {
             request_body,
             params.max_retries,
             params.retry_timeout,
+            params.request_timeout,
             params.cancellation_token.as_ref(),
             needs_extended_cache,
         )
@@ -593,6 +594,7 @@ async fn execute_anthropic_request(
     request_body: serde_json::Value,
     max_retries: u32,
     base_timeout: std::time::Duration,
+    request_timeout: Option<std::time::Duration>,
     cancellation_token: Option<&tokio::sync::watch::Receiver<bool>>,
     extended_cache_ttl: bool,
 ) -> Result<ProviderResponse> {
@@ -614,16 +616,19 @@ async fn execute_anthropic_request(
             let request_body = request_body.clone();
             let beta_header = beta_header.to_string();
             Box::pin(async move {
-                let response = client
-                    .post(&api_url)
-                    .header("Content-Type", "application/json")
-                    .header(&auth_header_name, &auth_header_value)
-                    .header("anthropic-version", "2023-06-01")
-                    .header("anthropic-beta", &beta_header)
-                    .json(&request_body)
-                    .send()
-                    .await
-                    .map_err(anyhow::Error::from)?;
+                let response = shared::apply_request_timeout(
+                    client
+                        .post(&api_url)
+                        .header("Content-Type", "application/json")
+                        .header(&auth_header_name, &auth_header_value)
+                        .header("anthropic-version", "2023-06-01")
+                        .header("anthropic-beta", &beta_header),
+                    request_timeout,
+                )
+                .json(&request_body)
+                .send()
+                .await
+                .map_err(anyhow::Error::from)?;
 
                 // Return Err for retryable HTTP errors so the retry loop catches them
                 if retry::is_retryable_status(response.status().as_u16()) {

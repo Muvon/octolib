@@ -87,6 +87,21 @@ pub(crate) fn is_connection_error(err: &anyhow::Error) -> bool {
         .is_some_and(|e| e.is_connect())
 }
 
+/// Apply an optional per-request timeout to a RequestBuilder.
+///
+/// `None` leaves the builder unchanged (no timeout — LLM responses may take minutes).
+/// `Some(d)` sets a hard timeout on the whole HTTP request; exceeding it aborts with
+/// a reqwest timeout error that surfaces as a retryable failure.
+pub(super) fn apply_request_timeout(
+    req: reqwest::RequestBuilder,
+    timeout: Option<Duration>,
+) -> reqwest::RequestBuilder {
+    match timeout {
+        Some(d) => req.timeout(d),
+        None => req,
+    }
+}
+
 const MAX_JSON_INPUT_BYTES: usize = 1_000_000;
 
 /// Standard cache marker used by providers that support ephemeral prompt caching.

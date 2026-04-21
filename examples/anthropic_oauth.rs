@@ -101,6 +101,7 @@ async fn main() -> anyhow::Result<()> {
         cancellation_token: None,
         previous_id: None,
         use_long_cache: false,
+        request_timeout: None,
     };
 
     // Make the API call

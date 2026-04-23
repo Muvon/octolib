@@ -37,12 +37,15 @@ User Code → ProviderFactory → AiProvider trait → Specific Provider → API
 ### What Lives Where
 ```
 src/llm/
-├── traits.rs          → AiProvider trait (THE interface)
-├── factory.rs         → Model parsing, provider selection
-├── types.rs           → Message, ProviderResponse, TokenUsage
-├── providers/         → OpenAI, Anthropic, OpenRouter, etc.
-├── strategies.rs      → Provider-specific tool call handling
-└── retry.rs           → Exponential backoff logic
+├── traits.rs                  → AiProvider trait (THE interface)
+├── factory.rs                 → Model parsing, provider selection
+├── types.rs                   → Message, ProviderResponse, TokenUsage
+├── reference_pricing.rs       → Baseline pricing for open/open-weight models (fuzzy match)
+├── reference_capabilities.rs  → Baseline model capabilities (vision, tools, context)
+├── providers/                 → OpenAI, Anthropic, OpenRouter, NVIDIA, etc.
+│   └── openai_compat.rs       → Shared request/response layer for OpenAI-compatible APIs
+├── strategies.rs              → Provider-specific tool call handling
+└── retry.rs                   → Exponential backoff logic
 
 src/embedding/
 ├── mod.rs             → Main API: generate_embeddings()
@@ -60,15 +63,29 @@ src/errors.rs          → ProviderError, ConfigError, etc.
 ## 📍 TASK-BASED GUIDE
 
 ### "Add support for new AI provider"
+
+Decide the provider shape first:
+
+- **Native API (OpenAI, Anthropic, DeepSeek, Moonshot, Z.ai, MiniMax, Google)**: known model family, own pricing → `PRICING` const table in provider file + custom `chat_completion()`.
+- **OpenAI-compatible proxy/aggregator (NVIDIA NIM, Cerebras, Together, Cloudflare, Ollama, Local, OctoHub)**: hosts models from many origins → delegate to `openai_compat::chat_completion()` and use **reference pricing** instead of a per-provider table.
+
+**Steps (native API):**
 1. **Create**: `src/llm/providers/newprovider.rs`
 2. **Implement**: `AiProvider` trait (copy from `openai.rs` as template)
-3. **Add pricing**: Const table at top of file
+3. **Add pricing**: `PRICING` const table at top of file
 4. **Register**: Add to `src/llm/providers/mod.rs`
 5. **Factory**: Add case in `src/llm/factory.rs` → `get_provider_for_model()`
 6. **Export**: Add to `src/lib.rs` re-exports
 7. **Test**: Create example in `examples/`
 
-**Files to touch**: `providers/newprovider.rs`, `providers/mod.rs`, `factory.rs`, `lib.rs`
+**Steps (OpenAI-compatible proxy — see `nvidia.rs` / `cerebras.rs` as templates):**
+1. **Create**: `src/llm/providers/newprovider.rs` delegating to `openai_compat::chat_completion()`
+2. **Override `get_model_pricing()`** → `reference_pricing::get_reference_pricing(model)` (makes pricing discoverable to trait consumers)
+3. **Post-call fallback**: if the upstream API doesn't return `cost` in the response, fill `response.exchange.usage.cost` using `reference_pricing::calculate_reference_cost(model, input, output)` (pattern: `ollama.rs`, `local.rs`, `nvidia.rs`)
+4. **Add missing model entries** to `src/llm/reference_pricing.rs` and `src/llm/reference_capabilities.rs` if the proxy hosts models that aren't already listed
+5. **Register** in `providers/mod.rs`, **Factory** in `factory.rs`, **Export** in `lib.rs`, **Test** in `examples/`
+
+**Files to touch**: `providers/newprovider.rs`, `providers/mod.rs`, `factory.rs`, `lib.rs` (+ `reference_pricing.rs` / `reference_capabilities.rs` for proxies)
 
 ### "Fix provider API issue"
 1. **Find provider**: `src/llm/providers/<provider>.rs`
@@ -108,11 +125,14 @@ src/errors.rs          → ProviderError, ConfigError, etc.
 
 ### "Fix cost calculation"
 1. **Provider file**: `src/llm/providers/<provider>.rs`
-2. **Update**: `PRICING` const table at top
-3. **Check**: `calculate_cost()` function logic
-4. **Verify**: Token usage parsing in `chat_completion()`
+2. **Native API providers**: update `PRICING` const table at top; check `calculate_cost()` logic; verify token usage parsing in `chat_completion()`
+3. **OpenAI-compatible proxies**: check `reference_pricing.rs` — most proxies (NVIDIA, Cerebras, Together, Ollama, Local) don't have their own pricing, they fall back to reference pricing by model name. If cost is `None`, verify:
+   - `get_model_pricing()` is overridden to return `reference_pricing::get_reference_pricing(model)`
+   - `chat_completion()` fills `usage.cost` from `calculate_reference_cost()` when the API didn't return one
+   - The model name (after `sanitize_model_name` + `normalize_model_name`) contains a pattern in `REFERENCE_PRICING` table
+4. **Missing reference entries**: add the model family to `src/llm/reference_pricing.rs` — patterns are substring-matched; put longer/more-specific patterns first
 
-**Pricing sources**: Provider's official pricing page
+**Pricing sources**: Provider's official pricing page (native) or cheapest major provider hosting the model (reference)
 
 ### "Add caching support"
 1. **Provider file**: `src/llm/providers/<provider>.rs`
@@ -191,8 +211,8 @@ cargo build --release  # Too slow
 → See `examples/structured_output.rs`
 
 **Problem: Cost calculation wrong**
-→ Update `PRICING` const in provider file
-→ Check provider's official pricing page
+→ Native provider: update `PRICING` const in provider file, check provider's official pricing page
+→ OpenAI-compatible proxy (NVIDIA, Cerebras, Together, Ollama, Local): check `reference_pricing.rs` has the model family, ensure provider overrides `get_model_pricing()` AND fills `usage.cost` via `calculate_reference_cost()` after calling `openai_compat_chat_completion()`
 
 **Problem: Compilation error**
 → `cargo clean && cargo check --message-format=short`

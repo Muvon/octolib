@@ -17,8 +17,8 @@
 use crate::llm::providers::{
     AmazonBedrockProvider, AnthropicProvider, CerebrasProvider, CliProvider,
     CloudflareWorkersAiProvider, DeepSeekProvider, GoogleVertexProvider, LocalProvider,
-    MinimaxProvider, MoonshotProvider, OctoHubProvider, OllamaProvider, OpenAiProvider,
-    OpenRouterProvider, TogetherProvider, ZaiProvider,
+    MinimaxProvider, MoonshotProvider, NvidiaProvider, OctoHubProvider, OllamaProvider,
+    OpenAiProvider, OpenRouterProvider, TogetherProvider, ZaiProvider,
 };
 use crate::llm::traits::AiProvider;
 use anyhow::Result;
@@ -65,13 +65,14 @@ impl ProviderFactory {
             "deepseek" => Ok(Box::new(DeepSeekProvider::new())),
             "minimax" => Ok(Box::new(MinimaxProvider::new())),
             "moonshot" | "kimi" => Ok(Box::new(MoonshotProvider::new())),
+            "nvidia" => Ok(Box::new(NvidiaProvider::new())),
             "octohub" => Ok(Box::new(OctoHubProvider::new())),
             "together" => Ok(Box::new(TogetherProvider::new())),
             "zai" => Ok(Box::new(ZaiProvider::new())),
             "cli" => Err(anyhow::anyhow!(
                 "CLI provider requires a model string like 'cli:<backend>/<model>'. Use ProviderFactory::get_provider_for_model instead."
             )),
-            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported: openai, anthropic, openrouter, cerebras, local, ollama, google, amazon, cloudflare, deepseek, minimax, moonshot, octohub, together, zai, cli", provider_name))
+            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported: openai, anthropic, openrouter, cerebras, local, ollama, google, amazon, cloudflare, deepseek, minimax, moonshot, nvidia, octohub, together, zai, cli", provider_name))
         }
     }
 
@@ -111,6 +112,7 @@ impl ProviderFactory {
             "deepseek",
             "minimax",
             "moonshot",
+            "nvidia",
             "octohub",
             "together",
             "zai",
@@ -212,6 +214,7 @@ mod tests {
         assert!(ProviderFactory::create_provider("deepseek").is_ok());
         assert!(ProviderFactory::create_provider("minimax").is_ok());
         assert!(ProviderFactory::create_provider("moonshot").is_ok());
+        assert!(ProviderFactory::create_provider("nvidia").is_ok());
         assert!(ProviderFactory::create_provider("cli").is_err());
 
         // Test case insensitive
@@ -219,6 +222,7 @@ mod tests {
         assert!(ProviderFactory::create_provider("ANTHROPIC").is_ok());
         assert!(ProviderFactory::create_provider("MiniMax").is_ok());
         assert!(ProviderFactory::create_provider("MOONSHOT").is_ok());
+        assert!(ProviderFactory::create_provider("NVIDIA").is_ok());
         assert!(ProviderFactory::create_provider("OLLAMA").is_ok());
         assert!(ProviderFactory::create_provider("CEREBRAS").is_ok());
 
@@ -255,6 +259,12 @@ mod tests {
         assert_eq!(cerebras.name(), "cerebras");
         assert!(cerebras.supports_model("gpt-oss-120b"));
         assert!(!cerebras.supports_caching("gpt-oss-120b"));
+
+        let nvidia = ProviderFactory::create_provider("nvidia").unwrap();
+        assert_eq!(nvidia.name(), "nvidia");
+        assert!(nvidia.supports_model("nvidia/llama-3.1-nemotron-ultra-253b-v1"));
+        assert!(nvidia.supports_model("deepseek-ai/deepseek-v3.2"));
+        assert!(!nvidia.supports_caching("any-model"));
     }
 
     #[test]
@@ -317,6 +327,15 @@ mod tests {
         let (provider, model) = result.unwrap();
         assert_eq!(provider.name(), "cerebras");
         assert_eq!(model, "gpt-oss-120b");
+
+        // Test NVIDIA provider
+        let result = ProviderFactory::get_provider_for_model(
+            "nvidia:nvidia/llama-3.1-nemotron-ultra-253b-v1",
+        );
+        assert!(result.is_ok());
+        let (provider, model) = result.unwrap();
+        assert_eq!(provider.name(), "nvidia");
+        assert_eq!(model, "nvidia/llama-3.1-nemotron-ultra-253b-v1");
 
         // Test invalid format
         let result = ProviderFactory::get_provider_for_model("gpt-4o");

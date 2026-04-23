@@ -111,8 +111,8 @@ impl AiProvider for OctoHubProvider {
             "input": input_array,
         });
 
-        if let Some(ref instr) = instructions {
-            request_body["instructions"] = serde_json::json!(instr);
+        if let Some(instr) = instructions {
+            request_body["instructions"] = instr;
         }
 
         if let Some(ref prev_id) = previous_id {
@@ -142,12 +142,16 @@ impl AiProvider for OctoHubProvider {
                 let tool_defs: Vec<serde_json::Value> = sorted_tools
                     .iter()
                     .map(|f| {
-                        serde_json::json!({
+                        let mut tool = serde_json::json!({
                             "type": "function",
                             "name": f.name,
                             "description": f.description,
                             "parameters": f.parameters
-                        })
+                        });
+                        if let Some(ref cc) = f.cache_control {
+                            tool["cache_control"] = cc.clone();
+                        }
+                        tool
                     })
                     .collect();
 
@@ -377,19 +381,32 @@ impl AiProvider for OctoHubProvider {
 // Message conversion
 // ---------------------------------------------------------------------------
 
-/// Extract system instructions from messages (first system message or all
-/// concatenated). Returns `None` if no system messages exist.
-fn extract_instructions(messages: &[Message]) -> Option<String> {
-    let system_parts: Vec<&str> = messages
-        .iter()
-        .filter(|m| m.role == "system")
-        .map(|m| m.content.as_str())
-        .collect();
+/// Extract system instructions from messages. Returns a JSON value that is
+/// either a plain string or a structured array with `cache_control` when any
+/// system message is marked as cached.
+fn extract_instructions(messages: &[Message]) -> Option<serde_json::Value> {
+    let system_msgs: Vec<&Message> = messages.iter().filter(|m| m.role == "system").collect();
+    if system_msgs.is_empty() {
+        return None;
+    }
 
-    if system_parts.is_empty() {
-        None
+    let text = system_msgs
+        .iter()
+        .map(|m| m.content.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let any_cached = system_msgs.iter().any(|m| m.cached);
+    if any_cached {
+        let ttl = system_msgs.iter().find_map(|m| m.cache_ttl.as_deref());
+        let mut block = serde_json::json!([{
+            "type": "text",
+            "text": text,
+        }]);
+        block[0]["cache_control"] = shared::ephemeral_cache_control_with_ttl(ttl);
+        Some(block)
     } else {
-        Some(system_parts.join("\n"))
+        Some(serde_json::json!(text))
     }
 }
 
@@ -439,11 +456,7 @@ fn messages_to_input(messages: &[Message], has_previous_response: bool) -> Vec<s
             .iter()
             .skip(last_assistant_idx.map(|idx| idx + 1).unwrap_or(0))
             .filter_map(|msg| match msg.role.as_str() {
-                "user" => Some(serde_json::json!({
-                    "type": "message",
-                    "role": "user",
-                    "content": msg.content
-                })),
+                "user" => Some(user_message_value(msg)),
                 _ => None,
             })
             .collect()
@@ -452,15 +465,33 @@ fn messages_to_input(messages: &[Message], has_previous_response: bool) -> Vec<s
         messages
             .iter()
             .filter_map(|msg| match msg.role.as_str() {
-                "user" => Some(serde_json::json!({
-                    "type": "message",
-                    "role": "user",
-                    "content": msg.content
-                })),
+                "user" => Some(user_message_value(msg)),
                 _ => None,
             })
             .collect()
     }
+}
+
+/// Build a single user message JSON value, attaching `cache_control` when the
+/// message is marked as cached.
+fn user_message_value(msg: &Message) -> serde_json::Value {
+    let content: serde_json::Value = if msg.cached {
+        let mut block = serde_json::json!([{
+            "type": "input_text",
+            "text": msg.content,
+        }]);
+        block[0]["cache_control"] =
+            shared::ephemeral_cache_control_with_ttl(msg.cache_ttl.as_deref());
+        block
+    } else {
+        serde_json::json!(msg.content)
+    };
+
+    serde_json::json!({
+        "type": "message",
+        "role": "user",
+        "content": content
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -553,16 +584,46 @@ mod tests {
     #[test]
     fn test_extract_instructions_single() {
         let messages = vec![Message::system("You are helpful."), Message::user("Hello")];
-        assert_eq!(
-            extract_instructions(&messages),
-            Some("You are helpful.".to_string())
-        );
+        let instr = extract_instructions(&messages).unwrap();
+        assert_eq!(instr, serde_json::json!("You are helpful."));
     }
 
     #[test]
     fn test_extract_instructions_none() {
         let messages = vec![Message::user("Hello")];
         assert_eq!(extract_instructions(&messages), None);
+    }
+
+    #[test]
+    fn test_extract_instructions_cached() {
+        let messages = vec![
+            Message::system("You are helpful.").with_cache_marker(),
+            Message::user("Hello"),
+        ];
+        let instr = extract_instructions(&messages).unwrap();
+        let arr = instr.as_array().expect("should be array when cached");
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["type"], "text");
+        assert_eq!(arr[0]["text"], "You are helpful.");
+        assert_eq!(arr[0]["cache_control"]["type"], "ephemeral");
+    }
+
+    #[test]
+    fn test_user_message_value_plain() {
+        let msg = Message::user("Hello");
+        let val = user_message_value(&msg);
+        assert_eq!(val["content"], "Hello");
+    }
+
+    #[test]
+    fn test_user_message_value_cached() {
+        let msg = Message::user("Hello").with_cache_marker();
+        let val = user_message_value(&msg);
+        let content = val["content"].as_array().expect("should be array");
+        assert_eq!(content.len(), 1);
+        assert_eq!(content[0]["type"], "input_text");
+        assert_eq!(content[0]["text"], "Hello");
+        assert_eq!(content[0]["cache_control"]["type"], "ephemeral");
     }
 
     #[test]

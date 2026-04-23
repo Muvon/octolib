@@ -12,7 +12,7 @@ Octolib is a comprehensive, self-sufficient AI provider library that provides a 
 
 ## ✨ Key Features
 
-- **🔌 Multi-Provider Support**: OpenAI, Anthropic, OpenRouter, Cerebras, Ollama, Together, Google, Amazon, Cloudflare, DeepSeek, MiniMax, Moonshot AI (Kimi), Z.ai, OctoHub, Local, CLI proxies
+- **🔌 Multi-Provider Support**: OpenAI, Anthropic, OpenRouter, Cerebras, NVIDIA NIM, Ollama, Together, Google, Amazon, Cloudflare, DeepSeek, MiniMax, Moonshot AI (Kimi), Z.ai, OctoHub, Local, CLI proxies
 - **🛡️ Unified Interface**: Consistent API across different providers
 - **🔍 Intelligent Model Validation**: Strict `provider:model` format parsing with case-insensitive model support
 - **📋 Structured Output**: JSON and JSON Schema support for OpenAI, OpenRouter, DeepSeek, Together, and Z.ai
@@ -365,6 +365,7 @@ The library automatically detects OAuth credentials and prefers them over API ke
 | **MiniMax** | ✅ JSON Mode | ❌ No | ✅ Yes | ✅ Yes |
 | **Anthropic** | ❌ No | ✅ Yes | ✅ Yes | ✅ Yes |
 | **Z.ai** | ✅ JSON Mode | ❌ No | ✅ Yes | ✅ Yes |
+| **NVIDIA NIM** | ✅ JSON + Schema | Per-model | ✅ Yes | ❌ No |
 | **Google Vertex** | ❌ No | ✅ Yes | ✅ Yes | ❌ No |
 | **Amazon Bedrock** | ❌ No | ✅ Yes | ✅ Yes | ❌ No |
 | **Cloudflare** | ❌ No | ❌ No | ❌ No | ❌ No |
@@ -462,6 +463,7 @@ if let Some(usage) = &response.exchange.usage {
 | Moonshot AI (Kimi) | ✅ Full Support | Kimi K2 Series, Vision (kimi-k2.5), Tools, Structured Output, Caching |
 | MiniMax | ✅ Full Support | Anthropic-Compatible API, Tools, Caching, Thinking, Structured Output |
 | Z.ai | ✅ Full Support | GLM Models, Caching, Structured Output |
+| NVIDIA NIM | ✅ Full Support | 100+ Hosted Models (Nemotron, Llama, DeepSeek, GLM, etc.), Tools, Structured Output |
 | Google Vertex AI | ✅ Supported | Enterprise AI Integration |
 | Amazon Bedrock | ✅ Supported | Cloud AI Services |
 | Cloudflare Workers AI | ✅ Supported | Edge AI Compute |

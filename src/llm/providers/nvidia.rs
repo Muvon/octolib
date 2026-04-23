@@ -79,11 +79,18 @@ impl AiProvider for NvidiaProvider {
         true
     }
 
+    fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
+        // NVIDIA NIM doesn't expose its own pricing — fall back to reference pricing
+        // based on the underlying model (e.g., z-ai/glm-5.1 → glm-5.1 reference entry).
+        crate::llm::reference_pricing::get_reference_pricing(model)
+    }
+
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
         let api_key = self.get_api_key()?;
         let api_url = get_api_url(NVIDIA_API_URL_ENV, NVIDIA_API_URL);
+        let model = params.model.clone();
 
-        openai_compat_chat_completion(
+        let mut response = openai_compat_chat_completion(
             OpenAiCompatConfig {
                 provider_name: "nvidia",
                 usage_fallback_cost: None,
@@ -93,7 +100,21 @@ impl AiProvider for NvidiaProvider {
             api_url,
             params,
         )
-        .await
+        .await?;
+
+        // NVIDIA doesn't return cost in the response — derive it from reference pricing
+        // so downstream consumers (CLI token display, cost tracking) see a value.
+        if let Some(ref mut usage) = response.exchange.usage {
+            if usage.cost.is_none() {
+                usage.cost = crate::llm::reference_pricing::calculate_reference_cost(
+                    &model,
+                    usage.input_tokens,
+                    usage.output_tokens,
+                );
+            }
+        }
+
+        Ok(response)
     }
 }
 

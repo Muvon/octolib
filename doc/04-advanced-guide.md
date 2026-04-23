@@ -11,6 +11,7 @@
 | Moonshot AI (Kimi) | ✅ Full Support | Kimi K2 Series, Vision (kimi-k2.5), Tools, Structured Output, Caching, Thinking |
 | MiniMax | ✅ Full Support | Anthropic-Compatible API, Tools, Caching, Thinking |
 | Z.ai | ✅ Full Support | GLM Models, Caching, Structured Output |
+| NVIDIA NIM | ✅ Full Support | 100+ Hosted Models, Tools, Structured Output, Reference Pricing |
 | Together AI | ✅ Full Support | Multi-Provider Proxy, Vision, Tools, Structured Output |
 | Cerebras | ✅ Full Support | Fast Inference, Structured Output |
 | OctoHub | ✅ Supported | Local AI Serving |
@@ -89,6 +90,7 @@ All providers support custom API URLs via environment variables. If not set, def
 | DeepSeek | `DEEPSEEK_API_KEY` | `DEEPSEEK_API_URL` | `https://api.deepseek.com/chat/completions` |
 | MiniMax | `MINIMAX_API_KEY` | `MINIMAX_API_URL` | `https://api.minimax.io/anthropic/v1/messages` |
 | Z.ai | `ZAI_API_KEY` | `ZAI_API_URL` | `https://api.z.ai/v1/llm/chat/completions` |
+| NVIDIA NIM | `NVIDIA_API_KEY` | `NVIDIA_API_URL` | `https://integrate.api.nvidia.com/v1/chat/completions` |
 
 Example usage with custom endpoints:
 

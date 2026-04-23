@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.16.1] - 2026-04-23
+
+### 📋 Release Summary
+
+This release adds prompt caching support for improved performance and reduced API costs, along with an important security fix addressing RUSTSEC-2026-0104. Users will benefit from faster response times and enhanced system stability.
+
+
+### ✨ New Features & Enhancements
+
+- **octohub**: add prompt caching support `e0d64c34`
+
+### 🔧 Improvements & Optimizations
+
+- **workflow**: upgrade rust toolchain to 1.95.0 `4a153e1e`
+
+### 🐛 Bug Fixes & Stability
+
+- update rustls-webpki to patch RUSTSEC-2026-0104 `bfc6cc98`
+
 ## [0.16.0] - 2026-04-21
 
 ### 📋 Release Summary

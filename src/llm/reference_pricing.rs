@@ -60,6 +60,9 @@ const REFERENCE_PRICING: &[RefPricingTuple] = &[
     ("qwen-2.5-coder-32b", 0.10, 0.10, 0.10, 0.10),
     ("qwen-2.5-7b", 0.05, 0.05, 0.05, 0.05),
     // --- DeepSeek ---
+    ("deepseek-v4-pro", 1.74, 3.48, 1.74, 0.145),
+    ("deepseek-v4-flash", 0.14, 0.28, 0.14, 0.028),
+    ("deepseek-v4", 0.14, 0.28, 0.14, 0.028),
     ("deepseek-v3", 0.28, 0.42, 0.28, 0.028),
     ("deepseek-r1", 0.28, 0.42, 0.28, 0.028),
     ("deepseek-v2", 0.14, 0.28, 0.14, 0.014),

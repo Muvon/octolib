@@ -86,6 +86,9 @@ const REFERENCE_CAPABILITIES: &[RefCapsTuple] = &[
     // --- Qwen 2 (text-only) ---
     ("qwen-2-72b", false, false, true, 131_072),
     // --- DeepSeek ---
+    ("deepseek-v4-pro", false, false, true, 1_000_000),
+    ("deepseek-v4-flash", false, false, true, 1_000_000),
+    ("deepseek-v4", false, false, true, 1_000_000),
     ("deepseek-v3", false, false, true, 65_536),
     ("deepseek-r1", false, false, true, 65_536),
     ("deepseek-v2", false, false, true, 131_072),

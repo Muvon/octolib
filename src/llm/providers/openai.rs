@@ -31,10 +31,13 @@ use serde::Deserialize;
 use std::env;
 
 /// OpenAI pricing constants (per 1M tokens in USD)
-/// Source: https://developers.openai.com/api/docs/pricing (verified Mar 31, 2026)
+/// Source: https://developers.openai.com/api/docs/pricing (verified Apr 24, 2026)
 /// Format: (model, input, output, cache_write, cache_read)
 /// Note: For models without caching, cache_write = input and cache_read = input
 const PRICING: &[PricingTuple] = &[
+    // GPT-5.5 family
+    ("gpt-5.5-pro", 30.00, 180.00, 30.00, 30.00),
+    ("gpt-5.5", 5.00, 30.00, 5.00, 0.50),
     // GPT-5.4 family
     ("gpt-5.4-pro", 30.00, 180.00, 30.00, 30.00),
     ("gpt-5.4", 2.50, 15.00, 2.50, 0.25),
@@ -297,6 +300,10 @@ impl AiProvider for OpenAiProvider {
         // These are the actual context windows - API handles output limits
         let normalized = normalize_model_name(model);
 
+        // GPT-5.5 family: 1M context window
+        if normalized.starts_with("gpt-5.5") {
+            return 1_000_000;
+        }
         // GPT-5.3 Instant: 128K context window
         if normalized.starts_with("gpt-5.3-instant") {
             return 128_000;
@@ -959,6 +966,8 @@ mod tests {
         assert!(provider.supports_model("gpt-5-mini-2025-08-07"));
         assert!(provider.supports_model("gpt-5-nano"));
         assert!(provider.supports_model("gpt-5-nano-2025-08-07"));
+        assert!(provider.supports_model("gpt-5.5"));
+        assert!(provider.supports_model("gpt-5.5-pro"));
         assert!(provider.supports_model("gpt-5.2-codex"));
         assert!(provider.supports_model("gpt-5.3-codex"));
         assert!(provider.supports_model("gpt-5.2-chat-latest"));
@@ -994,6 +1003,10 @@ mod tests {
     #[test]
     fn test_get_max_input_tokens_gpt5() {
         let provider = OpenAiProvider::new();
+
+        // GPT-5.5 models should have 1M context window
+        assert_eq!(provider.get_max_input_tokens("gpt-5.5"), 1_000_000);
+        assert_eq!(provider.get_max_input_tokens("gpt-5.5-pro"), 1_000_000);
 
         // GPT-5 models should have 400K context window
         assert_eq!(provider.get_max_input_tokens("gpt-5"), 400_000);

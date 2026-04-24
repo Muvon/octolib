@@ -14,19 +14,21 @@
 
 //! DeepSeek provider implementation
 //!
-//! PRICING UPDATE: March 2026
-//! Both models now correspond to DeepSeek-V3.2 (128K context limit)
-//! with identical pricing (per 1M tokens in USD):
+//! PRICING UPDATE: April 2026
+//! Source: <https://api-docs.deepseek.com/quick_start/pricing>
 //!
-//! deepseek-chat (V3.2, non-thinking mode):
+//! deepseek-v4-flash (1M context, thinking by default):
 //! - Cache Hit: $0.028
-//! - Cache Miss (Input): $0.28
-//! - Output: $0.42
+//! - Cache Miss (Input): $0.14
+//! - Output: $0.28
 //!
-//! deepseek-reasoner (V3.2, thinking mode):
-//! - Cache Hit: $0.028
-//! - Cache Miss (Input): $0.28
-//! - Output: $0.42
+//! deepseek-v4-pro (1M context, thinking by default):
+//! - Cache Hit: $0.145
+//! - Cache Miss (Input): $1.74
+//! - Output: $3.48
+//!
+//! Legacy aliases (deprecated, V3.2 pricing retained):
+//! deepseek-chat (non-thinking), deepseek-reasoner (thinking)
 
 use crate::errors::ProviderError;
 use crate::llm::providers::shared;
@@ -42,13 +44,17 @@ use serde::{Deserialize, Serialize};
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-// Model pricing (per 1M tokens in USD) - Updated Mar 2026
+// Model pricing (per 1M tokens in USD) - Updated Apr 2026
 // Source: https://api-docs.deepseek.com/quick_start/pricing
 /// Format: (model, input, output, cache_write, cache_read)
 /// Note: DeepSeek uses cache_hit/cache_miss model - cache_write = cache_miss (input), cache_read = cache_hit
 const PRICING: &[PricingTuple] = &[
-    ("deepseek-chat", 0.28, 0.42, 0.28, 0.028), // V3.2 non-thinking
-    ("deepseek-reasoner", 0.28, 0.42, 0.28, 0.028), // V3.2 thinking
+    // V4 family (1M context)
+    ("deepseek-v4-pro", 1.74, 3.48, 1.74, 0.145),
+    ("deepseek-v4-flash", 0.14, 0.28, 0.14, 0.028),
+    // Legacy aliases (deprecated, V3.2 pricing retained)
+    ("deepseek-chat", 0.28, 0.42, 0.28, 0.028),
+    ("deepseek-reasoner", 0.28, 0.42, 0.28, 0.028),
 ];
 
 /// Get pricing tuple for a specific model (case-insensitive)
@@ -192,8 +198,13 @@ impl AiProvider for DeepSeekProvider {
         ))
     }
 
-    fn get_max_input_tokens(&self, _model: &str) -> usize {
-        64_000 // DeepSeek context window
+    fn get_max_input_tokens(&self, model: &str) -> usize {
+        let model_lower = crate::llm::utils::normalize_model_name(model);
+        if model_lower.contains("v4") {
+            1_000_000 // DeepSeek V4: 1M context
+        } else {
+            64_000 // Legacy models
+        }
     }
 
     fn supported_sampling_params(&self, model: &str) -> SamplingSupport {
@@ -444,6 +455,8 @@ mod tests {
     #[test]
     fn test_supports_model() {
         let provider = DeepSeekProvider::new();
+        assert!(provider.supports_model("deepseek-v4-flash"));
+        assert!(provider.supports_model("deepseek-v4-pro"));
         assert!(provider.supports_model("deepseek-chat"));
         assert!(provider.supports_model("deepseek-reasoner"));
         assert!(!provider.supports_model("gpt-4"));
@@ -453,12 +466,23 @@ mod tests {
     #[test]
     fn test_supports_model_case_insensitive() {
         let provider = DeepSeekProvider::new();
-        // Test uppercase
+        assert!(provider.supports_model("DEEPSEEK-V4-FLASH"));
+        assert!(provider.supports_model("DEEPSEEK-V4-PRO"));
         assert!(provider.supports_model("DEEPSEEK-CHAT"));
         assert!(provider.supports_model("DEEPSEEK-REASONER"));
-        // Test mixed case
-        assert!(provider.supports_model("DeepSeek-Chat"));
-        assert!(provider.supports_model("DEEPSEEK-reasoner"));
+        assert!(provider.supports_model("DeepSeek-V4-Flash"));
+    }
+
+    #[test]
+    fn test_max_input_tokens() {
+        let provider = DeepSeekProvider::new();
+        assert_eq!(
+            provider.get_max_input_tokens("deepseek-v4-flash"),
+            1_000_000
+        );
+        assert_eq!(provider.get_max_input_tokens("deepseek-v4-pro"), 1_000_000);
+        assert_eq!(provider.get_max_input_tokens("deepseek-chat"), 64_000);
+        assert_eq!(provider.get_max_input_tokens("deepseek-reasoner"), 64_000);
     }
 
     #[test]

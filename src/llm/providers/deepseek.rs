@@ -15,7 +15,7 @@
 //! DeepSeek provider implementation
 //!
 //! PRICING UPDATE: April 2026
-//! Source: https://api-docs.deepseek.com/quick_start/pricing
+//! Source: <https://api-docs.deepseek.com/quick_start/pricing>
 //!
 //! deepseek-v4-flash (1M context, thinking by default):
 //! - Cache Hit: $0.028
@@ -27,7 +27,7 @@
 //! - Cache Miss (Input): $1.74
 //! - Output: $3.48
 //!
-//! Legacy aliases (deprecated, map to v4-flash):
+//! Legacy aliases (deprecated, V3.2 pricing retained):
 //! deepseek-chat (non-thinking), deepseek-reasoner (thinking)
 
 use crate::errors::ProviderError;
@@ -52,7 +52,7 @@ const PRICING: &[PricingTuple] = &[
     // V4 family (1M context)
     ("deepseek-v4-pro", 1.74, 3.48, 1.74, 0.145),
     ("deepseek-v4-flash", 0.14, 0.28, 0.14, 0.028),
-    // Legacy aliases (deprecated, map to v4-flash)
+    // Legacy aliases (deprecated, V3.2 pricing retained)
     ("deepseek-chat", 0.28, 0.42, 0.28, 0.028),
     ("deepseek-reasoner", 0.28, 0.42, 0.28, 0.028),
 ];

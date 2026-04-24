@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.17.0] - 2026-04-24
+
+### 📋 Release Summary
+
+This release adds NVIDIA NIM as a new AI provider with integrated reference pricing for cost tracking (29bd33fd, dda2a4b0).
+
+
+### ✨ New Features & Enhancements
+
+- **nvidia**: add reference pricing for NVIDIA NIM `29bd33fd`
+- **llm**: add NVIDIA NIM provider support `dda2a4b0`
+
 ## [0.16.1] - 2026-04-23
 
 ### 📋 Release Summary

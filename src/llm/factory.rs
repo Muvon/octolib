@@ -16,9 +16,10 @@
 
 use crate::llm::providers::{
     AmazonBedrockProvider, AnthropicProvider, BytePlusProvider, CerebrasProvider, CliProvider,
-    CloudflareWorkersAiProvider, DeepSeekProvider, GoogleVertexProvider, GroqProvider,
-    LocalProvider, MinimaxProvider, MoonshotProvider, NvidiaProvider, OctoHubProvider,
-    OllamaProvider, OpenAiProvider, OpenRouterProvider, TogetherProvider, ZaiProvider,
+    CloudflareWorkersAiProvider, DeepSeekProvider, FeatherlessProvider, GoogleVertexProvider,
+    GroqProvider, LocalProvider, MinimaxProvider, MoonshotProvider, NvidiaProvider,
+    OctoHubProvider, OllamaProvider, OpenAiProvider, OpenRouterProvider, TogetherProvider,
+    ZaiProvider,
 };
 use crate::llm::traits::AiProvider;
 use anyhow::Result;
@@ -65,6 +66,7 @@ impl ProviderFactory {
             "amazon" => Ok(Box::new(AmazonBedrockProvider::new())),
             "cloudflare" => Ok(Box::new(CloudflareWorkersAiProvider::new())),
             "deepseek" => Ok(Box::new(DeepSeekProvider::new())),
+            "featherless" => Ok(Box::new(FeatherlessProvider::new())),
             "minimax" => Ok(Box::new(MinimaxProvider::new())),
             "moonshot" | "kimi" => Ok(Box::new(MoonshotProvider::new())),
             "nvidia" => Ok(Box::new(NvidiaProvider::new())),
@@ -74,7 +76,7 @@ impl ProviderFactory {
             "cli" => Err(anyhow::anyhow!(
                 "CLI provider requires a model string like 'cli:<backend>/<model>'. Use ProviderFactory::get_provider_for_model instead."
             )),
-            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported: openai, anthropic, openrouter, cerebras, local, ollama, google, groq, amazon, cloudflare, deepseek, minimax, moonshot, nvidia, octohub, together, zai, byteplus, cli", provider_name))
+            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported: openai, anthropic, openrouter, cerebras, local, ollama, google, groq, amazon, cloudflare, deepseek, featherless, minimax, moonshot, nvidia, octohub, together, zai, byteplus, cli", provider_name))
         }
     }
 
@@ -113,6 +115,7 @@ impl ProviderFactory {
             "amazon",
             "cloudflare",
             "deepseek",
+            "featherless",
             "minimax",
             "moonshot",
             "nvidia",
@@ -351,6 +354,18 @@ mod tests {
         assert_eq!(model, "llama-3.3-70b-versatile");
         assert!(provider.supports_model(&model));
         assert!(provider.supports_structured_output(&model));
+
+        // Test Featherless provider
+        let result = ProviderFactory::get_provider_for_model(
+            "featherless:meta-llama/Meta-Llama-3.1-8B-Instruct",
+        );
+        assert!(result.is_ok());
+        let (provider, model) = result.unwrap();
+        assert_eq!(provider.name(), "featherless");
+        assert_eq!(model, "meta-llama/Meta-Llama-3.1-8B-Instruct");
+        assert!(provider.supports_model(&model));
+        assert!(provider.supports_structured_output(&model));
+        assert!(!provider.supports_caching(&model));
 
         // Test invalid format
         let result = ProviderFactory::get_provider_for_model("gpt-4o");

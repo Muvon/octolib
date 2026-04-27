@@ -16,9 +16,9 @@
 
 use crate::llm::providers::{
     AmazonBedrockProvider, AnthropicProvider, BytePlusProvider, CerebrasProvider, CliProvider,
-    CloudflareWorkersAiProvider, DeepSeekProvider, GoogleVertexProvider, LocalProvider,
-    MinimaxProvider, MoonshotProvider, NvidiaProvider, OctoHubProvider, OllamaProvider,
-    OpenAiProvider, OpenRouterProvider, TogetherProvider, ZaiProvider,
+    CloudflareWorkersAiProvider, DeepSeekProvider, GoogleVertexProvider, GroqProvider,
+    LocalProvider, MinimaxProvider, MoonshotProvider, NvidiaProvider, OctoHubProvider,
+    OllamaProvider, OpenAiProvider, OpenRouterProvider, TogetherProvider, ZaiProvider,
 };
 use crate::llm::traits::AiProvider;
 use anyhow::Result;
@@ -61,6 +61,7 @@ impl ProviderFactory {
             "anthropic" => Ok(Box::new(AnthropicProvider::new())),
             "byteplus" => Ok(Box::new(BytePlusProvider::new())),
             "google" => Ok(Box::new(GoogleVertexProvider::new())),
+            "groq" => Ok(Box::new(GroqProvider::new())),
             "amazon" => Ok(Box::new(AmazonBedrockProvider::new())),
             "cloudflare" => Ok(Box::new(CloudflareWorkersAiProvider::new())),
             "deepseek" => Ok(Box::new(DeepSeekProvider::new())),
@@ -73,7 +74,7 @@ impl ProviderFactory {
             "cli" => Err(anyhow::anyhow!(
                 "CLI provider requires a model string like 'cli:<backend>/<model>'. Use ProviderFactory::get_provider_for_model instead."
             )),
-            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported: openai, anthropic, openrouter, cerebras, local, ollama, google, amazon, cloudflare, deepseek, minimax, moonshot, nvidia, octohub, together, zai, byteplus, cli", provider_name))
+            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported: openai, anthropic, openrouter, cerebras, local, ollama, google, groq, amazon, cloudflare, deepseek, minimax, moonshot, nvidia, octohub, together, zai, byteplus, cli", provider_name))
         }
     }
 
@@ -108,6 +109,7 @@ impl ProviderFactory {
             "ollama",
             "anthropic",
             "google",
+            "groq",
             "amazon",
             "cloudflare",
             "deepseek",
@@ -190,6 +192,7 @@ mod tests {
         assert!(providers.contains(&"deepseek"));
         assert!(providers.contains(&"minimax"));
         assert!(providers.contains(&"moonshot"));
+        assert!(providers.contains(&"groq"));
         assert!(providers.contains(&"cli"));
     }
 
@@ -217,6 +220,7 @@ mod tests {
         assert!(ProviderFactory::create_provider("minimax").is_ok());
         assert!(ProviderFactory::create_provider("moonshot").is_ok());
         assert!(ProviderFactory::create_provider("nvidia").is_ok());
+        assert!(ProviderFactory::create_provider("groq").is_ok());
         assert!(ProviderFactory::create_provider("cli").is_err());
 
         // Test case insensitive
@@ -338,6 +342,15 @@ mod tests {
         let (provider, model) = result.unwrap();
         assert_eq!(provider.name(), "nvidia");
         assert_eq!(model, "nvidia/llama-3.1-nemotron-ultra-253b-v1");
+
+        // Test Groq provider
+        let result = ProviderFactory::get_provider_for_model("groq:llama-3.3-70b-versatile");
+        assert!(result.is_ok());
+        let (provider, model) = result.unwrap();
+        assert_eq!(provider.name(), "groq");
+        assert_eq!(model, "llama-3.3-70b-versatile");
+        assert!(provider.supports_model(&model));
+        assert!(provider.supports_structured_output(&model));
 
         // Test invalid format
         let result = ProviderFactory::get_provider_for_model("gpt-4o");

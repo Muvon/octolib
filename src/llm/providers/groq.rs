@@ -33,7 +33,7 @@ use crate::llm::providers::openai_compat::{
 };
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderResponse};
-use crate::llm::utils::{is_model_in_pricing_table, PricingTuple};
+use crate::llm::utils::PricingTuple;
 use anyhow::Result;
 use std::env;
 
@@ -172,6 +172,7 @@ impl AiProvider for GroqProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::llm::utils::is_model_in_pricing_table;
 
     #[test]
     fn test_supports_model() {

@@ -15,7 +15,7 @@
 //! Provider factory for creating AI provider instances
 
 use crate::llm::providers::{
-    AmazonBedrockProvider, AnthropicProvider, CerebrasProvider, CliProvider,
+    AmazonBedrockProvider, AnthropicProvider, BytePlusProvider, CerebrasProvider, CliProvider,
     CloudflareWorkersAiProvider, DeepSeekProvider, GoogleVertexProvider, LocalProvider,
     MinimaxProvider, MoonshotProvider, NvidiaProvider, OctoHubProvider, OllamaProvider,
     OpenAiProvider, OpenRouterProvider, TogetherProvider, ZaiProvider,
@@ -59,6 +59,7 @@ impl ProviderFactory {
             "local" => Ok(Box::new(LocalProvider::new())),
             "ollama" => Ok(Box::new(OllamaProvider::new())),
             "anthropic" => Ok(Box::new(AnthropicProvider::new())),
+            "byteplus" => Ok(Box::new(BytePlusProvider::new())),
             "google" => Ok(Box::new(GoogleVertexProvider::new())),
             "amazon" => Ok(Box::new(AmazonBedrockProvider::new())),
             "cloudflare" => Ok(Box::new(CloudflareWorkersAiProvider::new())),
@@ -72,7 +73,7 @@ impl ProviderFactory {
             "cli" => Err(anyhow::anyhow!(
                 "CLI provider requires a model string like 'cli:<backend>/<model>'. Use ProviderFactory::get_provider_for_model instead."
             )),
-            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported: openai, anthropic, openrouter, cerebras, local, ollama, google, amazon, cloudflare, deepseek, minimax, moonshot, nvidia, octohub, together, zai, cli", provider_name))
+            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported: openai, anthropic, openrouter, cerebras, local, ollama, google, amazon, cloudflare, deepseek, minimax, moonshot, nvidia, octohub, together, zai, byteplus, cli", provider_name))
         }
     }
 
@@ -116,6 +117,7 @@ impl ProviderFactory {
             "octohub",
             "together",
             "zai",
+            "byteplus",
             "cli",
         ]
     }

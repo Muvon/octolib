@@ -31,7 +31,7 @@ Octolib provides a unified interface for generating embeddings across multiple p
 - All v4 models share the same embedding space (interoperable)
 
 **Google:**
-- Note: `text-embedding-004` is deprecated (Jan 14, 2026)
+- Note: `text-embedding-004` is deprecated
 
 ## 🚀 Quick Start
 

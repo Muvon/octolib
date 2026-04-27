@@ -1,8 +1,7 @@
 # Octolib: Self-Sufficient AI Provider Library
 
 
-**© 2025 Muvon Un Limited (Hong Kong)** | [Website](https://muvon.io) | [Product Page](https://octolib.muvon.io)
-
+**© 2026 Muvon Un Limited (Hong Kong)** | [Website](https://muvon.io) | [Product Page](https://octolib.muvon.io)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org)
 
@@ -11,8 +10,7 @@
 Octolib is a comprehensive, self-sufficient AI provider library that provides a unified, type-safe interface for interacting with multiple AI services. It offers intelligent model selection, robust error handling, and advanced features like cross-provider tool calling and vision support.
 
 ## ✨ Key Features
-
-- **🔌 Multi-Provider Support**: OpenAI, Anthropic, OpenRouter, Cerebras, NVIDIA NIM, Ollama, Together, Google, Amazon, Cloudflare, DeepSeek, MiniMax, Moonshot AI (Kimi), Z.ai, OctoHub, Local, CLI proxies
+- **🔌 Multi-Provider Support**: OpenAI, Anthropic, OpenRouter, Cerebras, NVIDIA NIM, Groq, BytePlus, Ollama, Together, Google, Amazon, Cloudflare, DeepSeek, MiniMax, Moonshot AI (Kimi), Z.ai, OctoHub, Local, CLI proxies
 - **🛡️ Unified Interface**: Consistent API across different providers
 - **🔍 Intelligent Model Validation**: Strict `provider:model` format parsing with case-insensitive model support
 - **📋 Structured Output**: JSON and JSON Schema support for OpenAI, OpenRouter, DeepSeek, Together, and Z.ai
@@ -366,10 +364,16 @@ The library automatically detects OAuth credentials and prefers them over API ke
 | **Anthropic** | ❌ No | ✅ Yes | ✅ Yes | ✅ Yes |
 | **Z.ai** | ✅ JSON Mode | ❌ No | ✅ Yes | ✅ Yes |
 | **NVIDIA NIM** | ✅ JSON + Schema | Per-model | ✅ Yes | ❌ No |
+| **Groq** | ✅ JSON + Schema | Per-model | ❌ No | ✅ Select models |
+| **BytePlus** | ✅ JSON + Schema | Per-model | ❌ No | ✅ Yes |
+| **Cerebras** | ✅ JSON + Schema | ❌ No | ❌ No | ❌ No |
 | **Google Vertex** | ❌ No | ✅ Yes | ✅ Yes | ❌ No |
 | **Amazon Bedrock** | ❌ No | ✅ Yes | ✅ Yes | ❌ No |
+| **OctoHub** | Per-model | Per-model | ✅ Yes | ✅ Yes |
+| **Together** | Per-model | Per-model | ✅ Yes | ❌ No |
 | **Cloudflare** | ❌ No | ❌ No | ❌ No | ❌ No |
-
+| **Local** | Per-model | Per-model | Per-model | ❌ No |
+| **Ollama** | Per-model | Per-model | Per-model | ❌ No |
 
 ### Structured Output Details
 
@@ -459,15 +463,22 @@ if let Some(usage) = &response.exchange.usage {
 | OpenAI | ✅ Full Support | Chat, Vision, Tools, Structured Output, Caching |
 | Anthropic | ✅ Full Support | Claude Models, Vision, Tools, Caching |
 | OpenRouter | ✅ Full Support | Multi-Provider Proxy, Vision, Caching, Structured Output |
+| Groq | ✅ Full Support | Fast Inference, Structured Output, Caching |
+| BytePlus | ✅ Full Support | Seed Models, Structured Output, Caching |
 | DeepSeek | ✅ Full Support | Open-Source AI Models, Structured Output, Caching |
-| Moonshot AI (Kimi) | ✅ Full Support | Kimi K2 Series, Vision (kimi-k2.5), Tools, Structured Output, Caching |
+| Moonshot AI (Kimi) | ✅ Full Support | Kimi K2 Series, Vision (kimi-k2.5), Tools, Structured Output, Caching, Thinking |
 | MiniMax | ✅ Full Support | Anthropic-Compatible API, Tools, Caching, Thinking, Structured Output |
 | Z.ai | ✅ Full Support | GLM Models, Caching, Structured Output |
-| NVIDIA NIM | ✅ Full Support | 100+ Hosted Models (Nemotron, Llama, DeepSeek, GLM, etc.), Tools, Structured Output |
+| NVIDIA NIM | ✅ Full Support | 100+ Hosted Models, Tools, Structured Output, Reference Pricing |
+| Together AI | ✅ Full Support | Multi-Provider Proxy, Vision, Tools, Structured Output |
+| Cerebras | ✅ Full Support | Fast Inference, Structured Output |
+| OctoHub | ✅ Supported | Local AI Serving |
 | Google Vertex AI | ✅ Supported | Enterprise AI Integration |
 | Amazon Bedrock | ✅ Supported | Cloud AI Services |
 | Cloudflare Workers AI | ✅ Supported | Edge AI Compute |
-
+| Local LLM | ✅ Supported | Ollama, LM Studio, LocalAI, Jan, vLLM |
+| Ollama | ✅ Supported | Local LLM Runner |
+| CLI Proxy | ✅ Supported | Codex, Claude, Gemini, Cursor |
 ## 🔒 Privacy & Security
 
 - **🏠 Local-first design**

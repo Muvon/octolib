@@ -20,7 +20,7 @@ Cross-encoders process query and document together, enabling deeper semantic und
 | **Voyage AI** | rerank-2.5, rerank-2.5-lite, rerank-2, rerank-2-lite, rerank-1, rerank-lite-1 | 4K-32K tokens | Multilingual, instruction-following |
 | **Cohere** | rerank-english-v3.0, rerank-multilingual-v3.0, rerank-english-v2.0, rerank-multilingual-v2.0 | Up to 4K tokens | Enterprise-grade, multilingual |
 | **Jina AI** | jina-reranker-v3, jina-reranker-v2-base-multilingual, jina-reranker-v1-base-en, jina-colbert-v2 | 1K-131K tokens | Automatic chunking, multilingual |
-
+| **Mixedbread AI** | mxbai-rerank-large-v2, mxbai-rerank-base-v2, mxbai-rerank-large-v1, mxbai-rerank-base-v1, mxbai-rerank-xsmall-v1 | 8K tokens | RL-trained, 100+ languages, open-source v1 models |
 ### Local Providers (no API keys, requires features)
 
 | Provider | Models | Features |
@@ -50,15 +50,17 @@ Cross-encoders process query and document together, enabling deeper semantic und
 | `rerank-english-v2.0` | Previous generation English | Legacy support |
 | `rerank-multilingual-v2.0` | Previous generation multilingual | Legacy support |
 
-**Jina AI Models:**
+**Mixedbread AI Models:**
 
 | Model | Context Length | Description | Use Case |
 |-------|----------------|-------------|----------|
-| `jina-reranker-v3` | 131K tokens | Latest model with long context | Long documents |
-| `jina-reranker-v2-base-multilingual` | 1K tokens | Multilingual with auto-chunking | Multilingual content |
-| `jina-reranker-v1-base-en` | 1K tokens | English-only | English content |
-| `jina-colbert-v2` | 8K tokens | ColBERT architecture | Fast retrieval |
+| `mxbai-rerank-large-v2` | 8K tokens | RL-trained, best quality | High accuracy reranking |
+| `mxbai-rerank-base-v2` | 8K tokens | Balanced v2 model | Good performance/speed |
+| `mxbai-rerank-large-v1` | 8K tokens | Open-source (Apache 2.0) | Open-source deployments |
+| `mxbai-rerank-base-v1` | 8K tokens | Open-source, balanced | Open-source deployments |
+| `mxbai-rerank-xsmall-v1` | 8K tokens | Fastest open-source | Low-latency needs |
 
+**Jina AI Models:**
 **FastEmbed Models (Local):**
 
 | Model | Description | Use Case |
@@ -85,6 +87,7 @@ Cross-encoders process query and document together, enabling deeper semantic und
 export VOYAGE_API_KEY="your_voyage_key"
 export COHERE_API_KEY="your_cohere_key"
 export JINA_API_KEY="your_jina_key"
+export MXBAI_API_KEY="your_mixedbread_key"
 ```
 
 **Local Providers:**

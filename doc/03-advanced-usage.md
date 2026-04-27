@@ -96,7 +96,7 @@ pub struct GenericToolCall {
 
 **Supported metadata:**
 - **OpenRouter + Gemini**: `reasoning_details` array (thought signatures)
-- **Future providers**: Extensible for any provider-specific data
+- **Extensible architecture**: The `meta` field supports any provider-specific data
 
 ## Vision Support
 

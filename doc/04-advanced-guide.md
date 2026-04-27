@@ -7,6 +7,8 @@
 | OpenAI | ✅ Full Support | Chat, Vision, Tools, Structured Output, Caching |
 | Anthropic | ✅ Full Support | Claude Models, Vision, Tools, Caching |
 | OpenRouter | ✅ Full Support | Multi-Provider Proxy, Vision, Caching, Structured Output |
+| Groq | ✅ Full Support | Fast Inference, Structured Output, Caching |
+| BytePlus | ✅ Full Support | Seed Models, Structured Output, Caching |
 | DeepSeek | ✅ Full Support | Open-Source AI Models, Structured Output, Caching |
 | Moonshot AI (Kimi) | ✅ Full Support | Kimi K2 Series, Vision (kimi-k2.5), Tools, Structured Output, Caching, Thinking |
 | MiniMax | ✅ Full Support | Anthropic-Compatible API, Tools, Caching, Thinking |
@@ -75,6 +77,12 @@ Each provider requires its specific API key:
 - `OPENAI_API_KEY`: OpenAI API key
 - `ANTHROPIC_API_KEY`: Anthropic API key
 - `OPENROUTER_API_KEY`: OpenRouter API key
+- `GROQ_API_KEY`: Groq API key
+- `BYTEPLUS_API_KEY`: BytePlus API key
+- `NVIDIA_API_KEY`: NVIDIA NIM API key
+- `CLOUDFLARE_API_KEY`: Cloudflare API key
+- `TOGETHER_API_KEY`: Together AI API key
+- `OCTOHUB_API_KEY`: OctoHub API key
 - `GOOGLE_APPLICATION_CREDENTIALS`: Google Vertex AI credentials
 - `AWS_ACCESS_KEY_ID` & `AWS_SECRET_ACCESS_KEY`: Amazon Bedrock credentials
 
@@ -87,10 +95,16 @@ All providers support custom API URLs via environment variables. If not set, def
 | OpenAI | `OPENAI_API_KEY` | `OPENAI_API_URL` | `https://api.openai.com/v1/chat/completions` |
 | Anthropic | `ANTHROPIC_API_KEY` | `ANTHROPIC_API_URL` | `https://api.anthropic.com/v1/messages` |
 | OpenRouter | `OPENROUTER_API_KEY` | `OPENROUTER_API_URL` | `https://openrouter.ai/api/v1/chat/completions` |
+| Groq | `GROQ_API_KEY` | `GROQ_API_URL` | `https://api.groq.com/openai/v1/chat/completions` |
+| BytePlus | `BYTEPLUS_API_KEY` | `BYTEPLUS_API_URL` | `https://ark.ap-southeast.bytepluses.com/api/v3/chat/completions` |
 | DeepSeek | `DEEPSEEK_API_KEY` | `DEEPSEEK_API_URL` | `https://api.deepseek.com/chat/completions` |
 | MiniMax | `MINIMAX_API_KEY` | `MINIMAX_API_URL` | `https://api.minimax.io/anthropic/v1/messages` |
+| Moonshot | `MOONSHOT_API_KEY` | `MOONSHOT_API_URL` | `https://api.moonshot.cn/v1/chat/completions` |
 | Z.ai | `ZAI_API_KEY` | `ZAI_API_URL` | `https://api.z.ai/v1/llm/chat/completions` |
 | NVIDIA NIM | `NVIDIA_API_KEY` | `NVIDIA_API_URL` | `https://integrate.api.nvidia.com/v1/chat/completions` |
+| Together AI | `TOGETHER_API_KEY` | `TOGETHER_API_URL` | `https://api.together.xyz/v1/chat/completions` |
+| Cerebras | `CEREBRAS_API_KEY` | `CEREBRAS_API_URL` | `https://api.cerebras.ai/v1/chat/completions` |
+| OctoHub | `OCTOHUB_API_KEY` | `OCTOHUB_API_URL` | `http://127.0.0.1:8080` |
 
 Example usage with custom endpoints:
 
@@ -249,9 +263,16 @@ async fn structured_output_example() -> anyhow::Result<()> {
 |----------|-----------|-------------|-------------|
 | OpenAI | ✅ Yes | ✅ Yes | ✅ Yes |
 | OpenRouter | ✅ Yes | ✅ Yes | ✅ Yes |
+| NVIDIA NIM | ✅ Yes | ✅ Yes | ✅ Yes |
+| Groq | ✅ Yes | ✅ Yes | ✅ Yes |
+| BytePlus | ✅ Yes | ✅ Yes | ✅ Yes |
+| Cerebras | ✅ Yes | ✅ Yes | ✅ Yes |
+| Together AI | Per-model | Per-model | Per-model |
 | DeepSeek | ✅ Yes | ❌ No* | ❌ No |
+| Moonshot AI (Kimi) | ✅ Yes | ❌ No | ❌ No |
 | MiniMax | ✅ Yes | ❌ No | ❌ No |
 | Z.ai | ✅ Yes | ❌ No | ❌ No |
+| Local/Ollama/OctoHub | Per-model | Per-model | Per-model |
 | Others | ❌ No | ❌ No | ❌ No |
 
 *DeepSeek falls back to JSON mode when JSON Schema is requested.

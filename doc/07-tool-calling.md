@@ -117,11 +117,10 @@ let generic_calls = provider_calls.to_generic_tool_calls();
 
 **Direct Google API:**
 ```rust
-// For direct Google Gemini API (future support)
+// For direct Google Gemini API (not currently implemented)
 // thought_signature would be stored in meta and restored
 // to the function call part when sending back
 ```
-
 ### Metadata Structure
 
 The `meta` field is a flexible JSON object that can store any provider-specific data:
@@ -135,7 +134,7 @@ pub struct GenericToolCall {
 // {
 //   "reasoning_details": [...],  // OpenRouter Gemini
 //   "thought_signature": "...",  // Direct Google API
-//   "custom_field": "..."        // Future providers
+//   "custom_field": "..."        // Extensible architecture
 // }
 ```
 
@@ -231,11 +230,10 @@ async fn tool_calling_example() -> anyhow::Result<()> {
 | Provider | Metadata Type | Automatic Handling |
 |----------|--------------|-------------------|
 | **OpenRouter + Gemini** | `reasoning_details` | ✅ Yes |
-| **Direct Google API** | `thought_signature` | 🔜 Future |
+| **Direct Google API** | `thought_signature` | ❌ Not supported |
 | **OpenAI** | None | N/A |
 | **Anthropic** | None | N/A |
 | **DeepSeek** | None | N/A |
-
 ### Provider-Specific Notes
 
 **OpenRouter with Gemini 3:**
@@ -245,10 +243,8 @@ async fn tool_calling_example() -> anyhow::Result<()> {
 - Fixes 400 errors: "Function call is missing a thought_signature"
 
 **Direct Google Gemini API:**
-- Future support for `thought_signature` in function call parts
-- Will use same `meta` field architecture
-- Seamless integration with existing code
-
+- The `meta` field architecture supports `thought_signature` storage
+- Not currently implemented in direct Google provider
 ## Best Practices
 
 ### 1. Use Appropriate Type for Context

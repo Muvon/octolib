@@ -72,8 +72,11 @@ Cross-provider tool call standardization:
 - Anthropic
 - OpenRouter
 - Cerebras
+- Groq (with prompt caching)
+- BytePlus (Seed models, with prompt caching)
 - NVIDIA NIM
 - Ollama
+- Together AI
 - DeepSeek
 - Moonshot AI (Kimi) - with thinking support
 - MiniMax - with thinking support
@@ -84,7 +87,6 @@ Cross-provider tool call standardization:
 - Local (Ollama, LM Studio, LocalAI, Jan, vLLM)
 - OctoHub (local)
 - CLI proxies (codex, claude, gemini, cursor)
-
 ### Embedding Providers
 - Jina AI
 - Voyage AI
@@ -127,14 +129,6 @@ Cross-provider tool call standardization:
 - No external network calls for provider selection
 - Comprehensive input validation
 - Respects provider-specific security requirements
-
-## Future Roadmap
-
-- More provider integrations
-- Enhanced caching mechanisms
-- Improved vision support
-- Advanced tool calling capabilities
-- Additional reranker providers
 
 ## Contributing
 

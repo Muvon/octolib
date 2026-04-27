@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.18.0] - 2026-04-27
+
+### 📋 Release Summary
+
+This release expands multi-provider support with the integration of Groq and BytePlus, alongside the addition of DeepSeek V4 and GPT-5.5 model families (2064d1a8, 1e96d554, 22d2d49a). Users will benefit from enhanced cost tracking through updated pricing references and corrected legacy aliases for DeepSeek (85de539e, 3e018d3c). These updates improve model validation and provide more efficient processing via Groq’s prompt caching capabilities.
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: add Groq provider support with prompt caching `2064d1a8`
+- **llm**: expand model capabilities and pricing references `85de539e`
+- **llm**: add BytePlus provider and Seed models `1e96d554`
+- **llm**: add DeepSeek V4 and GPT-5.5 model families `22d2d49a`
+
+### 🔧 Improvements & Optimizations
+
+- **groq**: move pricing utility import to test module `8ae5162b`
+
+### 🐛 Bug Fixes & Stability
+
+- **deepseek**: adjust pricing for legacy aliases `3e018d3c`
+
 ## [0.17.0] - 2026-04-24
 
 ### 📋 Release Summary

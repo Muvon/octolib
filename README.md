@@ -10,7 +10,7 @@
 Octolib is a comprehensive, self-sufficient AI provider library that provides a unified, type-safe interface for interacting with multiple AI services. It offers intelligent model selection, robust error handling, and advanced features like cross-provider tool calling and vision support.
 
 ## ✨ Key Features
-- **🔌 Multi-Provider Support**: OpenAI, Anthropic, OpenRouter, Cerebras, NVIDIA NIM, Groq, BytePlus, Ollama, Together, Google, Amazon, Cloudflare, DeepSeek, MiniMax, Moonshot AI (Kimi), Z.ai, OctoHub, Local, CLI proxies
+- **🔌 Multi-Provider Support**: OpenAI, Anthropic, OpenRouter, Cerebras, NVIDIA NIM, Groq, BytePlus, Ollama, Together, Featherless, Google, Amazon, Cloudflare, DeepSeek, MiniMax, Moonshot AI (Kimi), Z.ai, OctoHub, Local, CLI proxies
 - **🛡️ Unified Interface**: Consistent API across different providers
 - **🔍 Intelligent Model Validation**: Strict `provider:model` format parsing with case-insensitive model support
 - **📋 Structured Output**: JSON and JSON Schema support for OpenAI, OpenRouter, DeepSeek, Together, and Z.ai
@@ -367,6 +367,7 @@ The library automatically detects OAuth credentials and prefers them over API ke
 | **Groq** | ✅ JSON + Schema | Per-model | ❌ No | ✅ Select models |
 | **BytePlus** | ✅ JSON + Schema | Per-model | ❌ No | ✅ Yes |
 | **Cerebras** | ✅ JSON + Schema | ❌ No | ❌ No | ❌ No |
+| **Featherless** | ✅ JSON + Schema | ❌ No | ❌ No | ❌ No |
 | **Google Vertex** | ❌ No | ✅ Yes | ✅ Yes | ❌ No |
 | **Amazon Bedrock** | ❌ No | ✅ Yes | ✅ Yes | ❌ No |
 | **OctoHub** | Per-model | Per-model | ✅ Yes | ✅ Yes |
@@ -472,6 +473,7 @@ if let Some(usage) = &response.exchange.usage {
 | NVIDIA NIM | ✅ Full Support | 100+ Hosted Models, Tools, Structured Output, Reference Pricing |
 | Together AI | ✅ Full Support | Multi-Provider Proxy, Vision, Tools, Structured Output |
 | Cerebras | ✅ Full Support | Fast Inference, Structured Output |
+| Featherless | ✅ Full Support | Open-Weight Models (Qwen, Llama, Mistral, DeepSeek, RWKV), Subscription Billing |
 | OctoHub | ✅ Supported | Local AI Serving |
 | Google Vertex AI | ✅ Supported | Enterprise AI Integration |
 | Amazon Bedrock | ✅ Supported | Cloud AI Services |

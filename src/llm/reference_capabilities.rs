@@ -56,6 +56,12 @@ const REFERENCE_CAPABILITIES: &[RefCapsTuple] = &[
     ("seed-1-8", false, false, true, 131_072),
     ("seed-1-6-flash", false, false, true, 131_072),
     ("seed-1-6", false, false, true, 131_072),
+    // --- BytePlus aliases (dot-form names that don't sanitize to "2-0" form) ---
+    ("dola-seed-2.0-pro", false, false, true, 256_000),
+    ("dola-seed-2.0-lite", false, false, true, 256_000),
+    ("dola-seed-2.0-code", false, false, true, 256_000),
+    ("bytedance-seed-code", false, false, true, 256_000),
+    ("glm-4-7-251222", false, false, true, 200_000),
     // --- Meta Llama 4 (multimodal) ---
     ("llama-4-maverick", true, false, true, 1_048_576),
     ("llama-4-scout", true, false, true, 524_288),
@@ -138,36 +144,136 @@ const REFERENCE_CAPABILITIES: &[RefCapsTuple] = &[
     ("gemini-2.5-flash", true, true, true, 1_048_576),
     ("gemini-2.5-pro", true, true, true, 1_048_576),
     ("gemini-2.0-flash", true, true, true, 1_048_576),
-    // --- Zhipu GLM ---
+    // --- Zhipu GLM (most specific first) ---
     ("glm-5v-turbo", true, false, true, 128_000),
     ("glm-5v", true, false, true, 128_000),
-    ("glm-5.1-turbo", false, false, true, 128_000),
-    ("glm-5.1", false, false, true, 128_000),
+    ("glm-5.1-turbo", false, false, true, 200_000),
+    ("glm-5.1", false, false, true, 200_000),
     ("glm-5-turbo", false, false, true, 128_000),
     ("glm-5", false, false, true, 128_000),
+    ("glm-4.7-flashx", false, false, true, 200_000),
     ("glm-4.7-flash", false, false, true, 200_000),
     ("glm-4.7", false, false, true, 200_000),
+    ("glm-4.6v-flashx", true, false, true, 128_000),
+    ("glm-4.6v-flash", true, false, true, 128_000),
+    ("glm-4.6v", true, false, true, 128_000),
+    ("glm-4.6", false, false, true, 128_000),
+    ("glm-4.5-airx", false, false, true, 131_072),
+    ("glm-4.5-air", false, false, true, 131_072),
+    ("glm-4.5-flash", false, false, true, 131_072),
+    ("glm-4.5v", true, false, true, 131_072),
+    ("glm-4.5-x", false, false, true, 131_072),
+    ("glm-4.5", false, false, true, 131_072),
+    ("glm-4-32b-0414-128k", false, false, true, 128_000),
+    ("glm-ocr", true, false, false, 128_000),
     ("glm-4", false, false, true, 128_000),
-    // --- MiniMax ---
+    // --- MiniMax (most specific first) ---
+    ("minimax-m2.7-highspeed", false, false, false, 1_000_000),
     ("minimax-m2.7", false, false, false, 1_000_000),
+    ("minimax-m2.5-highspeed", false, false, false, 1_000_000),
+    ("minimax-m2.5-lightning", false, false, false, 1_000_000),
     ("minimax-m2.5", false, false, false, 1_000_000),
+    ("minimax-m2.1-lightning", false, false, false, 1_000_000),
+    ("minimax-m2.1", false, false, false, 1_000_000),
     ("minimax-m2", false, false, false, 1_000_000),
+    ("m2-her", false, false, false, 128_000),
     // --- Microsoft Phi ---
     ("phi-4-multimodal", true, false, true, 131_072),
     ("phi-4", false, false, true, 16_384),
     ("phi-3-vision", true, false, true, 131_072),
     ("phi-3", false, false, true, 131_072),
-    // --- Moonshot Kimi ---
-    ("kimi-k2.5", true, false, true, 262_144),
-    ("kimi-k2-thinking-turbo", false, false, true, 131_072),
-    ("kimi-k2-turbo", false, false, true, 131_072),
-    ("kimi-k2-thinking", false, false, true, 131_072),
-    ("kimi-k2", false, false, true, 131_072),
+    // --- Moonshot Kimi (most specific first) ---
+    ("kimi-k2.6-code-preview", false, false, true, 256_000),
+    ("kimi-k2.6", false, false, true, 256_000),
+    ("kimi-k2.5", true, false, true, 256_000),
+    ("kimi-k2-thinking-turbo", false, false, true, 256_000),
+    ("kimi-k2-turbo", false, false, true, 256_000),
+    ("kimi-k2-thinking", false, false, true, 256_000),
+    ("kimi-k2-0915", false, false, true, 256_000),
+    ("kimi-k2-0905", false, false, true, 256_000),
+    ("kimi-k2-0711", false, false, true, 256_000),
+    ("kimi-k2", false, false, true, 256_000),
+    ("moonshot-v1-128k", false, false, true, 131_072),
+    ("moonshot-v1-32k", false, false, true, 32_768),
+    ("moonshot-v1-8k", false, false, true, 8_192),
     // --- Cohere Command ---
     ("command-r-plus", false, false, true, 131_072),
     ("command-r", false, false, true, 131_072),
     // --- DBRX ---
     ("dbrx", false, false, true, 32_768),
+    // --- Anthropic Claude (most specific first; substring match is order-sensitive) ---
+    ("claude-opus-4-7", true, false, false, 1_000_000),
+    ("claude-opus-4-6", true, false, false, 200_000),
+    ("claude-sonnet-4-6", true, false, false, 200_000),
+    ("claude-opus-4-5", true, false, false, 200_000),
+    ("claude-sonnet-4-5", true, false, false, 200_000),
+    ("claude-haiku-4-5", true, false, false, 200_000),
+    ("claude-opus-4-1", true, false, false, 200_000),
+    ("claude-opus-4", true, false, false, 200_000),
+    ("claude-sonnet-4", true, false, false, 200_000),
+    ("claude-haiku-4", true, false, false, 200_000),
+    ("claude-3-7-sonnet", true, false, false, 200_000),
+    ("claude-3-5-sonnet", true, false, false, 200_000),
+    ("claude-3-5-haiku", true, false, false, 200_000),
+    ("claude-3-opus", true, false, false, 200_000),
+    ("claude-3-sonnet", true, false, false, 200_000),
+    ("claude-3-haiku", true, false, false, 200_000),
+    // --- OpenAI proprietary (most specific first; substring match is order-sensitive) ---
+    ("gpt-5.5-pro", false, false, true, 1_000_000),
+    ("gpt-5.5", false, false, true, 1_000_000),
+    ("gpt-5.4-pro", false, false, true, 400_000),
+    ("gpt-5.4-mini", false, false, true, 400_000),
+    ("gpt-5.4-nano", false, false, true, 400_000),
+    ("gpt-5.4", false, false, true, 400_000),
+    ("gpt-5.3-instant", false, false, true, 128_000),
+    ("gpt-5.3-codex", false, false, true, 400_000),
+    ("gpt-5.3-chat-latest", false, false, true, 400_000),
+    ("gpt-5.3", false, false, true, 400_000),
+    ("gpt-5.2-pro", false, false, true, 400_000),
+    ("gpt-5.2-codex", false, false, true, 400_000),
+    ("gpt-5.2-chat-latest", false, false, true, 400_000),
+    ("gpt-5.2", false, false, true, 400_000),
+    ("gpt-5.1-codex-mini", false, false, true, 400_000),
+    ("gpt-5.1-codex-max", false, false, true, 400_000),
+    ("gpt-5.1-codex", false, false, true, 400_000),
+    ("gpt-5.1-chat-latest", false, false, true, 400_000),
+    ("gpt-5.1", false, false, true, 400_000),
+    ("gpt-5-pro", false, false, true, 400_000),
+    ("gpt-5-codex", false, false, true, 400_000),
+    ("gpt-5-chat-latest", false, false, true, 400_000),
+    ("gpt-5-mini", false, false, true, 400_000),
+    ("gpt-5-nano", false, false, true, 400_000),
+    ("gpt-5", false, false, true, 400_000),
+    ("codex-mini-latest", false, false, true, 200_000),
+    ("gpt-4.1-mini", false, false, true, 1_047_576),
+    ("gpt-4.1-nano", false, false, true, 1_047_576),
+    ("gpt-4.1", false, false, true, 1_047_576),
+    ("gpt-4o-mini-realtime-preview", false, false, true, 128_000),
+    ("gpt-4o-realtime-preview", false, false, true, 128_000),
+    ("gpt-4o-mini", true, false, true, 128_000),
+    ("gpt-4o", true, false, true, 128_000),
+    ("gpt-4.5-preview", false, false, true, 128_000),
+    ("gpt-realtime-1.5", false, false, true, 32_000),
+    ("gpt-realtime-mini", false, false, true, 32_000),
+    ("gpt-realtime", false, false, true, 32_000),
+    ("gpt-audio-1.5", false, false, true, 128_000),
+    ("gpt-audio-mini", false, false, true, 128_000),
+    ("gpt-audio", false, false, true, 128_000),
+    ("o4-mini-deep-research", false, false, true, 200_000),
+    ("o4-mini", false, false, true, 200_000),
+    ("o3-deep-research", false, false, true, 200_000),
+    ("o3-pro", false, false, true, 200_000),
+    ("o3-mini", false, false, true, 200_000),
+    ("o3", false, false, true, 200_000),
+    ("o1-pro", false, false, true, 200_000),
+    ("o1-mini", false, false, true, 128_000),
+    ("o1", false, false, true, 200_000),
+    ("gpt-4-32k", false, false, true, 32_768),
+    ("gpt-4-turbo", true, false, true, 128_000),
+    ("gpt-4", false, false, true, 8_192),
+    ("gpt-3.5-turbo-16k-0613", false, false, true, 16_384),
+    ("gpt-3.5-turbo-instruct", false, false, true, 4_096),
+    ("gpt-3.5-turbo", false, false, true, 16_385),
     // --- OpenAI open-weight ---
     ("gpt-oss-120b", false, false, true, 131_072),
     ("gpt-oss-20b", false, false, true, 131_072),
@@ -317,5 +423,188 @@ mod tests {
         let caps = get_reference_capabilities("phi-4").unwrap();
         assert!(!caps.vision);
         assert_eq!(caps.max_input_tokens, 16_384);
+    }
+
+    #[test]
+    fn test_deepseek_v4_pro_ollama_format() {
+        // Regression: previously fell through to 8192 default via Ollama
+        let caps = get_reference_capabilities("deepseek-v4-pro").unwrap();
+        assert_eq!(caps.max_input_tokens, 1_000_000);
+        let caps = get_reference_capabilities("deepseek-v4-pro:671b").unwrap();
+        assert_eq!(caps.max_input_tokens, 1_000_000);
+        let caps = get_reference_capabilities("deepseek-v4-flash").unwrap();
+        assert_eq!(caps.max_input_tokens, 1_000_000);
+    }
+
+    #[test]
+    fn test_openai_gpt5_family() {
+        // gpt-5.5-pro must NOT match the gpt-5 catch-all (400K) — specificity ordering proof
+        assert_eq!(
+            get_reference_capabilities("gpt-5.5-pro")
+                .unwrap()
+                .max_input_tokens,
+            1_000_000
+        );
+        assert_eq!(
+            get_reference_capabilities("gpt-5.5")
+                .unwrap()
+                .max_input_tokens,
+            1_000_000
+        );
+        assert_eq!(
+            get_reference_capabilities("gpt-5.4")
+                .unwrap()
+                .max_input_tokens,
+            400_000
+        );
+        assert_eq!(
+            get_reference_capabilities("gpt-5")
+                .unwrap()
+                .max_input_tokens,
+            400_000
+        );
+        assert_eq!(
+            get_reference_capabilities("gpt-5.3-instant")
+                .unwrap()
+                .max_input_tokens,
+            128_000
+        );
+    }
+
+    #[test]
+    fn test_openai_o_series_and_gpt4() {
+        assert_eq!(
+            get_reference_capabilities("o4-mini")
+                .unwrap()
+                .max_input_tokens,
+            200_000
+        );
+        assert_eq!(
+            get_reference_capabilities("o3").unwrap().max_input_tokens,
+            200_000
+        );
+        assert_eq!(
+            get_reference_capabilities("gpt-4-32k")
+                .unwrap()
+                .max_input_tokens,
+            32_768
+        );
+        assert_eq!(
+            get_reference_capabilities("gpt-4o")
+                .unwrap()
+                .max_input_tokens,
+            128_000
+        );
+        assert_eq!(
+            get_reference_capabilities("gpt-4.1-mini")
+                .unwrap()
+                .max_input_tokens,
+            1_047_576
+        );
+    }
+
+    #[test]
+    fn test_anthropic_claude() {
+        assert_eq!(
+            get_reference_capabilities("claude-opus-4-7")
+                .unwrap()
+                .max_input_tokens,
+            1_000_000
+        );
+        assert_eq!(
+            get_reference_capabilities("claude-sonnet-4-6")
+                .unwrap()
+                .max_input_tokens,
+            200_000
+        );
+        assert_eq!(
+            get_reference_capabilities("claude-haiku-4-5-20251001")
+                .unwrap()
+                .max_input_tokens,
+            200_000
+        );
+        assert!(
+            get_reference_capabilities("claude-opus-4-7")
+                .unwrap()
+                .vision
+        );
+    }
+
+    #[test]
+    fn test_kimi_k2_256k() {
+        // All Kimi K2 variants now report 256K (matches MoonshotProvider override)
+        assert_eq!(
+            get_reference_capabilities("kimi-k2.6")
+                .unwrap()
+                .max_input_tokens,
+            256_000
+        );
+        assert_eq!(
+            get_reference_capabilities("kimi-k2-0905")
+                .unwrap()
+                .max_input_tokens,
+            256_000
+        );
+        assert_eq!(
+            get_reference_capabilities("kimi-k2")
+                .unwrap()
+                .max_input_tokens,
+            256_000
+        );
+    }
+
+    #[test]
+    fn test_glm_5_1_200k() {
+        assert_eq!(
+            get_reference_capabilities("glm-5.1")
+                .unwrap()
+                .max_input_tokens,
+            200_000
+        );
+        assert_eq!(
+            get_reference_capabilities("glm-5.1-turbo")
+                .unwrap()
+                .max_input_tokens,
+            200_000
+        );
+    }
+
+    #[test]
+    fn test_minimax_variants() {
+        assert_eq!(
+            get_reference_capabilities("MiniMax-M2.7-highspeed")
+                .unwrap()
+                .max_input_tokens,
+            1_000_000
+        );
+        assert_eq!(
+            get_reference_capabilities("MiniMax-M2.5-lightning")
+                .unwrap()
+                .max_input_tokens,
+            1_000_000
+        );
+        assert_eq!(
+            get_reference_capabilities("MiniMax-M2.1")
+                .unwrap()
+                .max_input_tokens,
+            1_000_000
+        );
+    }
+
+    #[test]
+    fn test_byteplus_dot_aliases() {
+        // BytePlus dot-form aliases (don't sanitize to "2-0" form)
+        assert_eq!(
+            get_reference_capabilities("dola-seed-2.0-pro")
+                .unwrap()
+                .max_input_tokens,
+            256_000
+        );
+        assert_eq!(
+            get_reference_capabilities("bytedance-seed-code")
+                .unwrap()
+                .max_input_tokens,
+            256_000
+        );
     }
 }

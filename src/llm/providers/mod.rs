@@ -16,6 +16,7 @@
 
 pub mod amazon;
 pub mod anthropic;
+pub mod byteplus;
 pub mod cerebras;
 pub mod cli;
 pub mod cloudflare;
@@ -37,6 +38,7 @@ pub mod zai;
 // Re-export provider implementations
 pub use amazon::AmazonBedrockProvider;
 pub use anthropic::AnthropicProvider;
+pub use byteplus::BytePlusProvider;
 pub use cerebras::CerebrasProvider;
 pub use cli::CliProvider;
 pub use cloudflare::CloudflareWorkersAiProvider;

@@ -48,6 +48,14 @@ const REFERENCE_CAPABILITIES: &[RefCapsTuple] = &[
     ("llava", true, false, false, 4_096),
     ("bakllava", true, false, false, 4_096),
     ("moondream", true, false, false, 8_192),
+    // --- ByteDance Seed ---
+    ("seed-2-0-pro", false, false, true, 256_000),
+    ("seed-2-0-code", false, false, true, 256_000),
+    ("seed-2-0-lite", false, false, true, 256_000),
+    ("seed-2-0-mini", false, false, true, 256_000),
+    ("seed-1-8", false, false, true, 131_072),
+    ("seed-1-6-flash", false, false, true, 131_072),
+    ("seed-1-6", false, false, true, 131_072),
     // --- Meta Llama 4 (multimodal) ---
     ("llama-4-maverick", true, false, true, 1_048_576),
     ("llama-4-scout", true, false, true, 524_288),

@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.19.0] - 2026-04-28
+
+### 📋 Release Summary
+
+This release introduces support for the Featherless provider, expanding the library's multi-provider ecosystem (aba1cb42). Documentation has also been enhanced to provide comprehensive guidance on the growing list of supported model providers (e1290ca7).
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: add Featherless provider support `aba1cb42`
+
+### 📚 Documentation & Examples
+
+- **providers**: expand model provider support and documentation `e1290ca7`
+
 ## [0.18.0] - 2026-04-27
 
 ### 📋 Release Summary

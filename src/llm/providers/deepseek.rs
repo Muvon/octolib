@@ -238,12 +238,10 @@ fn convert_messages(messages: &[crate::llm::types::Message]) -> Vec<DeepSeekMess
             });
 
             let reasoning_content = if msg.role == "assistant" && tool_calls.is_some() {
-                Some(
-                    msg.thinking
-                        .as_ref()
-                        .map(|t| t.content.clone())
-                        .unwrap_or_default(),
-                )
+                // Only replay actual thinking content — omit field entirely if no thinking was present.
+                // DeepSeek requires reasoning_content when replaying tool-call turns that had thinking,
+                // but unlike Moonshot it does NOT require an empty string when there was none.
+                msg.thinking.as_ref().map(|t| t.content.clone())
             } else {
                 None
             };
@@ -445,25 +443,29 @@ impl AiProvider for DeepSeekProvider {
             ));
         }
 
-        // Read response as text first for better error diagnostics
-        let response_text = retry::cancellable(
-            async { response.text().await.map_err(anyhow::Error::from) },
+        // Parse response as JSON Value first — gives us both the raw value for exchange logging
+        // and a source for typed deserialization without parsing the body twice.
+        let response_json: serde_json::Value = retry::cancellable(
+            async { response.json().await.map_err(anyhow::Error::from) },
             params.cancellation_token.as_ref(),
             || ProviderError::Cancelled.into(),
         )
         .await?;
 
-        let deepseek_response: DeepSeekResponse =
-            serde_json::from_str(&response_text).map_err(|e| {
+        let deepseek_response: DeepSeekResponse = serde_json::from_value(response_json.clone())
+            .map_err(|e| {
                 anyhow::anyhow!(
                     "DeepSeek API response deserialization error: {} — response: {}",
                     e,
-                    &response_text[..response_text.len().min(500)]
+                    response_json
+                        .to_string()
+                        .chars()
+                        .take(500)
+                        .collect::<String>()
                 )
             })?;
 
-        // Clone the response for exchange logging before moving parts of it
-        let response_for_exchange: serde_json::Value = serde_json::from_str(&response_text)?;
+        let response_for_exchange = response_json;
 
         let choice = deepseek_response
             .choices
@@ -484,9 +486,8 @@ impl AiProvider for DeepSeekProvider {
                             return None;
                         }
 
-                        let arguments: serde_json::Value =
-                            serde_json::from_str(&call.function.arguments)
-                                .unwrap_or(serde_json::json!({}));
+                        let arguments =
+                            shared::parse_tool_call_arguments_lossy(&call.function.arguments);
 
                         Some(crate::llm::types::ToolCall {
                             id: call.id,
@@ -795,14 +796,15 @@ mod tests {
         assert!(converted[0].tool_calls.is_some());
         assert!(converted[0].content.is_none());
 
-        // Assistant turn with tool_calls but no stored thinking → empty string
-        // (defensive: prior turn's reasoning was lost in storage; empty avoids panic).
+        // Assistant turn with tool_calls but no stored thinking → field omitted entirely (None).
+        // DeepSeek does not require reasoning_content when there was no thinking; unlike
+        // Moonshot it does NOT require an empty string sentinel.
         let assistant_tools_no_thinking = Message {
             thinking: None,
             ..assistant_with_tools.clone()
         };
         let converted = convert_messages(std::slice::from_ref(&assistant_tools_no_thinking));
-        assert_eq!(converted[0].reasoning_content.as_deref(), Some(""));
+        assert!(converted[0].reasoning_content.is_none());
 
         // Assistant turn without tool_calls → reasoning_content omitted (DeepSeek
         // ignores it on non-tool turns; sending it is harmless but unnecessary).

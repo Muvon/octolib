@@ -220,10 +220,77 @@ fn build_moonshot_tools(tools: &[crate::llm::types::FunctionDefinition]) -> Vec<
             function: MoonshotToolFunction {
                 name: f.name.clone(),
                 description: f.description.clone(),
-                parameters: f.parameters.clone(),
+                parameters: sanitize_schema_for_moonshot(&f.parameters),
             },
         })
         .collect()
+}
+
+/// Sanitize a JSON Schema for Moonshot's strict validator.
+///
+/// Moonshot rejects schemas where a property has a `$ref` AND sibling keys
+/// (`description`, `default`, etc.) — error:
+///   "conflicting keywords found after $ref expansion: description"
+///
+/// schemars 1.x emits exactly this pattern when a typed field has a doc comment:
+///   { "$ref": "#/$defs/Foo", "description": "..." }
+///
+/// Strategy: inline `$defs` references in-place, merging the referenced schema
+/// with the sibling keys (siblings win on conflict — they carry the field-specific
+/// doc). After inlining, drop `$defs` from the root since nothing references it.
+/// This is lossless: descriptions, enums, and types are all preserved.
+fn sanitize_schema_for_moonshot(schema: &serde_json::Value) -> serde_json::Value {
+    let mut cloned = schema.clone();
+    if let serde_json::Value::Object(root) = &cloned {
+        // Extract $defs (if present) for inlining
+        let defs = root.get("$defs").cloned();
+        if let Some(serde_json::Value::Object(defs_map)) = defs {
+            inline_refs(&mut cloned, &defs_map);
+            // Drop $defs from root after inlining — nothing references it now
+            if let serde_json::Value::Object(root_mut) = &mut cloned {
+                root_mut.remove("$defs");
+            }
+        }
+    }
+    cloned
+}
+
+/// Recursively walk `value` and inline any `{"$ref": "#/$defs/Name", ...siblings}`
+/// objects with the referenced definition's content. Siblings (description, etc.)
+/// override fields from the inlined definition.
+fn inline_refs(value: &mut serde_json::Value, defs: &serde_json::Map<String, serde_json::Value>) {
+    match value {
+        serde_json::Value::Object(map) => {
+            // First, recurse into children so nested $refs are resolved bottom-up
+            for v in map.values_mut() {
+                inline_refs(v, defs);
+            }
+
+            // If this object has a $ref pointing into $defs, inline it
+            if let Some(serde_json::Value::String(ref_str)) = map.get("$ref") {
+                if let Some(def_name) = ref_str.strip_prefix("#/$defs/") {
+                    if let Some(serde_json::Value::Object(def_obj)) = defs.get(def_name) {
+                        // Build merged object: start with def content, overlay siblings
+                        let mut merged = def_obj.clone();
+                        for (k, v) in map.iter() {
+                            if k != "$ref" {
+                                merged.insert(k.clone(), v.clone());
+                            }
+                        }
+                        *value = serde_json::Value::Object(merged);
+                        // Recurse again in case the inlined def itself contains $refs
+                        inline_refs(value, defs);
+                    }
+                }
+            }
+        }
+        serde_json::Value::Array(arr) => {
+            for v in arr.iter_mut() {
+                inline_refs(v, defs);
+            }
+        }
+        _ => {}
+    }
 }
 
 // Convert messages to Moonshot (OpenAI-compatible) format
@@ -1042,5 +1109,89 @@ mod tests {
         let json = serde_json::to_value(&msg_with_empty_reasoning).unwrap();
         assert!(json.get("reasoning_content").is_some());
         assert_eq!(json.get("reasoning_content").unwrap().as_str().unwrap(), "");
+    }
+
+    #[test]
+    fn test_sanitize_schema_inlines_ref_with_sibling_description() {
+        // Repro: schemars 1.x emits {"$ref": "#/$defs/Foo", "description": "..."}
+        // which Moonshot rejects as "conflicting keywords found after $ref expansion: description"
+        let schema = serde_json::json!({
+            "type": "object",
+            "$defs": {
+                "RelationshipKind": {
+                    "type": "string",
+                    "enum": ["related_to", "depends_on"]
+                }
+            },
+            "properties": {
+                "relationship_type": {
+                    "$ref": "#/$defs/RelationshipKind",
+                    "description": "Relationship type"
+                }
+            },
+            "required": ["relationship_type"]
+        });
+
+        let sanitized = sanitize_schema_for_moonshot(&schema);
+
+        // $defs should be gone
+        assert!(sanitized.get("$defs").is_none(), "$defs should be removed");
+
+        let prop = &sanitized["properties"]["relationship_type"];
+        // No $ref left
+        assert!(prop.get("$ref").is_none(), "$ref should be inlined");
+        // Inlined enum from def
+        assert_eq!(prop["type"], "string");
+        assert_eq!(prop["enum"][0], "related_to");
+        // Sibling description preserved
+        assert_eq!(prop["description"], "Relationship type");
+    }
+
+    #[test]
+    fn test_sanitize_schema_handles_nested_refs_in_anyof() {
+        // schemars also produces $refs inside anyOf — must be recursively inlined
+        let schema = serde_json::json!({
+            "type": "object",
+            "$defs": {
+                "MemoryType": {
+                    "type": "string",
+                    "enum": ["code", "architecture"]
+                }
+            },
+            "properties": {
+                "memory_type": {
+                    "anyOf": [
+                        {"$ref": "#/$defs/MemoryType"},
+                        {"type": "null"}
+                    ],
+                    "description": "Memory category"
+                }
+            }
+        });
+
+        let sanitized = sanitize_schema_for_moonshot(&schema);
+
+        let any_of = &sanitized["properties"]["memory_type"]["anyOf"];
+        assert!(
+            any_of[0].get("$ref").is_none(),
+            "nested $ref should be inlined"
+        );
+        assert_eq!(any_of[0]["type"], "string");
+        assert_eq!(any_of[0]["enum"][0], "code");
+        assert_eq!(any_of[1]["type"], "null");
+    }
+
+    #[test]
+    fn test_sanitize_schema_no_defs_passthrough() {
+        // Schemas without $defs should pass through unchanged
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "A name"}
+            },
+            "required": ["name"]
+        });
+        let sanitized = sanitize_schema_for_moonshot(&schema);
+        assert_eq!(sanitized, schema);
     }
 }

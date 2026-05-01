@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.19.1] - 2026-05-01
+
+### 📋 Release Summary
+
+This release introduces tool calling support for DeepSeek, featuring enhanced parsing and improved thinking logic (5efdec47, 86b48e68). Additional updates include optimized JSON schema handling for Moonshot and expanded model support for Jina and Voyage embeddings (4cd45c89, 606b3306).
+
+
+### ✨ New Features & Enhancements
+
+- **deepseek**: add tool calling support `5efdec47`
+
+### 🐛 Bug Fixes & Stability
+
+- **deepseek**: improve tool call parsing and thinking logic `86b48e68`
+
+### 📚 Documentation & Examples
+
+- **embedding**: expand Jina and Voyage model lists `606b3306`
+
+### 🔄 Other Changes
+
+1 maintenance, dependency, and tooling update not listed individually.
+
 ## [0.19.0] - 2026-04-28
 
 ### 📋 Release Summary

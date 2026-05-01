@@ -42,7 +42,6 @@ use anyhow::Result;
 
 use serde::{Deserialize, Serialize};
 use std::env;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 // Model pricing (per 1M tokens in USD) - Updated Apr 2026
 // Source: https://api-docs.deepseek.com/quick_start/pricing
@@ -110,32 +109,53 @@ struct DeepSeekRequest {
     stream: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     response_format: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tools: Option<Vec<DeepSeekTool>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_choice: Option<serde_json::Value>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct DeepSeekMessage {
     role: String,
-    content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_calls: Option<Vec<DeepSeekToolCall>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_call_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 struct DeepSeekResponse {
     id: String,
+    #[serde(default)]
+    object: Option<String>,
+    #[serde(default)]
+    created: Option<u64>,
+    #[serde(default)]
+    model: Option<String>,
     choices: Vec<DeepSeekChoice>,
     usage: Option<DeepSeekUsage>,
+    #[serde(default)]
+    system_fingerprint: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 struct DeepSeekChoice {
+    #[serde(default)]
+    index: u32,
     message: DeepSeekMessage,
     finish_reason: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 struct DeepSeekUsage {
-    input_tokens: u64,
+    prompt_tokens: u64,
     completion_tokens: u64,
     total_tokens: u64,
     #[serde(default)]
@@ -143,13 +163,105 @@ struct DeepSeekUsage {
     #[serde(default)]
     prompt_cache_miss_tokens: u64,
     #[serde(default)]
+    prompt_tokens_details: Option<DeepSeekPromptTokensDetails>,
+    #[serde(default)]
     completion_tokens_details: Option<DeepSeekCompletionTokensDetails>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
+struct DeepSeekPromptTokensDetails {
+    #[serde(default)]
+    cached_tokens: u64,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct DeepSeekCompletionTokensDetails {
     #[serde(default)]
     reasoning_tokens: u64,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct DeepSeekToolCall {
+    id: String,
+    #[serde(rename = "type")]
+    tool_type: String,
+    function: DeepSeekFunction,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct DeepSeekFunction {
+    name: String,
+    arguments: String,
+}
+
+#[derive(Serialize, Debug, Clone)]
+struct DeepSeekTool {
+    #[serde(rename = "type")]
+    tool_type: String,
+    function: DeepSeekToolFunction,
+}
+
+#[derive(Serialize, Debug, Clone)]
+struct DeepSeekToolFunction {
+    name: String,
+    description: String,
+    parameters: serde_json::Value,
+}
+
+/// Convert generic Messages into DeepSeek's wire format.
+///
+/// DeepSeek thinking-mode rule (per /guides/thinking_mode): when an assistant turn
+/// produced tool_calls, its reasoning_content MUST be replayed in subsequent
+/// requests — otherwise the API returns 400. For assistant turns without
+/// tool_calls (and for all other roles), reasoning_content is ignored and is
+/// omitted here.
+fn convert_messages(messages: &[crate::llm::types::Message]) -> Vec<DeepSeekMessage> {
+    messages
+        .iter()
+        .map(|msg| {
+            let tool_calls = msg.tool_calls.as_ref().and_then(|tc| {
+                shared::parse_generic_tool_calls_strict(tc, "deepseek")
+                    .ok()
+                    .map(|calls| {
+                        calls
+                            .into_iter()
+                            .map(|call| DeepSeekToolCall {
+                                id: call.id,
+                                tool_type: "function".to_string(),
+                                function: DeepSeekFunction {
+                                    name: call.name,
+                                    arguments: shared::arguments_to_json_string(&call.arguments),
+                                },
+                            })
+                            .collect::<Vec<_>>()
+                    })
+            });
+
+            let reasoning_content = if msg.role == "assistant" && tool_calls.is_some() {
+                Some(
+                    msg.thinking
+                        .as_ref()
+                        .map(|t| t.content.clone())
+                        .unwrap_or_default(),
+                )
+            } else {
+                None
+            };
+
+            DeepSeekMessage {
+                role: msg.role.clone(),
+                content: if msg.content.is_empty() && tool_calls.is_some() {
+                    None
+                } else {
+                    Some(msg.content.clone())
+                },
+                reasoning_content,
+                tool_calls,
+                tool_call_id: msg.tool_call_id.clone(),
+                name: msg.name.clone(),
+            }
+        })
+        .collect()
 }
 
 #[async_trait::async_trait]
@@ -221,16 +333,7 @@ impl AiProvider for DeepSeekProvider {
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
         let api_key = self.get_api_key()?;
 
-        // Convert messages to DeepSeek format
-        let messages: Vec<DeepSeekMessage> = params
-            .messages
-            .iter()
-            .map(|msg| DeepSeekMessage {
-                role: msg.role.clone(),
-                content: msg.content.clone(),
-                reasoning_content: None,
-            })
-            .collect();
+        let messages = convert_messages(&params.messages);
 
         let mut request = DeepSeekRequest {
             model: params.model.clone(),
@@ -239,6 +342,8 @@ impl AiProvider for DeepSeekProvider {
             max_tokens: Some(params.max_tokens),
             stream: Some(false), // We don't support streaming in octolib yet
             response_format: None,
+            tools: None,
+            tool_choice: None,
         };
 
         // Add structured output format if specified
@@ -257,6 +362,23 @@ impl AiProvider for DeepSeekProvider {
                     }));
                 }
             }
+        }
+
+        // Add tools if specified
+        if let Some(tools) = &params.tools {
+            request.tools = Some(
+                tools
+                    .iter()
+                    .map(|tool| DeepSeekTool {
+                        tool_type: "function".to_string(),
+                        function: DeepSeekToolFunction {
+                            name: tool.name.clone(),
+                            description: tool.description.clone(),
+                            parameters: tool.parameters.clone(),
+                        },
+                    })
+                    .collect(),
+            );
         }
 
         let start_time = std::time::Instant::now();
@@ -323,15 +445,25 @@ impl AiProvider for DeepSeekProvider {
             ));
         }
 
-        let deepseek_response: DeepSeekResponse = retry::cancellable(
-            async { response.json().await.map_err(anyhow::Error::from) },
+        // Read response as text first for better error diagnostics
+        let response_text = retry::cancellable(
+            async { response.text().await.map_err(anyhow::Error::from) },
             params.cancellation_token.as_ref(),
             || ProviderError::Cancelled.into(),
         )
         .await?;
 
+        let deepseek_response: DeepSeekResponse =
+            serde_json::from_str(&response_text).map_err(|e| {
+                anyhow::anyhow!(
+                    "DeepSeek API response deserialization error: {} — response: {}",
+                    e,
+                    &response_text[..response_text.len().min(500)]
+                )
+            })?;
+
         // Clone the response for exchange logging before moving parts of it
-        let response_for_exchange = serde_json::to_value(&deepseek_response)?;
+        let response_for_exchange: serde_json::Value = serde_json::from_str(&response_text)?;
 
         let choice = deepseek_response
             .choices
@@ -339,22 +471,48 @@ impl AiProvider for DeepSeekProvider {
             .next()
             .ok_or_else(|| anyhow::anyhow!("No choices in DeepSeek response"))?;
 
+        let content = choice.message.content.unwrap_or_default();
+
+        // Extract tool calls from response
+        let tool_calls: Option<Vec<crate::llm::types::ToolCall>> =
+            choice.message.tool_calls.map(|calls| {
+                calls
+                    .into_iter()
+                    .filter_map(|call| {
+                        if call.tool_type != "function" {
+                            tracing::warn!("Unexpected tool type: {}", call.tool_type);
+                            return None;
+                        }
+
+                        let arguments: serde_json::Value =
+                            serde_json::from_str(&call.function.arguments)
+                                .unwrap_or(serde_json::json!({}));
+
+                        Some(crate::llm::types::ToolCall {
+                            id: call.id,
+                            name: call.function.name,
+                            arguments,
+                        })
+                    })
+                    .collect()
+            });
+
         // Create exchange record for logging
-        let exchange = ProviderExchange {
-            request: serde_json::to_value(&request)?,
-            response: response_for_exchange,
-            timestamp: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs(),
-            usage: None, // Will be set below
-            provider: self.name().to_string(),
-            rate_limit_headers: None, // DeepSeek doesn't provide rate limit headers in response
-        };
+        let mut response_json = response_for_exchange;
+        if let Some(ref tc) = tool_calls {
+            shared::set_response_tool_calls(&mut response_json, tc, None);
+        }
+
+        let exchange = ProviderExchange::new(
+            serde_json::to_value(&request)?,
+            response_json,
+            None, // Will be set below
+            self.name(),
+        );
 
         // Calculate cost with the provider pricing table
         let token_usage = if let Some(usage) = deepseek_response.usage {
-            let prompt_tokens = usage.input_tokens;
+            let prompt_tokens = usage.prompt_tokens;
             let completion_tokens = usage.completion_tokens;
             let total_tokens = usage.total_tokens;
 
@@ -364,6 +522,17 @@ impl AiProvider for DeepSeekProvider {
             // DeepSeek doesn't separate regular input from cache write in their API
             let cache_read_tokens = usage.prompt_cache_hit_tokens;
             let cache_miss_tokens = usage.prompt_cache_miss_tokens;
+
+            // Also check prompt_tokens_details.cached_tokens as alternative
+            let cache_read_tokens = if cache_read_tokens == 0 {
+                usage
+                    .prompt_tokens_details
+                    .as_ref()
+                    .map(|d| d.cached_tokens)
+                    .unwrap_or(0)
+            } else {
+                cache_read_tokens
+            };
 
             // For CLEAN input_tokens, we use cache_miss_tokens
             // (DeepSeek charges these at the "cache miss" rate which includes write cost)
@@ -408,8 +577,6 @@ impl AiProvider for DeepSeekProvider {
         let mut final_exchange = exchange;
         final_exchange.usage = token_usage.clone();
 
-        let content = &choice.message.content;
-
         // Extract thinking block from reasoning_content if present
         let thinking = choice
             .message
@@ -429,18 +596,13 @@ impl AiProvider for DeepSeekProvider {
             });
 
         // Try to parse structured output if it was requested
-        let structured_output =
-            if content.trim().starts_with('{') || content.trim().starts_with('[') {
-                serde_json::from_str(content).ok()
-            } else {
-                None
-            };
+        let structured_output = shared::parse_structured_output_from_text(&content);
 
         Ok(ProviderResponse {
-            content: choice.message.content,
+            content,
             thinking,
             exchange: final_exchange,
-            tool_calls: None, // DeepSeek doesn't support tool calls in octolib yet
+            tool_calls,
             finish_reason: choice.finish_reason,
             structured_output,
             id: Some(deepseek_response.id),
@@ -527,8 +689,11 @@ mod tests {
         // Test with reasoning_content present
         let message_with_thinking = DeepSeekMessage {
             role: "assistant".to_string(),
-            content: "The answer is 9.11".to_string(),
+            content: Some("The answer is 9.11".to_string()),
             reasoning_content: Some("Let me compare 9.11 and 9.8. Converting to same decimal places: 9.11 vs 9.80. Clearly 9.80 > 9.11.".to_string()),
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
         };
 
         // Verify reasoning_content is properly stored
@@ -543,8 +708,11 @@ mod tests {
         // Test without reasoning_content
         let message_without_thinking = DeepSeekMessage {
             role: "assistant".to_string(),
-            content: "Hello".to_string(),
+            content: Some("Hello".to_string()),
             reasoning_content: None,
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
         };
 
         assert!(message_without_thinking.reasoning_content.is_none());
@@ -552,8 +720,11 @@ mod tests {
         // Test with empty reasoning_content
         let message_empty_thinking = DeepSeekMessage {
             role: "assistant".to_string(),
-            content: "Hello".to_string(),
+            content: Some("Hello".to_string()),
             reasoning_content: Some("".to_string()),
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
         };
 
         assert!(message_empty_thinking.reasoning_content.is_some());
@@ -562,5 +733,107 @@ mod tests {
             .as_ref()
             .unwrap()
             .is_empty());
+
+        // Test with null content (tool call response)
+        let message_tool_call = DeepSeekMessage {
+            role: "assistant".to_string(),
+            content: None,
+            reasoning_content: None,
+            tool_calls: Some(vec![DeepSeekToolCall {
+                id: "call_123".to_string(),
+                tool_type: "function".to_string(),
+                function: DeepSeekFunction {
+                    name: "get_weather".to_string(),
+                    arguments: "{}".to_string(),
+                },
+            }]),
+            tool_call_id: None,
+            name: None,
+        };
+
+        assert!(message_tool_call.content.is_none());
+        assert!(message_tool_call.tool_calls.is_some());
+    }
+
+    #[test]
+    fn test_convert_messages_reasoning_content_replay() {
+        use crate::llm::tool_calls::GenericToolCall;
+        use crate::llm::types::{Message, ThinkingBlock};
+
+        let tool_calls_json = serde_json::to_value(vec![GenericToolCall {
+            id: "call_123".to_string(),
+            name: "list_files".to_string(),
+            arguments: serde_json::json!({"path": "."}),
+            meta: None,
+        }])
+        .unwrap();
+
+        // Assistant turn with tool_calls + thinking → reasoning_content must be replayed.
+        let assistant_with_tools = Message {
+            role: "assistant".to_string(),
+            content: String::new(),
+            timestamp: 0,
+            cached: false,
+            cache_ttl: None,
+            tool_call_id: None,
+            name: None,
+            tool_calls: Some(tool_calls_json.clone()),
+            images: None,
+            videos: None,
+            thinking: Some(ThinkingBlock {
+                content: "I should list the files first.".to_string(),
+                tokens: 8,
+            }),
+            id: None,
+        };
+        let converted = convert_messages(std::slice::from_ref(&assistant_with_tools));
+        assert_eq!(converted.len(), 1);
+        assert_eq!(
+            converted[0].reasoning_content.as_deref(),
+            Some("I should list the files first.")
+        );
+        assert!(converted[0].tool_calls.is_some());
+        assert!(converted[0].content.is_none());
+
+        // Assistant turn with tool_calls but no stored thinking → empty string
+        // (defensive: prior turn's reasoning was lost in storage; empty avoids panic).
+        let assistant_tools_no_thinking = Message {
+            thinking: None,
+            ..assistant_with_tools.clone()
+        };
+        let converted = convert_messages(std::slice::from_ref(&assistant_tools_no_thinking));
+        assert_eq!(converted[0].reasoning_content.as_deref(), Some(""));
+
+        // Assistant turn without tool_calls → reasoning_content omitted (DeepSeek
+        // ignores it on non-tool turns; sending it is harmless but unnecessary).
+        let assistant_plain = Message::assistant("Hello").with_thinking(ThinkingBlock {
+            content: "trivial".to_string(),
+            tokens: 1,
+        });
+        let converted = convert_messages(std::slice::from_ref(&assistant_plain));
+        assert!(converted[0].reasoning_content.is_none());
+
+        // User / tool / system messages → never carry reasoning_content.
+        let user_msg = Message::user("hi");
+        let tool_msg = Message::tool("ok", "call_123", "list_files");
+        let system_msg = Message::system("be helpful");
+        for msg in [user_msg, tool_msg, system_msg] {
+            let converted = convert_messages(std::slice::from_ref(&msg));
+            assert!(converted[0].reasoning_content.is_none());
+        }
+
+        // Verify JSON serialization: None is omitted, Some("") is preserved.
+        let json =
+            serde_json::to_value(&convert_messages(std::slice::from_ref(&assistant_with_tools))[0])
+                .unwrap();
+        assert_eq!(
+            json.get("reasoning_content").and_then(|v| v.as_str()),
+            Some("I should list the files first.")
+        );
+
+        let json_plain =
+            serde_json::to_value(&convert_messages(std::slice::from_ref(&assistant_plain))[0])
+                .unwrap();
+        assert!(json_plain.get("reasoning_content").is_none());
     }
 }

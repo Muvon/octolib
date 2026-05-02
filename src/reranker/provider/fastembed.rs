@@ -43,7 +43,7 @@ impl FastEmbedProvider {
 
         let model = TextRerank::try_new(
             RerankInitOptions::new(model_enum)
-                .with_show_download_progress(true)
+                .with_show_download_progress(false)
                 .with_cache_dir(cache_dir),
         )
         .context("Failed to initialize FastEmbed reranker model")?;

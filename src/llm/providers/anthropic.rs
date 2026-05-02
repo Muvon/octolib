@@ -549,13 +549,21 @@ fn convert_messages(messages: &[Message]) -> Vec<AnthropicMessage> {
                     });
                 } else {
                     // Handle regular user and assistant messages
-                    let mut content = vec![AnthropicContent::Text {
-                        text: message.content.clone(),
-                        cache_control: shared::maybe_cache_control_with_ttl(
-                            message.cached,
-                            message.cache_ttl.as_deref(),
-                        ),
-                    }];
+                    let mut content = Vec::new();
+
+                    // Only add text block when content is non-empty — Anthropic rejects
+                    // empty text blocks with "text content blocks must be non-empty".
+                    // This can happen when the AI responds with only tool_use blocks
+                    // (no accompanying text), leaving content = "" in the stored message.
+                    if !message.content.trim().is_empty() {
+                        content.push(AnthropicContent::Text {
+                            text: message.content.clone(),
+                            cache_control: shared::maybe_cache_control_with_ttl(
+                                message.cached,
+                                message.cache_ttl.as_deref(),
+                            ),
+                        });
+                    }
 
                     // Add images if present
                     if let Some(images) = &message.images {
@@ -573,10 +581,14 @@ fn convert_messages(messages: &[Message]) -> Vec<AnthropicMessage> {
                         }
                     }
 
-                    result.push(AnthropicMessage {
-                        role: message.role.clone(),
-                        content,
-                    });
+                    // Skip messages with no content blocks — an empty content array is
+                    // equally invalid and would cause the same API rejection.
+                    if !content.is_empty() {
+                        result.push(AnthropicMessage {
+                            role: message.role.clone(),
+                            content,
+                        });
+                    }
                 }
             }
         }

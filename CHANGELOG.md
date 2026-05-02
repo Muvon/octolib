@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.19.2] - 2026-05-02
+
+### 📋 Release Summary
+
+This release improves the reliability of LLM interactions by automatically detecting and recovering from stale connection issues (7a27332c). These enhancements ensure more stable communication with AI providers and reduce potential request failures during extended sessions.
+
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: detect stale pooled connections for retry `7a27332c`
+
 ## [0.19.1] - 2026-05-01
 
 ### 📋 Release Summary

@@ -80,11 +80,16 @@ pub(crate) fn refresh_http_client() {
 ///
 /// Such errors include: DNS resolution failure, TCP connection refused/reset,
 /// TLS handshake failure, network unreachable, and similar transport errors.
-/// Retrying on the same client may reuse the same broken connection, so
-/// callers should call `refresh_http_client()` before retrying.
+///
+/// Also catches `is_request()` errors: a stale pooled connection that gets
+/// TCP-reset mid-request (e.g. server closed idle connection, NAT timeout)
+/// produces `is_request()=true, is_connect()=false`. Without this, the pool
+/// is never refreshed and all retries reuse the same broken connection.
+///
+/// Callers should call `refresh_http_client()` before retrying.
 pub(crate) fn is_connection_error(err: &anyhow::Error) -> bool {
     err.downcast_ref::<reqwest::Error>()
-        .is_some_and(|e| e.is_connect())
+        .is_some_and(|e| e.is_connect() || e.is_request())
 }
 
 /// Apply an optional per-request timeout to a RequestBuilder.

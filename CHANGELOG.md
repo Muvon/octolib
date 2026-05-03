@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.19.3] - 2026-05-03
+
+### 📋 Release Summary
+
+This release introduces performance optimizations for LLM interactions by enabling data compression and persistent connections (0cb37b54). Reliability and user experience are improved through refined handling of Anthropic text blocks and a streamlined interface for embedding model initialization (9898888f, 1f574f98).
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: enable compression and HTTP/2 keep-alive `0cb37b54`
+
+### 🐛 Bug Fixes & Stability
+
+- **anthropic**: prevent rejection of empty text blocks `9898888f`
+- **fastembed**: disable model download progress bar `1f574f98`
+
 ## [0.19.2] - 2026-05-02
 
 ### 📋 Release Summary

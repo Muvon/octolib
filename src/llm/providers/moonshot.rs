@@ -14,25 +14,27 @@
 
 //! Moonshot AI (Kimi) provider implementation
 //!
-//! PRICING UPDATE: April 2026 (verified Apr 17, 2026)
-//! Model-specific pricing (per 1M tokens in USD):
-//! Source: <https://platform.moonshot.ai/docs/pricing/chat>
+//! PRICING UPDATE: May 2026 (verified May 03, 2026)
+//! Source: <https://platform.kimi.ai/docs/pricing/chat-k26.md>,
+//!         <https://platform.kimi.ai/docs/pricing/chat-k25.md>,
+//!         <https://platform.kimi.ai/docs/pricing/chat-k2.md>,
+//!         <https://platform.kimi.ai/docs/pricing/chat-v1.md>
 //!
-//! kimi-k2 series:
-//! - Cache Hit: $0.15
-//! - Cache Miss (Input): $0.60
-//! - Output: $2.50
+//! Per 1M tokens (USD): (cache_hit, cache_miss_input, output)
+//! - kimi-k2.6:                  $0.16 / $0.95 / $4.00
+//! - kimi-k2.5:                  $0.10 / $0.60 / $3.00
+//! - kimi-k2-0905-preview:       $0.15 / $0.60 / $2.50
+//! - kimi-k2-0711-preview:       $0.15 / $0.60 / $2.50
+//! - kimi-k2-turbo-preview:      $0.15 / $1.15 / $8.00
+//! - kimi-k2-thinking:           $0.15 / $0.60 / $2.50
+//! - kimi-k2-thinking-turbo:     $0.15 / $1.15 / $8.00
+//! - moonshot-v1-{8k,32k,128k}:  no caching; (input, output) only
 //!
-//! kimi-k2.5:
-//! - Cache Hit: $0.10
-//! - Cache Miss (Input): $0.60
-//! - Output: $3.00
-//!
-//! kimi-k2.6 / kimi-k2.6-code-preview:
-//! - Cache Hit: $0.15
-//! - Cache Miss (Input): $0.60
-//! - Output: $2.50
-
+//! Caching: Kimi uses AUTOMATIC context caching (no `cache_control` markers).
+//! Response usage carries `cached_tokens` (top-level) and/or
+//! `prompt_tokens_details.cached_tokens`. `prompt_tokens` is the TOTAL prompt
+//! including cached portion, so clean input = prompt_tokens - cached_tokens.
+//! Cache writes are NOT separately billed by Moonshot — only hits are discounted.
 use super::shared;
 use crate::errors::ProviderError;
 use crate::llm::retry;
@@ -46,21 +48,26 @@ use serde::{Deserialize, Serialize};
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-// Model pricing (per 1M tokens in USD) - Updated Apr 2026
+// Model pricing (per 1M tokens in USD) - Updated May 2026 (verified against official docs)
 /// Format: (model, input, output, cache_write, cache_read)
-/// Note: Legacy models have no cache (cache_write = input, cache_read = input)
+///
+/// Notes:
+/// - `input` = cache miss price; `cache_read` = cache hit price.
+/// - Moonshot does NOT bill cache writes separately, so `cache_write` = `input`.
+/// - V1 legacy models have no cache support → `cache_write` = `cache_read` = `input`.
+/// - Order matters: more specific patterns first (substring matching).
 const PRICING: &[PricingTuple] = &[
-    // Kimi K2.6 series (coding-focused, multimodal)
-    ("kimi-k2.6", 0.60, 2.50, 0.60, 0.15),
-    ("kimi-k2.6-code-preview", 0.60, 2.50, 0.60, 0.15),
+    // Kimi K2.6 (multimodal, latest flagship)
+    ("kimi-k2.6", 0.95, 4.00, 0.95, 0.16),
     // Kimi K2.5 (multimodal)
     ("kimi-k2.5", 0.60, 3.00, 0.60, 0.10),
+    // Kimi K2 turbo variants (high-speed)
     ("kimi-k2-thinking-turbo", 1.15, 8.00, 1.15, 0.15),
     ("kimi-k2-turbo", 1.15, 8.00, 1.15, 0.15),
+    // Kimi K2 standard variants
     ("kimi-k2-thinking", 0.60, 2.50, 0.60, 0.15),
     ("kimi-k2-0905", 0.60, 2.50, 0.60, 0.15),
     ("kimi-k2-0711", 0.60, 2.50, 0.60, 0.15),
-    ("kimi-k2-0915", 0.60, 2.50, 0.60, 0.15),
     ("kimi-k2", 0.60, 2.50, 0.60, 0.15),
     // Moonshot V1 series (legacy, no cache support)
     ("moonshot-v1-128k", 2.00, 5.00, 2.00, 2.00),
@@ -501,8 +508,10 @@ impl AiProvider for MoonshotProvider {
         }
     }
 
-    fn supports_caching(&self, _model: &str) -> bool {
-        true
+    fn supports_caching(&self, model: &str) -> bool {
+        // Only Kimi K2.x series supports automatic context caching.
+        // Moonshot V1 legacy models have no caching (no cache-hit pricing).
+        contains_ignore_ascii_case(model, "kimi-k2")
     }
 
     fn supports_vision(&self, model: &str) -> bool {
@@ -527,11 +536,16 @@ impl AiProvider for MoonshotProvider {
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {
-        // Kimi K2 series supports up to 256K context
-        if contains_ignore_ascii_case(model, "kimi-k2") {
-            return 256_000;
+        // Kimi K2 family — context windows per official model spec
+        // (kimi-k2.6/k2.5/k2-0905/turbo/thinking → 256K = 262_144;
+        //  kimi-k2-0711 → 128K = 131_072).
+        if contains_ignore_ascii_case(model, "kimi-k2-0711") {
+            return 131_072;
         }
-        // Moonshot V1 series - context window based on model variant
+        if contains_ignore_ascii_case(model, "kimi-k2") {
+            return 262_144;
+        }
+        // Moonshot V1 series — context window matches the variant name.
         if contains_ignore_ascii_case(model, "moonshot-v1-128k") {
             return 131_072;
         }
@@ -541,7 +555,7 @@ impl AiProvider for MoonshotProvider {
         if contains_ignore_ascii_case(model, "moonshot-v1-8k") {
             return 8_192;
         }
-        // Default fallback
+        // Default fallback for unknown variants
         128_000
     }
 
@@ -831,8 +845,8 @@ mod tests {
         assert!(provider.supports_model("kimi-k2-turbo-preview"));
         assert!(provider.supports_model("kimi-k2.5"));
         assert!(provider.supports_model("kimi-k2.6"));
-        assert!(provider.supports_model("kimi-k2.6-code-preview"));
         assert!(provider.supports_model("kimi-k2-0711-preview"));
+        assert!(provider.supports_model("kimi-k2-0905-preview"));
         assert!(provider.supports_model("KIMI-K2"));
         // Moonshot V1 series
         assert!(provider.supports_model("moonshot-v1-8k"));
@@ -848,8 +862,21 @@ mod tests {
         let provider = MoonshotProvider::new();
         assert!(provider.supports_vision("kimi-k2.5"));
         assert!(provider.supports_vision("kimi-k2.6"));
-        assert!(provider.supports_vision("kimi-k2.6-code-preview"));
         assert!(!provider.supports_vision("kimi-k2"));
+    }
+
+    #[test]
+    fn test_supports_caching() {
+        let provider = MoonshotProvider::new();
+        // K2 family supports automatic context caching
+        assert!(provider.supports_caching("kimi-k2"));
+        assert!(provider.supports_caching("kimi-k2.5"));
+        assert!(provider.supports_caching("kimi-k2.6"));
+        assert!(provider.supports_caching("kimi-k2-thinking"));
+        // V1 legacy models do NOT support caching
+        assert!(!provider.supports_caching("moonshot-v1-8k"));
+        assert!(!provider.supports_caching("moonshot-v1-32k"));
+        assert!(!provider.supports_caching("moonshot-v1-128k"));
     }
 
     #[test]
@@ -890,13 +917,22 @@ mod tests {
     #[test]
     fn test_get_max_input_tokens() {
         let provider = MoonshotProvider::new();
-        // Kimi K2 series
-        assert_eq!(provider.get_max_input_tokens("kimi-k2"), 256_000);
-        assert_eq!(provider.get_max_input_tokens("kimi-k2.5"), 256_000);
-        assert_eq!(provider.get_max_input_tokens("kimi-k2.6"), 256_000);
+        // Kimi K2 family — 256K = 262_144 (kimi-k2-0711 is 128K = 131_072)
+        assert_eq!(provider.get_max_input_tokens("kimi-k2"), 262_144);
+        assert_eq!(provider.get_max_input_tokens("kimi-k2.5"), 262_144);
+        assert_eq!(provider.get_max_input_tokens("kimi-k2.6"), 262_144);
         assert_eq!(
-            provider.get_max_input_tokens("kimi-k2.6-code-preview"),
-            256_000
+            provider.get_max_input_tokens("kimi-k2-0905-preview"),
+            262_144
+        );
+        assert_eq!(provider.get_max_input_tokens("kimi-k2-thinking"), 262_144);
+        assert_eq!(
+            provider.get_max_input_tokens("kimi-k2-thinking-turbo"),
+            262_144
+        );
+        assert_eq!(
+            provider.get_max_input_tokens("kimi-k2-0711-preview"),
+            131_072
         );
         // Moonshot V1 series
         assert_eq!(provider.get_max_input_tokens("moonshot-v1-128k"), 131_072);
@@ -908,24 +944,22 @@ mod tests {
 
     #[test]
     fn test_calculate_cost_k26() {
-        // kimi-k2.6: Input: $0.60/1M, Output: $2.50/1M (same as K2 series)
+        // kimi-k2.6: Input (cache miss): $0.95/1M, Output: $4.00/1M, Cache hit: $0.16/1M
         let cost = calculate_cost("kimi-k2.6", 1_000_000, 500_000);
         assert!(cost.is_some());
-        let expected = 0.60 + (0.5 * 2.50);
+        let expected = 0.95 + (0.5 * 4.00);
         assert!((cost.unwrap() - expected).abs() < 0.01);
 
-        // kimi-k2.6 with cache: Cache hit: $0.15/1M, Cache miss: $0.60/1M, Output: $2.50/1M
+        // kimi-k2.6 with cache (50/50 split, 250k output)
         let cost_cached = calculate_cost_with_cache("kimi-k2.6", 500_000, 500_000, 250_000);
         assert!(cost_cached.is_some());
-        let expected_cached = (0.5 * 0.60) + (0.5 * 0.15) + (0.25 * 2.50);
+        let expected_cached = (0.5 * 0.95) + (0.5 * 0.16) + (0.25 * 4.00);
         assert!((cost_cached.unwrap() - expected_cached).abs() < 0.01);
 
-        // kimi-k2.6-code-preview: same pricing as kimi-k2.6
-        let cost_preview = calculate_cost("kimi-k2.6-code-preview", 1_000_000, 500_000);
-        assert!(cost_preview.is_some());
-        assert!((cost_preview.unwrap() - expected).abs() < 0.01);
+        // Cached version should be cheaper than full cache-miss for same total prompt
+        let cost_full_miss = calculate_cost("kimi-k2.6", 1_000_000, 250_000);
+        assert!(cost_cached.unwrap() < cost_full_miss.unwrap());
     }
-
     #[test]
     fn test_moonshot_v1_pricing() {
         // moonshot-v1-8k: Input: $0.20/1M, Output: $2.00/1M (no cache)

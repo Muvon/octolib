@@ -24,27 +24,56 @@ use std::time::Duration;
 /// Process-wide shared HTTP client, swappable on connection errors.
 ///
 /// `reqwest::Client` holds a connection pool internally — reusing it across
-/// all provider requests enables TCP keep-alive, HTTP/2 multiplexing, and
-/// avoids the per-request TLS handshake overhead that causes connection-reset
-/// errors under load.
+/// all provider requests enables connection keep-alive, HTTP/2 multiplexing
+/// (when the server supports it via ALPN), and avoids the per-request TLS
+/// handshake overhead that causes connection-reset errors under load.
 ///
 /// When a connection error is detected (DNS failure, TCP reset, TLS handshake
 /// failure, network unreachable), `refresh_http_client()` atomically swaps
 /// in a fresh client with a new connection pool, so subsequent retries don't
 /// reuse stale/broken connections.
 ///
+/// # HTTP stack tuning
+///
 /// No request timeout is set — LLM responses can legitimately take minutes.
-/// Instead we configure:
-/// - `tcp_keepalive`: OS-level probes detect dead connections before reuse
-/// - `pool_idle_timeout`: evict idle pooled connections before NAT/firewall
-///   silently drops them, preventing hangs on stale sockets
+/// Per-call timeouts are applied via `apply_request_timeout()` when callers
+/// pass `request_timeout`. Instead the client is configured for reliability
+/// and bandwidth efficiency:
+///
+/// **Transport / pool reliability**
+/// - `tcp_keepalive(30s)`: OS-level probes detect dead connections before reuse
+/// - `tcp_nodelay(true)`: disable Nagle's algorithm — request bodies ship
+///   immediately instead of waiting for ACK coalescing (lower latency)
+/// - `pool_idle_timeout(30s)`: evict idle pooled connections before NAT/firewall
+///   or the upstream edge silently drops them. Some upstream edges (notably
+///   CN-hosted endpoints like DeepSeek / Moonshot) close idle keep-alive
+///   connections aggressively; reusing such a half-closed socket produces
+///   "error sending request" / TCP RST mid-write
+///
+/// **HTTP/2 keep-alive (only takes effect when ALPN negotiates h2)**
+/// - `http2_keep_alive_interval(20s)`: PING frames detect dead peers proactively
+///   and prevent NAT/firewall idle-timeout from silently dropping the
+///   multiplexed connection
+/// - `http2_keep_alive_while_idle(true)`: keep PINGing even with no active streams
+/// - `http2_keep_alive_timeout(10s)`: drop conn if PING unACKed within 10s
+///
+/// **Compression** (cargo features: `gzip`, `brotli`, `zstd`, `deflate`)
+/// - reqwest sends `Accept-Encoding: zstd, br, gzip, deflate` automatically
+///   and decompresses response bodies transparently. Server picks whichever
+///   it supports; we never need per-provider configuration. For LLM JSON
+///   responses this typically saves 40–70% bandwidth depending on the algo
+///   the provider chose
 static HTTP_CLIENT: LazyLock<ArcSwap<reqwest::Client>> =
     LazyLock::new(|| ArcSwap::from_pointee(build_http_client()));
 
 fn build_http_client() -> reqwest::Client {
     reqwest::Client::builder()
-        .tcp_keepalive(Duration::from_secs(60))
-        .pool_idle_timeout(Duration::from_secs(90))
+        .tcp_keepalive(Duration::from_secs(30))
+        .tcp_nodelay(true)
+        .pool_idle_timeout(Duration::from_secs(30))
+        .http2_keep_alive_interval(Duration::from_secs(20))
+        .http2_keep_alive_while_idle(true)
+        .http2_keep_alive_timeout(Duration::from_secs(10))
         .build()
         .expect("failed to build HTTP client")
 }

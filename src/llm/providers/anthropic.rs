@@ -111,13 +111,17 @@ fn calculate_cost_with_cache(model: &str, usage: CacheTokenUsage) -> Option<f64>
     // Regular input tokens at normal price
     let regular_input_cost = (usage.regular_input_tokens as f64 / 1_000_000.0) * input_price;
 
-    // Cache creation tokens at cache_write_price (1.25x price for 5m cache)
+    // Anthropic cache-write pricing multipliers (relative to base input price):
+    //   5m TTL (default) = 1.25x base
+    //   1h TTL           = 2.00x base
+    // The PRICING table's `cache_write_price` already encodes 5m (= input * 1.25),
+    // so 5m uses it directly; 1h is derived from the base `input_price` to keep
+    // the spec multiplier explicit (no derived magic numbers).
     let cache_creation_cost =
         (usage.cache_creation_tokens as f64 / 1_000_000.0) * cache_write_price;
 
-    // Cache creation tokens at 2x price (100% more expensive) for 1h cache
     let cache_creation_cost_1h =
-        (usage.cache_creation_tokens_1h as f64 / 1_000_000.0) * cache_write_price * 2.0;
+        (usage.cache_creation_tokens_1h as f64 / 1_000_000.0) * input_price * 2.0;
 
     // Cache read tokens at cache_read_price (0.1x price for most models)
     let cache_read_cost = (usage.cache_read_tokens as f64 / 1_000_000.0) * cache_read_price;
@@ -140,24 +144,17 @@ fn calculate_anthropic_cost(
     model: &str,
     input_tokens: u32,
     output_tokens: u32,
-    cache_creation_input_tokens: u32,
+    cache_creation_5m_tokens: u32,
+    cache_creation_1h_tokens: u32,
     cache_read_input_tokens: u32,
 ) -> Option<f64> {
-    // Calculate cache creation tokens for 1h (these are charged at 2x)
-    let cache_creation_1h_tokens = if cache_creation_input_tokens > 0 {
-        // Assume all cache creation is for 1h TTL (more expensive)
-        cache_creation_input_tokens
-    } else {
-        0
-    };
-
     // input_tokens from API is ALREADY clean (non-cached regular tokens)
     let regular_input_tokens = input_tokens;
 
     let usage = CacheTokenUsage {
         regular_input_tokens: regular_input_tokens as u64,
-        cache_creation_tokens: 0, // Using 1h cache creation instead
-        cache_creation_tokens_1h: cache_creation_1h_tokens as u64,
+        cache_creation_tokens: cache_creation_5m_tokens as u64, // 5m TTL: 1.25x base
+        cache_creation_tokens_1h: cache_creation_1h_tokens as u64, // 1h TTL: 2x base
         cache_read_tokens: cache_read_input_tokens as u64,
         output_tokens: output_tokens as u64,
     };
@@ -475,6 +472,14 @@ enum AnthropicResponseContent {
     },
 }
 
+#[derive(Deserialize, Debug, Default)]
+struct AnthropicCacheCreation {
+    #[serde(default)]
+    ephemeral_5m_input_tokens: u64,
+    #[serde(default)]
+    ephemeral_1h_input_tokens: u64,
+}
+
 #[derive(Deserialize, Debug)]
 struct AnthropicUsage {
     input_tokens: u64,
@@ -483,6 +488,15 @@ struct AnthropicUsage {
     cache_creation_input_tokens: Option<u64>,
     #[serde(default)]
     cache_read_input_tokens: Option<u64>,
+    /// Per-TTL breakdown of cache creation tokens.
+    /// Anthropic returns this nested object whenever any prompt block uses
+    /// `cache_control` (including the default 5m TTL). When absent, all cache
+    /// creation is assumed to be 5m -- which is Anthropic's default TTL when
+    /// `ttl` is omitted from `cache_control`. Treating an unknown TTL as 1h
+    /// (2x base price) over-charges by ~60% for typical 5m usage; treating it
+    /// as 5m matches Anthropic's billing default.
+    #[serde(default)]
+    cache_creation: Option<AnthropicCacheCreation>,
 }
 
 // Convert our session messages to Anthropic format
@@ -798,10 +812,27 @@ async fn execute_anthropic_request(
         .cache_read_input_tokens
         .unwrap_or(0);
 
-    let cache_creation_tokens = anthropic_response
-        .usage
-        .cache_creation_input_tokens
-        .unwrap_or(0);
+    // Cache creation token breakdown by TTL.
+    // Prefer the explicit `cache_creation` nested object when the API returns
+    // it (per-TTL split). When absent, treat the legacy aggregate
+    // `cache_creation_input_tokens` as 5m TTL — this matches Anthropic's
+    // default `cache_control` TTL when `ttl` is omitted, and avoids
+    // over-charging by ~60% (1h is billed at 2x base, 5m at 1.25x base).
+    let (cache_creation_5m_tokens, cache_creation_1h_tokens) =
+        match anthropic_response.usage.cache_creation.as_ref() {
+            Some(split) => (
+                split.ephemeral_5m_input_tokens,
+                split.ephemeral_1h_input_tokens,
+            ),
+            None => (
+                anthropic_response
+                    .usage
+                    .cache_creation_input_tokens
+                    .unwrap_or(0),
+                0,
+            ),
+        };
+    let cache_creation_tokens = cache_creation_5m_tokens + cache_creation_1h_tokens;
 
     // CRITICAL: input_tokens from API is ALREADY clean (non-cached)
     // According to Anthropic docs:
@@ -814,7 +845,8 @@ async fn execute_anthropic_request(
         request_body["model"].as_str().unwrap_or(""),
         anthropic_response.usage.input_tokens as u32,
         anthropic_response.usage.output_tokens as u32,
-        cache_creation_tokens as u32,
+        cache_creation_5m_tokens as u32,
+        cache_creation_1h_tokens as u32,
         cache_read_tokens as u32,
     );
 

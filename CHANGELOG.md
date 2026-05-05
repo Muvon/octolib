@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.19.4] - 2026-05-05
+
+### 📋 Release Summary
+
+This release updates Moonshot model specifications and pricing (162e083e) while introducing support for Anthropic’s per-TTL cache creation costs (1abf4740) to ensure more accurate expense tracking. Additionally, the development documentation has been fully refreshed to align with 2026 standards (9d1f4513).
+
+
+### ✨ New Features & Enhancements
+
+- **moonshot**: update pricing and model specifications `162e083e`
+
+### 🐛 Bug Fixes & Stability
+
+- **anthropic**: support per-TTL cache creation pricing `1abf4740`
+
+### 📚 Documentation & Examples
+
+- **instructions**: rewrite development guide for 2026 `9d1f4513`
+
 ## [0.19.3] - 2026-05-03
 
 ### 📋 Release Summary

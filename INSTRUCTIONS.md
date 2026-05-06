@@ -1,6 +1,6 @@
 # Octolib — AI Provider Library Guide
 
-Rust library providing a unified interface to multiple AI providers (OpenAI, Anthropic, OpenRouter, NVIDIA, Ollama, Google, Amazon, Cloudflare, DeepSeek, Moonshot, Z.ai, BytePlus, Groq, Cerebras, Together, Featherless, OctoHub, CLI proxies). Handles chat completions, embeddings, reranking, cost tracking, caching, structured output, vision, and tool calls. No panics, no `println!`, always `Result`. Copyright year is **2026**.
+Rust library providing a unified interface to multiple AI providers (OpenAI, Anthropic, OpenRouter, NVIDIA, Ollama, Google, Amazon, Cloudflare, DeepSeek, Moonshot, Z.ai, BytePlus, Groq, Cerebras, Together, Featherless, Fireworks, OctoHub, CLI proxies). Handles chat completions, embeddings, reranking, cost tracking, caching, structured output, vision, and tool calls. No panics, no `println!`, always `Result`. Copyright year is **2026**.
 
 ## Project Structure
 
@@ -42,6 +42,7 @@ src/
 │       ├── openrouter.rs           → Proxy — delegates to openai_compat
 │       ├── octohub.rs              → Proxy — delegates to openai_compat
 │       ├── featherless.rs          → Proxy — delegates to openai_compat
+│       ├── fireworks.rs            → Proxy — delegates to openai_compat (auto prefix-cache)
 │       └── cli/                    → CLI proxy: claude, codex, cursor, gemini, generic backends
 ├── embedding/
 │   ├── mod.rs                      → generate_embeddings(), generate_embeddings_batch(), count_tokens(), truncate_output()

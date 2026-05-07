@@ -17,7 +17,7 @@
 use super::shared;
 use crate::errors::ProviderError;
 use crate::llm::retry;
-use crate::llm::traits::AiProvider;
+use crate::llm::traits::{AiProvider, KeepalivePolicy};
 use crate::llm::types::{
     ChatCompletionParams, Message, ProviderExchange, ProviderResponse, SamplingSupport,
     ThinkingBlock, TokenUsage, ToolCall,
@@ -218,6 +218,18 @@ impl AiProvider for AnthropicProvider {
 
     fn supports_caching(&self, _model: &str) -> bool {
         true
+    }
+
+    fn keepalive_policy(&self, _model: &str, use_long_cache: bool) -> Option<KeepalivePolicy> {
+        // Match the cache_ttl that to_octolib_params applies to system/tool blocks:
+        //   use_long_cache = true  → 1h cache → ping every 54m
+        //   use_long_cache = false → 5m cache → ping every 4m30s
+        // 90% of TTL leaves a 10% margin for network latency and scheduler jitter.
+        let ttl_secs = if use_long_cache { 3600 } else { 300 };
+        let interval_secs = ttl_secs * 9 / 10;
+        Some(KeepalivePolicy {
+            interval: std::time::Duration::from_secs(interval_secs),
+        })
     }
 
     fn supports_vision(&self, model: &str) -> bool {

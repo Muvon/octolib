@@ -18,7 +18,7 @@ use super::shared;
 use crate::errors::ProviderError;
 use crate::errors::ToolCallError;
 use crate::llm::retry;
-use crate::llm::traits::AiProvider;
+use crate::llm::traits::{AiProvider, KeepalivePolicy};
 use crate::llm::types::{
     ChatCompletionParams, Message, ProviderExchange, ProviderResponse, SamplingSupport,
     ThinkingBlock, TokenUsage, ToolCall,
@@ -93,6 +93,22 @@ impl AiProvider for OpenRouterProvider {
         // OpenRouter supports caching for Anthropic models (case-insensitive)
         let normalized = normalize_model_name(model);
         normalized.starts_with("anthropic") || normalized.starts_with("claude")
+    }
+
+    fn keepalive_policy(&self, model: &str, use_long_cache: bool) -> Option<KeepalivePolicy> {
+        // OpenRouter passes `cache_control` straight through to Anthropic
+        // upstream for Claude routes, so the same refresh-on-read TTL semantics
+        // apply (5m default / 1h with extended-cache-ttl beta). We deliberately
+        // do not enable keepalive for non-Anthropic OpenRouter routes — other
+        // upstreams' cache mechanics are not pingable through OR's API.
+        let normalized = normalize_model_name(model);
+        if !(normalized.starts_with("anthropic") || normalized.starts_with("claude")) {
+            return None;
+        }
+        let ttl_secs = if use_long_cache { 3600 } else { 300 };
+        Some(KeepalivePolicy {
+            interval: std::time::Duration::from_secs(ttl_secs * 9 / 10),
+        })
     }
 
     fn supports_vision(&self, model: &str) -> bool {

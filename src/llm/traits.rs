@@ -18,6 +18,26 @@ use crate::llm::types::{
     ChatCompletionParams, EffectiveSamplingParams, ProviderResponse, SamplingSupport,
 };
 use anyhow::Result;
+use std::time::Duration;
+
+/// How a provider keeps its prompt cache warm during idle periods.
+///
+/// Returned from [`AiProvider::keepalive_policy`]. If `None`, the caller
+/// should not attempt to ping — the provider either manages cache internally
+/// (no client-controllable refresh) or has no cache primitive worth pinging.
+///
+/// Currently the only refresh strategy is "send the cached prefix again with
+/// a minimal `max_tokens` value" — the act of reading the cache resets its
+/// TTL on Anthropic-style providers. Other strategies (e.g. patching a Gemini
+/// `cachedContent` resource) can be added later as enum variants.
+#[derive(Debug, Clone)]
+pub struct KeepalivePolicy {
+    /// How often to fire the ping. Should be < cache TTL by a comfortable
+    /// margin (typically TTL × 0.9) to absorb network latency and scheduler
+    /// jitter. The caller respects this verbatim — providers must already
+    /// account for their own TTL semantics.
+    pub interval: Duration,
+}
 
 /// Trait that all AI providers must implement
 #[async_trait::async_trait]
@@ -61,6 +81,43 @@ pub trait AiProvider: Send + Sync {
     /// Check if the provider/model supports caching
     fn supports_caching(&self, _model: &str) -> bool {
         false
+    }
+
+    /// How often (and whether) to ping this provider to keep its prompt cache warm.
+    ///
+    /// `use_long_cache` mirrors octomind's `use_long_system_cache` flag — providers
+    /// that support multiple TTLs (e.g. Anthropic's 5m vs 1h) use it to derive the
+    /// correct ping interval. Default: `None` (do not ping).
+    ///
+    /// Implementors must return `None` when:
+    /// - the provider/model does not support caching at all,
+    /// - the cache is fully managed server-side with no observable refresh primitive,
+    /// - or pinging would cost more than letting the cache expire.
+    ///
+    /// # Per-provider summary (verified Mar–May 2026)
+    ///
+    /// - **Anthropic** ✓ — explicit `cache_control` ephemeral; TTL resets on read;
+    ///   5m default, 1h opt-in. Returns `Some`.
+    /// - **OpenRouter** ✓ — passes `cache_control` through to upstream, working only
+    ///   for Anthropic/Claude routes. Returns `Some` when model is Claude-family.
+    /// - **OpenAI** ✗ — fully automatic prompt caching, no `cache_control` primitive
+    ///   the client can attach. A "ping" would be a billed-in-full duplicate
+    ///   request, not a cache extension. `None`.
+    /// - **Google Gemini** ✗ via chat completion — implicit cache only here; the
+    ///   explicit `cachedContent` resource lives behind a separate REST endpoint
+    ///   and is refreshed by `PATCH cachedContents/{id}` with a new `expireTime`,
+    ///   not by sending messages. Out of scope for the SendCachedPrefix model.
+    ///   `None`.
+    /// - **Amazon Bedrock** ✗ today — current octolib impl uses the OpenAI-compat
+    ///   endpoint and does not yet inject `cache_control`. When that lands, swap
+    ///   to `Some` matching the Anthropic policy for Claude models.
+    /// - **DeepSeek / Groq / Moonshot Kimi K2** ✗ — automatic disk/prefix caching
+    ///   with no client-controllable refresh primitive. `None`.
+    /// - **Cloudflare / Together / Fireworks / Cerebras / Nvidia / BytePlus /
+    ///   Minimax / Featherless / Octohub / Local / Ollama / Zai / CLI providers** ✗
+    ///   — no caching primitive worth pinging. `None`.
+    fn keepalive_policy(&self, _model: &str, _use_long_cache: bool) -> Option<KeepalivePolicy> {
+        None
     }
 
     /// Get maximum input tokens for a model (actual context window size)

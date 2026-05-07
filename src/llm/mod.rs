@@ -35,7 +35,7 @@ pub use factory::ProviderFactory;
 pub use reference_capabilities::ModelCapabilities;
 pub use strategies::{ModelLimits, ProviderStrategy, StrategyFactory, ToolResult};
 pub use tool_calls::{GenericToolCall, ProviderToolCalls};
-pub use traits::AiProvider;
+pub use traits::{AiProvider, KeepalivePolicy};
 pub use types::{
     ChatCompletionParams, EffectiveSamplingParams, FunctionDefinition, ImageAttachment, ImageData,
     Message, MessageBuilder, ModelPricing, OutputFormat, ProviderExchange, ProviderResponse,

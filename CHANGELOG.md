@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.20.0] - 2026-05-08
+
+### 📋 Release Summary
+
+This release expands provider support with the integration of Fireworks AI and introduces a prompt cache keepalive policy to optimize performance and resource management (00dac961, 4c6187d5). These updates, alongside core documentation improvements, enhance the library's flexibility and efficiency for multi-provider AI workflows.
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: add prompt cache keepalive policy `4c6187d5`
+- **llm**: add Fireworks AI provider support `00dac961`
+
 ## [0.19.4] - 2026-05-05
 
 ### 📋 Release Summary

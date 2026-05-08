@@ -101,6 +101,19 @@ impl AiProvider for TogetherProvider {
             request_body["max_tokens"] = serde_json::json!(params.max_tokens);
         }
 
+        // Pass-through reasoning_effort for Together's OpenAI-compatible thinking models
+        // (e.g. DeepSeek-R1, Qwen3-Thinking). Models without it ignore the field.
+        if let Some(effort) = params.reasoning_effort {
+            let s = match effort {
+                crate::llm::types::ReasoningEffort::Low => "low",
+                crate::llm::types::ReasoningEffort::Medium => "medium",
+                crate::llm::types::ReasoningEffort::High => "high",
+                crate::llm::types::ReasoningEffort::XHigh => "high",
+                crate::llm::types::ReasoningEffort::Max => "high",
+            };
+            request_body["reasoning_effort"] = serde_json::json!(s);
+        }
+
         // Tools (OpenAI-compatible)
         if let Some(tools) = &params.tools {
             if !tools.is_empty() {

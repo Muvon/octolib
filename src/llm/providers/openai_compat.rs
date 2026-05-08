@@ -60,6 +60,22 @@ pub(crate) async fn chat_completion(
         request_body["max_tokens"] = serde_json::json!(params.max_tokens);
     }
 
+    // Pass-through reasoning_effort as a top-level OpenAI-compat field.
+    // Many providers (NVIDIA, Cerebras, Together, Groq, Fireworks, Cloudflare, Featherless,
+    // OpenRouter, OctoHub, Google Vertex via OpenAI-compat) accept the standard
+    // `reasoning_effort` parameter with values: "low" | "medium" | "high".
+    // Providers that don't recognize it will ignore it.
+    if let Some(effort) = params.reasoning_effort {
+        let s = match effort {
+            crate::llm::types::ReasoningEffort::Low => "low",
+            crate::llm::types::ReasoningEffort::Medium => "medium",
+            crate::llm::types::ReasoningEffort::High => "high",
+            crate::llm::types::ReasoningEffort::XHigh => "high",
+            crate::llm::types::ReasoningEffort::Max => "high",
+        };
+        request_body["reasoning_effort"] = serde_json::json!(s);
+    }
+
     if let Some(tools) = &params.tools {
         if !tools.is_empty() {
             let mut sorted_tools = tools.clone();

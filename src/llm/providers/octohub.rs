@@ -133,6 +133,19 @@ impl AiProvider for OctoHubProvider {
             request_body["max_output_tokens"] = serde_json::json!(params.max_tokens);
         }
 
+        // OctoHub re-runs the request through this same library server-side, so we
+        // forward `reasoning_effort` as a plain string and let the server map it.
+        if let Some(effort) = params.reasoning_effort {
+            let s = match effort {
+                crate::llm::types::ReasoningEffort::Low => "low",
+                crate::llm::types::ReasoningEffort::Medium => "medium",
+                crate::llm::types::ReasoningEffort::High => "high",
+                crate::llm::types::ReasoningEffort::XHigh => "xhigh",
+                crate::llm::types::ReasoningEffort::Max => "max",
+            };
+            request_body["reasoning_effort"] = serde_json::json!(s);
+        }
+
         // Add tools
         if let Some(tools) = &params.tools {
             if !tools.is_empty() {

@@ -179,7 +179,7 @@ impl AiProvider for CliProvider {
         let (lines, stderr, content, thinking, usage, used_args) = match self.backend.kind {
             CliBackendKind::Codex => {
                 let prompt = self.messages_to_prompt(&params.messages);
-                let args = codex::build_args(self, &backend_model);
+                let args = codex::build_args(self, &backend_model, params.reasoning_effort);
                 let command = self.command.clone();
 
                 let (lines, stderr) = retry::retry_with_exponential_backoff(

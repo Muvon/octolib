@@ -158,6 +158,8 @@ struct ZaiRequest {
     web_search: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     response_format: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thinking: Option<serde_json::Value>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -346,6 +348,13 @@ impl AiProvider for ZaiProvider {
                     "type": mode_str
                 })
             }),
+            // Z.ai GLM hybrid thinking models (4.5/4.6/4.7/5/5.1) accept
+            // `thinking: { "type": "enabled" | "disabled" }`. The API is binary —
+            // there is no budget knob, so any non-None ReasoningEffort enables it.
+            // Models without hybrid thinking (e.g. glm-4-32b, glm-ocr) ignore the field.
+            thinking: params
+                .reasoning_effort
+                .map(|_| serde_json::json!({ "type": "enabled" })),
         };
 
         // Execute request with retry logic

@@ -113,6 +113,7 @@ async fn main() -> anyhow::Result<()> {
         cancellation_token: None,
         previous_id: None,
         use_long_cache: false,
+        reasoning_effort: None,
         request_timeout: None,
     };
 
@@ -180,6 +181,7 @@ async fn main() -> anyhow::Result<()> {
         cancellation_token: None,
         previous_id: None,
         use_long_cache: false,
+        reasoning_effort: None,
         request_timeout: None,
     };
 

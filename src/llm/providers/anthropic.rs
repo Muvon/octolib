@@ -19,8 +19,8 @@ use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::traits::{AiProvider, KeepalivePolicy};
 use crate::llm::types::{
-    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, SamplingSupport,
-    ThinkingBlock, TokenUsage, ToolCall,
+    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, ReasoningEffort,
+    SamplingSupport, ThinkingBlock, TokenUsage, ToolCall,
 };
 use crate::llm::utils::{
     get_model_pricing, is_model_in_pricing_table, normalize_model_name, PricingTuple,
@@ -86,6 +86,22 @@ struct CacheTokenUsage {
 
 /// Models that reject ALL sampling parameters (temperature, top_p, top_k).
 const NO_SAMPLING_MODELS: &[&str] = &["opus-4-7"];
+
+/// Models that support extended thinking via the `thinking` block.
+/// Substring match against `params.model`. Order matters only for documentation.
+const THINKING_MODELS: &[&str] = &[
+    "opus-4-7",
+    "opus-4-6",
+    "opus-4-5",
+    "opus-4-1",
+    "opus-4",
+    "sonnet-4-7",
+    "sonnet-4-6",
+    "sonnet-4-5",
+    "sonnet-4",
+    "haiku-4-5",
+    "3-7-sonnet",
+];
 
 /// Models that reject top_p but accept temperature and top_k.
 const NO_TOP_P_MODELS: &[&str] = &[
@@ -388,6 +404,33 @@ impl AiProvider for AnthropicProvider {
                     .collect::<Vec<_>>();
 
                 request_body["tools"] = serde_json::json!(anthropic_tools);
+            }
+        }
+
+        // Add `thinking` block when caller requested reasoning effort and the model supports it.
+        // Anthropic accepts: { "type": "enabled", "budget_tokens": <u32> } | { "type": "disabled" }.
+        // Constraint: budget_tokens must be < max_tokens. We clamp when max_tokens is set.
+        if let Some(effort) = params.reasoning_effort {
+            let model_supports_thinking = THINKING_MODELS.iter().any(|p| params.model.contains(p));
+            if model_supports_thinking {
+                let mut budget: u32 = match effort {
+                    ReasoningEffort::Low => 2_048,
+                    ReasoningEffort::Medium => 8_192,
+                    ReasoningEffort::High => 16_384,
+                    ReasoningEffort::XHigh => 32_768,
+                    ReasoningEffort::Max => 65_536,
+                };
+                // Anthropic requires budget_tokens < max_tokens. Clamp if needed.
+                if params.max_tokens > 0 {
+                    let max = params.max_tokens;
+                    if budget >= max {
+                        budget = max.saturating_sub(1024).max(1024);
+                    }
+                }
+                request_body["thinking"] = serde_json::json!({
+                    "type": "enabled",
+                    "budget_tokens": budget,
+                });
             }
         }
 

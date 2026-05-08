@@ -13,10 +13,14 @@
 // limitations under the License.
 
 use crate::llm::providers::cli::CliProvider;
-use crate::llm::types::{ThinkingBlock, TokenUsage};
+use crate::llm::types::{ReasoningEffort, ThinkingBlock, TokenUsage};
 use anyhow::Result;
 
-pub(crate) fn build_args(provider: &CliProvider, model: &str) -> Vec<String> {
+pub(crate) fn build_args(
+    provider: &CliProvider,
+    model: &str,
+    effort_override: Option<ReasoningEffort>,
+) -> Vec<String> {
     let mut args = vec!["exec".to_string()];
 
     if !model.is_empty() {
@@ -24,11 +28,19 @@ pub(crate) fn build_args(provider: &CliProvider, model: &str) -> Vec<String> {
         args.push(model.to_string());
     }
 
+    // Per-call effort takes precedence over the provider's env-configured default.
+    // codex CLI accepts: low | medium | high (no "none"/"xhigh").
+    let effort_str: String = match effort_override {
+        Some(ReasoningEffort::Low) => "low".to_string(),
+        Some(ReasoningEffort::Medium) => "medium".to_string(),
+        Some(ReasoningEffort::High) => "high".to_string(),
+        Some(ReasoningEffort::XHigh) => "high".to_string(),
+        Some(ReasoningEffort::Max) => "high".to_string(),
+        None => provider.reasoning_effort.clone(),
+    };
+
     args.push("-c".to_string());
-    args.push(format!(
-        "model_reasoning_effort=\"{}\"",
-        provider.reasoning_effort
-    ));
+    args.push(format!("model_reasoning_effort=\"{}\"", effort_str));
 
     if provider.skip_git_check {
         args.push("--skip-git-repo-check".to_string());

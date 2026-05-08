@@ -783,6 +783,23 @@ pub struct EffectiveSamplingParams {
     pub top_k: Option<u32>,
 }
 
+/// Generic reasoning effort level for thinking-capable models.
+///
+/// This enum is intentionally provider-agnostic. Each provider owns its own
+/// mapping from these levels to its native knob (effort string, budget tokens,
+/// thinking flag, etc.) inside its `chat_completion()` implementation.
+///
+/// To leave thinking at provider default, keep `ChatCompletionParams::reasoning_effort` as `None`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ReasoningEffort {
+    Low,
+    Medium,
+    High,
+    XHigh,
+    Max,
+}
+
 #[derive(Clone)]
 pub struct ChatCompletionParams {
     /// Array of conversation messages
@@ -814,6 +831,9 @@ pub struct ChatCompletionParams {
     pub previous_id: Option<String>,
     /// Enable long-lived cache (provider-specific: OpenAI "24h" retention, Anthropic 1h TTL)
     pub use_long_cache: bool,
+    /// Reasoning effort hint for thinking-capable models. `None` = provider default
+    /// (most providers omit the field; hybrid models stay non-thinking).
+    pub reasoning_effort: Option<ReasoningEffort>,
 }
 
 impl ChatCompletionParams {
@@ -841,6 +861,7 @@ impl ChatCompletionParams {
             response_format: None,
             previous_id: None,
             use_long_cache: false,
+            reasoning_effort: None,
         }
     }
 
@@ -890,6 +911,12 @@ impl ChatCompletionParams {
     /// Set previous response ID for multi-turn conversations (OpenAI Responses API)
     pub fn with_previous_id(mut self, id: &str) -> Self {
         self.previous_id = Some(id.to_string());
+        self
+    }
+
+    /// Set reasoning effort. Has no effect on models without thinking support.
+    pub fn with_reasoning_effort(mut self, effort: ReasoningEffort) -> Self {
+        self.reasoning_effort = Some(effort);
         self
     }
 }

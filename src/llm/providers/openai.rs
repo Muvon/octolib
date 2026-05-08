@@ -19,8 +19,8 @@ use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, SamplingSupport,
-    ThinkingBlock, TokenUsage, ToolCall,
+    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, ReasoningEffort,
+    SamplingSupport, ThinkingBlock, TokenUsage, ToolCall,
 };
 use crate::llm::utils::{
     calculate_cost_from_pricing_table, get_model_pricing, is_model_in_pricing_table,
@@ -438,15 +438,24 @@ impl AiProvider for OpenAiProvider {
             request_body["max_output_tokens"] = serde_json::json!(params.max_tokens);
         }
 
-        // Add reasoning effort for reasoning models
+        // Add reasoning effort for reasoning models (o1/o3/o4/gpt-5/gpt-5.5+).
+        // Maps generic ReasoningEffort -> OpenAI Responses API "effort" string.
+        // OpenAI accepts: "none" | "low" | "medium" | "high" | "xhigh" (gpt-5.5+).
+        // Default when caller omits is "medium" (per OpenAI guidance).
         if params.model.starts_with("o1")
             || params.model.starts_with("o3")
             || params.model.starts_with("o4")
             || params.model.starts_with("gpt-5")
         {
-            request_body["reasoning"] = serde_json::json!({
-                "effort": "medium"
-            });
+            let effort = match params.reasoning_effort {
+                Some(ReasoningEffort::Low) => "low",
+                Some(ReasoningEffort::Medium) => "medium",
+                Some(ReasoningEffort::High) => "high",
+                Some(ReasoningEffort::XHigh) => "xhigh",
+                Some(ReasoningEffort::Max) => "xhigh",
+                None => "medium",
+            };
+            request_body["reasoning"] = serde_json::json!({ "effort": effort });
         }
 
         // Add tools if available

@@ -124,9 +124,9 @@ pub use llm::{
     GoogleVertexProvider, ImageAttachment, ImageData, LocalProvider, Message, MessageBuilder,
     MinimaxProvider, ModelLimits, MoonshotProvider, OllamaProvider, OpenAiProvider,
     OpenRouterProvider, OutputFormat, ProviderExchange, ProviderFactory, ProviderResponse,
-    ProviderStrategy, ProviderToolCalls, ResponseMode, SamplingSupport, SourceType,
-    StrategyFactory, StructuredOutputRequest, ThinkingBlock, TogetherProvider, TokenUsage,
-    ToolCall, ToolResult, VideoAttachment, VideoData, ZaiProvider,
+    ProviderStrategy, ProviderToolCalls, ReasoningEffort, ResponseMode, SamplingSupport,
+    SourceType, StrategyFactory, StructuredOutputRequest, ThinkingBlock, TogetherProvider,
+    TokenUsage, ToolCall, ToolResult, VideoAttachment, VideoData, ZaiProvider,
 };
 pub use reranker::{
     create_rerank_provider_from_parts, parse_provider_model as parse_rerank_provider_model, rerank,

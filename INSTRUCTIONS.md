@@ -11,7 +11,7 @@ src/
 ├── storage.rs                      → Cache dirs for FastEmbed/HuggingFace models
 ├── llm/
 │   ├── traits.rs                   → AiProvider trait — THE interface every provider implements
-│   ├── types.rs                    → Message, ChatCompletionParams, ProviderResponse, TokenUsage, ModelPricing, etc.
+│   ├── types.rs                    → Message, ChatCompletionParams, ProviderResponse, TokenUsage, ModelPricing, ReasoningEffort, etc.
 │   ├── factory.rs                  → ProviderFactory::get_provider_for_model("provider:model")
 │   ├── config.rs                   → CacheConfig, CacheTTL, CacheType
 │   ├── strategies.rs               → ProviderStrategy trait + AnthropicStrategy/OpenAIStrategy (tool call formatting)
@@ -21,7 +21,7 @@ src/
 │   ├── reference_pricing.rs        → Baseline pricing for open/proxy models (substring-matched, specific-first)
 │   ├── reference_capabilities.rs   → Baseline capabilities (vision, video, structured_output, context window)
 │   └── providers/
-│       ├── openai_compat.rs        → Shared OpenAI-compatible request/response layer; also OpenAiCompatConfig, get_optional_api_key, get_api_url (internal, not pub)
+│       ├── openai_compat.rs        → Shared OpenAI-compatible request/response layer; auto-passes reasoning_effort; also OpenAiCompatConfig, get_optional_api_key, get_api_url (internal, not pub)
 │       ├── shared.rs               → HTTP client (arc-swap pool), cache control helpers, tool call parsers
 │       ├── openai.rs               → Native — PRICING table, Responses API, OAuth support
 │       ├── anthropic.rs            → Native — PRICING table, caching, thinking blocks, OAuth support
@@ -71,6 +71,7 @@ examples/                           → One file per feature — use as integrat
 | Fix capabilities (vision/context/structured) | `src/llm/reference_capabilities.rs` for proxies; override trait methods for native |
 | Add structured output to a provider | `supports_structured_output()` + `response_format` in request + parse `structured_output` |
 | Add caching to a provider | `supports_caching()` + cache headers in request + parse cache token fields |
+| Configure reasoning / thinking effort | `src/llm/types.rs` → `ReasoningEffort` enum; per-provider mapping inside each `chat_completion()` |
 | Tool call handling | `src/llm/strategies.rs` → `AnthropicStrategy` / `OpenAIStrategy` |
 | Shared HTTP / cache helpers | `src/llm/providers/shared.rs` |
 | Model format parsing | `src/llm/factory.rs` → `ProviderFactory::parse_model()` |
@@ -145,6 +146,19 @@ const PRICING: &[PricingTuple] = &[
 ### TokenUsage Fields
 
 `input_tokens` = clean input only (never includes cache tokens). Separate fields: `cache_write_tokens`, `cache_read_tokens`, `output_tokens`, `reasoning_tokens`, `cost: Option<f64>`.
+
+### Reasoning Effort
+
+`ReasoningEffort` enum (`Low`, `Medium`, `High`, `XHigh`, `Max`) — provider-agnostic. Set via `ChatCompletionParams::with_reasoning_effort(effort)`. `None` (default) = provider default behavior.
+
+Per-provider mapping:
+- **Anthropic** → `thinking` block with `budget_tokens` (Low: 2048, Medium: 8192, High: 16384, XHigh: 32768, Max: 65536); clamped below `max_tokens`
+- **OpenAI** → `reasoning.effort` string (`"low"` / `"medium"` / `"high"` / `"xhigh"`; Max maps to `"xhigh"`)
+- **openai_compat** (NVIDIA, Cerebras, Groq, etc.) → passthrough `reasoning_effort` string; unsupported models ignore it
+- **OpenRouter / Together** → passthrough `reasoning_effort` string
+- **OctoHub** → passthrough string (supports all five levels including `"max"`)
+- **Z.ai** → binary `thinking: { "type": "enabled" }` for any non-None effort (no budget knob)
+- **Codex CLI** → `model_reasoning_effort` config (accepts `low` / `medium` / `high` only)
 
 ### Sampling Parameters
 
@@ -257,6 +271,7 @@ Files still showing `Copyright 2025` (`src/errors.rs`, `src/storage.rs`, `src/ll
 - **`fastembed` and `huggingface` are default features** — code gated on them must use `#[cfg(feature = "...")]`.
 - **Shared HTTP client** in `providers/shared.rs` is process-wide and arc-swapped on connection errors — don't create per-request clients.
 - **`supports_model()` for native providers** should use `is_model_in_pricing_table()` — this enforces that only known/priced models are accepted.
+- **ReasoningEffort is a hint, not a guarantee** — models without thinking support silently ignore it. Anthropic clamps budget_tokens below max_tokens.
 
 ## Never
 

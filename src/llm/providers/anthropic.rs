@@ -103,6 +103,21 @@ const THINKING_MODELS: &[&str] = &[
     "3-7-sonnet",
 ];
 
+/// Models that support (or require) adaptive thinking via `thinking.type: "adaptive"`.
+/// Opus 4.7 rejects manual `thinking.type: "enabled"` outright; on Opus 4.6 and
+/// Sonnet 4.6, manual mode is deprecated and will be removed.
+const ADAPTIVE_THINKING_MODELS: &[&str] = &["opus-4-7", "opus-4-6", "sonnet-4-6"];
+
+/// Models where adaptive thinking is the ONLY accepted mode. Manual
+/// `thinking.type: "enabled"` returns a 400. These models also default
+/// `display: "omitted"`, so we opt in to `"summarized"` to keep thinking
+/// text visible in `ProviderResponse::thinking`.
+const ADAPTIVE_ONLY_MODELS: &[&str] = &["opus-4-7"];
+
+/// Models that accept `output_config.effort`. Per Anthropic docs:
+/// Mythos Preview, Opus 4.7, Opus 4.6, Sonnet 4.6, Opus 4.5.
+const EFFORT_PARAM_MODELS: &[&str] = &["opus-4-7", "opus-4-6", "sonnet-4-6", "opus-4-5"];
+
 /// Models that reject top_p but accept temperature and top_k.
 const NO_TOP_P_MODELS: &[&str] = &[
     "opus-4-1",
@@ -342,16 +357,26 @@ impl AiProvider for AnthropicProvider {
             "model": params.model,
             "messages": anthropic_messages,
         });
-        // Apply sampling parameters based on model support
-        let sampling = self.effective_sampling_params(&params);
-        if let Some(temp) = sampling.temperature {
-            request_body["temperature"] = serde_json::json!(temp);
-        }
-        if let Some(top_p) = sampling.top_p {
-            request_body["top_p"] = serde_json::json!(top_p);
-        }
-        if let Some(top_k) = sampling.top_k {
-            request_body["top_k"] = serde_json::json!(top_k);
+
+        // Decide upfront whether extended thinking will be enabled. Anthropic
+        // rejects non-default `temperature`/`top_p`/`top_k` whenever thinking
+        // (manual or adaptive) is on — only `temperature=1` is accepted and
+        // top_p/top_k must be omitted. Skip them entirely in that case.
+        let thinking_enabled = params.reasoning_effort.is_some()
+            && THINKING_MODELS.iter().any(|p| params.model.contains(p));
+
+        if !thinking_enabled {
+            // Apply sampling parameters based on model support
+            let sampling = self.effective_sampling_params(&params);
+            if let Some(temp) = sampling.temperature {
+                request_body["temperature"] = serde_json::json!(temp);
+            }
+            if let Some(top_p) = sampling.top_p {
+                request_body["top_p"] = serde_json::json!(top_p);
+            }
+            if let Some(top_k) = sampling.top_k {
+                request_body["top_k"] = serde_json::json!(top_k);
+            }
         }
 
         // Add max_tokens if specified (0 means don't include it in request)
@@ -407,30 +432,81 @@ impl AiProvider for AnthropicProvider {
             }
         }
 
-        // Add `thinking` block when caller requested reasoning effort and the model supports it.
-        // Anthropic accepts: { "type": "enabled", "budget_tokens": <u32> } | { "type": "disabled" }.
-        // Constraint: budget_tokens must be < max_tokens. We clamp when max_tokens is set.
+        // Translate `reasoning_effort` into Anthropic's thinking + effort knobs.
+        // The API surface diverged across model generations:
+        //   - Opus 4.7 only accepts `thinking.type: "adaptive"` (manual is 400).
+        //   - Opus 4.6 / Sonnet 4.6 accept adaptive (recommended) or manual; manual deprecated.
+        //   - Opus 4.5 keeps manual `budget_tokens` but also supports `output_config.effort`.
+        //   - Older Claude 4 / 3.7 keep manual `budget_tokens` only.
         if let Some(effort) = params.reasoning_effort {
-            let model_supports_thinking = THINKING_MODELS.iter().any(|p| params.model.contains(p));
-            if model_supports_thinking {
-                let mut budget: u32 = match effort {
-                    ReasoningEffort::Low => 2_048,
-                    ReasoningEffort::Medium => 8_192,
-                    ReasoningEffort::High => 16_384,
-                    ReasoningEffort::XHigh => 32_768,
-                    ReasoningEffort::Max => 65_536,
-                };
-                // Anthropic requires budget_tokens < max_tokens. Clamp if needed.
-                if params.max_tokens > 0 {
-                    let max = params.max_tokens;
-                    if budget >= max {
-                        budget = max.saturating_sub(1024).max(1024);
+            if thinking_enabled {
+                let supports_adaptive = ADAPTIVE_THINKING_MODELS
+                    .iter()
+                    .any(|p| params.model.contains(p));
+                let adaptive_only = ADAPTIVE_ONLY_MODELS
+                    .iter()
+                    .any(|p| params.model.contains(p));
+                let supports_effort_param =
+                    EFFORT_PARAM_MODELS.iter().any(|p| params.model.contains(p));
+
+                if supports_adaptive {
+                    // Adaptive: Claude decides depth, `output_config.effort` guides it.
+                    // On Opus 4.7, `display` defaults to "omitted" — set "summarized"
+                    // so the thinking field carries text we can surface to callers.
+                    let mut thinking_obj = serde_json::json!({"type": "adaptive"});
+                    if adaptive_only {
+                        thinking_obj["display"] = serde_json::json!("summarized");
                     }
+                    request_body["thinking"] = thinking_obj;
+                } else {
+                    // Manual: budget_tokens must be < max_tokens. Clamp if needed.
+                    let mut budget: u32 = match effort {
+                        ReasoningEffort::Low => 2_048,
+                        ReasoningEffort::Medium => 8_192,
+                        ReasoningEffort::High => 16_384,
+                        ReasoningEffort::XHigh => 32_768,
+                        ReasoningEffort::Max => 65_536,
+                    };
+                    if params.max_tokens > 0 {
+                        let max = params.max_tokens;
+                        if budget >= max {
+                            budget = max.saturating_sub(1024).max(1024);
+                        }
+                    }
+                    request_body["thinking"] = serde_json::json!({
+                        "type": "enabled",
+                        "budget_tokens": budget,
+                    });
                 }
-                request_body["thinking"] = serde_json::json!({
-                    "type": "enabled",
-                    "budget_tokens": budget,
-                });
+
+                if supports_effort_param {
+                    // Per-model value constraints:
+                    //   "xhigh" — Opus 4.7 only
+                    //   "max"   — Opus 4.7, Opus 4.6, Sonnet 4.6 (NOT Opus 4.5)
+                    // Downgrade unsupported levels to "high" rather than 400ing the call.
+                    let supports_xhigh = params.model.contains("opus-4-7");
+                    let supports_max = supports_adaptive;
+                    let effort_str = match effort {
+                        ReasoningEffort::Low => "low",
+                        ReasoningEffort::Medium => "medium",
+                        ReasoningEffort::High => "high",
+                        ReasoningEffort::XHigh => {
+                            if supports_xhigh {
+                                "xhigh"
+                            } else {
+                                "high"
+                            }
+                        }
+                        ReasoningEffort::Max => {
+                            if supports_max {
+                                "max"
+                            } else {
+                                "high"
+                            }
+                        }
+                    };
+                    request_body["output_config"] = serde_json::json!({"effort": effort_str});
+                }
             }
         }
 

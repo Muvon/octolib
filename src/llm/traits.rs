@@ -125,7 +125,7 @@ pub trait AiProvider: Send + Sync {
     fn get_max_input_tokens(&self, model: &str) -> usize {
         crate::llm::reference_capabilities::get_reference_capabilities(model)
             .map(|c| c.max_input_tokens)
-            .unwrap_or(8_192)
+            .unwrap_or(262_144)
     }
 
     /// Check if the provider/model supports vision capabilities

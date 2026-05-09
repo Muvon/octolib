@@ -426,13 +426,26 @@ fn extract_instructions(messages: &[Message]) -> Option<serde_json::Value> {
 /// Convert conversation messages to OctoHub `input` array.
 ///
 /// When `has_previous_response` is true, only sends NEW messages after the
-/// last assistant message (tool results or user follow-ups). The server
-/// reconstructs full history from `previous_response_id`.
+/// last assistant message — both tool results AND user follow-ups, in the
+/// order they appear. The server reconstructs full history from
+/// `previous_completion_id` and treats this list as new input items.
 ///
 /// When false, sends all non-system messages as the initial input.
+///
+/// Why both tool results AND user messages must be sent together:
+/// after a cancelled multi-turn (assistant emitted tool_calls, tool_result
+/// landed, but the follow-up assistant response was cancelled), the client
+/// may send the next user message before the tool round closes. The
+/// in-memory list is then `[..., assistant(tool_calls), tool_result, user]`.
+/// Returning only the tool_result and dropping the user message lets the
+/// server reply to the tool result alone — the user's actual question never
+/// reaches the model and the conversation continues "off-track". Octohub's
+/// `push_items` accepts interleaved `function_call_output` and `message`
+/// items in one input array, so we forward them together.
 fn messages_to_input(messages: &[Message], has_previous_response: bool) -> Vec<serde_json::Value> {
     if has_previous_response {
-        // Find the last assistant message with an ID
+        // Find the last assistant message with an ID; everything after it
+        // is what the server hasn't seen yet.
         let last_assistant_idx = messages
             .iter()
             .enumerate()
@@ -440,36 +453,23 @@ fn messages_to_input(messages: &[Message], has_previous_response: bool) -> Vec<s
             .find(|(_, m)| m.role == "assistant" && m.id.is_some())
             .map(|(idx, _)| idx);
 
-        if let Some(assistant_idx) = last_assistant_idx {
-            // Collect new tool results after the last assistant message
-            let new_tool_results: Vec<_> = messages
-                .iter()
-                .skip(assistant_idx + 1)
-                .filter_map(|msg| {
-                    if msg.role == "tool" {
-                        let call_id = msg.tool_call_id.clone().unwrap_or_default();
-                        Some(serde_json::json!({
-                            "type": "function_call_output",
-                            "call_id": call_id,
-                            "output": msg.content
-                        }))
-                    } else {
-                        None
-                    }
-                })
-                .collect();
+        let start = last_assistant_idx.map(|idx| idx + 1).unwrap_or(0);
 
-            if !new_tool_results.is_empty() {
-                return new_tool_results;
-            }
-        }
-
-        // No tool results — send new user messages after the last assistant
         messages
             .iter()
-            .skip(last_assistant_idx.map(|idx| idx + 1).unwrap_or(0))
+            .skip(start)
             .filter_map(|msg| match msg.role.as_str() {
+                "tool" => {
+                    let call_id = msg.tool_call_id.clone().unwrap_or_default();
+                    Some(serde_json::json!({
+                        "type": "function_call_output",
+                        "call_id": call_id,
+                        "output": msg.content
+                    }))
+                }
                 "user" => Some(user_message_value(msg)),
+                // System is already in `instructions`; assistant turns came
+                // from the server and don't need to be echoed back.
                 _ => None,
             })
             .collect()
@@ -688,6 +688,42 @@ mod tests {
         assert_eq!(input[0]["type"], "function_call_output");
         assert_eq!(input[0]["call_id"], "call_xyz");
         assert_eq!(input[0]["output"], "72°F sunny");
+    }
+
+    /// Regression: after a multi-turn cancel that leaves a tool_result without
+    /// a follow-up assistant response, the next user message must be sent
+    /// alongside the tool_result — not dropped. Previously this case returned
+    /// only the tool_result and the user's question was silently lost,
+    /// causing the next assistant turn to reply to the tool result and the
+    /// model to drift "off-track" for the rest of the conversation.
+    #[test]
+    fn test_messages_to_input_tool_result_then_user_after_cancel() {
+        let mut assistant_msg = Message::assistant("");
+        assistant_msg.tool_calls = Some(serde_json::json!([{
+            "id": "call_xyz",
+            "name": "get_weather",
+            "arguments": {"location": "NYC"}
+        }]));
+        assistant_msg.id = Some("resp_123".to_string());
+        let messages = vec![
+            Message::user("What is the weather?"),
+            assistant_msg,
+            Message::tool("72°F sunny", "call_xyz", "get_weather"),
+            Message::user("Now write me a poem about it."),
+        ];
+
+        let input = messages_to_input(&messages, true);
+        assert_eq!(
+            input.len(),
+            2,
+            "tool_result and follow-up user must both be sent"
+        );
+        assert_eq!(input[0]["type"], "function_call_output");
+        assert_eq!(input[0]["call_id"], "call_xyz");
+        assert_eq!(input[0]["output"], "72°F sunny");
+        assert_eq!(input[1]["type"], "message");
+        assert_eq!(input[1]["role"], "user");
+        assert_eq!(input[1]["content"], "Now write me a poem about it.");
     }
 
     #[test]

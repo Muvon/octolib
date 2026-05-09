@@ -162,7 +162,7 @@ mod tests {
         let provider = OllamaProvider::new();
         assert_eq!(provider.get_max_input_tokens("llama3.1:8b"), 131_072);
         assert_eq!(provider.get_max_input_tokens("mistral:7b"), 32_768);
-        // Unknown models get conservative default
-        assert_eq!(provider.get_max_input_tokens("unknown-model"), 8_192);
+        // Unknown models get reference-capabilities fallback default
+        assert_eq!(provider.get_max_input_tokens("unknown-model"), 262_144);
     }
 }

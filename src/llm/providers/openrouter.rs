@@ -166,7 +166,7 @@ impl AiProvider for OpenRouterProvider {
         if normalized.starts_with("o1") || normalized.starts_with("o3") {
             return 200_000;
         }
-        128_000 // Conservative default for OpenRouter
+        262_144 // Default for unlisted OpenRouter models
     }
 
     fn supports_structured_output(&self, model: &str) -> bool {

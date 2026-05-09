@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.21.1] - 2026-05-09
+
+### 📋 Release Summary
+
+This release improves core LLM reliability by increasing default input token limits and ensuring consistent message history when processing tool results (51474057, 31f06c94). These updates enhance the library's stability and accuracy during complex multi-turn interactions.
+
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: increase default max input token limits `51474057`
+- **llm**: ensure user messages are sent with tool results `31f06c94`
+
 ## [0.21.0] - 2026-05-09
 
 ### 📋 Release Summary

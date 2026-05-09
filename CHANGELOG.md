@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.21.0] - 2026-05-09
+
+### 📋 Release Summary
+
+This release introduces comprehensive support for reasoning effort and adaptive thinking levels across supported providers, including specific enhancements for Anthropic models (46db38f0, 6c2a601d). These updates are accompanied by expanded documentation to help users effectively implement and manage model reasoning intensity (8620b077).
+
+
+### ✨ New Features & Enhancements
+
+- **anthropic**: support adaptive thinking and effort levels `46db38f0`
+- **llm**: implement reasoning effort support across providers `6c2a601d`
+
+### 📚 Documentation & Examples
+
+- **llm**: document reasoning effort implementation `8620b077`
+
 ## [0.20.0] - 2026-05-08
 
 ### 📋 Release Summary

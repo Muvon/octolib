@@ -149,7 +149,10 @@ const NO_TEMPERATURE_PREFIXES: &[&str] = &["o1", "o2", "o3", "o4", "gpt-5"];
 /// * `has_previous_response` - Whether we have a previous_id (continuation)
 fn messages_to_input(messages: &[Message], has_previous_response: bool) -> Vec<serde_json::Value> {
     if has_previous_response {
-        // Find the index of the last assistant message with an ID
+        // Everything after the last assistant_id is new input. Send tool
+        // results AND user follow-ups together — splitting them silently
+        // drops the user message when both exist (e.g. after a multi-turn
+        // cancel that left a tool_result without a follow-up assistant).
         let last_assistant_idx = messages
             .iter()
             .enumerate()
@@ -157,36 +160,20 @@ fn messages_to_input(messages: &[Message], has_previous_response: bool) -> Vec<s
             .find(|(_, m)| m.role == "assistant" && m.id.is_some())
             .map(|(idx, _)| idx);
 
-        if let Some(assistant_idx) = last_assistant_idx {
-            // Check if there are any tool messages AFTER the last assistant message
-            let new_tool_results: Vec<_> = messages
-                .iter()
-                .skip(assistant_idx + 1)
-                .filter_map(|msg| {
-                    if msg.role == "tool" {
-                        let call_id_str = msg.tool_call_id.clone().unwrap_or_default();
-                        Some(serde_json::json!({
-                            "type": "function_call_output",
-                            "call_id": call_id_str,
-                            "output": msg.content
-                        }))
-                    } else {
-                        None
-                    }
-                })
-                .collect();
+        let start = last_assistant_idx.map(|idx| idx + 1).unwrap_or(0);
 
-            // If we have new tool results, send them
-            if !new_tool_results.is_empty() {
-                return new_tool_results;
-            }
-        }
-
-        // No new tool results - send new user/system messages after the last assistant
         messages
             .iter()
-            .skip(last_assistant_idx.map(|idx| idx + 1).unwrap_or(0))
+            .skip(start)
             .filter_map(|msg| match msg.role.as_str() {
+                "tool" => {
+                    let call_id_str = msg.tool_call_id.clone().unwrap_or_default();
+                    Some(serde_json::json!({
+                        "type": "function_call_output",
+                        "call_id": call_id_str,
+                        "output": msg.content
+                    }))
+                }
                 "user" | "system" => Some(serde_json::json!({
                     "role": msg.role,
                     "content": msg.content
@@ -1324,6 +1311,88 @@ mod tests {
         let user_msg = &input[0];
         assert_eq!(user_msg["role"], "user");
         assert_eq!(user_msg["content"], "what else you can do?");
+    }
+
+    /// Regression: after a multi-turn cancel that leaves a tool_result without
+    /// a follow-up assistant, the next user prompt must be sent alongside the
+    /// tool_result. Previously the function returned only the tool_result and
+    /// dropped the user message, causing the model to "drift" off-track.
+    #[test]
+    fn test_messages_to_input_tool_result_then_user_after_cancel() {
+        let messages = vec![
+            Message {
+                role: "user".to_string(),
+                content: "What is the weather?".to_string(),
+                timestamp: 0,
+                images: None,
+                videos: None,
+                cached: false,
+                cache_ttl: None,
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+                thinking: None,
+                id: None,
+            },
+            Message {
+                role: "assistant".to_string(),
+                content: "".to_string(),
+                timestamp: 0,
+                images: None,
+                videos: None,
+                cached: false,
+                cache_ttl: None,
+                tool_calls: Some(serde_json::json!([{
+                    "id": "call_w",
+                    "type": "function",
+                    "function": {"name": "get_weather", "arguments": "{}"}
+                }])),
+                tool_call_id: None,
+                name: None,
+                thinking: None,
+                id: Some("resp_x".to_string()),
+            },
+            Message {
+                role: "tool".to_string(),
+                content: "72°F sunny".to_string(),
+                timestamp: 0,
+                images: None,
+                videos: None,
+                cached: false,
+                cache_ttl: None,
+                tool_calls: None,
+                tool_call_id: Some("call_w".to_string()),
+                name: Some("get_weather".to_string()),
+                thinking: None,
+                id: None,
+            },
+            // User retried after cancelling the follow-up assistant.
+            Message {
+                role: "user".to_string(),
+                content: "Now write me a poem about it.".to_string(),
+                timestamp: 0,
+                images: None,
+                videos: None,
+                cached: false,
+                cache_ttl: None,
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+                thinking: None,
+                id: None,
+            },
+        ];
+
+        let input = messages_to_input(&messages, true);
+        assert_eq!(
+            input.len(),
+            2,
+            "tool_result and follow-up user must both be sent"
+        );
+        assert_eq!(input[0]["type"], "function_call_output");
+        assert_eq!(input[0]["call_id"], "call_w");
+        assert_eq!(input[1]["role"], "user");
+        assert_eq!(input[1]["content"], "Now write me a poem about it.");
     }
 
     #[test]

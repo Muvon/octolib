@@ -311,27 +311,35 @@ fn convert_messages(messages: &[Message]) -> Vec<OpenAiCompatMessage> {
 
                     if let Some(images) = &message.images {
                         for image in images {
-                            if let crate::llm::types::ImageData::Base64(data) = &image.data {
-                                content_parts.push(serde_json::json!({
-                                    "type": "image_url",
-                                    "image_url": {
-                                        "url": format!("data:{};base64,{}", image.media_type, data)
-                                    }
-                                }));
-                            }
+                            let url = match &image.data {
+                                crate::llm::types::ImageData::Base64(data) => {
+                                    format!("data:{};base64,{}", image.media_type, data)
+                                }
+                                crate::llm::types::ImageData::Url(u) => u.clone(),
+                            };
+                            content_parts.push(serde_json::json!({
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": url
+                                }
+                            }));
                         }
                     }
 
                     if let Some(videos) = &message.videos {
                         for video in videos {
-                            if let crate::llm::types::VideoData::Base64(data) = &video.data {
-                                content_parts.push(serde_json::json!({
-                                    "type": "video_url",
-                                    "video_url": {
-                                        "url": format!("data:{};base64,{}", video.media_type, data)
-                                    }
-                                }));
-                            }
+                            let url = match &video.data {
+                                crate::llm::types::VideoData::Base64(data) => {
+                                    format!("data:{};base64,{}", video.media_type, data)
+                                }
+                                crate::llm::types::VideoData::Url(u) => u.clone(),
+                            };
+                            content_parts.push(serde_json::json!({
+                                "type": "video_url",
+                                "video_url": {
+                                    "url": url
+                                }
+                            }));
                         }
                     }
 

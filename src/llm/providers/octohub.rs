@@ -485,10 +485,61 @@ fn messages_to_input(messages: &[Message], has_previous_response: bool) -> Vec<s
     }
 }
 
-/// Build a single user message JSON value, attaching `cache_control` when the
-/// message is marked as cached.
+/// Build a single user message JSON value. When the message has image/video
+/// attachments, the `content` is emitted as an array of typed Responses-API
+/// parts: `input_text` for the text and `input_image` / `input_video` for each
+/// attachment. Cache markers attach to the leading `input_text` part.
+///
+/// When there are no attachments and no cache marker, `content` stays a plain
+/// string — the simpler shape every OctoHub-supported provider accepts.
 fn user_message_value(msg: &Message) -> serde_json::Value {
-    let content: serde_json::Value = if msg.cached {
+    let has_images = msg.images.as_ref().is_some_and(|v| !v.is_empty());
+    let has_videos = msg.videos.as_ref().is_some_and(|v| !v.is_empty());
+
+    let content: serde_json::Value = if has_images || has_videos {
+        let mut parts: Vec<serde_json::Value> = Vec::new();
+        let mut text_part = serde_json::json!({
+            "type": "input_text",
+            "text": msg.content,
+        });
+        if msg.cached {
+            text_part["cache_control"] =
+                shared::ephemeral_cache_control_with_ttl(msg.cache_ttl.as_deref());
+        }
+        parts.push(text_part);
+
+        if let Some(images) = &msg.images {
+            for image in images {
+                let url = match &image.data {
+                    crate::llm::types::ImageData::Base64(data) => {
+                        format!("data:{};base64,{}", image.media_type, data)
+                    }
+                    crate::llm::types::ImageData::Url(u) => u.clone(),
+                };
+                parts.push(serde_json::json!({
+                    "type": "input_image",
+                    "image_url": url,
+                }));
+            }
+        }
+
+        if let Some(videos) = &msg.videos {
+            for video in videos {
+                let url = match &video.data {
+                    crate::llm::types::VideoData::Base64(data) => {
+                        format!("data:{};base64,{}", video.media_type, data)
+                    }
+                    crate::llm::types::VideoData::Url(u) => u.clone(),
+                };
+                parts.push(serde_json::json!({
+                    "type": "input_video",
+                    "video_url": url,
+                }));
+            }
+        }
+
+        serde_json::Value::Array(parts)
+    } else if msg.cached {
         let mut block = serde_json::json!([{
             "type": "input_text",
             "text": msg.content,

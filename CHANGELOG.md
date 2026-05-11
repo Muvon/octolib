@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.21.2] - 2026-05-11
+
+### 📋 Release Summary
+
+This release introduces support for image and video attachments via URL data across the LLM and OctoHub modules (28ab0012, d98f3f8e). These updates expand the library's multimodal capabilities, allowing users to process rich media content seamlessly within the provider framework.
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: support URL data for images and videos `28ab0012`
+- **octohub**: support image and video attachments `d98f3f8e`
+
 ## [0.21.1] - 2026-05-09
 
 ### 📋 Release Summary

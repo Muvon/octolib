@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.21.3] - 2026-05-12
+
+### 📋 Release Summary
+
+This release expands the core functionality of the octohub module by enabling full model capabilities across all supported providers (1f7aa094). These enhancements provide users with broader access to advanced model features, ensuring a more versatile and robust AI integration experience.
+
+
+### ✨ New Features & Enhancements
+
+- **octohub**: enable all model capabilities `1f7aa094`
+
 ## [0.21.2] - 2026-05-11
 
 ### 📋 Release Summary

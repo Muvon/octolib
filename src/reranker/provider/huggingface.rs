@@ -36,7 +36,7 @@ use candle_nn::VarBuilder;
 #[cfg(feature = "huggingface")]
 use candle_transformers::models::bert::{BertModel, Config as BertConfig};
 #[cfg(feature = "huggingface")]
-use hf_hub::{api::tokio::Api, Repo, RepoType};
+use hf_hub::{api::tokio::ApiBuilder, Repo, RepoType};
 #[cfg(feature = "huggingface")]
 use std::collections::HashMap;
 #[cfg(feature = "huggingface")]
@@ -68,7 +68,11 @@ impl CrossEncoderModel {
             .context("Failed to get HuggingFace cache directory")?;
         std::env::set_var("HF_HOME", &cache_dir);
 
-        let api = Api::new().context("Failed to initialize HuggingFace API")?;
+        // Disable hf-hub progress bars; octomind owns terminal UI.
+        let api = ApiBuilder::new()
+            .with_progress(false)
+            .build()
+            .context("Failed to initialize HuggingFace API")?;
         let repo = api.repo(Repo::new(model_name.to_string(), RepoType::Model));
 
         let config_path = repo

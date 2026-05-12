@@ -63,7 +63,7 @@ use candle_transformers::models::qwen2::{Config as Qwen2Config, Model as Qwen2Mo
 #[cfg(feature = "huggingface")]
 use candle_transformers::models::xlm_roberta::{Config as XLMRobertaConfig, XLMRobertaModel};
 #[cfg(feature = "huggingface")]
-use hf_hub::{api::tokio::Api, Repo, RepoType};
+use hf_hub::{api::tokio::ApiBuilder, Repo, RepoType};
 #[cfg(feature = "huggingface")]
 use jina_code_bert::JinaCodeBertModel;
 #[cfg(feature = "huggingface")]
@@ -222,8 +222,14 @@ impl HuggingFaceModel {
         // Set the HuggingFace cache directory via environment variable
         std::env::set_var("HF_HOME", &cache_dir);
 
-        // Download model files from HuggingFace Hub with proper error handling
-        let api = Api::new().context("Failed to initialize HuggingFace API")?;
+        // Download model files from HuggingFace Hub with proper error handling.
+        // Disable progress bars — callers wrap downloads in their own UI
+        // (octomind shows a generic "Working …" spinner; we don't want
+        // hf-hub's indicatif bar fighting with it for the terminal).
+        let api = ApiBuilder::new()
+            .with_progress(false)
+            .build()
+            .context("Failed to initialize HuggingFace API")?;
         let repo = api.repo(Repo::new(model_name.to_string(), RepoType::Model));
 
         // Download required files with enhanced error handling

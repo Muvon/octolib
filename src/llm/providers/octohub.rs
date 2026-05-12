@@ -78,12 +78,30 @@ impl AiProvider for OctoHubProvider {
         Ok(Self::api_key().unwrap_or_default())
     }
 
+    // OctoHub is a proxy fronting arbitrary (often custom) models — the real
+    // capability lives behind the proxy and is not knowable here. Advertise
+    // everything as supported so callers don't block on this layer; the
+    // upstream provider returns an explicit error if the underlying model
+    // can't honor a request.
     fn supports_caching(&self, _model: &str) -> bool {
-        true // Depends on underlying provider
+        true
     }
 
-    // supports_vision, supports_video, supports_structured_output, get_max_input_tokens
-    // are resolved via reference capabilities (trait defaults)
+    fn supports_vision(&self, _model: &str) -> bool {
+        true
+    }
+
+    fn supports_video(&self, _model: &str) -> bool {
+        true
+    }
+
+    fn supports_structured_output(&self, _model: &str) -> bool {
+        true
+    }
+
+    fn get_max_input_tokens(&self, _model: &str) -> usize {
+        1_048_576
+    }
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
         let base_url = Self::base_url();
@@ -636,13 +654,10 @@ mod tests {
     fn test_capabilities() {
         let provider = OctoHubProvider::new();
         assert!(provider.supports_caching("any"));
-        // Vision/video/structured_output now resolved via reference capabilities
-        assert!(provider.supports_vision("llava:latest"));
-        assert!(!provider.supports_vision("llama-3.1-8b"));
-        assert!(provider.supports_video("qwen-2.5-vl-72b"));
-        assert!(!provider.supports_video("llama-3.1-8b"));
-        assert!(provider.supports_structured_output("llama-3.1-8b"));
-        assert_eq!(provider.get_max_input_tokens("llama-3.1-8b"), 131_072);
+        assert!(provider.supports_vision("any"));
+        assert!(provider.supports_video("any"));
+        assert!(provider.supports_structured_output("any"));
+        assert_eq!(provider.get_max_input_tokens("any"), 1_048_576);
     }
 
     #[test]

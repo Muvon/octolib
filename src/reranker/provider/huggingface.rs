@@ -253,11 +253,7 @@ impl CrossEncoderModel {
 
         let token_ids = encoding.get_ids();
         let token_type_ids = encoding.get_type_ids();
-        let attention_mask_vec: Vec<u32> = encoding
-            .get_attention_mask()
-            .iter()
-            .map(|&m| m as u32)
-            .collect();
+        let attention_mask_vec = encoding.get_attention_mask().to_vec();
 
         let input_ids = Tensor::new(token_ids, &self.device)?.unsqueeze(0)?;
         let token_type_ids_tensor = Tensor::new(token_type_ids, &self.device)?.unsqueeze(0)?;
@@ -272,8 +268,7 @@ impl CrossEncoderModel {
                 // Pooler: take [CLS] hidden, project + tanh.
                 let cls = hidden.narrow(1, 0, 1)?.squeeze(1)?; // (1, hidden_size)
                 let pooled = b.pooler.forward(&cls)?.tanh()?; // (1, hidden_size)
-                let logits = b.classifier.forward(&pooled)?; // (1, num_labels)
-                logits
+                b.classifier.forward(&pooled)? // (1, num_labels)
             }
 
             Backend::XLMRoberta(m) => {

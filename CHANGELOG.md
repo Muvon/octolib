@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.21.4] - 2026-05-13
+
+### 📋 Release Summary
+
+This release expands HuggingFace reranker capabilities by adding XLM-RoBERTa support and normalizing output scores for better consistency (e3f88407, 34d973ad). Additionally, the user experience has been improved by streamlining the model download process and disabling unnecessary progress bars (ac109a11).
+
+
+### ✨ New Features & Enhancements
+
+- **reranker**: apply sigmoid to huggingface scores `e3f88407`
+- **reranker**: add XLM-RoBERTa support for HuggingFace `34d973ad`
+- **huggingface**: disable hub progress bars `ac109a11`
+
 ## [0.21.3] - 2026-05-12
 
 ### 📋 Release Summary

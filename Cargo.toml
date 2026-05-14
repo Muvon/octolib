@@ -65,4 +65,3 @@ opt-level = "z"
 lto = "thin"           # faster than "fat" lto, still significant gains
 codegen-units = 1      # max optimization, slower compile
 strip = "symbols"
-

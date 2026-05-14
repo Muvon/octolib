@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.21.5] - 2026-05-14
+
+### 📋 Release Summary
+
+This release improves overall system performance through optimized build profiles and updated dependencies for the Candle engine (f8ad2f76). Additionally, the reranker module has been refined for more efficient data processing and streamlined logic (a12d9b2c, 1fe1108e).
+
+
+### 🔧 Improvements & Optimizations
+
+- **project**: remove trailing newline in Cargo.toml `1fe1108e`
+- **candle**: optimize build profile and update dependencies `f8ad2f76`
+- **reranker**: simplify tensor conversion and return logic `a12d9b2c`
+
 ## [0.21.4] - 2026-05-13
 
 ### 📋 Release Summary

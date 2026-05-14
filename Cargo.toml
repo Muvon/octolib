@@ -32,7 +32,7 @@ anyhow = "1.0.102"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 reqwest = { version = "0.12", features = ["json", "rustls-tls", "gzip", "brotli", "zstd", "deflate", "http2", "charset"], default-features = false }
-tokio = { version = "1.50.0", features = ["time", "sync", "macros", "rt-multi-thread"] }
+tokio = { version = "1.52.3", features = ["time", "sync", "macros", "rt-multi-thread"] }
 arc-swap = "1"
 base64 = "0.22"
 thiserror = "2.0.18"
@@ -44,7 +44,7 @@ jsonwebtoken = "10"
 tiktoken-rs = "0.9.1"
 
 # Optional embedding provider dependencies
-fastembed = { version = "5.13.0", default-features = false, features = ["hf-hub-rustls-tls", "ort-download-binaries-rustls-tls"], optional = true }
+fastembed = { version = "5.13.4", default-features = false, features = ["hf-hub-rustls-tls", "ort-download-binaries-rustls-tls"], optional = true }
 # Candle dependencies for HuggingFace support (optional)
 # Pinned to 0.10.2 to match fastembed's candle version (qwen3 feature)
 candle-core = { version = "0.10.2", optional = true }
@@ -53,7 +53,7 @@ candle-transformers = { version = "0.10.2", optional = true }
 tokenizers = { version = "0.22.2", optional = true }
 # HuggingFace Hub - use rustls-tls to avoid native-tls dependency
 # Pinned to 0.4.x to share single version with fastembed (which uses hf-hub 0.4.1)
-hf-hub = { version = "0.4.1", default-features = false, features = ["tokio", "rustls-tls"], optional = true }
+hf-hub = { version = "0.4.3", default-features = false, features = ["tokio", "rustls-tls"], optional = true }
 
 [dev-dependencies]
 serial_test = "3.4.0"
@@ -61,30 +61,8 @@ tracing-subscriber = "0.3"
 
 # Release build: optimized for distribution (no native-specific instructions)
 [profile.release]
-opt-level = 3
+opt-level = "z"
 lto = "thin"           # faster than "fat" lto, still significant gains
 codegen-units = 1      # max optimization, slower compile
 strip = "symbols"
 
-# Local release build: maximally optimized for the current machine
-# Use with: cargo build --profile release-local
-[profile.release-local]
-inherits = "release"
-lto = "fat"
-strip = false          # keep symbols for profiling
-[profile.release-local.build-override]
-opt-level = 3
-
-[profile.release-local.package."*"]
-opt-level = 3
-
-
-[patch.crates-io]
-# Patch hf-hub 0.4.x to use indicatif 0.18 (eliminates number_prefix unmaintained warning)
-# This commit updates indicatif from 0.17 to 0.18 while keeping crate version at 0.4.3
-# Both octolib and fastembed share this single patched version
-# See: https://github.com/huggingface/hf-hub/pull/126
-hf-hub = { git = "https://github.com/huggingface/hf-hub", rev = "65fb0347d9" }
-# Replace unmaintained paste (RUSTSEC-2024-0436) with paste-complete shim
-# paste-complete is a fork with identical code and an active maintainer
-paste = { path = "patches/paste" }

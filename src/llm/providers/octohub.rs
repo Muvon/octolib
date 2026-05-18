@@ -362,11 +362,20 @@ impl AiProvider for OctoHubProvider {
             }
         }
 
-        // Build usage from OctoHub's flat usage format
+        // Build usage from OctoHub's flat usage format.
+        //
+        // The OctoHub server forwards `input_tokens` straight from the
+        // upstream provider's octolib `TokenUsage`, which by convention is
+        // ALREADY CLEAN (no cache_read, no cache_write — see
+        // `octolib/src/llm/types.rs::TokenUsage::input_tokens`). Do NOT
+        // subtract cache_read_tokens here; that double-counts and makes the
+        // client believe no fresh input flowed whenever caching is active,
+        // which breaks the cost breakdown display (input line skipped) and
+        // skews cache_efficiency math.
         let usage = &api_response.usage;
         let cache_read_tokens = usage.cache_read_tokens.unwrap_or(0);
         let cache_write_tokens = usage.cache_write_tokens.unwrap_or(0);
-        let input_tokens_clean = usage.input_tokens.saturating_sub(cache_read_tokens);
+        let input_tokens_clean = usage.input_tokens;
         let reasoning_tokens = usage.reasoning_tokens.unwrap_or(0);
 
         let thinking = reasoning_content.map(|rc| ThinkingBlock {

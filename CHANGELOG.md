@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.21.6] - 2026-05-19
+
+### 📋 Release Summary
+
+This release improves LLM reliability and accuracy by resolving issues with token counting, conversation history management, and API alignment (04a5091f, 6169d61b, 98746a86). Additionally, internal CI workflows have been optimized for better maintainability (cd09de78).
+
+
+### 🔧 Improvements & Optimizations
+
+- **workflow**: migrate pr brief to reusable workflow `cd09de78`
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: align octohub tests with api signature `04a5091f`
+- **llm**: prevent compression summaries from blocking history `6169d61b`
+- **llm**: prevent double counting cached tokens `98746a86`
+
 ## [0.21.5] - 2026-05-14
 
 ### 📋 Release Summary

@@ -735,7 +735,7 @@ mod tests {
     fn test_messages_to_input_initial() {
         let messages = vec![Message::system("You are helpful."), Message::user("Hello!")];
 
-        let input = messages_to_input(&messages, false);
+        let input = messages_to_input(&messages, None);
         // System messages go to instructions, not input
         assert_eq!(input.len(), 1);
         assert_eq!(input[0]["type"], "message");
@@ -753,7 +753,7 @@ mod tests {
             Message::user("Tell me more."),
         ];
 
-        let input = messages_to_input(&messages, true);
+        let input = messages_to_input(&messages, Some("resp_abc"));
         assert_eq!(input.len(), 1);
         assert_eq!(input[0]["type"], "message");
         assert_eq!(input[0]["role"], "user");
@@ -775,7 +775,7 @@ mod tests {
             Message::tool("72°F sunny", "call_xyz", "get_weather"),
         ];
 
-        let input = messages_to_input(&messages, true);
+        let input = messages_to_input(&messages, Some("resp_123"));
         assert_eq!(input.len(), 1);
         assert_eq!(input[0]["type"], "function_call_output");
         assert_eq!(input[0]["call_id"], "call_xyz");
@@ -804,7 +804,7 @@ mod tests {
             Message::user("Now write me a poem about it."),
         ];
 
-        let input = messages_to_input(&messages, true);
+        let input = messages_to_input(&messages, Some("resp_123"));
         assert_eq!(
             input.len(),
             2,

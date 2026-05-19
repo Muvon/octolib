@@ -107,21 +107,21 @@ impl AiProvider for OctoHubProvider {
         let base_url = Self::base_url();
         let api_url = format!("{}/v1/completions", base_url.trim_end_matches('/'));
 
-        // Resolve previous_response_id: explicit param > last message with id
-        let previous_id = params.previous_id.clone().or_else(|| {
-            params
-                .messages
-                .iter()
-                .rev()
-                .find(|m| m.id.is_some())
-                .and_then(|m| m.id.clone())
-        });
+        // Resolve previous_response_id: explicit param > last non-compression assistant id.
+        // Compression summaries inherit the previous OctoHub completion id only so
+        // local clients can keep continuity metadata. For OctoHub itself they are
+        // a new compacted transcript boundary; treating that id as already-seen
+        // makes classic upstream providers (Z.ai, etc.) reconstruct the old
+        // pre-compression chain and lose the synthetic summary.
+        let previous_id = resolve_previous_id(&params.messages, params.previous_id.clone());
 
         // Extract system instructions from messages
         let instructions = extract_instructions(&params.messages);
 
-        // Convert messages to input array
-        let input_array = messages_to_input(&params.messages, previous_id.is_some());
+        // Convert messages to input array. Use the selected previous_id, not just a
+        // boolean, so a compression summary that inherited an id but is not used as
+        // previous_completion_id is still sent inline to OctoHub.
+        let input_array = messages_to_input(&params.messages, previous_id.as_deref());
 
         // Build request body
         let mut request_body = serde_json::json!({
@@ -450,14 +450,30 @@ fn extract_instructions(messages: &[Message]) -> Option<serde_json::Value> {
     }
 }
 
+fn is_compression_summary(msg: &Message) -> bool {
+    msg.role == "assistant" && msg.name.as_deref() == Some("plan_compression")
+}
+
+fn resolve_previous_id(messages: &[Message], explicit: Option<String>) -> Option<String> {
+    explicit.or_else(|| {
+        messages
+            .iter()
+            .rev()
+            .find(|m| m.role == "assistant" && m.id.is_some() && !is_compression_summary(m))
+            .and_then(|m| m.id.clone())
+    })
+}
+
 /// Convert conversation messages to OctoHub `input` array.
 ///
-/// When `has_previous_response` is true, only sends NEW messages after the
-/// last assistant message — both tool results AND user follow-ups, in the
-/// order they appear. The server reconstructs full history from
-/// `previous_completion_id` and treats this list as new input items.
+/// When `previous_id` is present, sends messages after the assistant turn with
+/// that exact id — both tool results AND user follow-ups, in the order they
+/// appear. The server reconstructs history up to `previous_completion_id` and
+/// treats this list as new input items.
 ///
-/// When false, sends all non-system messages as the initial input.
+/// When absent, sends the local compacted transcript inline. Assistant text is
+/// included so compression summaries survive when OctoHub proxies to classic
+/// chat-completion providers such as Z.ai.
 ///
 /// Why both tool results AND user messages must be sent together:
 /// after a cancelled multi-turn (assistant emitted tool_calls, tool_result
@@ -469,46 +485,47 @@ fn extract_instructions(messages: &[Message]) -> Option<serde_json::Value> {
 /// reaches the model and the conversation continues "off-track". Octohub's
 /// `push_items` accepts interleaved `function_call_output` and `message`
 /// items in one input array, so we forward them together.
-fn messages_to_input(messages: &[Message], has_previous_response: bool) -> Vec<serde_json::Value> {
-    if has_previous_response {
-        // Find the last assistant message with an ID; everything after it
-        // is what the server hasn't seen yet.
-        let last_assistant_idx = messages
+fn messages_to_input(messages: &[Message], previous_id: Option<&str>) -> Vec<serde_json::Value> {
+    if let Some(previous_id) = previous_id {
+        let previous_assistant_idx = messages
             .iter()
             .enumerate()
             .rev()
-            .find(|(_, m)| m.role == "assistant" && m.id.is_some())
+            .find(|(_, m)| m.role == "assistant" && m.id.as_deref() == Some(previous_id))
             .map(|(idx, _)| idx);
 
-        let start = last_assistant_idx.map(|idx| idx + 1).unwrap_or(0);
+        let start = previous_assistant_idx.map(|idx| idx + 1).unwrap_or(0);
 
         messages
             .iter()
             .skip(start)
-            .filter_map(|msg| match msg.role.as_str() {
-                "tool" => {
-                    let call_id = msg.tool_call_id.clone().unwrap_or_default();
-                    Some(serde_json::json!({
-                        "type": "function_call_output",
-                        "call_id": call_id,
-                        "output": msg.content
-                    }))
-                }
-                "user" => Some(user_message_value(msg)),
-                // System is already in `instructions`; assistant turns came
-                // from the server and don't need to be echoed back.
-                _ => None,
-            })
+            .filter_map(input_item_for_message)
             .collect()
     } else {
-        // Initial request: send all non-system messages
-        messages
-            .iter()
-            .filter_map(|msg| match msg.role.as_str() {
-                "user" => Some(user_message_value(msg)),
-                _ => None,
-            })
-            .collect()
+        // Initial or locally-compacted request: send the local transcript, not
+        // just user turns. This is required after compression because the
+        // synthetic assistant summary is the context replacement.
+        messages.iter().filter_map(input_item_for_message).collect()
+    }
+}
+
+fn input_item_for_message(msg: &Message) -> Option<serde_json::Value> {
+    match msg.role.as_str() {
+        "tool" => {
+            let call_id = msg.tool_call_id.clone().unwrap_or_default();
+            Some(serde_json::json!({
+                "type": "function_call_output",
+                "call_id": call_id,
+                "output": msg.content
+            }))
+        }
+        "user" => Some(user_message_value(msg)),
+        "assistant" if !msg.content.is_empty() => Some(serde_json::json!({
+            "type": "message",
+            "role": "assistant",
+            "content": msg.content
+        })),
+        _ => None,
     }
 }
 

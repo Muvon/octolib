@@ -403,14 +403,27 @@ impl AiProvider for OctoHubProvider {
         let exchange =
             ProviderExchange::new(request_body, response_json, Some(token_usage), "octohub");
 
-        let structured_output = shared::parse_structured_output_from_text(&content);
+        // OctoHub ≥ v0.2.0 mirrors `structured_output` from the upstream
+        // ProviderResponse on the wire — prefer it when present, since the
+        // upstream provider may have validated the JSON against the schema
+        // server-side and the canonical typed value is what we want here.
+        //
+        // Older OctoHub servers (which dropped the field) trigger the
+        // text-parse fallback so this client keeps working against them.
+        // The text-parse path also recovers from upstream providers that
+        // returned bare JSON without populating `structured_output` itself.
+        let structured_output = api_response
+            .structured_output
+            .or_else(|| shared::parse_structured_output_from_text(&content));
 
         Ok(ProviderResponse {
             content,
             thinking,
             exchange,
             tool_calls,
-            finish_reason: None, // Responses API doesn't have finish_reason
+            // Mirror the upstream `finish_reason` (now surfaced by OctoHub).
+            // `None` from older servers leaves this absent — same as before.
+            finish_reason: api_response.finish_reason,
             structured_output,
             id: api_response.id,
         })
@@ -612,6 +625,18 @@ struct OctoHubResponse {
     id: Option<String>,
     output: Vec<OutputItem>,
     usage: OctoHubUsage,
+    /// Schema-validated JSON from the upstream provider, surfaced by OctoHub
+    /// since v0.2.0. When present, callers MUST prefer this over re-parsing
+    /// `output[].content[].text` — the upstream may have validated the JSON
+    /// against the schema server-side, so this is the canonical typed result.
+    /// `None` from older OctoHub servers triggers the text-parse fallback
+    /// path for backwards compatibility.
+    #[serde(default)]
+    structured_output: Option<serde_json::Value>,
+    /// Upstream finish_reason (`stop`, `length`, `tool_calls`,
+    /// `content_filter`, …). Surfaced by OctoHub since v0.2.0.
+    #[serde(default)]
+    finish_reason: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]

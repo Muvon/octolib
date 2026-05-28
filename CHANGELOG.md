@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.21.7] - 2026-05-28
+
+### 📋 Release Summary
+
+This release expands LLM capabilities with the addition of Claude Opus 4.8 support (f0c9e2ef). Additionally, OctoHub now supports structured outputs and detailed finish reasons for improved response control (9fd4b810).
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: add support for claude-opus-4-8 `f0c9e2ef`
+- **llm**: support OctoHub structured output and finish reason `9fd4b810`
+
 ## [0.21.6] - 2026-05-19
 
 ### 📋 Release Summary

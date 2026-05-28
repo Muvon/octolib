@@ -34,6 +34,8 @@ use std::env;
 /// Prices sourced from Anthropic pricing docs (verified Mar 18, 2026).
 /// Format: (model, input, output, cache_write, cache_read)
 const PRICING: &[PricingTuple] = &[
+    // Claude 4.8
+    ("claude-opus-4-8", 5.00, 25.00, 6.25, 0.50),
     // Claude 4.7
     ("claude-opus-4-7", 5.00, 25.00, 6.25, 0.50),
     // Claude 4.6
@@ -85,11 +87,12 @@ struct CacheTokenUsage {
 }
 
 /// Models that reject ALL sampling parameters (temperature, top_p, top_k).
-const NO_SAMPLING_MODELS: &[&str] = &["opus-4-7"];
+const NO_SAMPLING_MODELS: &[&str] = &["opus-4-8", "opus-4-7"];
 
 /// Models that support extended thinking via the `thinking` block.
 /// Substring match against `params.model`. Order matters only for documentation.
 const THINKING_MODELS: &[&str] = &[
+    "opus-4-8",
     "opus-4-7",
     "opus-4-6",
     "opus-4-5",
@@ -106,7 +109,7 @@ const THINKING_MODELS: &[&str] = &[
 /// Models that support (or require) adaptive thinking via `thinking.type: "adaptive"`.
 /// Opus 4.7 rejects manual `thinking.type: "enabled"` outright; on Opus 4.6 and
 /// Sonnet 4.6, manual mode is deprecated and will be removed.
-const ADAPTIVE_THINKING_MODELS: &[&str] = &["opus-4-7", "opus-4-6", "sonnet-4-6"];
+const ADAPTIVE_THINKING_MODELS: &[&str] = &["opus-4-8", "opus-4-7", "opus-4-6", "sonnet-4-6"];
 
 /// Models where adaptive thinking is the ONLY accepted mode. Manual
 /// `thinking.type: "enabled"` returns a 400. These models also default
@@ -272,8 +275,8 @@ impl AiProvider for AnthropicProvider {
     fn get_max_input_tokens(&self, model: &str) -> usize {
         // Anthropic model context window limits (case-insensitive)
         let model_lower = normalize_model_name(model);
-        if model_lower.contains("claude-opus-4-7") {
-            // Claude Opus 4.7 has 1M context window
+        if model_lower.contains("claude-opus-4-8") || model_lower.contains("claude-opus-4-7") {
+            // Claude Opus 4.8 and 4.7 have 1M context window
             1_000_000
         } else if model_lower.contains("claude-opus-4")
             || model_lower.contains("claude-sonnet-4")

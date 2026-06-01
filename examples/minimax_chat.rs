@@ -26,11 +26,14 @@
 //!    ```
 //!
 //! **Supported Models:**
+//! - MiniMax-M3: Frontier coding, 1M context, natively multimodal ($0.6/$2.4 per 1M tokens)
+//! - MiniMax-M3-highspeed: Same quality, faster inference ($0.6/$2.4 per 1M tokens)
 //! - MiniMax-M2.1: Powerful multi-language programming capabilities ($0.3/$1.2 per 1M tokens)
 //! - MiniMax-M2.1-lightning: Faster and more agile ($0.3/$2.4 per 1M tokens)
 //! - MiniMax-M2: Agentic capabilities, advanced reasoning ($0.3/$1.2 per 1M tokens)
 //!
 //! **Features:**
+//! - Multimodal (M3): native image and video input
 //! - Thinking blocks: MiniMax can show its reasoning process
 //! - Tool use: Function calling support
 //! - Prompt caching: Reduce costs for repeated prompts
@@ -62,7 +65,9 @@ async fn main() -> anyhow::Result<()> {
             eprintln!("2. Set the environment variable:");
             eprintln!("   export MINIMAX_API_KEY=\"your-api-key-here\"");
             eprintln!("\nSupported models:");
-            eprintln!("   - minimax:MiniMax-M2.5 (recommended - latest)");
+            eprintln!("   - minimax:MiniMax-M3 (recommended - latest, multimodal)");
+            eprintln!("   - minimax:MiniMax-M3-highspeed (faster)");
+            eprintln!("   - minimax:MiniMax-M2.5");
             eprintln!("   - minimax:MiniMax-M2.5-lightning (faster)");
             eprintln!("   - minimax:MiniMax-M2.1");
             eprintln!("   - minimax:MiniMax-M2.1-lightning (faster)");
@@ -71,8 +76,8 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    // Create provider with MiniMax-M2.5 model
-    let (provider, model) = ProviderFactory::get_provider_for_model("minimax:MiniMax-M2.5")?;
+    // Create provider with MiniMax-M3 model (latest, multimodal)
+    let (provider, model) = ProviderFactory::get_provider_for_model("minimax:MiniMax-M3")?;
 
     println!("\n📝 Provider: {}", provider.name());
     println!("🤖 Model: {}", model);

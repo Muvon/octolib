@@ -168,6 +168,9 @@ const REFERENCE_CAPABILITIES: &[RefCapsTuple] = &[
     ("glm-ocr", true, false, false, 128_000),
     ("glm-4", false, false, true, 128_000),
     // --- MiniMax (most specific first) ---
+    // M3 is natively multimodal (image + video); earlier M2.x models are text-only.
+    ("minimax-m3-highspeed", true, true, false, 1_000_000),
+    ("minimax-m3", true, true, false, 1_000_000),
     ("minimax-m2.7-highspeed", false, false, false, 1_000_000),
     ("minimax-m2.7", false, false, false, 1_000_000),
     ("minimax-m2.5-highspeed", false, false, false, 1_000_000),
@@ -571,6 +574,17 @@ mod tests {
 
     #[test]
     fn test_minimax_variants() {
+        // M3 is multimodal: image + video
+        let m3 = get_reference_capabilities("MiniMax-M3").unwrap();
+        assert!(m3.vision);
+        assert!(m3.video);
+        assert_eq!(m3.max_input_tokens, 1_000_000);
+        assert_eq!(
+            get_reference_capabilities("MiniMax-M3-highspeed")
+                .unwrap()
+                .max_input_tokens,
+            1_000_000
+        );
         assert_eq!(
             get_reference_capabilities("MiniMax-M2.7-highspeed")
                 .unwrap()

@@ -210,6 +210,8 @@ const REFERENCE_PRICING: &[RefPricingTuple] = &[
     ("glm-ocr", 0.03, 0.03, 0.00, 0.00),
     ("glm-4", 0.60, 2.20, 0.60, 0.06),
     // --- MiniMax (most specific first) ---
+    ("minimax-m3-highspeed", 0.60, 2.40, 0.75, 0.06),
+    ("minimax-m3", 0.60, 2.40, 0.75, 0.06),
     ("minimax-m2.7-highspeed", 0.60, 2.40, 0.75, 0.06),
     ("minimax-m2.7", 0.30, 1.20, 0.375, 0.06),
     ("minimax-m2.5-highspeed", 0.60, 2.40, 0.75, 0.03),

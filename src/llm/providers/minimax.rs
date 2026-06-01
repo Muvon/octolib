@@ -19,8 +19,8 @@ use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, SamplingSupport,
-    ThinkingBlock, TokenUsage, ToolCall,
+    ChatCompletionParams, ImageData, Message, ProviderExchange, ProviderResponse, SamplingSupport,
+    ThinkingBlock, TokenUsage, ToolCall, VideoData,
 };
 use crate::llm::utils::{
     get_model_pricing, is_model_in_pricing_table, normalize_model_name, PricingTuple,
@@ -31,10 +31,14 @@ use serde::{Deserialize, Serialize};
 use std::env;
 
 /// MiniMax pricing constants (per 1M tokens in USD)
-/// Source: https://www.minimax.io/platform/price (verified Mar 18, 2026)
+/// Source: https://www.minimax.io/platform/price (M3 verified Jun 1, 2026)
 /// Format: (model, input, output, cache_write, cache_read)
 const PRICING: &[PricingTuple] = &[
-    // MiniMax M2.7 (latest generation)
+    // MiniMax M3 (latest generation, natively multimodal — image + video input)
+    // Standard rate; a temporary launch promo halves these to 0.30/1.20.
+    ("MiniMax-M3-highspeed", 0.60, 2.40, 0.75, 0.06),
+    ("MiniMax-M3", 0.60, 2.40, 0.75, 0.06),
+    // MiniMax M2.7
     ("MiniMax-M2.7-highspeed", 0.60, 2.40, 0.75, 0.06),
     ("MiniMax-M2.7", 0.30, 1.20, 0.375, 0.06),
     // MiniMax M2.5
@@ -142,8 +146,14 @@ impl AiProvider for MinimaxProvider {
         true // MiniMax supports prompt caching
     }
 
-    fn supports_vision(&self, _model: &str) -> bool {
-        false // MiniMax doesn't support vision yet according to docs
+    fn supports_vision(&self, model: &str) -> bool {
+        // Only MiniMax-M3 is natively multimodal; earlier M2.x models are text-only
+        normalize_model_name(model).contains("minimax-m3")
+    }
+
+    fn supports_video(&self, model: &str) -> bool {
+        // MiniMax-M3 accepts native video input on the Anthropic-compatible endpoint
+        normalize_model_name(model).contains("minimax-m3")
     }
 
     fn supports_structured_output(&self, _model: &str) -> bool {
@@ -165,7 +175,10 @@ impl AiProvider for MinimaxProvider {
     fn get_max_input_tokens(&self, model: &str) -> usize {
         // MiniMax model context window limits (case-insensitive)
         let model_lower = normalize_model_name(model);
-        if model_lower.contains("minimax-m2.1") || model_lower.contains("minimax-m2") {
+        if model_lower.contains("minimax-m3")
+            || model_lower.contains("minimax-m2.1")
+            || model_lower.contains("minimax-m2")
+        {
             1_000_000 // 1M context window
         } else {
             128_000 // Default fallback
@@ -326,6 +339,10 @@ enum MinimaxContent {
         #[serde(skip_serializing_if = "Option::is_none")]
         cache_control: Option<serde_json::Value>,
     },
+    #[serde(rename = "image")]
+    Image { source: serde_json::Value },
+    #[serde(rename = "video")]
+    Video { source: serde_json::Value },
     #[serde(rename = "tool_result")]
     ToolResult {
         tool_use_id: String,
@@ -433,15 +450,59 @@ fn convert_messages(messages: &[Message]) -> Vec<MinimaxMessage> {
                     });
                 } else {
                     // Handle regular user and assistant messages
-                    let content = vec![MinimaxContent::Text {
-                        text: message.content.clone(),
-                        cache_control: shared::maybe_ephemeral_cache_control(message.cached),
-                    }];
+                    let mut content = Vec::new();
 
-                    result.push(MinimaxMessage {
-                        role: message.role.clone(),
-                        content,
-                    });
+                    // Skip empty text blocks — Anthropic-compatible APIs reject them
+                    if !message.content.trim().is_empty() {
+                        content.push(MinimaxContent::Text {
+                            text: message.content.clone(),
+                            cache_control: shared::maybe_ephemeral_cache_control(message.cached),
+                        });
+                    }
+
+                    // Add image attachments (MiniMax-M3 multimodal)
+                    if let Some(images) = &message.images {
+                        for image in images {
+                            let source = match &image.data {
+                                ImageData::Base64(data) => serde_json::json!({
+                                    "type": "base64",
+                                    "media_type": image.media_type,
+                                    "data": data,
+                                }),
+                                ImageData::Url(url) => serde_json::json!({
+                                    "type": "url",
+                                    "url": url,
+                                }),
+                            };
+                            content.push(MinimaxContent::Image { source });
+                        }
+                    }
+
+                    // Add video attachments (MiniMax-M3 multimodal)
+                    if let Some(videos) = &message.videos {
+                        for video in videos {
+                            let source = match &video.data {
+                                VideoData::Base64(data) => serde_json::json!({
+                                    "type": "base64",
+                                    "media_type": video.media_type,
+                                    "data": data,
+                                }),
+                                VideoData::Url(url) => serde_json::json!({
+                                    "type": "url",
+                                    "url": url,
+                                }),
+                            };
+                            content.push(MinimaxContent::Video { source });
+                        }
+                    }
+
+                    // Skip messages with no content blocks — an empty array is invalid
+                    if !content.is_empty() {
+                        result.push(MinimaxMessage {
+                            role: message.role.clone(),
+                            content,
+                        });
+                    }
                 }
             }
         }
@@ -646,6 +707,8 @@ mod tests {
     #[test]
     fn test_model_support() {
         let provider = MinimaxProvider::new();
+        assert!(provider.supports_model("MiniMax-M3"));
+        assert!(provider.supports_model("MiniMax-M3-highspeed"));
         assert!(provider.supports_model("MiniMax-M2.5"));
         assert!(provider.supports_model("MiniMax-M2.5-highspeed"));
         assert!(provider.supports_model("MiniMax-M2.5-lightning"));
@@ -677,6 +740,14 @@ mod tests {
 
     #[test]
     fn test_cost_calculation() {
+        // Test MiniMax-M3: $0.60 input, $2.40 output (standard rate)
+        let cost = calculate_minimax_cost("MiniMax-M3", 1_000_000, 1_000_000, 0, 0);
+        assert_eq!(cost, Some(3.00)); // 0.60 + 2.40
+
+        // Test MiniMax-M3-highspeed: same standard rate
+        let cost = calculate_minimax_cost("MiniMax-M3-highspeed", 1_000_000, 1_000_000, 0, 0);
+        assert_eq!(cost, Some(3.00)); // 0.60 + 2.40
+
         // Test MiniMax-M2.5: $0.30 input, $1.20 output (Feb 2026)
         let cost = calculate_minimax_cost("MiniMax-M2.5", 1_000_000, 1_000_000, 0, 0);
         assert_eq!(cost, Some(1.50)); // 0.30 + 1.20
@@ -707,6 +778,13 @@ mod tests {
         let provider = MinimaxProvider::new();
         assert!(provider.supports_caching("MiniMax-M2.1"));
         assert!(!provider.supports_vision("MiniMax-M2.1"));
+        assert!(!provider.supports_video("MiniMax-M2.1"));
         assert!(!provider.supports_structured_output("MiniMax-M2.1"));
+
+        // MiniMax-M3 is natively multimodal (image + video)
+        assert!(provider.supports_vision("MiniMax-M3"));
+        assert!(provider.supports_vision("MiniMax-M3-highspeed"));
+        assert!(provider.supports_video("MiniMax-M3"));
+        assert!(provider.supports_caching("MiniMax-M3"));
     }
 }

@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.21.8] - 2026-06-01
+
+### 📋 Release Summary
+
+This release expands provider support by adding Minimax M3 and M3-highspeed models (18eb2390).
+
+
+### ✨ New Features & Enhancements
+
+- **minimax**: add M3 and M3-highspeed models `18eb2390`
+
 ## [0.21.7] - 2026-05-28
 
 ### 📋 Release Summary

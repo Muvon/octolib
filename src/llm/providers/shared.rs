@@ -35,12 +35,13 @@ use std::time::Duration;
 ///
 /// # HTTP stack tuning
 ///
-/// No request timeout is set — LLM responses can legitimately take minutes.
-/// Per-call timeouts are applied via `apply_request_timeout()` when callers
-/// pass `request_timeout`. Instead the client is configured for reliability
-/// and bandwidth efficiency:
+/// Total request timeouts are applied per call via `apply_request_timeout()`.
+/// The client itself only limits connection establishment, so slow LLM
+/// generation is not affected by the connect timeout.
 ///
 /// **Transport / pool reliability**
+/// - `connect_timeout(20s)`: bound DNS, TCP, and TLS establishment without
+///   limiting how long an established LLM request may run
 /// - `tcp_keepalive(30s)`: OS-level probes detect dead connections before reuse
 /// - `tcp_nodelay(true)`: disable Nagle's algorithm — request bodies ship
 ///   immediately instead of waiting for ACK coalescing (lower latency)
@@ -68,6 +69,7 @@ static HTTP_CLIENT: LazyLock<ArcSwap<reqwest::Client>> =
 
 fn build_http_client() -> reqwest::Client {
     reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(20))
         .tcp_keepalive(Duration::from_secs(30))
         .tcp_nodelay(true)
         .pool_idle_timeout(Duration::from_secs(30))

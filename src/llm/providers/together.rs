@@ -356,29 +356,23 @@ async fn execute_together_request(
             let request_body = request_body.clone();
 
             Box::pin(async move {
-                let response = shared::apply_request_timeout(
-                    client
-                        .post(TOGETHER_API_URL)
-                        .header("Content-Type", "application/json")
-                        .header("Authorization", format!("Bearer {}", api_key)),
-                    request_timeout,
-                )
-                .json(&request_body)
-                .send()
-                .await
-                .map_err(anyhow::Error::from)?;
+                let req = client
+                    .post(TOGETHER_API_URL)
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", format!("Bearer {}", api_key))
+                    .json(&request_body);
 
-                if retry::is_retryable_status(response.status().as_u16()) {
-                    let status = response.status();
-                    let error_text = response.text().await.unwrap_or_default();
+                let captured = shared::send_and_read(req, request_timeout).await?;
+
+                if retry::is_retryable_status(captured.status.as_u16()) {
                     return Err(anyhow::anyhow!(
                         "Together.ai API error {}: {}",
-                        status,
-                        error_text
+                        captured.status,
+                        captured.body
                     ));
                 }
 
-                Ok(response)
+                Ok(captured)
             })
         },
         max_retries,
@@ -397,27 +391,15 @@ async fn execute_together_request(
 
     let request_time_ms = start_time.elapsed().as_millis() as u64;
 
-    if !response.status().is_success() {
-        let status = response.status();
-        let error_text = retry::cancellable(
-            async { response.text().await.map_err(anyhow::Error::from) },
-            cancellation_token,
-            || ProviderError::Cancelled.into(),
-        )
-        .await?;
+    if !response.status.is_success() {
         return Err(anyhow::anyhow!(
             "Together.ai API error {}: {}",
-            status,
-            error_text
+            response.status,
+            response.body
         ));
     }
 
-    let response_text = retry::cancellable(
-        async { response.text().await.map_err(anyhow::Error::from) },
-        cancellation_token,
-        || ProviderError::Cancelled.into(),
-    )
-    .await?;
+    let response_text = response.body;
     let together_response: TogetherResponse = serde_json::from_str(&response_text)?;
 
     let choice = together_response

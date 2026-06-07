@@ -387,30 +387,24 @@ impl AiProvider for DeepSeekProvider {
                 let api_key = api_key.clone();
                 let request = request.clone();
                 Box::pin(async move {
-                    let response = shared::apply_request_timeout(
-                        client
-                            .post("https://api.deepseek.com/chat/completions")
-                            .header("Authorization", format!("Bearer {}", api_key))
-                            .header("Content-Type", "application/json")
-                            .json(&request),
-                        request_timeout,
-                    )
-                    .send()
-                    .await
-                    .map_err(anyhow::Error::from)?;
+                    let req = client
+                        .post("https://api.deepseek.com/chat/completions")
+                        .header("Authorization", format!("Bearer {}", api_key))
+                        .header("Content-Type", "application/json")
+                        .json(&request);
+
+                    let captured = shared::send_and_read(req, request_timeout).await?;
 
                     // Return Err for retryable HTTP errors so the retry loop catches them
-                    if retry::is_retryable_status(response.status().as_u16()) {
-                        let status = response.status();
-                        let error_text = response.text().await.unwrap_or_default();
+                    if retry::is_retryable_status(captured.status.as_u16()) {
                         return Err(anyhow::anyhow!(
                             "DeepSeek API error {}: {}",
-                            status,
-                            error_text
+                            captured.status,
+                            captured.body
                         ));
                     }
 
-                    Ok(response)
+                    Ok(captured)
                 })
             },
             params.max_retries,
@@ -428,29 +422,17 @@ impl AiProvider for DeepSeekProvider {
         .await?;
         let request_time_ms = start_time.elapsed().as_millis() as u64;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let error_text = retry::cancellable(
-                async { response.text().await.map_err(anyhow::Error::from) },
-                params.cancellation_token.as_ref(),
-                || ProviderError::Cancelled.into(),
-            )
-            .await?;
+        if !response.status.is_success() {
             return Err(anyhow::anyhow!(
                 "DeepSeek API error {}: {}",
-                status,
-                error_text
+                response.status,
+                response.body
             ));
         }
 
         // Parse response as JSON Value first — gives us both the raw value for exchange logging
         // and a source for typed deserialization without parsing the body twice.
-        let response_json: serde_json::Value = retry::cancellable(
-            async { response.json().await.map_err(anyhow::Error::from) },
-            params.cancellation_token.as_ref(),
-            || ProviderError::Cancelled.into(),
-        )
-        .await?;
+        let response_json: serde_json::Value = serde_json::from_str(&response.body)?;
 
         let deepseek_response: DeepSeekResponse = serde_json::from_value(response_json.clone())
             .map_err(|e| {

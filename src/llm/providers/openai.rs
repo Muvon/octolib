@@ -606,36 +606,29 @@ async fn execute_openai_request(
             let api_url = api_url.clone();
             let request_body = request_body.clone();
             Box::pin(async move {
-                let mut req = shared::apply_request_timeout(
-                    client
-                        .post(&api_url)
-                        .header("Content-Type", "application/json")
-                        .header("Authorization", format!("Bearer {}", auth_token)),
-                    request_timeout,
-                );
+                let mut req = client
+                    .post(&api_url)
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", format!("Bearer {}", auth_token));
 
                 // Add ChatGPT-Account-ID header if using OAuth
                 if let Some(id) = account_id {
                     req = req.header("ChatGPT-Account-ID", id);
                 }
-                let response = req
-                    .json(&request_body)
-                    .send()
-                    .await
-                    .map_err(anyhow::Error::from)?;
+
+                let captured =
+                    shared::send_and_read(req.json(&request_body), request_timeout).await?;
 
                 // Return Err for retryable HTTP errors so the retry loop catches them
-                if retry::is_retryable_status(response.status().as_u16()) {
-                    let status = response.status();
-                    let error_text = response.text().await.unwrap_or_default();
+                if retry::is_retryable_status(captured.status.as_u16()) {
                     return Err(anyhow::anyhow!(
                         "OpenAI API error {}: {}",
-                        status,
-                        error_text
+                        captured.status,
+                        captured.body
                     ));
                 }
 
-                Ok(response)
+                Ok(captured)
             })
         },
         max_retries,
@@ -656,7 +649,7 @@ async fn execute_openai_request(
 
     // Extract rate limit headers before consuming response
     let mut rate_limit_headers = std::collections::HashMap::new();
-    let headers = response.headers();
+    let headers = &response.headers;
 
     // Check for cache hit headers first (fallback for older API versions)
     let _cache_creation_input_tokens = headers
@@ -706,27 +699,15 @@ async fn execute_openai_request(
         rate_limit_headers.insert("request_reset".to_string(), request_reset.to_string());
     }
 
-    if !response.status().is_success() {
-        let status = response.status();
-        let error_text = retry::cancellable(
-            async { response.text().await.map_err(anyhow::Error::from) },
-            cancellation_token,
-            || ProviderError::Cancelled.into(),
-        )
-        .await?;
+    if !response.status.is_success() {
         return Err(anyhow::anyhow!(
             "OpenAI API error {}: {}",
-            status,
-            error_text
+            response.status,
+            response.body
         ));
     }
 
-    let response_text = retry::cancellable(
-        async { response.text().await.map_err(anyhow::Error::from) },
-        cancellation_token,
-        || ProviderError::Cancelled.into(),
-    )
-    .await?;
+    let response_text = response.body;
     let api_response: ResponsesApiResponse = serde_json::from_str(&response_text)?;
 
     // Extract content from output array

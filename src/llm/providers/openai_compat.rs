@@ -392,24 +392,19 @@ async fn execute_request(
                     request = request.header("Authorization", format!("Bearer {}", api_key));
                 }
 
-                let response = shared::apply_request_timeout(request, request_timeout)
-                    .send()
-                    .await
-                    .map_err(anyhow::Error::from)?;
+                let captured = shared::send_and_read(request, request_timeout).await?;
 
                 // Return Err for retryable HTTP errors so the retry loop catches them
-                if retry::is_retryable_status(response.status().as_u16()) {
-                    let status = response.status();
-                    let error_text = response.text().await.unwrap_or_default();
+                if retry::is_retryable_status(captured.status.as_u16()) {
                     return Err(anyhow::anyhow!(
                         "{} API error {}: {}",
                         provider_name,
-                        status,
-                        error_text
+                        captured.status,
+                        captured.body
                     ));
                 }
 
-                Ok(response)
+                Ok(captured)
             })
         },
         params.max_retries,
@@ -428,28 +423,16 @@ async fn execute_request(
 
     let request_time_ms = start_time.elapsed().as_millis() as u64;
 
-    if !response.status().is_success() {
-        let status = response.status();
-        let error_text = retry::cancellable(
-            async { response.text().await.map_err(anyhow::Error::from) },
-            params.cancellation_token.as_ref(),
-            || ProviderError::Cancelled.into(),
-        )
-        .await?;
+    if !response.status.is_success() {
         return Err(anyhow::anyhow!(
             "{} API error {}: {}",
             config.provider_name,
-            status,
-            error_text
+            response.status,
+            response.body
         ));
     }
 
-    let response_text = retry::cancellable(
-        async { response.text().await.map_err(anyhow::Error::from) },
-        params.cancellation_token.as_ref(),
-        || ProviderError::Cancelled.into(),
-    )
-    .await?;
+    let response_text = response.body;
     let api_response: OpenAiCompatResponse = serde_json::from_str(&response_text)?;
 
     let (message, finish_reason) = if let Some(choice) = api_response.choices.into_iter().next() {

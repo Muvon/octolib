@@ -624,32 +624,26 @@ async fn execute_openrouter_request(
                 .unwrap_or_else(|_| "https://octolib.muvon.io".to_string());
 
             Box::pin(async move {
-                let response = shared::apply_request_timeout(
-                    client
-                        .post(&api_url)
-                        .header("Content-Type", "application/json")
-                        .header("Authorization", format!("Bearer {}", api_key))
-                        .header("HTTP-Referer", openrouter_http_referer)
-                        .header("X-Title", openrouter_app_title),
-                    request_timeout,
-                )
-                .json(&request_body)
-                .send()
-                .await
-                .map_err(anyhow::Error::from)?;
+                let req = client
+                    .post(&api_url)
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", format!("Bearer {}", api_key))
+                    .header("HTTP-Referer", openrouter_http_referer)
+                    .header("X-Title", openrouter_app_title)
+                    .json(&request_body);
+
+                let captured = shared::send_and_read(req, request_timeout).await?;
 
                 // Return Err for retryable HTTP errors so the retry loop catches them
-                if retry::is_retryable_status(response.status().as_u16()) {
-                    let status = response.status();
-                    let error_text = response.text().await.unwrap_or_default();
+                if retry::is_retryable_status(captured.status.as_u16()) {
                     return Err(anyhow::anyhow!(
                         "OpenRouter API error {}: {}",
-                        status,
-                        error_text
+                        captured.status,
+                        captured.body
                     ));
                 }
 
-                Ok(response)
+                Ok(captured)
             })
         },
         max_retries,
@@ -668,27 +662,15 @@ async fn execute_openrouter_request(
 
     let request_time_ms = start_time.elapsed().as_millis() as u64;
 
-    if !response.status().is_success() {
-        let status = response.status();
-        let error_text = retry::cancellable(
-            async { response.text().await.map_err(anyhow::Error::from) },
-            cancellation_token,
-            || ProviderError::Cancelled.into(),
-        )
-        .await?;
+    if !response.status.is_success() {
         return Err(anyhow::anyhow!(
             "OpenRouter API error {}: {}",
-            status,
-            error_text
+            response.status,
+            response.body
         ));
     }
 
-    let response_text = retry::cancellable(
-        async { response.text().await.map_err(anyhow::Error::from) },
-        cancellation_token,
-        || ProviderError::Cancelled.into(),
-    )
-    .await?;
+    let response_text = response.body;
     let openrouter_response: OpenRouterResponse = serde_json::from_str(&response_text)?;
 
     let choice = openrouter_response

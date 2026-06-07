@@ -106,6 +106,7 @@ pub mod errors;
 pub mod llm;
 pub mod reranker;
 pub mod storage;
+pub mod utils;
 
 // Re-export main types and traits for easy access (backward compatibility)
 pub use embedding::{

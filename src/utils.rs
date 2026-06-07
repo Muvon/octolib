@@ -92,6 +92,22 @@ pub fn path_to_id_cwd() -> String {
     path_to_id(&path)
 }
 
+/// Returns true if `path` is inside a git repository (has a reachable `.git`).
+pub fn is_git_repo(path: &Path) -> bool {
+    Command::new("git")
+        .args(["rev-parse", "--is-inside-work-tree"])
+        .current_dir(path)
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+/// Returns true if the current working directory is inside a git repository.
+pub fn is_git_repo_cwd() -> bool {
+    let path = std::env::current_dir().unwrap_or_default();
+    is_git_repo(&path)
+}
+
 /// Extract the `org/repo` portion (lowercased) from a normalized URL or raw remote URL.
 ///
 /// `github.com/muvon/octomind` → `muvon/octomind`

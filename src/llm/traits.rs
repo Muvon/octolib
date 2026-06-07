@@ -149,6 +149,25 @@ pub trait AiProvider: Send + Sync {
             .unwrap_or(false)
     }
 
+    /// Whether the provider guarantees the response conforms to a supplied
+    /// JSON schema (constrained/strict decoding), as opposed to merely
+    /// emitting valid-but-arbitrary JSON (`json_object` mode).
+    ///
+    /// Callers that deserialize the response into a fixed shape should route
+    /// only schema-enforcing providers through the JSON path, and fall back
+    /// to a tolerant format (e.g. tag-delimited text) for the rest — a
+    /// non-enforcing provider can return valid JSON whose shape does not
+    /// match the schema, which would fail typed deserialization.
+    ///
+    /// Defaults to `supports_structured_output(model)`: a provider that
+    /// accepts structured output is assumed to enforce the schema unless it
+    /// overrides this. DeepSeek overrides to `false` — its API supports only
+    /// `json_object` mode and ignores the schema, so response shape is not
+    /// guaranteed.
+    fn enforces_response_schema(&self, model: &str) -> bool {
+        self.supports_structured_output(model)
+    }
+
     /// Get pricing information for a model
     /// Returns None if pricing is not available or model is not recognized.
     /// Default falls back to reference pricing for well-known open models.

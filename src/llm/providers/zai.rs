@@ -266,8 +266,18 @@ impl AiProvider for ZaiProvider {
     }
 
     fn supports_structured_output(&self, _model: &str) -> bool {
-        // Z.ai supports structured output via response_format
+        // Z.ai supports JSON mode (`response_format.type = "json_object"`) which
+        // guarantees valid JSON but NOT conformance to a supplied schema.
         true
+    }
+
+    fn enforces_response_schema(&self, _model: &str) -> bool {
+        // Z.ai's native API supports ONLY `json_object` mode — there is no
+        // `json_schema` response_format, so the supplied schema is ignored and
+        // the `Strict` arm in chat_completion downgrades to `json_object`. The
+        // response shape is therefore NOT guaranteed; report false so callers
+        // route to a tolerant parser (same class as DeepSeek).
+        false
     }
 
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
@@ -802,6 +812,8 @@ mod tests {
         let provider = ZaiProvider::new();
         assert!(provider.supports_caching("glm-4.7"));
         assert!(provider.supports_structured_output("glm-4.7"));
+        // json_object only — schema is NOT enforced (no json_schema response_format)
+        assert!(!provider.enforces_response_schema("glm-4.7"));
         // Vision models
         assert!(provider.supports_vision("glm-5v-turbo"));
         assert!(provider.supports_vision("glm-4.6v"));

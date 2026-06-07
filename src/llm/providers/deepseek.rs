@@ -296,6 +296,14 @@ impl AiProvider for DeepSeekProvider {
         true
     }
 
+    fn enforces_response_schema(&self, _model: &str) -> bool {
+        // DeepSeek supports only `json_object` mode — it returns valid JSON but
+        // ignores the supplied JSON schema, so the response shape is NOT
+        // guaranteed (the `JsonSchema` request arm above downgrades to
+        // `json_object`). Report false so callers route to a tolerant parser.
+        false
+    }
+
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
         let (input_price, output_price, cache_write_price, cache_read_price) =
             crate::llm::utils::get_model_pricing(model, PRICING)?;

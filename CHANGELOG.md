@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.22.0] - 2026-06-07
+
+### 📋 Release Summary
+
+This release enhances LLM capabilities with improved parallel tool handling and the addition of connection timeouts for increased reliability (f96f566c, 10d5c1ab). General performance and stability are further improved through streamlined request handling (5ded13c4).
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: enhance parallel tool handling `f96f566c`
+- **llm**: add connection timeout to http client `10d5c1ab`
+
+### 🔧 Improvements & Optimizations
+
+- **llm**: unify request handling with send_and_read `5ded13c4`
+
 ## [0.21.8] - 2026-06-01
 
 ### 📋 Release Summary

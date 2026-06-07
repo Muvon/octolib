@@ -117,10 +117,55 @@ pub(crate) fn refresh_http_client() {
 /// produces `is_request()=true, is_connect()=false`. Without this, the pool
 /// is never refreshed and all retries reuse the same broken connection.
 ///
+/// Also catches `is_body()` errors: the connection is killed AFTER response
+/// headers arrive but WHILE the body is streaming. This is the classic
+/// mid-stream RST — DPI inspecting the payload, an overloaded upstream or LB
+/// dropping a slow response, or a NAT/firewall resetting a long generation.
+/// Without this, a body-read failure is neither retried nor pool-refreshed.
+///
 /// Callers should call `refresh_http_client()` before retrying.
 pub(crate) fn is_connection_error(err: &anyhow::Error) -> bool {
     err.downcast_ref::<reqwest::Error>()
-        .is_some_and(|e| e.is_connect() || e.is_request())
+        .is_some_and(|e| e.is_connect() || e.is_request() || e.is_body())
+}
+
+/// A fully-buffered HTTP response: status, headers, and body read to completion.
+///
+/// Produced by [`send_and_read`], which reads the body INSIDE the retried unit
+/// so that a mid-stream connection reset surfaces as a retryable error instead
+/// of escaping the retry loop. Callers inspect `status`/`headers` and parse
+/// `body` without any further `.await` on the (already consumed) connection.
+pub(super) struct CapturedResponse {
+    pub status: reqwest::StatusCode,
+    pub headers: reqwest::header::HeaderMap,
+    pub body: String,
+}
+
+/// Send a request and read its entire body, all within one awaited unit.
+///
+/// Both the `send()` (connect/headers) and the body read happen here, so any
+/// transport failure — including a mid-body RST that only manifests during
+/// `text()` — is returned as an `Err` to the surrounding retry loop, where
+/// `is_connection_error` classifies it and `refresh_http_client` runs before
+/// the next attempt. Status and headers are cloned before the body is consumed.
+pub(super) async fn send_and_read(
+    request: reqwest::RequestBuilder,
+    timeout: Option<Duration>,
+) -> anyhow::Result<CapturedResponse> {
+    let response = apply_request_timeout(request, timeout)
+        .send()
+        .await
+        .map_err(anyhow::Error::from)?;
+
+    let status = response.status();
+    let headers = response.headers().clone();
+    let body = response.text().await.map_err(anyhow::Error::from)?;
+
+    Ok(CapturedResponse {
+        status,
+        headers,
+        body,
+    })
 }
 
 /// Apply an optional per-request timeout to a RequestBuilder.

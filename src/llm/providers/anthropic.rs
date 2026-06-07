@@ -636,113 +636,129 @@ struct AnthropicUsage {
 // Convert our session messages to Anthropic format
 fn convert_messages(messages: &[Message]) -> Vec<AnthropicMessage> {
     let mut result = Vec::new();
+    let mut index = 0;
 
-    for message in messages {
+    while index < messages.len() {
+        let message = &messages[index];
+
         // Skip system messages - they're handled separately
         if message.role == "system" {
+            index += 1;
             continue;
         }
 
         match message.role.as_str() {
             "tool" => {
-                // Tool messages must be converted to user role with tool_result content
-                let tool_call_id = message.tool_call_id.as_deref().unwrap_or("");
+                let mut content = Vec::new();
 
-                let content = vec![AnthropicContent::ToolResult {
-                    tool_use_id: tool_call_id.to_string(),
-                    content: message.content.clone(),
-                    cache_control: shared::maybe_cache_control_with_ttl(
-                        message.cached,
-                        message.cache_ttl.as_deref(),
-                    ),
-                }];
+                while index < messages.len() && messages[index].role == "tool" {
+                    let tool_message = &messages[index];
+                    let tool_call_id = tool_message.tool_call_id.as_deref().unwrap_or("");
+
+                    content.push(AnthropicContent::ToolResult {
+                        tool_use_id: tool_call_id.to_string(),
+                        content: tool_message.content.clone(),
+                        cache_control: shared::maybe_cache_control_with_ttl(
+                            tool_message.cached,
+                            tool_message.cache_ttl.as_deref(),
+                        ),
+                    });
+                    index += 1;
+                }
+
+                if index < messages.len() && messages[index].role == "user" {
+                    append_regular_content(&messages[index], &mut content);
+                    index += 1;
+                }
 
                 result.push(AnthropicMessage {
-                    role: "user".to_string(), // Tool messages become user messages
+                    role: "user".to_string(),
                     content,
                 });
             }
+            "assistant" if message.tool_calls.is_some() => {
+                // Assistant message with tool calls - reconstruct tool_use blocks
+                let mut content = Vec::new();
+
+                // Add text content if not empty
+                if !message.content.trim().is_empty() {
+                    content.push(AnthropicContent::Text {
+                        text: message.content.clone(),
+                        cache_control: shared::maybe_cache_control_with_ttl(
+                            message.cached,
+                            message.cache_ttl.as_deref(),
+                        ),
+                    });
+                }
+
+                // Add tool_use blocks from stored tool_calls in unified GenericToolCall format
+                for call in
+                    shared::parse_generic_tool_calls_lossy(message.tool_calls.as_ref(), "anthropic")
+                {
+                    content.push(AnthropicContent::ToolUse {
+                        id: call.id,
+                        name: call.name,
+                        input: call.arguments,
+                    });
+                }
+
+                result.push(AnthropicMessage {
+                    role: message.role.clone(),
+                    content,
+                });
+                index += 1;
+            }
             _ => {
-                // Handle user and assistant messages
-                if message.role == "assistant" && message.tool_calls.is_some() {
-                    // Assistant message with tool calls - reconstruct tool_use blocks
-                    let mut content = Vec::new();
+                // Handle regular user and assistant messages
+                let mut content = Vec::new();
+                append_regular_content(message, &mut content);
 
-                    // Add text content if not empty
-                    if !message.content.trim().is_empty() {
-                        content.push(AnthropicContent::Text {
-                            text: message.content.clone(),
-                            cache_control: shared::maybe_cache_control_with_ttl(
-                                message.cached,
-                                message.cache_ttl.as_deref(),
-                            ),
-                        });
-                    }
-
-                    // Add tool_use blocks from stored tool_calls in unified GenericToolCall format
-                    for call in shared::parse_generic_tool_calls_lossy(
-                        message.tool_calls.as_ref(),
-                        "anthropic",
-                    ) {
-                        content.push(AnthropicContent::ToolUse {
-                            id: call.id,
-                            name: call.name,
-                            input: call.arguments,
-                        });
-                    }
-
+                // Skip messages with no content blocks — an empty content array is
+                // equally invalid and would cause the same API rejection.
+                if !content.is_empty() {
                     result.push(AnthropicMessage {
                         role: message.role.clone(),
                         content,
                     });
-                } else {
-                    // Handle regular user and assistant messages
-                    let mut content = Vec::new();
-
-                    // Only add text block when content is non-empty — Anthropic rejects
-                    // empty text blocks with "text content blocks must be non-empty".
-                    // This can happen when the AI responds with only tool_use blocks
-                    // (no accompanying text), leaving content = "" in the stored message.
-                    if !message.content.trim().is_empty() {
-                        content.push(AnthropicContent::Text {
-                            text: message.content.clone(),
-                            cache_control: shared::maybe_cache_control_with_ttl(
-                                message.cached,
-                                message.cache_ttl.as_deref(),
-                            ),
-                        });
-                    }
-
-                    // Add images if present
-                    if let Some(images) = &message.images {
-                        for image in images {
-                            if let crate::llm::types::ImageData::Base64(data) = &image.data {
-                                content.push(AnthropicContent::Image {
-                                    source: ImageSource {
-                                        source_type: "base64".to_string(),
-                                        media_type: image.media_type.clone(),
-                                        data: data.clone(),
-                                    },
-                                    cache_control: None,
-                                });
-                            }
-                        }
-                    }
-
-                    // Skip messages with no content blocks — an empty content array is
-                    // equally invalid and would cause the same API rejection.
-                    if !content.is_empty() {
-                        result.push(AnthropicMessage {
-                            role: message.role.clone(),
-                            content,
-                        });
-                    }
                 }
+                index += 1;
             }
         }
     }
 
     result
+}
+
+fn append_regular_content(message: &Message, content: &mut Vec<AnthropicContent>) {
+    // Only add text block when content is non-empty — Anthropic rejects
+    // empty text blocks with "text content blocks must be non-empty".
+    // This can happen when the AI responds with only tool_use blocks
+    // (no accompanying text), leaving content = "" in the stored message.
+    if !message.content.trim().is_empty() {
+        content.push(AnthropicContent::Text {
+            text: message.content.clone(),
+            cache_control: shared::maybe_cache_control_with_ttl(
+                message.cached,
+                message.cache_ttl.as_deref(),
+            ),
+        });
+    }
+
+    // Add images if present
+    if let Some(images) = &message.images {
+        for image in images {
+            if let crate::llm::types::ImageData::Base64(data) = &image.data {
+                content.push(AnthropicContent::Image {
+                    source: ImageSource {
+                        source_type: "base64".to_string(),
+                        media_type: image.media_type.clone(),
+                        data: data.clone(),
+                    },
+                    cache_control: None,
+                });
+            }
+        }
+    }
 }
 
 // Execute a single Anthropic HTTP request with smart retry delay calculation
@@ -776,32 +792,26 @@ async fn execute_anthropic_request(
             let request_body = request_body.clone();
             let beta_header = beta_header.to_string();
             Box::pin(async move {
-                let response = shared::apply_request_timeout(
-                    client
-                        .post(&api_url)
-                        .header("Content-Type", "application/json")
-                        .header(&auth_header_name, &auth_header_value)
-                        .header("anthropic-version", "2023-06-01")
-                        .header("anthropic-beta", &beta_header),
-                    request_timeout,
-                )
-                .json(&request_body)
-                .send()
-                .await
-                .map_err(anyhow::Error::from)?;
+                let req = client
+                    .post(&api_url)
+                    .header("Content-Type", "application/json")
+                    .header(&auth_header_name, &auth_header_value)
+                    .header("anthropic-version", "2023-06-01")
+                    .header("anthropic-beta", &beta_header)
+                    .json(&request_body);
+
+                let captured = shared::send_and_read(req, request_timeout).await?;
 
                 // Return Err for retryable HTTP errors so the retry loop catches them
-                if retry::is_retryable_status(response.status().as_u16()) {
-                    let status = response.status();
-                    let error_text = response.text().await.unwrap_or_default();
+                if retry::is_retryable_status(captured.status.as_u16()) {
                     return Err(anyhow::anyhow!(
                         "Anthropic API error {}: {}",
-                        status,
-                        error_text
+                        captured.status,
+                        captured.body
                     ));
                 }
 
-                Ok(response)
+                Ok(captured)
             })
         },
         max_retries,
@@ -822,7 +832,7 @@ async fn execute_anthropic_request(
 
     // Extract rate limit headers before consuming response
     let mut rate_limit_headers = std::collections::HashMap::new();
-    let headers = response.headers();
+    let headers = &response.headers;
 
     // Anthropic rate limit headers
     if let Some(tokens_limit) = headers
@@ -874,27 +884,15 @@ async fn execute_anthropic_request(
         );
     }
 
-    if !response.status().is_success() {
-        let status = response.status();
-        let error_text = retry::cancellable(
-            async { response.text().await.map_err(anyhow::Error::from) },
-            cancellation_token,
-            || ProviderError::Cancelled.into(),
-        )
-        .await?;
+    if !response.status.is_success() {
         return Err(anyhow::anyhow!(
             "Anthropic API error {}: {}",
-            status,
-            error_text
+            response.status,
+            response.body
         ));
     }
 
-    let response_text = retry::cancellable(
-        async { response.text().await.map_err(anyhow::Error::from) },
-        cancellation_token,
-        || ProviderError::Cancelled.into(),
-    )
-    .await?;
+    let response_text = response.body;
     let anthropic_response: AnthropicResponse = serde_json::from_str(&response_text)?;
 
     // Extract content, thinking blocks, and tool calls
@@ -1185,5 +1183,54 @@ mod tests {
 
         // Test unknown model
         assert!(provider.get_model_pricing("unknown-model").is_none());
+    }
+
+    #[test]
+    fn parallel_tool_results_share_one_user_message() {
+        let mut assistant = Message::assistant("");
+        assistant.tool_calls = Some(serde_json::json!([
+            {"id": "toolu_a", "name": "first", "arguments": {}, "meta": null},
+            {"id": "toolu_b", "name": "second", "arguments": {}, "meta": null}
+        ]));
+
+        let messages = vec![
+            assistant,
+            Message::tool("result A", "toolu_a", "first"),
+            Message::tool("result B", "toolu_b", "second"),
+        ];
+
+        let converted = convert_messages(&messages);
+        assert_eq!(converted.len(), 2);
+        assert_eq!(converted[0].role, "assistant");
+        assert_eq!(converted[1].role, "user");
+
+        let user_content = serde_json::to_value(&converted[1].content).unwrap();
+        let blocks = user_content.as_array().unwrap();
+        assert_eq!(blocks.len(), 2);
+        assert_eq!(blocks[0]["type"], "tool_result");
+        assert_eq!(blocks[0]["tool_use_id"], "toolu_a");
+        assert_eq!(blocks[1]["type"], "tool_result");
+        assert_eq!(blocks[1]["tool_use_id"], "toolu_b");
+    }
+
+    #[test]
+    fn tool_results_merge_following_user_hint() {
+        let messages = vec![
+            Message::tool("result A", "toolu_a", "first"),
+            Message::tool("result B", "toolu_b", "second"),
+            Message::user("Please use those results."),
+        ];
+
+        let converted = convert_messages(&messages);
+        assert_eq!(converted.len(), 1);
+        assert_eq!(converted[0].role, "user");
+
+        let content = serde_json::to_value(&converted[0].content).unwrap();
+        let blocks = content.as_array().unwrap();
+        assert_eq!(blocks.len(), 3);
+        assert_eq!(blocks[0]["tool_use_id"], "toolu_a");
+        assert_eq!(blocks[1]["tool_use_id"], "toolu_b");
+        assert_eq!(blocks[2]["type"], "text");
+        assert_eq!(blocks[2]["text"], "Please use those results.");
     }
 }

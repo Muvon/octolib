@@ -92,14 +92,10 @@ pub fn path_to_id_cwd() -> String {
     path_to_id(&path)
 }
 
-/// Returns true if `path` is inside a git repository (has a reachable `.git`).
+/// Returns true if `path` itself is a git repository root (has a `.git` entry).
+/// Does NOT walk up to parent directories.
 pub fn is_git_repo(path: &Path) -> bool {
-    Command::new("git")
-        .args(["rev-parse", "--is-inside-work-tree"])
-        .current_dir(path)
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+    path.join(".git").exists()
 }
 
 /// Returns true if the current working directory is inside a git repository.
@@ -116,8 +112,8 @@ pub fn org_repo_from_url(url: &str) -> String {
     let normalized = normalize_git_url(url);
     // normalized is `host/org/repo` — drop the host segment
     normalized
-        .splitn(2, '/')
-        .nth(1)
+        .split_once('/')
+        .map(|(_, rest)| rest)
         .unwrap_or(&normalized)
         .to_string()
 }

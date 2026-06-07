@@ -395,120 +395,136 @@ struct MinimaxUsage {
 // Convert our session messages to MiniMax format (same as Anthropic)
 fn convert_messages(messages: &[Message]) -> Vec<MinimaxMessage> {
     let mut result = Vec::new();
+    let mut index = 0;
 
-    for message in messages {
+    while index < messages.len() {
+        let message = &messages[index];
+
         // Skip system messages - they're handled separately
         if message.role == "system" {
+            index += 1;
             continue;
         }
 
         match message.role.as_str() {
             "tool" => {
-                // Tool messages must be converted to user role with tool_result content
-                let tool_call_id = message.tool_call_id.as_deref().unwrap_or("");
+                let mut content = Vec::new();
 
-                let content = vec![MinimaxContent::ToolResult {
-                    tool_use_id: tool_call_id.to_string(),
-                    content: message.content.clone(),
-                    cache_control: shared::maybe_ephemeral_cache_control(message.cached),
-                }];
+                while index < messages.len() && messages[index].role == "tool" {
+                    let tool_message = &messages[index];
+                    let tool_call_id = tool_message.tool_call_id.as_deref().unwrap_or("");
+
+                    content.push(MinimaxContent::ToolResult {
+                        tool_use_id: tool_call_id.to_string(),
+                        content: tool_message.content.clone(),
+                        cache_control: shared::maybe_ephemeral_cache_control(tool_message.cached),
+                    });
+                    index += 1;
+                }
+
+                if index < messages.len() && messages[index].role == "user" {
+                    append_regular_content(&messages[index], &mut content);
+                    index += 1;
+                }
 
                 result.push(MinimaxMessage {
-                    role: "user".to_string(), // Tool messages become user messages
+                    role: "user".to_string(),
                     content,
                 });
             }
+            "assistant" if message.tool_calls.is_some() => {
+                // Assistant message with tool calls - reconstruct tool_use blocks
+                let mut content = Vec::new();
+
+                // Add text content if not empty
+                if !message.content.trim().is_empty() {
+                    content.push(MinimaxContent::Text {
+                        text: message.content.clone(),
+                        cache_control: shared::maybe_ephemeral_cache_control(message.cached),
+                    });
+                }
+
+                // Add tool_use blocks from stored tool_calls in unified GenericToolCall format
+                for call in
+                    shared::parse_generic_tool_calls_lossy(message.tool_calls.as_ref(), "minimax")
+                {
+                    content.push(MinimaxContent::ToolUse {
+                        id: call.id,
+                        name: call.name,
+                        input: call.arguments,
+                    });
+                }
+
+                result.push(MinimaxMessage {
+                    role: message.role.clone(),
+                    content,
+                });
+                index += 1;
+            }
             _ => {
-                // Handle user and assistant messages
-                if message.role == "assistant" && message.tool_calls.is_some() {
-                    // Assistant message with tool calls - reconstruct tool_use blocks
-                    let mut content = Vec::new();
+                // Handle regular user and assistant messages
+                let mut content = Vec::new();
+                append_regular_content(message, &mut content);
 
-                    // Add text content if not empty
-                    if !message.content.trim().is_empty() {
-                        content.push(MinimaxContent::Text {
-                            text: message.content.clone(),
-                            cache_control: shared::maybe_ephemeral_cache_control(message.cached),
-                        });
-                    }
-
-                    // Add tool_use blocks from stored tool_calls in unified GenericToolCall format
-                    for call in shared::parse_generic_tool_calls_lossy(
-                        message.tool_calls.as_ref(),
-                        "minimax",
-                    ) {
-                        content.push(MinimaxContent::ToolUse {
-                            id: call.id,
-                            name: call.name,
-                            input: call.arguments,
-                        });
-                    }
-
+                // Skip messages with no content blocks — an empty array is invalid
+                if !content.is_empty() {
                     result.push(MinimaxMessage {
                         role: message.role.clone(),
                         content,
                     });
-                } else {
-                    // Handle regular user and assistant messages
-                    let mut content = Vec::new();
-
-                    // Skip empty text blocks — Anthropic-compatible APIs reject them
-                    if !message.content.trim().is_empty() {
-                        content.push(MinimaxContent::Text {
-                            text: message.content.clone(),
-                            cache_control: shared::maybe_ephemeral_cache_control(message.cached),
-                        });
-                    }
-
-                    // Add image attachments (MiniMax-M3 multimodal)
-                    if let Some(images) = &message.images {
-                        for image in images {
-                            let source = match &image.data {
-                                ImageData::Base64(data) => serde_json::json!({
-                                    "type": "base64",
-                                    "media_type": image.media_type,
-                                    "data": data,
-                                }),
-                                ImageData::Url(url) => serde_json::json!({
-                                    "type": "url",
-                                    "url": url,
-                                }),
-                            };
-                            content.push(MinimaxContent::Image { source });
-                        }
-                    }
-
-                    // Add video attachments (MiniMax-M3 multimodal)
-                    if let Some(videos) = &message.videos {
-                        for video in videos {
-                            let source = match &video.data {
-                                VideoData::Base64(data) => serde_json::json!({
-                                    "type": "base64",
-                                    "media_type": video.media_type,
-                                    "data": data,
-                                }),
-                                VideoData::Url(url) => serde_json::json!({
-                                    "type": "url",
-                                    "url": url,
-                                }),
-                            };
-                            content.push(MinimaxContent::Video { source });
-                        }
-                    }
-
-                    // Skip messages with no content blocks — an empty array is invalid
-                    if !content.is_empty() {
-                        result.push(MinimaxMessage {
-                            role: message.role.clone(),
-                            content,
-                        });
-                    }
                 }
+                index += 1;
             }
         }
     }
 
     result
+}
+
+fn append_regular_content(message: &Message, content: &mut Vec<MinimaxContent>) {
+    // Skip empty text blocks — Anthropic-compatible APIs reject them
+    if !message.content.trim().is_empty() {
+        content.push(MinimaxContent::Text {
+            text: message.content.clone(),
+            cache_control: shared::maybe_ephemeral_cache_control(message.cached),
+        });
+    }
+
+    // Add image attachments (MiniMax-M3 multimodal)
+    if let Some(images) = &message.images {
+        for image in images {
+            let source = match &image.data {
+                ImageData::Base64(data) => serde_json::json!({
+                    "type": "base64",
+                    "media_type": image.media_type,
+                    "data": data,
+                }),
+                ImageData::Url(url) => serde_json::json!({
+                    "type": "url",
+                    "url": url,
+                }),
+            };
+            content.push(MinimaxContent::Image { source });
+        }
+    }
+
+    // Add video attachments (MiniMax-M3 multimodal)
+    if let Some(videos) = &message.videos {
+        for video in videos {
+            let source = match &video.data {
+                VideoData::Base64(data) => serde_json::json!({
+                    "type": "base64",
+                    "media_type": video.media_type,
+                    "data": data,
+                }),
+                VideoData::Url(url) => serde_json::json!({
+                    "type": "url",
+                    "url": url,
+                }),
+            };
+            content.push(MinimaxContent::Video { source });
+        }
+    }
 }
 
 // Execute a single MiniMax HTTP request with smart retry delay calculation
@@ -768,5 +784,54 @@ mod tests {
         assert!(provider.supports_vision("MiniMax-M3-highspeed"));
         assert!(provider.supports_video("MiniMax-M3"));
         assert!(provider.supports_caching("MiniMax-M3"));
+    }
+
+    #[test]
+    fn parallel_tool_results_share_one_user_message() {
+        let mut assistant = Message::assistant("");
+        assistant.tool_calls = Some(serde_json::json!([
+            {"id": "toolu_a", "name": "first", "arguments": {}, "meta": null},
+            {"id": "toolu_b", "name": "second", "arguments": {}, "meta": null}
+        ]));
+
+        let messages = vec![
+            assistant,
+            Message::tool("result A", "toolu_a", "first"),
+            Message::tool("result B", "toolu_b", "second"),
+        ];
+
+        let converted = convert_messages(&messages);
+        assert_eq!(converted.len(), 2);
+        assert_eq!(converted[0].role, "assistant");
+        assert_eq!(converted[1].role, "user");
+
+        let user_content = serde_json::to_value(&converted[1].content).unwrap();
+        let blocks = user_content.as_array().unwrap();
+        assert_eq!(blocks.len(), 2);
+        assert_eq!(blocks[0]["type"], "tool_result");
+        assert_eq!(blocks[0]["tool_use_id"], "toolu_a");
+        assert_eq!(blocks[1]["type"], "tool_result");
+        assert_eq!(blocks[1]["tool_use_id"], "toolu_b");
+    }
+
+    #[test]
+    fn tool_results_merge_following_user_hint() {
+        let messages = vec![
+            Message::tool("result A", "toolu_a", "first"),
+            Message::tool("result B", "toolu_b", "second"),
+            Message::user("Please use those results."),
+        ];
+
+        let converted = convert_messages(&messages);
+        assert_eq!(converted.len(), 1);
+        assert_eq!(converted[0].role, "user");
+
+        let content = serde_json::to_value(&converted[0].content).unwrap();
+        let blocks = content.as_array().unwrap();
+        assert_eq!(blocks.len(), 3);
+        assert_eq!(blocks[0]["tool_use_id"], "toolu_a");
+        assert_eq!(blocks[1]["tool_use_id"], "toolu_b");
+        assert_eq!(blocks[2]["type"], "text");
+        assert_eq!(blocks[2]["text"], "Please use those results.");
     }
 }

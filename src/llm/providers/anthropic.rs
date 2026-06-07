@@ -432,6 +432,14 @@ impl AiProvider for AnthropicProvider {
                     .collect::<Vec<_>>();
 
                 request_body["tools"] = serde_json::json!(anthropic_tools);
+
+                // Be explicit: Anthropic's default is parallel-enabled `auto`, but
+                // sending the flag prevents wrappers/defaults from silently forcing
+                // the one-tool-at-a-time path.
+                request_body["tool_choice"] = serde_json::json!({
+                    "type": "auto",
+                    "disable_parallel_tool_use": false,
+                });
             }
         }
 

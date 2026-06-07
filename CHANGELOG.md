@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.23.0] - 2026-06-07
+
+### 📋 Release Summary
+
+This release introduces response schema enforcement to ensure consistent LLM outputs (5eb5845c). Additionally, new utility tools enhance the library's ability to automatically detect and derive identifiers from Git repositories (8dc2d23b, e751e696, ff1981af).
+
+
+### ✨ New Features & Enhancements
+
+- **utils**: add git repository detection helpers `8dc2d23b`
+- **utils**: add git project ID derivation tools `e751e696`
+- **llm**: add response schema enforcement check `5eb5845c`
+
+### 🔧 Improvements & Optimizations
+
+- **utils**: simplify git repo check and url parsing `ff1981af`
+
 ## [0.22.0] - 2026-06-07
 
 ### 📋 Release Summary

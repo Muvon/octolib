@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.23.1] - 2026-06-09
+
+### 📋 Release Summary
+
+This release expands multi-provider support by adding integration for the claude-fable-5 model (88dbb8cc).
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: add support for claude-fable-5 `88dbb8cc`
+
 ## [0.23.0] - 2026-06-07
 
 ### 📋 Release Summary

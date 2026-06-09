@@ -205,6 +205,7 @@ const REFERENCE_CAPABILITIES: &[RefCapsTuple] = &[
     // --- DBRX ---
     ("dbrx", false, false, true, 32_768),
     // --- Anthropic Claude (most specific first; substring match is order-sensitive) ---
+    ("claude-fable-5", true, false, false, 1_000_000),
     ("claude-opus-4-7", true, false, false, 1_000_000),
     ("claude-opus-4-6", true, false, false, 200_000),
     ("claude-sonnet-4-6", true, false, false, 200_000),
@@ -531,6 +532,10 @@ mod tests {
                 .unwrap()
                 .vision
         );
+        // Mythos-class: 1M context, vision
+        let fable = get_reference_capabilities("claude-fable-5").unwrap();
+        assert_eq!(fable.max_input_tokens, 1_000_000);
+        assert!(fable.vision);
     }
 
     #[test]

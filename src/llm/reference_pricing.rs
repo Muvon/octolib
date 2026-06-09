@@ -35,6 +35,7 @@ type RefPricingTuple = (&'static str, f64, f64, f64, f64);
 /// when the actual provider doesn't report pricing.
 const REFERENCE_PRICING: &[RefPricingTuple] = &[
     // --- Anthropic Claude (most specific first) ---
+    ("claude-fable-5", 10.00, 50.00, 12.50, 1.00),
     ("claude-opus-4-8", 5.00, 25.00, 6.25, 0.50),
     ("claude-opus-4-7", 5.00, 25.00, 6.25, 0.50),
     ("claude-opus-4-6", 5.00, 25.00, 6.25, 0.50),
@@ -323,6 +324,9 @@ mod tests {
         assert_eq!(p.input_price_per_1m, 30.00);
         let p = get_reference_pricing("claude-opus-4-7").unwrap();
         assert_eq!(p.input_price_per_1m, 5.00);
+        let p = get_reference_pricing("claude-fable-5").unwrap();
+        assert_eq!(p.input_price_per_1m, 10.00);
+        assert_eq!(p.output_price_per_1m, 50.00);
         let p = get_reference_pricing("kimi-k2.6").unwrap();
         assert_eq!(p.input_price_per_1m, 0.60);
     }

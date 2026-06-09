@@ -112,13 +112,8 @@ const THINKING_MODELS: &[&str] = &[
 /// Models that support (or require) adaptive thinking via `thinking.type: "adaptive"`.
 /// Opus 4.7 rejects manual `thinking.type: "enabled"` outright; on Opus 4.6 and
 /// Sonnet 4.6, manual mode is deprecated and will be removed.
-const ADAPTIVE_THINKING_MODELS: &[&str] = &[
-    "fable-5",
-    "opus-4-8",
-    "opus-4-7",
-    "opus-4-6",
-    "sonnet-4-6",
-];
+const ADAPTIVE_THINKING_MODELS: &[&str] =
+    &["fable-5", "opus-4-8", "opus-4-7", "opus-4-6", "sonnet-4-6"];
 
 /// Models where adaptive thinking is the ONLY accepted mode. Manual
 /// `thinking.type: "enabled"` returns a 400. These models also default
@@ -128,13 +123,7 @@ const ADAPTIVE_ONLY_MODELS: &[&str] = &["fable-5", "opus-4-7"];
 
 /// Models that accept `output_config.effort`. Per Anthropic docs:
 /// Fable 5, Mythos Preview, Opus 4.7, Opus 4.6, Sonnet 4.6, Opus 4.5.
-const EFFORT_PARAM_MODELS: &[&str] = &[
-    "fable-5",
-    "opus-4-7",
-    "opus-4-6",
-    "sonnet-4-6",
-    "opus-4-5",
-];
+const EFFORT_PARAM_MODELS: &[&str] = &["fable-5", "opus-4-7", "opus-4-6", "sonnet-4-6", "opus-4-5"];
 
 /// Models that reject top_p but accept temperature and top_k.
 const NO_TOP_P_MODELS: &[&str] = &[

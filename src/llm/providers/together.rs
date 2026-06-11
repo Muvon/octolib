@@ -65,7 +65,9 @@ impl AiProvider for TogetherProvider {
     }
 
     fn supports_caching(&self, _model: &str) -> bool {
-        false
+        // Together performs automatic prompt-prefix caching (no opt-in param)
+        // and reports `cached_tokens` in usage on supported models.
+        true
     }
 
     // supports_vision, supports_video, supports_structured_output
@@ -226,6 +228,17 @@ struct TogetherUsage {
     completion_tokens: Option<u64>,
     #[serde(default)]
     total_tokens: Option<u64>,
+    /// Together-only top-level field; may also arrive OpenAI-style nested
+    #[serde(default)]
+    cached_tokens: Option<u64>,
+    #[serde(default)]
+    prompt_tokens_details: Option<TogetherPromptTokensDetails>,
+}
+
+#[derive(Deserialize, Debug)]
+struct TogetherPromptTokensDetails {
+    #[serde(default)]
+    cached_tokens: Option<u64>,
 }
 
 fn convert_messages(messages: &[Message]) -> Result<Vec<TogetherMessage>, ToolCallError> {
@@ -431,29 +444,38 @@ async fn execute_together_request(
             .collect()
     });
 
-    let input_tokens = together_response.usage.prompt_tokens.unwrap_or(0);
+    let prompt_tokens = together_response.usage.prompt_tokens.unwrap_or(0);
     let output_tokens = together_response.usage.completion_tokens.unwrap_or(0);
     let total_tokens = together_response
         .usage
         .total_tokens
-        .unwrap_or(input_tokens.saturating_add(output_tokens));
+        .unwrap_or(prompt_tokens.saturating_add(output_tokens));
+    let cache_read_tokens = together_response
+        .usage
+        .cached_tokens
+        .or_else(|| {
+            together_response
+                .usage
+                .prompt_tokens_details
+                .as_ref()
+                .and_then(|d| d.cached_tokens)
+        })
+        .unwrap_or(0);
+    let input_tokens = prompt_tokens.saturating_sub(cache_read_tokens);
 
     let usage = TokenUsage {
         input_tokens,
         output_tokens,
         cache_write_tokens: 0,
-        cache_read_tokens: 0,
+        cache_read_tokens,
         reasoning_tokens: 0,
         total_tokens,
         cost: request_body
             .get("model")
             .and_then(|m| m.as_str())
-            .and_then(|model| {
-                crate::llm::reference_pricing::calculate_reference_cost(
-                    model,
-                    input_tokens,
-                    output_tokens,
-                )
+            .and_then(crate::llm::reference_pricing::get_reference_pricing)
+            .map(|pricing| {
+                pricing.calculate_cost(input_tokens, 0, cache_read_tokens, output_tokens)
             }),
         request_time_ms: Some(request_time_ms),
     };

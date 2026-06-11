@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.23.2] - 2026-06-11
+
+### 📋 Release Summary
+
+This release expands model support with the addition of claude-fable-5 and introduces prompt caching for the Together provider to improve efficiency (88dbb8cc, 5a55caf5). Additionally, internal CI/CD processes have been streamlined through the migration to shared workflows (6f6aa1bc, 547da1de).
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: enable prompt caching for Together provider `5a55caf5`
+- **llm**: add support for claude-fable-5 `88dbb8cc`
+
+### 🔧 Improvements & Optimizations
+
+- **release**: replace custom release logic with shared workflow `547da1de`
+- **release**: 0.23.1 `3cb53380`
+
+### 🔄 Other Changes
+
+1 maintenance, dependency, and tooling update not listed individually.
+
 ## [0.23.1] - 2026-06-09
 
 ### 📋 Release Summary

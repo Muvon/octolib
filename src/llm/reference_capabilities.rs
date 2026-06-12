@@ -186,6 +186,7 @@ const REFERENCE_CAPABILITIES: &[RefCapsTuple] = &[
     ("phi-3-vision", true, false, true, 131_072),
     ("phi-3", false, false, true, 131_072),
     // --- Moonshot Kimi (most specific first) ---
+    ("kimi-k2.7-code", true, true, true, 256_000),
     ("kimi-k2.6-code-preview", false, false, true, 256_000),
     ("kimi-k2.6", false, false, true, 256_000),
     ("kimi-k2.5", true, false, true, 256_000),
@@ -541,6 +542,12 @@ mod tests {
     #[test]
     fn test_kimi_k2_256k() {
         // All Kimi K2 variants now report 256K (matches MoonshotProvider override)
+        assert_eq!(
+            get_reference_capabilities("kimi-k2.7-code")
+                .unwrap()
+                .max_input_tokens,
+            256_000
+        );
         assert_eq!(
             get_reference_capabilities("kimi-k2.6")
                 .unwrap()

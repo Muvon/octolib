@@ -226,6 +226,7 @@ const REFERENCE_PRICING: &[RefPricingTuple] = &[
     ("phi-4", 0.07, 0.14, 0.07, 0.07),
     ("phi-3", 0.05, 0.10, 0.05, 0.05),
     // --- Moonshot Kimi (most specific first) ---
+    ("kimi-k2.7-code", 0.95, 4.00, 0.95, 0.19),
     ("kimi-k2.6-code-preview", 0.60, 2.50, 0.60, 0.15),
     ("kimi-k2.6", 0.60, 2.50, 0.60, 0.15),
     ("kimi-k2.5", 0.60, 3.00, 0.60, 0.10),
@@ -329,5 +330,8 @@ mod tests {
         assert_eq!(p.output_price_per_1m, 50.00);
         let p = get_reference_pricing("kimi-k2.6").unwrap();
         assert_eq!(p.input_price_per_1m, 0.60);
+        let p = get_reference_pricing("kimi-k2.7-code").unwrap();
+        assert_eq!(p.input_price_per_1m, 0.95);
+        assert_eq!(p.output_price_per_1m, 4.00);
     }
 }

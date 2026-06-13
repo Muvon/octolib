@@ -28,7 +28,8 @@ use std::sync::LazyLock;
 use tiktoken_rs::cl100k_base;
 
 pub use provider::{
-    create_embedding_provider_from_parts, EmbeddingProvider, OctoHubEmbeddingProvider,
+    create_embedding_provider_from_parts, EmbeddingProvider, LocalEmbeddingProvider,
+    OctoHubEmbeddingProvider,
 };
 pub use types::*;
 

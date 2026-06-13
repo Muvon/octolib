@@ -34,6 +34,7 @@ static HTTP_CLIENT: LazyLock<Client> = LazyLock::new(|| {
 
 pub mod cohere;
 pub mod jina;
+pub mod local;
 pub mod mixedbread;
 pub mod voyage;
 
@@ -45,6 +46,7 @@ pub mod huggingface;
 
 pub use cohere::CohereProvider;
 pub use jina::JinaProvider;
+pub use local::LocalRerankerProvider;
 pub use mixedbread::MixedbreadProvider;
 pub use voyage::{VoyageProvider, VoyageProviderImpl};
 
@@ -82,6 +84,7 @@ pub async fn create_rerank_provider_from_parts(
         RerankProviderType::Cohere => Ok(Box::new(CohereProvider::new(model)?)),
         RerankProviderType::Jina => Ok(Box::new(JinaProvider::new(model)?)),
         RerankProviderType::MixedBread => Ok(Box::new(MixedbreadProvider::new(model)?)),
+        RerankProviderType::Local => Ok(Box::new(LocalRerankerProvider::new(model)?)),
         #[cfg(feature = "fastembed")]
         RerankProviderType::FastEmbed => Ok(Box::new(FastEmbedProvider::new(model)?)),
         #[cfg(feature = "huggingface")]

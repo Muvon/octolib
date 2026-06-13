@@ -45,6 +45,7 @@ pub enum RerankProviderType {
     Cohere,
     Jina,
     MixedBread,
+    Local,
     #[cfg(feature = "fastembed")]
     FastEmbed,
     #[cfg(feature = "huggingface")]
@@ -60,6 +61,8 @@ impl FromStr for RerankProviderType {
             "cohere" => Ok(Self::Cohere),
             "jina" => Ok(Self::Jina),
             "mixedbread" | "mxbai" => Ok(Self::MixedBread),
+            "ollama" => Err("Ollama does not support reranking. Use local provider with llama.cpp server, vLLM, or TEI for local reranking, or cloud providers (voyage, cohere, jina).".to_string()),
+            "local" => Ok(Self::Local),
             #[cfg(feature = "fastembed")]
             "fastembed" => Ok(Self::FastEmbed),
             #[cfg(feature = "huggingface")]
@@ -77,6 +80,7 @@ impl RerankProviderType {
             Self::Cohere => "cohere",
             Self::Jina => "jina",
             Self::MixedBread => "mixedbread",
+            Self::Local => "local",
             #[cfg(feature = "fastembed")]
             Self::FastEmbed => "fastembed",
             #[cfg(feature = "huggingface")]
@@ -101,8 +105,8 @@ pub fn parse_provider_model(input: &str) -> Result<(RerankProviderType, String)>
     }
 
     let provider = provider_str
-        .parse()
-        .map_err(|_| anyhow::anyhow!("Unknown reranker provider: {}", provider_str))?;
+        .parse::<RerankProviderType>()
+        .map_err(|e| anyhow::anyhow!("{}", e))?;
 
     Ok((provider, model.to_string()))
 }
@@ -161,6 +165,16 @@ mod tests {
         assert_eq!(provider, RerankProviderType::Cohere);
         assert_eq!(model, "rerank-english-v3.0");
 
+        let (provider, model) = parse_provider_model("local:bge-reranker-v2-m3").unwrap();
+        assert_eq!(provider, RerankProviderType::Local);
+        assert_eq!(model, "bge-reranker-v2-m3");
+
+        // Ollama should give custom error
+        let result = parse_provider_model("ollama:some-model");
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Ollama does not support reranking"), "Expected Ollama-specific error, got: {}", err);
+
         // Explicit unknown provider should error instead of silently falling back
         assert!(parse_provider_model("unknown:rerank-2").is_err());
         assert!(parse_provider_model(":rerank-2").is_err());
@@ -211,12 +225,22 @@ mod tests {
                 RerankProviderType::FastEmbed
             );
         }
+        assert_eq!(
+            "local".parse::<RerankProviderType>().unwrap(),
+            RerankProviderType::Local
+        );
+        // Ollama should error with specific message
+        let ollama_result = "ollama".parse::<RerankProviderType>();
+        assert!(ollama_result.is_err());
+        assert!(ollama_result.unwrap_err().contains("Ollama does not support reranking"));
+
         assert!("unknown".parse::<RerankProviderType>().is_err());
 
         assert_eq!(RerankProviderType::Voyage.as_str(), "voyage");
         assert_eq!(RerankProviderType::Cohere.as_str(), "cohere");
         assert_eq!(RerankProviderType::Jina.as_str(), "jina");
         assert_eq!(RerankProviderType::MixedBread.as_str(), "mixedbread");
+        assert_eq!(RerankProviderType::Local.as_str(), "local");
         #[cfg(feature = "huggingface")]
         {
             assert_eq!(RerankProviderType::HuggingFace.as_str(), "huggingface");

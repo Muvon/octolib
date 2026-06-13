@@ -13,6 +13,7 @@ Octolib provides a unified interface for generating embeddings across multiple p
 | **OpenRouter** | Dynamic model discovery from API | OpenRouter proxy models | ✅ OPENROUTER_API_KEY |
 | **Together AI** | intfloat/multilingual-e5-large-instruct (1024d) | Together proxy models | ✅ TOGETHER_API_KEY |
 | **OctoHub** | Any embedding model through OctoHub | Local serving via OctoHub | ✅ OCTOHUB_API_KEY |
+| **Local** | Any model via Ollama, llama.cpp, LM Studio, vLLM, LocalAI | OpenAI-compatible local servers | ❌ Optional LOCAL_EMBED_API_KEY |
 | **FastEmbed** | Local sentence-transformers models (dynamic discovery) | Local processing | ❌ No API key |
 | **HuggingFace** | sentence-transformers models (BERT, RoBERTa, MPNet, JinaBert, Qwen2) | HuggingFace Hub | ❌ No API key |
 
@@ -106,6 +107,10 @@ export GOOGLE_API_KEY="your-google-api-key"
 
 # OpenAI
 export OPENAI_API_KEY="your-openai-api-key"
+
+# Local (optional API key)
+export LOCAL_EMBED_API_URL="http://localhost:11434/v1/embeddings"
+export LOCAL_EMBED_API_KEY="your-optional-api-key"
 ```
 
 ## 🎯 Input Types

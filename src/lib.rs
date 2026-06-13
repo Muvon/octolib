@@ -112,7 +112,8 @@ pub mod utils;
 pub use embedding::{
     count_tokens, create_embedding_provider_from_parts, generate_embeddings,
     generate_embeddings_batch, split_texts_into_token_limited_batches, truncate_output,
-    EmbeddingProvider, EmbeddingProviderType, InputType, OctoHubEmbeddingProvider,
+    EmbeddingProvider, EmbeddingProviderType, InputType, LocalEmbeddingProvider,
+    OctoHubEmbeddingProvider,
 };
 pub use errors::{
     ConfigError, ConfigResult, MessageError, MessageResult, ProviderError, ProviderResult,

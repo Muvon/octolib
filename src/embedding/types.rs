@@ -67,6 +67,7 @@ pub enum EmbeddingProviderType {
     OpenAI,
     OpenRouter,
     OctoHub,
+    Local,
     Together,
 }
 
@@ -139,10 +140,11 @@ pub fn parse_provider_model(input: &str) -> Result<(EmbeddingProviderType, Strin
         "openai" => EmbeddingProviderType::OpenAI,
         "openrouter" => EmbeddingProviderType::OpenRouter,
         "octohub" => EmbeddingProviderType::OctoHub,
+        "local" => EmbeddingProviderType::Local,
         "together" => EmbeddingProviderType::Together,
         unknown => {
             return Err(anyhow::anyhow!(
-                "Unknown embedding provider '{}'. Supported: fastembed, jina, voyage, google, huggingface, openai, openrouter, octohub, together. \
+                "Unknown embedding provider '{}'. Supported: fastembed, jina, voyage, google, huggingface, openai, openrouter, octohub, local, together. \
                  This is a programming error - the provider should be validated before calling parse_provider_model.",
                 unknown
             ));
@@ -165,7 +167,8 @@ impl EmbeddingConfig {
             EmbeddingProviderType::Voyage => std::env::var("VOYAGE_API_KEY").ok(),
             EmbeddingProviderType::Google => std::env::var("GOOGLE_API_KEY").ok(),
             EmbeddingProviderType::Together => std::env::var("TOGETHER_API_KEY").ok(),
-            _ => None, // FastEmbed and SentenceTransformer don't need API keys
+            EmbeddingProviderType::Local => std::env::var("LOCAL_EMBED_API_KEY").ok(),
+            _ => None, // FastEmbed, HuggingFace, OctoHub, OpenAI, OpenRouter don't use this path
         }
     }
 
@@ -260,6 +263,10 @@ mod tests {
         let (provider, model) = parse_provider_model("  voyage : voyage-3.5  ").unwrap();
         assert_eq!(provider, EmbeddingProviderType::Voyage);
         assert_eq!(model, "voyage-3.5");
+
+        let (provider, model) = parse_provider_model("local:nomic-embed-text").unwrap();
+        assert_eq!(provider, EmbeddingProviderType::Local);
+        assert_eq!(model, "nomic-embed-text");
 
         // Empty segments should fail with explicit format error
         assert!(parse_provider_model("openai:").is_err());

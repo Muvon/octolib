@@ -38,7 +38,12 @@
 //!   - Models: `mxbai-rerank-large-v2`, `mxbai-rerank-base-v2`, `mxbai-rerank-large-v1`, `mxbai-rerank-base-v1`
 //!   - Requires: `MXBAI_API_KEY` environment variable
 //!
-//! ## Local Providers (no API keys, requires features)
+//! ## Local Providers
+//!
+//! - **Local**: OpenAI-compatible reranking via llama.cpp server, vLLM, or TEI
+//!   - Any model supported by the server (BAAI/bge-reranker-*, Qwen3-Reranker-*, etc.)
+//!   - Requires: `LOCAL_RERANK_API_URL` environment variable (default: `http://localhost:8012/v1/rerank`)
+//!   - Note: Ollama does NOT support reranking — use llama.cpp server or vLLM instead
 //!
 //! - **FastEmbed**: Fast local ONNX-based reranking (requires `fastembed` feature)
 //!   - Models: `bge-reranker-base`, `bge-reranker-v2-m3`, `jina-reranker-v1-turbo-en`, `jina-reranker-v2-base-multilingual`

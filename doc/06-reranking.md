@@ -21,12 +21,14 @@ Cross-encoders process query and document together, enabling deeper semantic und
 | **Cohere** | rerank-english-v3.0, rerank-multilingual-v3.0, rerank-english-v2.0, rerank-multilingual-v2.0 | Up to 4K tokens | Enterprise-grade, multilingual |
 | **Jina AI** | jina-reranker-v3, jina-reranker-v2-base-multilingual, jina-reranker-v1-base-en, jina-colbert-v2 | 1K-131K tokens | Automatic chunking, multilingual |
 | **Mixedbread AI** | mxbai-rerank-large-v2, mxbai-rerank-base-v2, mxbai-rerank-large-v1, mxbai-rerank-base-v1, mxbai-rerank-xsmall-v1 | 8K tokens | RL-trained, 100+ languages, open-source v1 models |
-### Local Providers (no API keys, requires features)
 
-| Provider | Models | Features |
-|----------|--------|----------|
-| **FastEmbed** | bge-reranker-base, bge-reranker-large, jina-reranker-v1-turbo-en, jina-reranker-v2-base-multilingual | ONNX-based, CPU-friendly, no API costs |
-| **HuggingFace** | bge-reranker-base, bge-reranker-large | Sentence-transformers models via HuggingFace Hub |
+### Local Providers (no API keys)
+
+| Provider | Models | Features | API Key |
+|----------|--------|----------|---------|
+| **Local** | Any reranker model via llama.cpp server, vLLM, or TEI | Jina-compatible `/v1/rerank` endpoint. **Note: Ollama does NOT support reranking.** | Optional LOCAL_RERANK_API_KEY |
+| **FastEmbed** | bge-reranker-base, bge-reranker-large, jina-reranker-v1-turbo-en, jina-reranker-v2-base-multilingual | ONNX-based, CPU-friendly, no API costs | ❌ No API key |
+| **HuggingFace** | bge-reranker-base, bge-reranker-large | Sentence-transformers models via HuggingFace Hub | ❌ No API key |
 
 ### 📝 Model Details
 
@@ -95,6 +97,11 @@ export MXBAI_API_KEY="your_mixedbread_key"
 # Enable fastembed feature in Cargo.toml
 cargo build --features fastembed
 # No API keys needed!
+
+# Local reranker (llama.cpp server, vLLM, TEI)
+# Optional: customize endpoint URL and API key
+export LOCAL_RERANK_API_URL="http://localhost:8012/v1/rerank"
+export LOCAL_RERANK_API_KEY="your-optional-api-key"
 ```
 
 ### Basic Reranking

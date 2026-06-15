@@ -173,7 +173,11 @@ mod tests {
         let result = parse_provider_model("ollama:some-model");
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("Ollama does not support reranking"), "Expected Ollama-specific error, got: {}", err);
+        assert!(
+            err.contains("Ollama does not support reranking"),
+            "Expected Ollama-specific error, got: {}",
+            err
+        );
 
         // Explicit unknown provider should error instead of silently falling back
         assert!(parse_provider_model("unknown:rerank-2").is_err());
@@ -232,7 +236,9 @@ mod tests {
         // Ollama should error with specific message
         let ollama_result = "ollama".parse::<RerankProviderType>();
         assert!(ollama_result.is_err());
-        assert!(ollama_result.unwrap_err().contains("Ollama does not support reranking"));
+        assert!(ollama_result
+            .unwrap_err()
+            .contains("Ollama does not support reranking"));
 
         assert!("unknown".parse::<RerankProviderType>().is_err());
 

@@ -48,8 +48,7 @@ impl LocalEmbeddingProvider {
     }
 
     fn api_url() -> String {
-        std::env::var(LOCAL_EMBED_API_URL_ENV)
-            .unwrap_or_else(|_| LOCAL_EMBED_API_URL.to_string())
+        std::env::var(LOCAL_EMBED_API_URL_ENV).unwrap_or_else(|_| LOCAL_EMBED_API_URL.to_string())
     }
 
     fn api_key() -> Option<String> {
@@ -110,11 +109,10 @@ impl EmbeddingProvider for LocalEmbeddingProvider {
             req = req.header("Authorization", format!("Bearer {}", key));
         }
 
-        let response = req
-            .json(&body)
-            .send()
-            .await
-            .with_context(|| format!("Failed to connect to local embedding server at {}", url))?;
+        let response =
+            req.json(&body).send().await.with_context(|| {
+                format!("Failed to connect to local embedding server at {}", url)
+            })?;
 
         if !response.status().is_success() {
             let status = response.status();

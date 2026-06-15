@@ -50,8 +50,7 @@ impl LocalRerankerProvider {
     }
 
     fn api_url() -> String {
-        std::env::var(LOCAL_RERANK_API_URL_ENV)
-            .unwrap_or_else(|_| LOCAL_RERANK_API_URL.to_string())
+        std::env::var(LOCAL_RERANK_API_URL_ENV).unwrap_or_else(|_| LOCAL_RERANK_API_URL.to_string())
     }
 
     fn api_key() -> Option<String> {

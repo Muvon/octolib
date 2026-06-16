@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.23.3] - 2026-06-16
+
+### 📋 Release Summary
+
+This release expands LLM compatibility with the addition of GLM-5.2 and Moonshot Kimi K2.7 support (41bc7f79, 7de4265d). Additionally, a new local provider has been introduced to enable self-hosted embeddings and reranking capabilities (89e50d3b).
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: add GLM-5.2 model support `41bc7f79`
+- **embedding,reranker**: add local provider for embeddings and reranking `89e50d3b`
+- **llm**: add Moonshot Kimi K2.7 support `7de4265d`
+
+### 🔄 Other Changes
+
+1 maintenance, dependency, and tooling update not listed individually.
+
 ## [0.23.2] - 2026-06-11
 
 ### 📋 Release Summary

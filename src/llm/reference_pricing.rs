@@ -190,6 +190,7 @@ const REFERENCE_PRICING: &[RefPricingTuple] = &[
     ("gemini-2.0-flash", 0.10, 0.40, 0.10, 0.025),
     // --- Zhipu GLM (most specific first) ---
     ("glm-5v-turbo", 1.20, 4.00, 0.00, 0.24),
+    ("glm-5.2", 1.00, 3.20, 0.00, 0.20),
     ("glm-5.1-turbo", 1.00, 3.20, 0.00, 0.20),
     ("glm-5.1", 1.00, 3.20, 0.00, 0.20),
     ("glm-5-turbo", 1.20, 4.00, 0.00, 0.24),

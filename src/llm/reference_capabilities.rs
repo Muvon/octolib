@@ -147,6 +147,7 @@ const REFERENCE_CAPABILITIES: &[RefCapsTuple] = &[
     // --- Zhipu GLM (most specific first) ---
     ("glm-5v-turbo", true, false, true, 128_000),
     ("glm-5v", true, false, true, 128_000),
+    ("glm-5.2", false, false, true, 200_000),
     ("glm-5.1-turbo", false, false, true, 200_000),
     ("glm-5.1", false, false, true, 200_000),
     ("glm-5-turbo", false, false, true, 128_000),

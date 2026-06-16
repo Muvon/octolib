@@ -16,6 +16,9 @@
 //!
 //! PRICING UPDATE: April 2026 (from <https://docs.z.ai/guides/overview/pricing>)
 //!
+//! GLM-5.2 series:
+//! - GLM-5.2: Input $1.00/1M, Cached $0.20/1M, Output $3.20/1M (pricing mirrors GLM-5.1)
+//!
 //! GLM-5.1 series:
 //! - GLM-5.1: Input $1.00/1M, Cached $0.20/1M, Output $3.20/1M
 //! - GLM-5.1-Turbo: Input $1.00/1M, Cached $0.20/1M, Output $3.20/1M
@@ -68,6 +71,8 @@ use std::env;
 /// Source: https://docs.z.ai/guides/overview/pricing (verified Apr 6, 2026)
 /// Format: (model, input, output, cache_write, cache_read)
 const PRICING: &[PricingTuple] = &[
+    // GLM-5.2 series (pricing mirrors GLM-5.1)
+    ("glm-5.2", 1.00, 3.20, 0.00, 0.20),
     // GLM-5.1 series
     ("glm-5.1-turbo", 1.00, 3.20, 0.00, 0.20),
     ("glm-5.1", 1.00, 3.20, 0.00, 0.20),
@@ -295,8 +300,8 @@ impl AiProvider for ZaiProvider {
     fn get_max_input_tokens(&self, model: &str) -> usize {
         // Z.ai model context window limits (case-insensitive)
         let model_lower = normalize_model_name(model);
-        if model_lower.contains("glm-5.1") {
-            200_000 // 200K context window for GLM-5.1
+        if model_lower.contains("glm-5.2") || model_lower.contains("glm-5.1") {
+            200_000 // 200K context window for GLM-5.1/5.2
         } else if model_lower.contains("glm-5") {
             128_000 // 128K context window for GLM-5
         } else if model_lower.contains("glm-4.7") {

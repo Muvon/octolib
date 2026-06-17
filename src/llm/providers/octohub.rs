@@ -509,18 +509,41 @@ fn input_item_for_message(msg: &Message) -> Option<serde_json::Value> {
     match msg.role.as_str() {
         "tool" => {
             let call_id = msg.tool_call_id.clone().unwrap_or_default();
-            Some(serde_json::json!({
+            let mut item = serde_json::json!({
                 "type": "function_call_output",
                 "call_id": call_id,
                 "output": msg.content
-            }))
+            });
+            // Forward the rolling cache breakpoint octomind sets on the tail tool
+            // result. Without this the marker is dropped and the (large) tool-result
+            // history is re-sent uncached every turn. Mirrors `user_message_value`.
+            if msg.cached {
+                item["cache_control"] =
+                    shared::ephemeral_cache_control_with_ttl(msg.cache_ttl.as_deref());
+            }
+            Some(item)
         }
         "user" => Some(user_message_value(msg)),
-        "assistant" if !msg.content.is_empty() => Some(serde_json::json!({
-            "type": "message",
-            "role": "assistant",
-            "content": msg.content
-        })),
+        "assistant" if !msg.content.is_empty() => {
+            // Plain string unless cached; when cached, use the typed-parts shape so
+            // the cache_control marker rides along (server reads it via is_cached()).
+            let content = if msg.cached {
+                let mut block = serde_json::json!([{
+                    "type": "input_text",
+                    "text": msg.content,
+                }]);
+                block[0]["cache_control"] =
+                    shared::ephemeral_cache_control_with_ttl(msg.cache_ttl.as_deref());
+                block
+            } else {
+                serde_json::json!(msg.content)
+            };
+            Some(serde_json::json!({
+                "type": "message",
+                "role": "assistant",
+                "content": content
+            }))
+        }
         _ => None,
     }
 }

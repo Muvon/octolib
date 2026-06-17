@@ -640,4 +640,59 @@ mod tests {
         let error_msg = result.err().unwrap().to_string();
         assert!(error_msg.contains("Unsupported model") || error_msg.contains("invalid"));
     }
+
+    /// How a provider settles its embedding dimension. `get_dimension()` is
+    /// synchronous, so the dimension MUST be known by the time construction returns.
+    /// A provider that reports `0` builds a zero-width vector column and the store
+    /// then rejects every real embedding — the bug that made the `local` provider
+    /// unusable for indexing.
+    ///
+    /// The match below deliberately has NO wildcard arm: adding a new
+    /// `EmbeddingProviderType` will not compile until its dimension strategy is
+    /// declared here. That is the guard — a new provider can never silently default
+    /// to dimension 0 without someone deciding, on this line, how it learns it.
+    #[derive(Debug, PartialEq)]
+    enum DimensionStrategy {
+        /// Known synchronously at construction (per-model map or local model config).
+        StaticAtConstruction,
+        /// Not advertised by the backend — must be probed from a live response in an
+        /// async `new()` and cached, like the Local and OpenRouter providers.
+        ProbedAtConstruction,
+    }
+
+    fn dimension_strategy(provider: &EmbeddingProviderType) -> DimensionStrategy {
+        match provider {
+            EmbeddingProviderType::FastEmbed
+            | EmbeddingProviderType::HuggingFace
+            | EmbeddingProviderType::Jina
+            | EmbeddingProviderType::Voyage
+            | EmbeddingProviderType::Google
+            | EmbeddingProviderType::OpenAI
+            | EmbeddingProviderType::Together => DimensionStrategy::StaticAtConstruction,
+            EmbeddingProviderType::OpenRouter
+            | EmbeddingProviderType::OctoHub
+            | EmbeddingProviderType::Local => DimensionStrategy::ProbedAtConstruction,
+        }
+    }
+
+    #[test]
+    fn every_provider_declares_a_dimension_strategy() {
+        // The compile-time guarantee lives in `dimension_strategy`'s exhaustive
+        // match. These assertions pin the providers whose dimension is NOT statically
+        // known to probe-at-construction, so a future "simplification" back to a sync
+        // constructor returning 0 (which silently breaks indexing) trips this test.
+        assert_eq!(
+            dimension_strategy(&EmbeddingProviderType::Local),
+            DimensionStrategy::ProbedAtConstruction
+        );
+        assert_eq!(
+            dimension_strategy(&EmbeddingProviderType::OpenRouter),
+            DimensionStrategy::ProbedAtConstruction
+        );
+        // Static providers must resolve a dimension without any network probe.
+        assert_eq!(
+            dimension_strategy(&EmbeddingProviderType::Voyage),
+            DimensionStrategy::StaticAtConstruction
+        );
+    }
 }

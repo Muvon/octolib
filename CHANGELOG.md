@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.23.4] - 2026-06-17
+
+### 📋 Release Summary
+
+This release introduces dimension probing for local embedding providers to ensure better model compatibility and accuracy (c4b00487).
+
+
+### ✨ New Features & Enhancements
+
+- **embedding**: implement dimension probing for local providers `c4b00487`
+
 ## [0.23.3] - 2026-06-16
 
 ### 📋 Release Summary

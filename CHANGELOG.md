@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.23.5] - 2026-06-17
+
+### 📋 Release Summary
+
+This release introduces cache control for tool and assistant messages, allowing for more efficient prompt management and reduced latency (0eb46291).
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: add cache control to tool and assistant messages `0eb46291`
+
 ## [0.23.4] - 2026-06-17
 
 ### 📋 Release Summary

@@ -24,6 +24,8 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use serde_json::json;
+use std::collections::HashMap;
+use std::sync::{LazyLock, RwLock};
 
 use super::super::types::InputType;
 use super::{EmbeddingProvider, HTTP_CLIENT};
@@ -32,19 +34,67 @@ const LOCAL_EMBED_API_KEY_ENV: &str = "LOCAL_EMBED_API_KEY";
 const LOCAL_EMBED_API_URL_ENV: &str = "LOCAL_EMBED_API_URL";
 const LOCAL_EMBED_API_URL: &str = "http://localhost:11434/v1/embeddings";
 
+/// Process-wide cache of probed embedding dimensions, keyed by `(endpoint, model)`.
+///
+/// An OpenAI-compatible server does not advertise its embedding dimension, so we
+/// must learn it from a live response. Providers are constructed repeatedly
+/// (indexing, every search, reranking), so we probe once per `(endpoint, model)`
+/// and reuse the result for all later constructions instead of issuing a network
+/// round-trip every time. Locks are handled poison-safely so a panic in another
+/// thread can never wedge dimension lookups.
+static DIMENSION_CACHE: LazyLock<RwLock<HashMap<(String, String), usize>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
+
 /// Local embedding provider for OpenAI-compatible local servers.
 pub struct LocalEmbeddingProvider {
     model_name: String,
+    dimension: usize,
 }
 
 impl LocalEmbeddingProvider {
-    pub fn new(model: &str) -> Result<Self> {
+    /// Construct the provider and probe its embedding dimension.
+    ///
+    /// An OpenAI-compatible server does not advertise its embedding dimension,
+    /// so — like the OpenRouter provider — we learn it from a single embedding
+    /// response at construction time and cache it for `get_dimension`. The
+    /// dimension is required up front to build the vector store schema.
+    pub async fn new(model: &str) -> Result<Self> {
         if model.is_empty() {
             return Err(anyhow::anyhow!("Model name cannot be empty"));
         }
-        Ok(Self {
+        let cache_key = (Self::api_url(), model.to_string());
+
+        // Reuse a dimension already probed for this (endpoint, model) — no network.
+        if let Some(dimension) = DIMENSION_CACHE
+            .read()
+            .ok()
+            .and_then(|cache| cache.get(&cache_key).copied())
+        {
+            return Ok(Self {
+                model_name: model.to_string(),
+                dimension,
+            });
+        }
+
+        let mut provider = Self {
             model_name: model.to_string(),
-        })
+            dimension: 0,
+        };
+        let probe = provider
+            .generate_embedding("dimension probe")
+            .await
+            .context("Failed to probe embedding dimension from the local server")?;
+        provider.dimension = probe.len();
+        if provider.dimension == 0 {
+            return Err(anyhow::anyhow!(
+                "Local embedding model '{}' returned a zero-length embedding while probing dimension",
+                model
+            ));
+        }
+        if let Ok(mut cache) = DIMENSION_CACHE.write() {
+            cache.insert(cache_key, provider.dimension);
+        }
+        Ok(provider)
     }
 
     fn api_url() -> String {
@@ -140,7 +190,7 @@ impl EmbeddingProvider for LocalEmbeddingProvider {
     }
 
     fn get_dimension(&self) -> usize {
-        0
+        self.dimension
     }
 
     fn is_model_supported(&self) -> bool {
@@ -152,11 +202,10 @@ impl EmbeddingProvider for LocalEmbeddingProvider {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_provider_creation() {
-        assert!(LocalEmbeddingProvider::new("nomic-embed-text").is_ok());
-        assert!(LocalEmbeddingProvider::new("any-model-name").is_ok());
-        assert!(LocalEmbeddingProvider::new("").is_err());
+    #[tokio::test]
+    async fn test_empty_model_rejected() {
+        // Rejected before any network probe, so this is safe offline.
+        assert!(LocalEmbeddingProvider::new("").await.is_err());
     }
 
     #[test]
@@ -166,12 +215,5 @@ mod tests {
             LocalEmbeddingProvider::api_url(),
             "http://localhost:11434/v1/embeddings"
         );
-    }
-
-    #[test]
-    fn test_is_model_supported() {
-        let provider = LocalEmbeddingProvider::new("nomic-embed-text").unwrap();
-        assert!(provider.is_model_supported());
-        assert_eq!(provider.get_dimension(), 0);
     }
 }

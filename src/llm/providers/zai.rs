@@ -72,10 +72,10 @@ use std::env;
 /// Format: (model, input, output, cache_write, cache_read)
 const PRICING: &[PricingTuple] = &[
     // GLM-5.2 series (pricing mirrors GLM-5.1)
-    ("glm-5.2", 1.00, 3.20, 0.00, 0.20),
+    ("glm-5.2", 1.40, 4.40, 0.00, 0.26),
     // GLM-5.1 series
-    ("glm-5.1-turbo", 1.00, 3.20, 0.00, 0.20),
-    ("glm-5.1", 1.00, 3.20, 0.00, 0.20),
+    ("glm-5.1-turbo", 1.40, 4.40, 0.00, 0.26),
+    ("glm-5.1", 1.40, 4.40, 0.00, 0.26),
     // GLM-5 series
     ("glm-5v-turbo", 1.20, 4.00, 0.00, 0.24), // vision
     ("glm-5-turbo", 1.20, 4.00, 0.00, 0.24),
@@ -723,9 +723,9 @@ mod tests {
         let cost = calculate_cost("glm-5-turbo", 1_000_000, 0, 1_000_000);
         assert!((cost.unwrap() - 5.20).abs() < 0.01); // 1.20 + 4.00
 
-        // Test GLM-5.1: $1.00 input, $3.20 output (same as GLM-5)
+        // Test GLM-5.1: $1.40 input, $4.40 output
         let cost = calculate_cost("glm-5.1", 1_000_000, 0, 1_000_000);
-        assert!((cost.unwrap() - 4.20).abs() < 0.01); // 1.00 + 3.20
+        assert!((cost.unwrap() - 5.80).abs() < 0.01); // 1.40 + 4.40
 
         // Test GLM-4.5: $0.60 input, $2.20 output
         let cost = calculate_cost("glm-4.5", 1_000_000, 0, 1_000_000);

@@ -632,6 +632,13 @@ impl AiProvider for MoonshotProvider {
                     // Moonshot's OpenAI-compat endpoint supports json_schema just like OpenAI
                     // but requires the "name" field in json_schema
                     if let Some(schema) = &response_format.schema {
+                        // Strict structured outputs need additionalProperties:false on
+                        // every nested object (no-op unless mode is Strict).
+                        let schema = crate::llm::utils::normalize_strict_schema(
+                            schema,
+                            response_format.mode,
+                        );
+
                         let mut format_obj = serde_json::json!({
                             "type": "json_schema",
                             "json_schema": {

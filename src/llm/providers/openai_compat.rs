@@ -126,6 +126,11 @@ pub(crate) async fn chat_completion(
                         request_body["format"] = serde_json::json!("json");
                     }
                 } else if let Some(schema) = &response_format.schema {
+                    // Strict structured outputs need additionalProperties:false on
+                    // every nested object (no-op unless mode is Strict).
+                    let schema =
+                        crate::llm::utils::normalize_strict_schema(schema, response_format.mode);
+
                     let mut format_obj = serde_json::json!({
                         "type": "json_schema",
                         "json_schema": {

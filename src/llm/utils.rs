@@ -136,6 +136,70 @@ pub fn calculate_cost_from_pricing_table(
     Some(regular_input_cost + cache_write_cost + cache_read_cost + output_cost)
 }
 
+/// Normalize a JSON schema for OpenAI strict structured output.
+///
+/// OpenAI's strict mode requires `additionalProperties: false` on every
+/// object in the schema. When `mode` is [`ResponseMode::Strict`] this
+/// recursively walks the schema and injects the flag into any
+/// `type: "object"` node missing it; otherwise the schema is returned
+/// unchanged. Providers call this before sending the schema to
+/// OpenAI-compatible endpoints (including OpenRouter, which forwards strict
+/// mode to OpenAI/Azure). Existing `additionalProperties` values are
+/// preserved.
+pub fn normalize_strict_schema(
+    schema: &serde_json::Value,
+    mode: crate::llm::types::ResponseMode,
+) -> serde_json::Value {
+    if matches!(mode, crate::llm::types::ResponseMode::Strict) {
+        inject_additional_properties(schema.clone())
+    } else {
+        schema.clone()
+    }
+}
+
+/// Recursively inject `additionalProperties: false` into every object node.
+fn inject_additional_properties(mut schema: serde_json::Value) -> serde_json::Value {
+    let Some(obj) = schema.as_object_mut() else {
+        return schema;
+    };
+
+    let is_object = obj
+        .get("type")
+        .and_then(|t| t.as_str())
+        .map(|t| t == "object")
+        .unwrap_or(false);
+
+    if is_object && !obj.contains_key("additionalProperties") {
+        obj.insert(
+            "additionalProperties".to_string(),
+            serde_json::Value::Bool(false),
+        );
+    }
+
+    // Recurse into properties
+    if let Some(properties) = obj.get_mut("properties").and_then(|p| p.as_object_mut()) {
+        for child in properties.values_mut() {
+            *child = inject_additional_properties(child.take());
+        }
+    }
+
+    // Recurse into array items
+    if let Some(items) = obj.get_mut("items") {
+        *items = inject_additional_properties(items.take());
+    }
+
+    // Handle allOf/anyOf/oneOf composition
+    for keyword in ["allOf", "anyOf", "oneOf"] {
+        if let Some(arr) = obj.get_mut(keyword).and_then(|a| a.as_array_mut()) {
+            for child in arr.iter_mut() {
+                *child = inject_additional_properties(child.take());
+            }
+        }
+    }
+
+    schema
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -222,5 +286,77 @@ mod tests {
         assert!(is_model_in_pricing_table("gpt-4o-mini", pricing));
         assert!(!is_model_in_pricing_table("gpt-5", pricing));
         assert!(!is_model_in_pricing_table("unknown-model", pricing));
+    }
+
+    #[test]
+    fn test_normalize_strict_schema_adds_additional_properties() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "descriptions": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "file_id": {"type": "string"},
+                            "description": {"type": "string"}
+                        },
+                        "required": ["file_id", "description"]
+                    }
+                }
+            },
+            "required": ["descriptions"]
+        });
+
+        let normalized = normalize_strict_schema(&schema, crate::llm::types::ResponseMode::Strict);
+        let obj = normalized.as_object().unwrap();
+        assert_eq!(
+            obj.get("additionalProperties"),
+            Some(&serde_json::Value::Bool(false))
+        );
+
+        let items = obj["properties"]["descriptions"]["items"]
+            .as_object()
+            .unwrap();
+        assert_eq!(
+            items.get("additionalProperties"),
+            Some(&serde_json::Value::Bool(false))
+        );
+    }
+
+    #[test]
+    fn test_normalize_strict_schema_preserves_existing_additional_properties() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+                "name": {"type": "string"}
+            }
+        });
+
+        let normalized = normalize_strict_schema(&schema, crate::llm::types::ResponseMode::Strict);
+        let obj = normalized.as_object().unwrap();
+        assert_eq!(
+            obj.get("additionalProperties"),
+            Some(&serde_json::Value::Bool(true))
+        );
+    }
+
+    #[test]
+    fn test_normalize_strict_schema_skips_non_object() {
+        let schema = serde_json::json!({"type": "string"});
+        let normalized = normalize_strict_schema(&schema, crate::llm::types::ResponseMode::Strict);
+        assert_eq!(normalized, serde_json::json!({"type": "string"}));
+    }
+
+    #[test]
+    fn test_normalize_strict_schema_noop_when_not_strict() {
+        // Non-strict modes must pass the schema through untouched.
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {"name": {"type": "string"}}
+        });
+        let normalized = normalize_strict_schema(&schema, crate::llm::types::ResponseMode::Auto);
+        assert_eq!(normalized, schema);
     }
 }

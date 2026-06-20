@@ -567,7 +567,7 @@ pub enum OutputFormat {
 }
 
 /// Response mode for structured output
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub enum ResponseMode {
     /// Automatic mode (provider decides)
     Auto,

@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.23.6] - 2026-06-21
+
+### 📋 Release Summary
+
+This release introduces JSON schema normalization to ensure more reliable outputs when using strict mode (c9034663). Additionally, pricing accuracy has been improved for GLM-5.1 and 5.2 models (07d2df1c).
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: implement JSON schema normalization for strict mode `c9034663`
+
+### 🔧 Improvements & Optimizations
+
+- **llm**: remove markdown link from doc comment `fa92abe7`
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: correct GLM-5.1 and 5.2 pricing rates `07d2df1c`
+
 ## [0.23.5] - 2026-06-17
 
 ### 📋 Release Summary

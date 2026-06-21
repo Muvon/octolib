@@ -139,7 +139,7 @@ pub fn calculate_cost_from_pricing_table(
 /// Normalize a JSON schema for OpenAI strict structured output.
 ///
 /// OpenAI's strict mode requires `additionalProperties: false` on every
-/// object in the schema. When `mode` is [`ResponseMode::Strict`] this
+/// object in the schema. When `mode` is `ResponseMode::Strict` this
 /// recursively walks the schema and injects the flag into any
 /// `type: "object"` node missing it; otherwise the schema is returned
 /// unchanged. Providers call this before sending the schema to

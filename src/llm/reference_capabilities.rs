@@ -80,6 +80,10 @@ const REFERENCE_CAPABILITIES: &[RefCapsTuple] = &[
     // --- Meta Llama 3 (text-only) ---
     ("llama-3-70b", false, false, true, 8_192),
     ("llama-3-8b", false, false, true, 8_192),
+    // --- Qwen 3.7 / 3.5 (text-only) ---
+    ("qwen-3.7-max", false, false, true, 262_144),
+    ("qwen-3.5-397b", false, false, true, 262_144),
+    ("qwen-3.5-9b", false, false, true, 131_072),
     // --- Qwen 3 (text-only) ---
     ("qwen-3-coder-480b", false, false, true, 262_144),
     ("qwen-3-235b", false, false, true, 131_072),

@@ -831,6 +831,10 @@ pub struct ChatCompletionParams {
     pub previous_id: Option<String>,
     /// Enable long-lived cache (provider-specific: OpenAI "24h" retention, Anthropic 1h TTL)
     pub use_long_cache: bool,
+    /// Explicit prompt-cache routing key (OpenAI `prompt_cache_key`). Optional hint
+    /// that pins requests sharing a long common prefix to the same cache, improving
+    /// hit rates. `None` = rely on automatic prefix-hash routing. OpenAI-only.
+    pub prompt_cache_key: Option<String>,
     /// Reasoning effort hint for thinking-capable models. `None` = provider default
     /// (most providers omit the field; hybrid models stay non-thinking).
     pub reasoning_effort: Option<ReasoningEffort>,
@@ -861,6 +865,7 @@ impl ChatCompletionParams {
             response_format: None,
             previous_id: None,
             use_long_cache: false,
+            prompt_cache_key: None,
             reasoning_effort: None,
         }
     }
@@ -868,6 +873,12 @@ impl ChatCompletionParams {
     /// Enable long-lived cache for this request
     pub fn with_long_cache(mut self, enabled: bool) -> Self {
         self.use_long_cache = enabled;
+        self
+    }
+
+    /// Set an explicit prompt-cache routing key (OpenAI `prompt_cache_key`).
+    pub fn with_prompt_cache_key(mut self, key: impl Into<String>) -> Self {
+        self.prompt_cache_key = Some(key.into());
         self
     }
 

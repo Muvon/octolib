@@ -513,6 +513,12 @@ impl AiProvider for OpenAiProvider {
             request_body["prompt_cache_retention"] = serde_json::json!("24h");
         }
 
+        // Explicit cache routing key: pins requests with a shared long prefix to the
+        // same cache for better hit rates (automatic prefix-hash routing still applies).
+        if let Some(ref cache_key) = params.prompt_cache_key {
+            request_body["prompt_cache_key"] = serde_json::json!(cache_key);
+        }
+
         // Execute the request with retry logic
         let account_id_header = oauth_account_id.as_ref().map(|(_, id)| id.clone());
         let api_url = env::var(OPENAI_API_URL_ENV).unwrap_or_else(|_| OPENAI_API_URL.to_string());

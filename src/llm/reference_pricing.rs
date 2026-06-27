@@ -136,6 +136,10 @@ const REFERENCE_PRICING: &[RefPricingTuple] = &[
     // --- Meta Llama 3 ---
     ("llama-3-70b", 0.60, 0.60, 0.60, 0.60),
     ("llama-3-8b", 0.10, 0.10, 0.10, 0.10),
+    // --- Qwen 3.7 / 3.5 (Together serverless rates) ---
+    ("qwen-3.7-max", 1.25, 3.75, 1.25, 0.13),
+    ("qwen-3.5-397b", 0.60, 3.60, 0.60, 0.35),
+    ("qwen-3.5-9b", 0.17, 0.25, 0.17, 0.17),
     // --- Qwen 3 ---
     ("qwen-3-coder-480b", 2.00, 2.00, 2.00, 2.00),
     ("qwen-3-235b", 0.60, 1.20, 0.60, 0.60),
@@ -301,6 +305,24 @@ mod tests {
     fn test_reference_pricing_together_format() {
         // Together uses HuggingFace-style names
         assert!(get_reference_pricing("meta-llama/Llama-3.3-70B-Instruct").is_some());
+    }
+
+    #[test]
+    fn test_reference_pricing_qwen_3_5_3_7() {
+        // Realistic Together model IDs must resolve via sanitized substring matching.
+        let p = get_reference_pricing("Qwen/Qwen3.7-Max").unwrap();
+        assert_eq!(p.input_price_per_1m, 1.25);
+        assert_eq!(p.cache_read_price_per_1m, 0.13);
+
+        let p = get_reference_pricing("Qwen/Qwen3.5-397B-A17B").unwrap();
+        assert_eq!(p.input_price_per_1m, 0.60);
+        assert_eq!(p.output_price_per_1m, 3.60);
+        assert_eq!(p.cache_read_price_per_1m, 0.35);
+
+        // 9B FP8 must NOT collide with the 397B entry
+        let p = get_reference_pricing("Qwen/Qwen3.5-9B-FP8").unwrap();
+        assert_eq!(p.input_price_per_1m, 0.17);
+        assert_eq!(p.output_price_per_1m, 0.25);
     }
 
     #[test]

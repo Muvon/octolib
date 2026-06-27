@@ -22,8 +22,8 @@ use crate::errors::ToolCallError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, SamplingSupport, TokenUsage,
-    ToolCall,
+    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, SamplingSupport,
+    ThinkingBlock, TokenUsage, ToolCall,
 };
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -210,6 +210,11 @@ struct TogetherChoice {
 #[derive(Deserialize, Debug)]
 struct TogetherResponseMessage {
     content: Option<String>,
+    /// Reasoning models (Qwen3, GPT-OSS, GLM, …) return their chain-of-thought
+    /// in a dedicated nullable `reasoning` field alongside `content`.
+    /// DeepSeek-R1 instead embeds it as `<think>…</think>` inside `content`.
+    #[serde(default)]
+    reasoning: Option<String>,
     tool_calls: Option<Vec<TogetherToolCall>>,
 }
 
@@ -428,7 +433,11 @@ async fn execute_together_request(
         .next()
         .ok_or_else(|| anyhow::anyhow!("No choices in Together.ai response"))?;
 
-    let content = choice.message.content.unwrap_or_default();
+    // Together reasoning models surface chain-of-thought either in a dedicated
+    // `reasoning` field or as inline <think>…</think> tags (DeepSeek-R1). Pull it
+    // out so it isn't silently dropped, and keep `content` clean.
+    let raw_content = choice.message.content.unwrap_or_default();
+    let (thinking, content) = extract_thinking(&raw_content, choice.message.reasoning);
 
     let tool_calls: Option<Vec<ToolCall>> = choice.message.tool_calls.map(|calls| {
         calls
@@ -475,7 +484,7 @@ async fn execute_together_request(
         output_tokens,
         cache_write_tokens: 0,
         cache_read_tokens,
-        reasoning_tokens: 0,
+        reasoning_tokens: thinking.as_ref().map(|t| t.tokens).unwrap_or(0),
         total_tokens,
         cost: request_body
             .get("model")
@@ -498,13 +507,56 @@ async fn execute_together_request(
 
     Ok(ProviderResponse {
         content,
-        thinking: None,
+        thinking,
         exchange,
         tool_calls,
         finish_reason: choice.finish_reason,
         structured_output,
         id: Some(together_response.id),
     })
+}
+
+/// Extract thinking content from a dedicated `reasoning` field or inline
+/// `<think>…</think>` tags, returning the thinking block (if any) and the
+/// cleaned content. Mirrors the Z.ai provider's reasoning handling.
+fn extract_thinking(content: &str, reasoning: Option<String>) -> (Option<ThinkingBlock>, String) {
+    // Priority 1: dedicated `reasoning` field (most Together reasoning models)
+    if let Some(ref thinking_str) = reasoning {
+        if !thinking_str.trim().is_empty() {
+            let tokens = (thinking_str.len() / 4) as u64;
+            return (
+                Some(ThinkingBlock {
+                    content: thinking_str.clone(),
+                    tokens,
+                }),
+                content.to_string(),
+            );
+        }
+    }
+
+    // Priority 2: inline <think>…</think> tags (DeepSeek-R1 on Together)
+    let think_start = "<think>";
+    let think_end = "</think>";
+    if let Some(start_idx) = content.find(think_start) {
+        if let Some(end_idx) = content.find(think_end) {
+            let thinking_content = &content[start_idx + think_start.len()..end_idx];
+            let before = &content[..start_idx];
+            let after = &content[end_idx + think_end.len()..];
+            let clean = format!("{}{}", before.trim(), after.trim())
+                .trim()
+                .to_string();
+            let tokens = (thinking_content.len() / 4) as u64;
+            return (
+                Some(ThinkingBlock {
+                    content: thinking_content.to_string(),
+                    tokens,
+                }),
+                clean,
+            );
+        }
+    }
+
+    (None, content.to_string())
 }
 
 #[cfg(test)]
@@ -518,5 +570,30 @@ mod tests {
         assert!(provider.supports_model("moonshotai/Kimi-K2.5"));
         assert!(provider.supports_model("any-model-name"));
         assert!(!provider.supports_model(""));
+    }
+
+    #[test]
+    fn test_extract_thinking_reasoning_field() {
+        let (thinking, content) =
+            extract_thinking("the answer is 42", Some("let me think...".to_string()));
+        assert_eq!(thinking.unwrap().content, "let me think...");
+        assert_eq!(content, "the answer is 42"); // content untouched
+    }
+
+    #[test]
+    fn test_extract_thinking_think_tags() {
+        let (thinking, content) = extract_thinking("<think>internal</think>visible answer", None);
+        assert_eq!(thinking.unwrap().content, "internal");
+        assert_eq!(content, "visible answer"); // tags stripped
+    }
+
+    #[test]
+    fn test_extract_thinking_none() {
+        let (thinking, content) = extract_thinking("plain answer", None);
+        assert!(thinking.is_none());
+        assert_eq!(content, "plain answer");
+        // empty/whitespace reasoning is ignored
+        let (thinking, _) = extract_thinking("x", Some("  ".to_string()));
+        assert!(thinking.is_none());
     }
 }

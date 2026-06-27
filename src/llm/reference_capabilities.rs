@@ -136,6 +136,7 @@ const REFERENCE_CAPABILITIES: &[RefCapsTuple] = &[
     ("gemma-2-27b", false, false, true, 8_192),
     ("gemma-2-9b", false, false, true, 8_192),
     // --- Google Gemini ---
+    ("gemini-3.5-flash", true, true, true, 1_048_576),
     ("gemini-3.1-pro", true, true, true, 1_048_576),
     ("gemini-3.1-flash-lite", true, true, true, 1_048_576),
     ("gemini-3-pro", true, true, true, 1_048_576),
@@ -187,6 +188,7 @@ const REFERENCE_CAPABILITIES: &[RefCapsTuple] = &[
     ("phi-3-vision", true, false, true, 131_072),
     ("phi-3", false, false, true, 131_072),
     // --- Moonshot Kimi (most specific first) ---
+    ("kimi-k2.7-code-highspeed", true, true, true, 256_000),
     ("kimi-k2.7-code", true, true, true, 256_000),
     ("kimi-k2.6-code-preview", false, false, true, 256_000),
     ("kimi-k2.6", false, false, true, 256_000),

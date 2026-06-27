@@ -180,6 +180,7 @@ const REFERENCE_PRICING: &[RefPricingTuple] = &[
     ("gemma-2-27b", 0.20, 0.20, 0.20, 0.20),
     ("gemma-2-9b", 0.05, 0.05, 0.05, 0.05),
     // --- Google Gemini ---
+    ("gemini-3.5-flash", 1.50, 9.00, 1.50, 0.15),
     ("gemini-3.1-pro", 2.00, 12.00, 2.00, 0.20),
     ("gemini-3.1-flash-lite", 0.25, 1.50, 0.25, 0.025),
     ("gemini-3-pro", 2.00, 12.00, 2.00, 0.20),
@@ -227,6 +228,7 @@ const REFERENCE_PRICING: &[RefPricingTuple] = &[
     ("phi-4", 0.07, 0.14, 0.07, 0.07),
     ("phi-3", 0.05, 0.10, 0.05, 0.05),
     // --- Moonshot Kimi (most specific first) ---
+    ("kimi-k2.7-code-highspeed", 1.90, 8.00, 1.90, 0.38),
     ("kimi-k2.7-code", 0.95, 4.00, 0.95, 0.19),
     ("kimi-k2.6-code-preview", 0.60, 2.50, 0.60, 0.15),
     ("kimi-k2.6", 0.60, 2.50, 0.60, 0.15),
@@ -334,5 +336,12 @@ mod tests {
         let p = get_reference_pricing("kimi-k2.7-code").unwrap();
         assert_eq!(p.input_price_per_1m, 0.95);
         assert_eq!(p.output_price_per_1m, 4.00);
+        // highspeed must NOT fall back to the base kimi-k2.7-code entry
+        let p = get_reference_pricing("kimi-k2.7-code-highspeed").unwrap();
+        assert_eq!(p.input_price_per_1m, 1.90);
+        assert_eq!(p.output_price_per_1m, 8.00);
+        let p = get_reference_pricing("gemini-3.5-flash").unwrap();
+        assert_eq!(p.input_price_per_1m, 1.50);
+        assert_eq!(p.output_price_per_1m, 9.00);
     }
 }

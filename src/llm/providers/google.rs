@@ -59,6 +59,8 @@ impl GoogleVertexProvider {
 /// Source: https://cloud.google.com/vertex-ai/generative-ai/pricing (verified Apr 6, 2026)
 /// Using ≤200K context tier prices. Format: (model, input, output, cache_write, cache_read)
 const PRICING: &[PricingTuple] = &[
+    // Gemini 3.5 series (GA May 2026; gemini-flash-latest points here)
+    ("gemini-3.5-flash", 1.50, 9.00, 1.50, 0.15),
     // Gemini 3.x series
     ("gemini-3.1-pro", 2.00, 12.00, 2.00, 0.20),
     ("gemini-3.1-flash", 0.50, 3.00, 0.50, 0.05),
@@ -437,6 +439,10 @@ mod tests {
         let p = provider.get_model_pricing("gemini-3.1-pro").unwrap();
         assert_eq!(p.input_price_per_1m, 2.00);
         assert_eq!(p.output_price_per_1m, 12.00);
+
+        let p = provider.get_model_pricing("gemini-3.5-flash").unwrap();
+        assert_eq!(p.input_price_per_1m, 1.50);
+        assert_eq!(p.output_price_per_1m, 9.00);
 
         let p = provider.get_model_pricing("gemini-2.5-flash").unwrap();
         assert_eq!(p.input_price_per_1m, 0.30);

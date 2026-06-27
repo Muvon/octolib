@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.23.7] - 2026-06-27
+
+### 📋 Release Summary
+
+This release expands model availability with support for Qwen 3.5/3.7, Gemini 3.5 Flash, and Kimi k2.7 (29beafc2, b0f2c84a). It also introduces advanced capabilities including OpenAI prompt caching and reasoning support for the Together provider (d13f28b6, e0de37a9). Additionally, streaming stability and dependencies for the Together provider have been improved (f4b98ded).
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: add Qwen 3.5 and 3.7 model support `29beafc2`
+- **llm**: add reasoning support for together provider `e0de37a9`
+- **llm**: add prompt cache key support for openai `d13f28b6`
+- **llm**: add gemini-3.5-flash and kimi-k2.7-code-highspeed `b0f2c84a`
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: improve Together provider streaming and update deps `f4b98ded`
+
+## [0.23.7] - 2026-06-27
+
+### 📋 Release Summary
+
+This release expands model availability with support for Qwen 3.5/3.7, Gemini 3.5 Flash, and Kimi K2.7 (29beafc2, b0f2c84a). It also introduces advanced capabilities, including reasoning support for Together AI and prompt cache keys for OpenAI (e0de37a9, d13f28b6). Additionally, streaming stability for the Together provider has been improved (f4b98ded).
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: add Qwen 3.5 and 3.7 model support `29beafc2`
+- **llm**: add reasoning support for together provider `e0de37a9`
+- **llm**: add prompt cache key support for openai `d13f28b6`
+- **llm**: add gemini-3.5-flash and kimi-k2.7-code-highspeed `b0f2c84a`
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: improve Together provider streaming and update deps `f4b98ded`
+
 ## [0.23.6] - 2026-06-21
 
 ### 📋 Release Summary

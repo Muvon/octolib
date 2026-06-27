@@ -23,6 +23,7 @@
 //!
 //! Per 1M tokens (USD): (cache_hit, cache_miss_input, output)
 //! - kimi-k2.7-code:             $0.19 / $0.95 / $4.00
+//! - kimi-k2.7-code-highspeed:   $0.38 / $1.90 / $8.00
 //! - kimi-k2.6:                  $0.16 / $0.95 / $4.00
 //! - kimi-k2.5:                  $0.10 / $0.60 / $3.00
 //! - kimi-k2-0905-preview:       $0.15 / $0.60 / $2.50
@@ -59,6 +60,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// - V1 legacy models have no cache support → `cache_write` = `cache_read` = `input`.
 /// - Order matters: more specific patterns first (substring matching).
 const PRICING: &[PricingTuple] = &[
+    // Kimi K2.7 Code HighSpeed (high-throughput variant; must precede the
+    // general kimi-k2.7 entry since that pattern is a substring of this name)
+    ("kimi-k2.7-code-highspeed", 1.90, 8.00, 1.90, 0.38),
     // Kimi K2.7 Code (multimodal coding flagship, covers kimi-k2.7-code)
     ("kimi-k2.7", 0.95, 4.00, 0.95, 0.19),
     // Kimi K2.6 (multimodal)
@@ -842,6 +846,7 @@ mod tests {
         assert!(provider.supports_model("kimi-k2.5"));
         assert!(provider.supports_model("kimi-k2.6"));
         assert!(provider.supports_model("kimi-k2.7-code"));
+        assert!(provider.supports_model("kimi-k2.7-code-highspeed"));
         assert!(provider.supports_model("kimi-k2-0711-preview"));
         assert!(provider.supports_model("kimi-k2-0905-preview"));
         assert!(provider.supports_model("KIMI-K2"));
@@ -974,6 +979,13 @@ mod tests {
         assert!(cost_cached.is_some());
         let expected_cached = (0.5 * 0.95) + (0.5 * 0.19) + (0.25 * 4.00);
         assert!((cost_cached.unwrap() - expected_cached).abs() < 0.01);
+
+        // highspeed must resolve to its own pricing ($1.90/$8.00), NOT the base
+        // kimi-k2.7 entry (substring-ordering regression guard)
+        let cost_hs = calculate_cost("kimi-k2.7-code-highspeed", 1_000_000, 500_000);
+        assert!(cost_hs.is_some());
+        let expected_hs = 1.90 + (0.5 * 8.00);
+        assert!((cost_hs.unwrap() - expected_hs).abs() < 0.01);
     }
     #[test]
     fn test_moonshot_v1_pricing() {

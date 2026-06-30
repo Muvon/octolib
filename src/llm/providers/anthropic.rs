@@ -40,6 +40,8 @@ const PRICING: &[PricingTuple] = &[
     ("claude-opus-4-8", 5.00, 25.00, 6.25, 0.50),
     // Claude 4.7
     ("claude-opus-4-7", 5.00, 25.00, 6.25, 0.50),
+    // Claude Sonnet 5: $3/$15 standard sticker, cache write 1.25x, cache read 0.1x
+    ("claude-sonnet-5", 3.00, 15.00, 3.75, 0.30),
     // Claude 4.6
     ("claude-sonnet-4-6-20260217", 3.00, 15.00, 3.75, 0.30),
     ("claude-sonnet-4-6", 3.00, 15.00, 3.75, 0.30),

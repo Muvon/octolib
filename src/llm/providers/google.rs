@@ -70,9 +70,9 @@ const PRICING: &[PricingTuple] = &[
     // Gemini 2.5 series
     ("gemini-2.5-flash-lite", 0.10, 0.40, 0.10, 0.01),
     ("gemini-2.5-flash", 0.30, 2.50, 0.30, 0.03),
-    ("gemini-2.5-pro", 1.25, 10.00, 1.25, 0.125),
+    ("gemini-2.5-pro", 1.25, 10.00, 1.25, 0.13),
     // Gemini 2.0 series
-    ("gemini-2.0-flash", 0.10, 0.40, 0.10, 0.025),
+    ("gemini-2.0-flash", 0.15, 0.60, 0.10, 0.025),
 ];
 
 const GOOGLE_CREDENTIAL_FILE_ENV: &str = "GOOGLE_CREDENTIAL_FILE";

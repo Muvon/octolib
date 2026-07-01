@@ -36,6 +36,7 @@ type RefPricingTuple = (&'static str, f64, f64, f64, f64);
 const REFERENCE_PRICING: &[RefPricingTuple] = &[
     // --- Anthropic Claude (most specific first) ---
     ("claude-fable-5", 10.00, 50.00, 12.50, 1.00),
+    ("claude-mythos-5", 10.00, 50.00, 12.50, 1.00),
     ("claude-opus-4-8", 5.00, 25.00, 6.25, 0.50),
     ("claude-opus-4-7", 5.00, 25.00, 6.25, 0.50),
     ("claude-opus-4-6", 5.00, 25.00, 6.25, 0.50),

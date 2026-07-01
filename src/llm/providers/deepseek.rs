@@ -14,20 +14,22 @@
 
 //! DeepSeek provider implementation
 //!
-//! PRICING UPDATE: April 2026
+//! PRICING UPDATE: April 2026 (revised 2026-04-24 per change log)
 //! Source: <https://api-docs.deepseek.com/quick_start/pricing>
 //!
 //! deepseek-v4-flash (1M context, thinking by default):
-//! - Cache Hit: $0.028
+//! - Cache Hit: $0.0028
 //! - Cache Miss (Input): $0.14
 //! - Output: $0.28
 //!
 //! deepseek-v4-pro (1M context, thinking by default):
-//! - Cache Hit: $0.145
-//! - Cache Miss (Input): $1.74
-//! - Output: $3.48
+//! - Cache Hit: $0.003625
+//! - Cache Miss (Input): $0.435
+//! - Output: $0.87
 //!
-//! Legacy aliases (deprecated, V3.2 pricing retained):
+//! Legacy aliases (deprecated, routed to v4-flash non-thinking/thinking modes
+//! since 2026-04-24, billed at v4-flash rates; scheduled for removal
+//! 2026-07-24 15:59 UTC per <https://api-docs.deepseek.com/updates>):
 //! deepseek-chat (non-thinking), deepseek-reasoner (thinking)
 
 use crate::errors::ProviderError;
@@ -49,11 +51,11 @@ use std::env;
 /// Note: DeepSeek uses cache_hit/cache_miss model - cache_write = cache_miss (input), cache_read = cache_hit
 const PRICING: &[PricingTuple] = &[
     // V4 family (1M context)
-    ("deepseek-v4-pro", 1.74, 3.48, 1.74, 0.145),
-    ("deepseek-v4-flash", 0.14, 0.28, 0.14, 0.028),
-    // Legacy aliases (deprecated, V3.2 pricing retained)
-    ("deepseek-chat", 0.28, 0.42, 0.28, 0.028),
-    ("deepseek-reasoner", 0.28, 0.42, 0.28, 0.028),
+    ("deepseek-v4-pro", 0.435, 0.87, 0.435, 0.003625),
+    ("deepseek-v4-flash", 0.14, 0.28, 0.14, 0.0028),
+    // Legacy aliases (deprecated, routed to v4-flash rates since 2026-04-24)
+    ("deepseek-chat", 0.14, 0.28, 0.14, 0.0028),
+    ("deepseek-reasoner", 0.14, 0.28, 0.14, 0.0028),
 ];
 
 /// Get pricing tuple for a specific model (case-insensitive)
@@ -640,18 +642,17 @@ mod tests {
 
     #[test]
     fn test_calculate_cost() {
-        // Test basic cost calculation with Jan 2026 pricing
-        // deepseek-chat: Input: $0.27/1M, Output: $1.10/1M
+        // Test basic cost calculation with v4-flash-routed pricing (since 2026-04-24)
+        // deepseek-chat: Input: $0.14/1M, Output: $0.28/1M
         let cost = calculate_cost("deepseek-chat", 1_000_000, 500_000);
         assert!(cost.is_some());
         let cost_value = cost.unwrap();
 
-        // V3.2 pricing: Input: $0.28/1M, Output: $0.42/1M
-        // Expected: (1M * $0.28) + (0.5M * $0.42) = $0.28 + $0.21 = $0.49
-        let expected = 0.28 + (0.5 * 0.42);
+        // Expected: (1M * $0.14) + (0.5M * $0.28) = $0.14 + $0.14 = $0.28
+        let expected = 0.14 + (0.5 * 0.28);
         assert!((cost_value - expected).abs() < 0.01);
 
-        // Both models now share the same V3.2 pricing
+        // Both models now share the same v4-flash pricing
         let cost2 = calculate_cost("deepseek-reasoner", 1_000_000, 500_000);
         assert!(cost2.is_some());
         assert!((cost2.unwrap() - expected).abs() < 0.01);
@@ -659,14 +660,14 @@ mod tests {
 
     #[test]
     fn test_calculate_cost_with_cache() {
-        // V3.2 pricing: Cache hit: $0.028/1M, Cache miss: $0.28/1M, Output: $0.42/1M
+        // v4-flash-routed pricing: Cache hit: $0.0028/1M, Cache miss: $0.14/1M, Output: $0.28/1M
         let cost = calculate_cost_with_cache("deepseek-chat", 500_000, 500_000, 250_000);
         assert!(cost.is_some());
         let cost_value = cost.unwrap();
 
-        // Expected: (0.5M * $0.28) + (0.5M * $0.028) + (0.25M * $0.42)
-        //         = $0.14 + $0.014 + $0.105 = $0.259
-        let expected = (0.5 * 0.28) + (0.5 * 0.028) + (0.25 * 0.42);
+        // Expected: (0.5M * $0.14) + (0.5M * $0.0028) + (0.25M * $0.28)
+        //         = $0.07 + $0.0014 + $0.07 = $0.1414
+        let expected = (0.5 * 0.14) + (0.5 * 0.0028) + (0.25 * 0.28);
         assert!((cost_value - expected).abs() < 0.01);
 
         // Cost with cache should be less than without cache for same total input

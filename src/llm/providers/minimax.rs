@@ -36,21 +36,22 @@ use std::env;
 const PRICING: &[PricingTuple] = &[
     // MiniMax M3 (latest generation, natively multimodal — image + video input)
     // Standard rate; a temporary launch promo halves these to 0.30/1.20.
-    ("MiniMax-M3-highspeed", 0.60, 2.40, 0.75, 0.06),
-    ("MiniMax-M3", 0.60, 2.40, 0.75, 0.06),
+    // Cache writes are free (no cache-write column in official pricing).
+    ("MiniMax-M3-highspeed", 0.60, 2.40, 0.0, 0.06),
+    ("MiniMax-M3", 0.60, 2.40, 0.0, 0.06),
     // MiniMax M2.7
-    ("MiniMax-M2.7-highspeed", 0.60, 2.40, 0.75, 0.06),
+    ("MiniMax-M2.7-highspeed", 0.60, 2.40, 0.375, 0.06),
     ("MiniMax-M2.7", 0.30, 1.20, 0.375, 0.06),
     // MiniMax M2.5
-    ("MiniMax-M2.5-highspeed", 0.60, 2.40, 0.75, 0.03),
-    ("MiniMax-M2.5-lightning", 0.60, 2.40, 0.75, 0.03), // backward-compatible alias
+    ("MiniMax-M2.5-highspeed", 0.60, 2.40, 0.375, 0.03),
+    ("MiniMax-M2.5-lightning", 0.60, 2.40, 0.375, 0.03), // backward-compatible alias
     ("MiniMax-M2.5", 0.30, 1.20, 0.375, 0.03),
     // M2-her (no caching)
     ("M2-her", 0.30, 1.20, 0.0, 0.0),
     // Legacy entries kept for compatibility
-    ("MiniMax-M2.1-lightning", 0.30, 2.40, 0.30, 0.03),
-    ("MiniMax-M2.1", 0.27, 0.95, 0.27, 0.027),
-    ("MiniMax-M2", 0.255, 1.00, 0.255, 0.0255),
+    ("MiniMax-M2.1-lightning", 0.60, 2.40, 0.375, 0.03),
+    ("MiniMax-M2.1", 0.30, 1.20, 0.375, 0.03),
+    ("MiniMax-M2", 0.30, 1.20, 0.375, 0.03),
 ];
 
 /// Token usage breakdown for cache-aware pricing
@@ -765,17 +766,17 @@ mod tests {
         let cost = calculate_minimax_cost("MiniMax-M2.5-lightning", 1_000_000, 1_000_000, 0, 0);
         assert_eq!(cost, Some(3.00)); // 0.60 + 2.40
 
-        // Test MiniMax-M2.1: $0.27 input, $0.95 output
+        // Test MiniMax-M2.1: $0.30 input, $1.20 output
         let cost = calculate_minimax_cost("MiniMax-M2.1", 1_000_000, 1_000_000, 0, 0);
-        assert_eq!(cost, Some(1.22)); // 0.27 + 0.95
+        assert_eq!(cost, Some(1.50)); // 0.30 + 1.20
 
-        // Test MiniMax-M2.1-lightning: $0.30 input, $2.40 output
+        // Test MiniMax-M2.1-lightning: $0.60 input, $2.40 output
         let cost = calculate_minimax_cost("MiniMax-M2.1-lightning", 1_000_000, 1_000_000, 0, 0);
-        assert!((cost.unwrap() - 2.7).abs() < 0.0001);
+        assert_eq!(cost, Some(3.00)); // 0.60 + 2.40
 
-        // Test MiniMax-M2: $0.255 input, $1.00 output
+        // Test MiniMax-M2: $0.30 input, $1.20 output
         let cost = calculate_minimax_cost("MiniMax-M2", 1_000_000, 1_000_000, 0, 0);
-        assert_eq!(cost, Some(1.255)); // 0.255 + 1.00
+        assert_eq!(cost, Some(1.50)); // 0.30 + 1.20
     }
 
     #[test]

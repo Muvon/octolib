@@ -36,12 +36,16 @@ use std::env;
 const PRICING: &[PricingTuple] = &[
     // Mythos-class (Fable 5): $10/$50, cache write 1.25x, cache read 0.1x
     ("claude-fable-5", 10.00, 50.00, 12.50, 1.00),
+    // Claude Mythos 5 (Project Glasswing only): same pricing/capabilities as Fable 5
+    ("claude-mythos-5", 10.00, 50.00, 12.50, 1.00),
     // Claude 4.8
     ("claude-opus-4-8", 5.00, 25.00, 6.25, 0.50),
     // Claude 4.7
     ("claude-opus-4-7", 5.00, 25.00, 6.25, 0.50),
-    // Claude Sonnet 5: $3/$15 standard sticker, cache write 1.25x, cache read 0.1x
-    ("claude-sonnet-5", 3.00, 15.00, 3.75, 0.30),
+    // Claude Sonnet 5: introductory pricing $2/$10 in effect through 2026-08-31,
+    // after which standard pricing of $3/$15 takes effect. Cache write is the
+    // 5m rate (1.25x input); the 1h tier is $4.00 and isn't representable here.
+    ("claude-sonnet-5", 2.00, 10.00, 2.50, 0.20),
     // Claude 4.6
     ("claude-sonnet-4-6-20260217", 3.00, 15.00, 3.75, 0.30),
     ("claude-sonnet-4-6", 3.00, 15.00, 3.75, 0.30),
@@ -91,12 +95,13 @@ struct CacheTokenUsage {
 }
 
 /// Models that reject ALL sampling parameters (temperature, top_p, top_k).
-const NO_SAMPLING_MODELS: &[&str] = &["fable-5", "opus-4-8", "opus-4-7"];
+const NO_SAMPLING_MODELS: &[&str] = &["fable-5", "mythos-5", "opus-4-8", "opus-4-7"];
 
 /// Models that support extended thinking via the `thinking` block.
 /// Substring match against `params.model`. Order matters only for documentation.
 const THINKING_MODELS: &[&str] = &[
     "fable-5",
+    "mythos-5",
     "opus-4-8",
     "opus-4-7",
     "opus-4-6",
@@ -114,18 +119,31 @@ const THINKING_MODELS: &[&str] = &[
 /// Models that support (or require) adaptive thinking via `thinking.type: "adaptive"`.
 /// Opus 4.7 rejects manual `thinking.type: "enabled"` outright; on Opus 4.6 and
 /// Sonnet 4.6, manual mode is deprecated and will be removed.
-const ADAPTIVE_THINKING_MODELS: &[&str] =
-    &["fable-5", "opus-4-8", "opus-4-7", "opus-4-6", "sonnet-4-6"];
+const ADAPTIVE_THINKING_MODELS: &[&str] = &[
+    "fable-5",
+    "mythos-5",
+    "opus-4-8",
+    "opus-4-7",
+    "opus-4-6",
+    "sonnet-4-6",
+];
 
 /// Models where adaptive thinking is the ONLY accepted mode. Manual
 /// `thinking.type: "enabled"` returns a 400. These models also default
 /// `display: "omitted"`, so we opt in to `"summarized"` to keep thinking
 /// text visible in `ProviderResponse::thinking`.
-const ADAPTIVE_ONLY_MODELS: &[&str] = &["fable-5", "opus-4-7"];
+const ADAPTIVE_ONLY_MODELS: &[&str] = &["fable-5", "mythos-5", "opus-4-7"];
 
 /// Models that accept `output_config.effort`. Per Anthropic docs:
-/// Fable 5, Mythos Preview, Opus 4.7, Opus 4.6, Sonnet 4.6, Opus 4.5.
-const EFFORT_PARAM_MODELS: &[&str] = &["fable-5", "opus-4-7", "opus-4-6", "sonnet-4-6", "opus-4-5"];
+/// Fable 5, Mythos 5, Opus 4.7, Opus 4.6, Sonnet 4.6, Opus 4.5.
+const EFFORT_PARAM_MODELS: &[&str] = &[
+    "fable-5",
+    "mythos-5",
+    "opus-4-7",
+    "opus-4-6",
+    "sonnet-4-6",
+    "opus-4-5",
+];
 
 /// Models that reject top_p but accept temperature and top_k.
 const NO_TOP_P_MODELS: &[&str] = &[
@@ -278,16 +296,18 @@ impl AiProvider for AnthropicProvider {
         model_lower.contains("claude-3")
             || model_lower.contains("claude-4")
             || model_lower.contains("claude-fable-5")
+            || model_lower.contains("claude-mythos-5")
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {
         // Anthropic model context window limits (case-insensitive)
         let model_lower = normalize_model_name(model);
         if model_lower.contains("claude-fable-5")
+            || model_lower.contains("claude-mythos-5")
             || model_lower.contains("claude-opus-4-8")
             || model_lower.contains("claude-opus-4-7")
         {
-            // Claude Fable 5 and Opus 4.8 / 4.7 have 1M context window
+            // Claude Fable 5, Mythos 5, and Opus 4.8 / 4.7 have 1M context window
             1_000_000
         } else if model_lower.contains("claude-opus-4")
             || model_lower.contains("claude-sonnet-4")
@@ -1227,10 +1247,32 @@ mod tests {
             provider.supported_sampling_params(model),
             SamplingSupport::NONE
         );
+    }
 
-        // Mythos 5 is Glasswing-restricted (not generally available), so it is
-        // intentionally not registered.
-        assert!(!provider.supports_model("claude-mythos-5"));
+    #[test]
+    fn test_mythos_5() {
+        let provider = AnthropicProvider::new();
+
+        // Project Glasswing only, but same pricing/capabilities as Fable 5
+        let model = "claude-mythos-5";
+        assert!(provider.supports_model(model));
+
+        // $10/$50, cache write 1.25x = 12.50, cache read 0.1x = 1.00
+        let pricing = provider.get_model_pricing(model).unwrap();
+        assert_eq!(pricing.input_price_per_1m, 10.0);
+        assert_eq!(pricing.output_price_per_1m, 50.0);
+        assert_eq!(pricing.cache_write_price_per_1m, 12.50);
+        assert_eq!(pricing.cache_read_price_per_1m, 1.00);
+
+        // 1M context window and vision (ID lacks claude-3/claude-4 substrings)
+        assert_eq!(provider.get_max_input_tokens(model), 1_000_000);
+        assert!(provider.supports_vision(model));
+
+        // Adaptive-only: rejects ALL sampling parameters
+        assert_eq!(
+            provider.supported_sampling_params(model),
+            SamplingSupport::NONE
+        );
     }
 
     #[test]

@@ -138,12 +138,23 @@ const REFERENCE_PRICING: &[RefPricingTuple] = &[
     // --- Meta Llama 3 ---
     ("llama-3-70b", 0.60, 0.60, 0.60, 0.60),
     ("llama-3-8b", 0.10, 0.10, 0.10, 0.10),
-    // --- Qwen 3.7 / 3.5 (Together serverless rates) ---
+    // --- Qwen 3.5 / 3.6 / 3.7 (Together serverless rates where hosted) ---
     ("qwen-3.7-max", 1.25, 3.75, 1.25, 0.13),
+    ("qwen-3.7-plus", 0.32, 1.28, 0.32, 0.03),
+    ("qwen-3.6-max", 1.30, 7.80, 1.30, 0.13),
+    ("qwen-3.6-plus", 0.50, 3.00, 0.50, 0.05),
+    ("qwen-3.6-flash", 0.25, 1.50, 0.25, 0.025),
     ("qwen-3.5-397b", 0.60, 3.60, 0.60, 0.35),
     ("qwen-3.5-9b", 0.17, 0.25, 0.17, 0.17),
+    ("qwen-3.5-plus", 0.40, 2.40, 0.40, 0.04),
+    ("qwen-3.5-flash", 0.10, 0.40, 0.10, 0.01),
     // --- Qwen 3 ---
+    ("qwen-3-coder-next", 0.11, 0.80, 0.11, 0.11),
+    ("qwen-3-coder-plus", 1.00, 5.00, 1.00, 0.10),
+    ("qwen-3-coder-flash", 0.30, 1.50, 0.30, 0.03),
     ("qwen-3-coder-480b", 2.00, 2.00, 2.00, 2.00),
+    ("qwen-3-vl-plus", 0.20, 1.60, 0.20, 0.02),
+    ("qwen-3-max", 1.20, 6.00, 1.20, 0.12),
     ("qwen-3-235b", 0.60, 1.20, 0.60, 0.60),
     ("qwen-3-32b", 0.10, 0.10, 0.10, 0.10),
     ("qwen-3-8b", 0.05, 0.05, 0.05, 0.05),
@@ -152,6 +163,11 @@ const REFERENCE_PRICING: &[RefPricingTuple] = &[
     ("qwen-2.5-32b", 0.10, 0.10, 0.10, 0.10),
     ("qwen-2.5-coder-32b", 0.10, 0.10, 0.10, 0.10),
     ("qwen-2.5-7b", 0.05, 0.05, 0.05, 0.05),
+    // --- Qwen proprietary API aliases (Alibaba Model Studio base tier, unversioned — keep last) ---
+    ("qwen-max", 1.60, 6.40, 1.60, 0.16),
+    ("qwen-plus", 0.40, 1.20, 0.40, 0.04),
+    ("qwen-flash", 0.05, 0.40, 0.05, 0.005),
+    ("qwen-turbo", 0.05, 0.20, 0.05, 0.005),
     // --- DeepSeek ---
     ("deepseek-v4-pro", 1.74, 3.48, 1.74, 0.145),
     ("deepseek-v4-flash", 0.14, 0.28, 0.14, 0.028),
@@ -325,6 +341,28 @@ mod tests {
         let p = get_reference_pricing("Qwen/Qwen3.5-9B-FP8").unwrap();
         assert_eq!(p.input_price_per_1m, 0.17);
         assert_eq!(p.output_price_per_1m, 0.25);
+
+        // Together-hosted Plus variants
+        let p = get_reference_pricing("Qwen/Qwen3.7-Plus").unwrap();
+        assert_eq!(p.input_price_per_1m, 0.32);
+        assert_eq!(p.output_price_per_1m, 1.28);
+        let p = get_reference_pricing("Qwen/Qwen3.6-Plus").unwrap();
+        assert_eq!(p.input_price_per_1m, 0.50);
+        assert_eq!(p.output_price_per_1m, 3.00);
+
+        // Alibaba proprietary API names
+        let p = get_reference_pricing("qwen3.6-flash").unwrap();
+        assert_eq!(p.input_price_per_1m, 0.25);
+        let p = get_reference_pricing("qwen3-max-2026-01-25").unwrap();
+        assert_eq!(p.input_price_per_1m, 1.20);
+        let p = get_reference_pricing("qwen3-coder-plus").unwrap();
+        assert_eq!(p.input_price_per_1m, 1.00);
+        // unversioned aliases must not shadow versioned entries
+        let p = get_reference_pricing("qwen-plus-latest").unwrap();
+        assert_eq!(p.input_price_per_1m, 0.40);
+        assert_eq!(p.output_price_per_1m, 1.20);
+        let p = get_reference_pricing("qwen-turbo").unwrap();
+        assert_eq!(p.output_price_per_1m, 0.20);
     }
 
     #[test]

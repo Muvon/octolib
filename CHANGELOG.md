@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.23.8] - 2026-07-02
+
+### 📋 Release Summary
+
+This release expands model compatibility and improves cost tracking by adding support for Qwen 3.5-3.7 and Claude Sonnet 5 (ab0def97, 1941ed2e, 8386a1ce). These updates ensure more accurate pricing calculations across a wider range of proprietary LLM providers.
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: add Qwen 3.5-3.7 and proprietary pricing `ab0def97`
+- **llm**: update model support and pricing `1941ed2e`
+- **llm**: add pricing for claude-sonnet-5 `8386a1ce`
+
 ## [0.23.7] - 2026-06-27
 
 ### 📋 Release Summary

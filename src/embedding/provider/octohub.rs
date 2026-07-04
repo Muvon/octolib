@@ -29,7 +29,7 @@ use super::{EmbeddingProvider, HTTP_CLIENT};
 
 const OCTOHUB_API_KEY_ENV: &str = "OCTOHUB_API_KEY";
 const OCTOHUB_API_URL_ENV: &str = "OCTOHUB_API_URL";
-const OCTOHUB_DEFAULT_URL: &str = "http://127.0.0.1:8080";
+const OCTOHUB_DEFAULT_URL: &str = "https://hub.octomind.run";
 
 /// OctoHub embedding provider - routes through OctoHub proxy server
 pub struct OctoHubEmbeddingProvider {

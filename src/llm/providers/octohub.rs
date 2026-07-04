@@ -31,7 +31,7 @@ use serde::Deserialize;
 
 const OCTOHUB_API_KEY_ENV: &str = "OCTOHUB_API_KEY";
 const OCTOHUB_API_URL_ENV: &str = "OCTOHUB_API_URL";
-const OCTOHUB_DEFAULT_BASE_URL: &str = "http://127.0.0.1:8080";
+const OCTOHUB_DEFAULT_BASE_URL: &str = "https://hub.octomind.run";
 
 /// OctoHub provider — routes through an OctoHub proxy server using the
 /// Responses API format (`/v1/completions`).

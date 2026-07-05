@@ -170,7 +170,7 @@ mod tests {
         std::env::remove_var(OCTOHUB_API_URL_ENV);
         assert_eq!(
             OctoHubEmbeddingProvider::api_url(),
-            "http://127.0.0.1:8080/v1/embeddings"
+            "https://hub.octomind.run/v1/embeddings"
         );
     }
 

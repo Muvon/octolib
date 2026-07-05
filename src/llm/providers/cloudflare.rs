@@ -116,7 +116,7 @@ impl AiProvider for CloudflareWorkersAiProvider {
             return true;
         }
         // Fall back to reference capabilities for the underlying model
-        crate::llm::reference_capabilities::get_reference_capabilities(model)
+        crate::llm::reference_models::get_reference_capabilities(model)
             .map(|c| c.vision)
             .unwrap_or(false)
     }
@@ -125,14 +125,18 @@ impl AiProvider for CloudflareWorkersAiProvider {
         true
     }
 
+    fn enforces_response_schema(&self, _model: &str) -> bool {
+        true
+    }
+
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
         // Try reference pricing based on underlying model
-        crate::llm::reference_pricing::get_reference_pricing(model)
+        crate::llm::reference_models::get_reference_pricing(model)
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {
         // Use reference capabilities for model-specific context windows
-        crate::llm::reference_capabilities::get_reference_capabilities(model)
+        crate::llm::reference_models::get_reference_capabilities(model)
             .map(|c| c.max_input_tokens)
             .unwrap_or(4_096) // Conservative default for Cloudflare's smaller models
     }

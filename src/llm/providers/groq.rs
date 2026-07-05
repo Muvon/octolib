@@ -118,6 +118,10 @@ impl AiProvider for GroqProvider {
         true
     }
 
+    fn enforces_response_schema(&self, _model: &str) -> bool {
+        true
+    }
+
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
         // Try Groq-specific pricing first
         if let Some((input, output, cache_write, cache_read)) =
@@ -131,7 +135,7 @@ impl AiProvider for GroqProvider {
             ));
         }
         // Fall back to reference pricing for other open-weight models
-        crate::llm::reference_pricing::get_reference_pricing(model)
+        crate::llm::reference_models::get_reference_pricing(model)
     }
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {

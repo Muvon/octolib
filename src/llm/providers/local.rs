@@ -75,7 +75,7 @@ impl AiProvider for LocalProvider {
 
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
         // Try reference pricing for cloud-equivalent cost estimation
-        crate::llm::reference_pricing::get_reference_pricing(model)
+        crate::llm::reference_models::get_reference_pricing(model)
     }
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
@@ -98,7 +98,7 @@ impl AiProvider for LocalProvider {
         // Fill cost from reference pricing for cloud-equivalent estimation
         if let Some(ref mut usage) = response.exchange.usage {
             if usage.cost.is_none() {
-                usage.cost = crate::llm::reference_pricing::calculate_reference_cost(
+                usage.cost = crate::llm::reference_models::calculate_reference_cost(
                     &model,
                     usage.input_tokens,
                     usage.output_tokens,

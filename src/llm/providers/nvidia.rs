@@ -79,10 +79,14 @@ impl AiProvider for NvidiaProvider {
         true
     }
 
+    fn enforces_response_schema(&self, _model: &str) -> bool {
+        true
+    }
+
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
         // NVIDIA NIM doesn't expose its own pricing — fall back to reference pricing
         // based on the underlying model (e.g., z-ai/glm-5.1 → glm-5.1 reference entry).
-        crate::llm::reference_pricing::get_reference_pricing(model)
+        crate::llm::reference_models::get_reference_pricing(model)
     }
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
@@ -106,7 +110,7 @@ impl AiProvider for NvidiaProvider {
         // so downstream consumers (CLI token display, cost tracking) see a value.
         if let Some(ref mut usage) = response.exchange.usage {
             if usage.cost.is_none() {
-                usage.cost = crate::llm::reference_pricing::calculate_reference_cost(
+                usage.cost = crate::llm::reference_models::calculate_reference_cost(
                     &model,
                     usage.input_tokens,
                     usage.output_tokens,

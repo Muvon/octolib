@@ -107,6 +107,10 @@ impl AiProvider for BytePlusProvider {
         true
     }
 
+    fn enforces_response_schema(&self, _model: &str) -> bool {
+        true
+    }
+
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
         // Try local pricing table first (BytePlus-specific prices)
         if let Some((input, output, cache_write, cache_read)) =
@@ -120,7 +124,7 @@ impl AiProvider for BytePlusProvider {
             ));
         }
         // Fall back to reference pricing for third-party models
-        crate::llm::reference_pricing::get_reference_pricing(model)
+        crate::llm::reference_models::get_reference_pricing(model)
     }
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {

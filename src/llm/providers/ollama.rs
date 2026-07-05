@@ -25,10 +25,8 @@ use crate::llm::providers::openai_compat::{
     chat_completion as openai_compat_chat_completion, get_api_url, get_optional_api_key,
     OpenAiCompatConfig,
 };
-use crate::llm::reference_models::proxy_route_enforces_response_schema;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderResponse};
-use crate::llm::utils::normalize_model_name;
 use anyhow::Result;
 
 /// Ollama provider
@@ -72,12 +70,11 @@ impl AiProvider for OllamaProvider {
     // supports_vision, supports_video, supports_structured_output, get_max_input_tokens
     // are resolved via reference capabilities (trait defaults)
 
-    fn enforces_response_schema(&self, model: &str) -> bool {
-        let normalized = normalize_model_name(model);
-        if normalized.contains("deepseek-v4") {
-            return false;
-        }
-        proxy_route_enforces_response_schema(model)
+    fn enforces_response_schema(&self, _model: &str) -> bool {
+        // Ollama-compatible routes accept a JSON schema-shaped `format`, but
+        // observed cloud routes can still return non-conforming text. Treat
+        // structured-output support as "can be guided", not hard constrained.
+        false
     }
 
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
@@ -172,9 +169,11 @@ mod tests {
         let provider = OllamaProvider::new();
         assert!(!provider.enforces_response_schema("deepseek-v4-pro"));
         assert!(!provider.enforces_response_schema("ollama:deepseek-v4-pro"));
+        assert!(!provider.enforces_response_schema("gemma4:31b-cloud"));
+        assert!(!provider.enforces_response_schema("minimax-m3"));
         assert!(!provider.enforces_response_schema("mistral:7b"));
-        assert!(provider.enforces_response_schema("llama3.1:8b"));
-        assert!(provider.enforces_response_schema("unknown-cloud-model"));
+        assert!(!provider.enforces_response_schema("llama3.1:8b"));
+        assert!(!provider.enforces_response_schema("unknown-cloud-model"));
     }
 
     #[test]

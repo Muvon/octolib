@@ -120,11 +120,11 @@ pub use errors::{
     StructuredOutputError, StructuredOutputResult, ToolCallError, ToolCallResult,
 };
 pub use llm::{
-    AiProvider, AmazonBedrockProvider, AnthropicProvider, CacheConfig, CacheTTL, CacheType,
-    CerebrasProvider, ChatCompletionParams, CloudflareWorkersAiProvider, DeepSeekProvider,
-    EffectiveSamplingParams, FireworksProvider, FunctionDefinition, GenericToolCall,
-    GoogleVertexProvider, ImageAttachment, ImageData, LocalProvider, Message, MessageBuilder,
-    MinimaxProvider, ModelLimits, MoonshotProvider, OllamaProvider, OpenAiProvider,
+    chat_completion_enforced, AiProvider, AmazonBedrockProvider, AnthropicProvider, CacheConfig,
+    CacheTTL, CacheType, CerebrasProvider, ChatCompletionParams, CloudflareWorkersAiProvider,
+    DeepSeekProvider, EffectiveSamplingParams, FireworksProvider, FunctionDefinition,
+    GenericToolCall, GoogleVertexProvider, ImageAttachment, ImageData, LocalProvider, Message,
+    MessageBuilder, MinimaxProvider, ModelLimits, MoonshotProvider, OllamaProvider, OpenAiProvider,
     OpenRouterProvider, OutputFormat, ProviderExchange, ProviderFactory, ProviderResponse,
     ProviderStrategy, ProviderToolCalls, ReasoningEffort, ResponseMode, SamplingSupport,
     SourceType, StrategyFactory, StructuredOutputRequest, ThinkingBlock, TogetherProvider,

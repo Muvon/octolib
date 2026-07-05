@@ -17,6 +17,7 @@
 use super::shared;
 use crate::errors::ProviderError;
 use crate::errors::ToolCallError;
+use crate::llm::reference_models::proxy_route_enforces_response_schema;
 use crate::llm::retry;
 use crate::llm::traits::{AiProvider, KeepalivePolicy};
 use crate::llm::types::{
@@ -112,48 +113,25 @@ impl AiProvider for OpenRouterProvider {
     }
 
     fn supports_vision(&self, model: &str) -> bool {
-        // Try reference capabilities first for accurate model-level detection
-        if let Some(caps) = crate::llm::reference_capabilities::get_reference_capabilities(model) {
+        // Try reference properties first for accurate model-level detection.
+        // The registry handles provider-prefixed names such as `openai/gpt-4o`.
+        if let Some(caps) = crate::llm::reference_models::get_reference_capabilities(model) {
             return caps.vision;
-        }
-        // For provider-prefixed models, try stripping the prefix
-        if let Some(slash_pos) = model.find('/') {
-            if let Some(caps) = crate::llm::reference_capabilities::get_reference_capabilities(
-                &model[slash_pos + 1..],
-            ) {
-                return caps.vision;
-            }
         }
         // Unknown model — default true (aggregator, let API handle)
         true
     }
 
     fn supports_video(&self, model: &str) -> bool {
-        if let Some(caps) = crate::llm::reference_capabilities::get_reference_capabilities(model) {
+        if let Some(caps) = crate::llm::reference_models::get_reference_capabilities(model) {
             return caps.video;
-        }
-        if let Some(slash_pos) = model.find('/') {
-            if let Some(caps) = crate::llm::reference_capabilities::get_reference_capabilities(
-                &model[slash_pos + 1..],
-            ) {
-                return caps.video;
-            }
         }
         false
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {
-        // Try reference capabilities first
-        if let Some(caps) = crate::llm::reference_capabilities::get_reference_capabilities(model) {
+        if let Some(caps) = crate::llm::reference_models::get_reference_capabilities(model) {
             return caps.max_input_tokens;
-        }
-        // For provider-prefixed models (anthropic/claude-3, openai/gpt-4o, etc.)
-        if let Some(slash_pos) = model.find('/') {
-            if let Some(caps) = crate::llm::reference_capabilities::get_reference_capabilities(
-                &model[slash_pos + 1..],
-            ) {
-                return caps.max_input_tokens;
-            }
         }
         // OpenRouter-specific known families not in reference table
         let normalized = normalize_model_name(model);
@@ -171,9 +149,13 @@ impl AiProvider for OpenRouterProvider {
 
     fn supports_structured_output(&self, model: &str) -> bool {
         // Try reference capabilities; default true for OpenRouter aggregator
-        crate::llm::reference_capabilities::get_reference_capabilities(model)
+        crate::llm::reference_models::get_reference_capabilities(model)
             .map(|c| c.structured_output)
             .unwrap_or(true)
+    }
+
+    fn enforces_response_schema(&self, model: &str) -> bool {
+        proxy_route_enforces_response_schema(model)
     }
 
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
@@ -884,5 +866,14 @@ mod tests {
         // Test uppercase
         assert!(provider.supports_caching("ANTHROPIC/CLAUDE-3.5-SONNET"));
         assert!(provider.supports_caching("CLAUDE-3-HAIKU"));
+    }
+
+    #[test]
+    fn test_schema_enforcement_proxy_policy() {
+        let provider = OpenRouterProvider::new();
+        assert!(provider.enforces_response_schema("deepseek-v4-pro"));
+        assert!(provider.enforces_response_schema("openai/gpt-4o"));
+        assert!(provider.enforces_response_schema("unknown/provider-model"));
+        assert!(!provider.enforces_response_schema("mistral-7b"));
     }
 }

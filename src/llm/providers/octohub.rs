@@ -20,6 +20,7 @@
 //! responses.
 //!
 use super::shared;
+use crate::llm::reference_models::proxy_route_enforces_response_schema;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
@@ -97,6 +98,10 @@ impl AiProvider for OctoHubProvider {
 
     fn supports_structured_output(&self, _model: &str) -> bool {
         true
+    }
+
+    fn enforces_response_schema(&self, model: &str) -> bool {
+        proxy_route_enforces_response_schema(model)
     }
 
     fn get_max_input_tokens(&self, _model: &str) -> usize {
@@ -721,6 +726,9 @@ mod tests {
         assert!(provider.supports_vision("any"));
         assert!(provider.supports_video("any"));
         assert!(provider.supports_structured_output("any"));
+        assert!(provider.enforces_response_schema("unknown-model"));
+        assert!(provider.enforces_response_schema("deepseek-v4-pro"));
+        assert!(!provider.enforces_response_schema("mistral-7b"));
         assert_eq!(provider.get_max_input_tokens("any"), 1_048_576);
     }
 

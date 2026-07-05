@@ -339,6 +339,10 @@ impl AiProvider for GoogleVertexProvider {
         true
     }
 
+    fn enforces_response_schema(&self, _model: &str) -> bool {
+        true
+    }
+
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
         let (input_price, output_price, cache_write_price, cache_read_price) =
             get_model_pricing(model, PRICING)?;

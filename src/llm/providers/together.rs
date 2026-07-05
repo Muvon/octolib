@@ -19,6 +19,7 @@
 use super::shared;
 use crate::errors::ProviderError;
 use crate::errors::ToolCallError;
+use crate::llm::reference_models::proxy_route_enforces_response_schema;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
@@ -73,9 +74,13 @@ impl AiProvider for TogetherProvider {
     // supports_vision, supports_video, supports_structured_output
     // are resolved via reference capabilities (trait defaults)
 
+    fn enforces_response_schema(&self, model: &str) -> bool {
+        proxy_route_enforces_response_schema(model)
+    }
+
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
         // Try reference pricing for cost estimation based on the underlying model
-        crate::llm::reference_pricing::get_reference_pricing(model)
+        crate::llm::reference_models::get_reference_pricing(model)
     }
 
     // get_max_input_tokens resolved via reference capabilities (trait default)
@@ -585,7 +590,7 @@ async fn execute_together_request(
         cost: request_body
             .get("model")
             .and_then(|m| m.as_str())
-            .and_then(crate::llm::reference_pricing::get_reference_pricing)
+            .and_then(crate::llm::reference_models::get_reference_pricing)
             .map(|pricing| {
                 pricing.calculate_cost(input_tokens, 0, cache_read_tokens, output_tokens)
             }),

@@ -319,7 +319,10 @@ pub(super) fn parse_tool_call_arguments_lossy(raw_arguments: &str) -> serde_json
 }
 
 /// Parse structured output directly from textual model content.
-pub(super) fn parse_structured_output_from_text(content: &str) -> Option<serde_json::Value> {
+///
+/// `pub(crate)` (rather than `pub(super)`): also reused by
+/// `llm::schema_enforcement`'s best-effort fallback candidate extraction.
+pub(crate) fn parse_structured_output_from_text(content: &str) -> Option<serde_json::Value> {
     let trimmed = content.trim();
     if trimmed.len() > MAX_JSON_INPUT_BYTES {
         tracing::warn!(

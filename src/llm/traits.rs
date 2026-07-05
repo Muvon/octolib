@@ -123,28 +123,28 @@ pub trait AiProvider: Send + Sync {
     /// Get maximum input tokens for a model (actual context window size)
     /// This is what we can send to the API - the provider handles output limits internally
     fn get_max_input_tokens(&self, model: &str) -> usize {
-        crate::llm::reference_capabilities::get_reference_capabilities(model)
+        crate::llm::reference_models::get_reference_capabilities(model)
             .map(|c| c.max_input_tokens)
             .unwrap_or(262_144)
     }
 
     /// Check if the provider/model supports vision capabilities
     fn supports_vision(&self, model: &str) -> bool {
-        crate::llm::reference_capabilities::get_reference_capabilities(model)
+        crate::llm::reference_models::get_reference_capabilities(model)
             .map(|c| c.vision)
             .unwrap_or(false)
     }
 
     /// Check if the provider/model supports video capabilities
     fn supports_video(&self, model: &str) -> bool {
-        crate::llm::reference_capabilities::get_reference_capabilities(model)
+        crate::llm::reference_models::get_reference_capabilities(model)
             .map(|c| c.video)
             .unwrap_or(false)
     }
 
     /// Check if the provider supports structured output
     fn supports_structured_output(&self, model: &str) -> bool {
-        crate::llm::reference_capabilities::get_reference_capabilities(model)
+        crate::llm::reference_models::get_reference_capabilities(model)
             .map(|c| c.structured_output)
             .unwrap_or(false)
     }
@@ -159,11 +159,9 @@ pub trait AiProvider: Send + Sync {
     /// non-enforcing provider can return valid JSON whose shape does not
     /// match the schema, which would fail typed deserialization.
     ///
-    /// Defaults to `supports_structured_output(model)`: a provider that
-    /// accepts structured output is assumed to enforce the schema unless it
-    /// overrides this. DeepSeek overrides to `false` — its API supports only
-    /// `json_object` mode and ignores the schema, so response shape is not
-    /// guaranteed.
+    /// Defaults to the provider's structured-output support. Providers or
+    /// routes that only support JSON mode, or known proxy routes that ignore
+    /// the supplied schema, must override this to return false.
     fn enforces_response_schema(&self, model: &str) -> bool {
         self.supports_structured_output(model)
     }
@@ -172,6 +170,6 @@ pub trait AiProvider: Send + Sync {
     /// Returns None if pricing is not available or model is not recognized.
     /// Default falls back to reference pricing for well-known open models.
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
-        crate::llm::reference_pricing::get_reference_pricing(model)
+        crate::llm::reference_models::get_reference_pricing(model)
     }
 }

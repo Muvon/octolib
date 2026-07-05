@@ -87,11 +87,15 @@ impl AiProvider for FeatherlessProvider {
         true
     }
 
+    fn enforces_response_schema(&self, _model: &str) -> bool {
+        true
+    }
+
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
         // Featherless uses subscription billing — no per-token pricing.
         // Fall back to reference pricing so cost estimates exist for popular
         // open-weight models served by the platform.
-        crate::llm::reference_pricing::get_reference_pricing(model)
+        crate::llm::reference_models::get_reference_pricing(model)
     }
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {

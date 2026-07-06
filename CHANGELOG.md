@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.24.0] - 2026-07-06
+
+### 📋 Release Summary
+
+This release introduces response schema enforcement for LLMs to ensure structured outputs (7de5f0d0, 15f0ff66). Additionally, several updates improve OctoHub connectivity and API stability across production and testing environments (2306e820, d7d0da4b).
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: implement response schema enforcement `7de5f0d0`
+
+### 🐛 Bug Fixes & Stability
+
+- **embedding**: correct octohub api url in tests `2306e820`
+- **llm**: disable response schema enforcement for ollama `15f0ff66`
+- **octohub**: set production default API URL `d7d0da4b`
+
 ## [0.23.8] - 2026-07-02
 
 ### 📋 Release Summary

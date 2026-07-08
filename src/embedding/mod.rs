@@ -20,6 +20,7 @@
 pub mod constants;
 #[cfg(test)]
 mod mod_test;
+pub mod pricing;
 pub mod provider;
 pub mod types;
 
@@ -27,6 +28,7 @@ use anyhow::Result;
 use std::sync::LazyLock;
 use tiktoken_rs::cl100k_base;
 
+pub use pricing::{calculate_embedding_cost, EmbeddingPricingTuple, EMBEDDING_PRICING};
 pub use provider::{
     create_embedding_provider_from_parts, EmbeddingProvider, LocalEmbeddingProvider,
     OctoHubEmbeddingProvider,

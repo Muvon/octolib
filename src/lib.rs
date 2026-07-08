@@ -110,9 +110,9 @@ pub mod utils;
 
 // Re-export main types and traits for easy access (backward compatibility)
 pub use embedding::{
-    count_tokens, create_embedding_provider_from_parts, generate_embeddings,
-    generate_embeddings_batch, split_texts_into_token_limited_batches, truncate_output,
-    EmbeddingProvider, EmbeddingProviderType, InputType, LocalEmbeddingProvider,
+    calculate_embedding_cost, count_tokens, create_embedding_provider_from_parts,
+    generate_embeddings, generate_embeddings_batch, split_texts_into_token_limited_batches,
+    truncate_output, EmbeddingProvider, EmbeddingProviderType, InputType, LocalEmbeddingProvider,
     OctoHubEmbeddingProvider,
 };
 pub use errors::{

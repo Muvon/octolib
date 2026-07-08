@@ -23,6 +23,7 @@ use std::env;
 
 use super::{EmbeddingProvider, HTTP_CLIENT};
 use crate::embedding::types::InputType;
+use crate::embedding::EmbeddingUsage;
 
 const TOGETHER_API_KEY_ENV: &str = "TOGETHER_API_KEY";
 const TOGETHER_EMBEDDING_URL: &str = "https://api.together.xyz/v1/embeddings";
@@ -69,7 +70,7 @@ impl TogetherProviderImpl {
 
 #[async_trait]
 impl EmbeddingProvider for TogetherProviderImpl {
-    async fn generate_embedding(&self, text: &str) -> Result<Vec<f32>> {
+    async fn generate_embedding(&self, text: &str) -> Result<(Vec<f32>, EmbeddingUsage)> {
         TogetherProvider::generate_embeddings(text, &self.model_name).await
     }
 
@@ -77,7 +78,7 @@ impl EmbeddingProvider for TogetherProviderImpl {
         &self,
         texts: Vec<String>,
         _input_type: InputType,
-    ) -> Result<Vec<Vec<f32>>> {
+    ) -> Result<(Vec<Vec<f32>>, EmbeddingUsage)> {
         TogetherProvider::generate_embeddings_batch(texts, &self.model_name).await
     }
 
@@ -94,7 +95,11 @@ impl EmbeddingProvider for TogetherProviderImpl {
 pub struct TogetherProvider;
 
 impl TogetherProvider {
-    pub async fn generate_embeddings(contents: &str, model: &str) -> Result<Vec<f32>> {
+    pub async fn generate_embeddings(
+        contents: &str,
+        model: &str,
+    ) -> Result<(Vec<f32>, EmbeddingUsage)> {
+        let est_tokens = crate::embedding::count_tokens(contents) as u64;
         let api_key = env::var(TOGETHER_API_KEY_ENV).map_err(|_| {
             anyhow::anyhow!(
                 "Together.ai API key not found. Set {} environment variable.",
@@ -122,18 +127,23 @@ impl TogetherProvider {
         }
 
         let result: TogetherEmbeddingResponse = response.json().await?;
-
-        result
+        let input_tokens = result.total_tokens_or(est_tokens);
+        let vector = result
             .data
             .first()
             .map(|d| d.embedding.clone())
-            .ok_or_else(|| anyhow::anyhow!("No embeddings found in response"))
+            .ok_or_else(|| anyhow::anyhow!("No embeddings found in response"))?;
+        Ok((vector, EmbeddingUsage::from_tokens(model, input_tokens)))
     }
 
     pub async fn generate_embeddings_batch(
         texts: Vec<String>,
         model: &str,
-    ) -> Result<Vec<Vec<f32>>> {
+    ) -> Result<(Vec<Vec<f32>>, EmbeddingUsage)> {
+        let est_tokens: u64 = texts
+            .iter()
+            .map(|t| crate::embedding::count_tokens(t) as u64)
+            .sum();
         let api_key = env::var(TOGETHER_API_KEY_ENV).map_err(|_| {
             anyhow::anyhow!(
                 "Together.ai API key not found. Set {} environment variable.",
@@ -161,6 +171,7 @@ impl TogetherProvider {
         }
 
         let result: TogetherEmbeddingResponse = response.json().await?;
+        let input_tokens = result.total_tokens_or(est_tokens);
 
         // Sort by index to ensure correct order
         let mut embeddings: Vec<(usize, Vec<f32>)> = result
@@ -170,13 +181,33 @@ impl TogetherProvider {
             .collect();
         embeddings.sort_by_key(|(i, _)| *i);
 
-        Ok(embeddings.into_iter().map(|(_, e)| e).collect())
+        let vectors: Vec<Vec<f32>> = embeddings.into_iter().map(|(_, e)| e).collect();
+        Ok((vectors, EmbeddingUsage::from_tokens(model, input_tokens)))
     }
 }
 
 #[derive(Debug, Deserialize)]
 struct TogetherEmbeddingResponse {
     data: Vec<TogetherEmbeddingData>,
+    #[serde(default)]
+    usage: Option<TogetherUsage>,
+}
+
+impl TogetherEmbeddingResponse {
+    /// Real provider token count when present (and non-zero), else the fallback.
+    fn total_tokens_or(&self, fallback: u64) -> u64 {
+        self.usage
+            .as_ref()
+            .map(|u| u.total_tokens)
+            .filter(|&t| t > 0)
+            .unwrap_or(fallback)
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct TogetherUsage {
+    #[serde(default)]
+    total_tokens: u64,
 }
 
 #[derive(Debug, Deserialize)]

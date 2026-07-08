@@ -33,6 +33,7 @@ use anyhow::{Context, Result};
 use serde_json::{json, Value};
 
 use super::super::types::InputType;
+use super::super::EmbeddingUsage;
 use super::{EmbeddingProvider, HTTP_CLIENT};
 
 /// Google provider implementation for trait
@@ -65,7 +66,7 @@ impl GoogleProviderImpl {
 
 #[async_trait::async_trait]
 impl EmbeddingProvider for GoogleProviderImpl {
-    async fn generate_embedding(&self, text: &str) -> Result<Vec<f32>> {
+    async fn generate_embedding(&self, text: &str) -> Result<(Vec<f32>, EmbeddingUsage)> {
         GoogleProvider::generate_embeddings(text, &self.model_name).await
     }
 
@@ -73,7 +74,7 @@ impl EmbeddingProvider for GoogleProviderImpl {
         &self,
         texts: Vec<String>,
         input_type: InputType,
-    ) -> Result<Vec<Vec<f32>>> {
+    ) -> Result<(Vec<Vec<f32>>, EmbeddingUsage)> {
         // Apply prefix manually for Google (doesn't support input_type API)
         let processed_texts: Vec<String> = texts
             .into_iter()
@@ -106,18 +107,28 @@ impl GoogleProvider {
             "text-multilingual-embedding-002",
         ]
     }
-    pub async fn generate_embeddings(contents: &str, model: &str) -> Result<Vec<f32>> {
-        let result = Self::generate_embeddings_batch(vec![contents.to_string()], model).await?;
-        result
-            .first()
-            .cloned()
-            .ok_or_else(|| anyhow::anyhow!("No embeddings found"))
+    pub async fn generate_embeddings(
+        contents: &str,
+        model: &str,
+    ) -> Result<(Vec<f32>, EmbeddingUsage)> {
+        let (vectors, usage) =
+            Self::generate_embeddings_batch(vec![contents.to_string()], model).await?;
+        let first = vectors
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("No embeddings found"))?;
+        Ok((first, usage))
     }
 
     pub async fn generate_embeddings_batch(
         texts: Vec<String>,
         model: &str,
-    ) -> Result<Vec<Vec<f32>>> {
+    ) -> Result<(Vec<Vec<f32>>, EmbeddingUsage)> {
+        // Google's embedContent returns no token usage, so estimate with tiktoken.
+        let est_tokens: u64 = texts
+            .iter()
+            .map(|t| crate::embedding::count_tokens(t) as u64)
+            .sum();
         let google_api_key = std::env::var("GOOGLE_API_KEY")
             .context("GOOGLE_API_KEY environment variable not set")?;
 
@@ -155,6 +166,9 @@ impl GoogleProvider {
             all_embeddings.push(embedding);
         }
 
-        Ok(all_embeddings)
+        Ok((
+            all_embeddings,
+            EmbeddingUsage::from_tokens(model, est_tokens),
+        ))
     }
 }

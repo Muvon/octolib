@@ -18,6 +18,7 @@ use anyhow::{Context, Result};
 use serde_json::{json, Value};
 
 use super::super::types::InputType;
+use super::super::EmbeddingUsage;
 use super::{EmbeddingProvider, HTTP_CLIENT};
 
 /// Jina provider implementation for trait
@@ -86,7 +87,7 @@ impl JinaProviderImpl {
 
 #[async_trait::async_trait]
 impl EmbeddingProvider for JinaProviderImpl {
-    async fn generate_embedding(&self, text: &str) -> Result<Vec<f32>> {
+    async fn generate_embedding(&self, text: &str) -> Result<(Vec<f32>, EmbeddingUsage)> {
         JinaProvider::generate_embeddings(text, &self.model_name).await
     }
 
@@ -94,7 +95,7 @@ impl EmbeddingProvider for JinaProviderImpl {
         &self,
         texts: Vec<String>,
         input_type: InputType,
-    ) -> Result<Vec<Vec<f32>>> {
+    ) -> Result<(Vec<Vec<f32>>, EmbeddingUsage)> {
         // Apply prefix manually for Jina (doesn't support input_type API)
         let processed_texts: Vec<String> = texts
             .into_iter()
@@ -134,18 +135,27 @@ impl EmbeddingProvider for JinaProviderImpl {
 pub struct JinaProvider;
 
 impl JinaProvider {
-    pub async fn generate_embeddings(contents: &str, model: &str) -> Result<Vec<f32>> {
-        let result = Self::generate_embeddings_batch(vec![contents.to_string()], model).await?;
-        result
-            .first()
-            .cloned()
-            .ok_or_else(|| anyhow::anyhow!("No embeddings found"))
+    pub async fn generate_embeddings(
+        contents: &str,
+        model: &str,
+    ) -> Result<(Vec<f32>, EmbeddingUsage)> {
+        let (vectors, usage) =
+            Self::generate_embeddings_batch(vec![contents.to_string()], model).await?;
+        let first = vectors
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("No embeddings found"))?;
+        Ok((first, usage))
     }
 
     pub async fn generate_embeddings_batch(
         texts: Vec<String>,
         model: &str,
-    ) -> Result<Vec<Vec<f32>>> {
+    ) -> Result<(Vec<Vec<f32>>, EmbeddingUsage)> {
+        let est_tokens: u64 = texts
+            .iter()
+            .map(|t| crate::embedding::count_tokens(t) as u64)
+            .sum();
         let jina_api_key =
             std::env::var("JINA_API_KEY").context("JINA_API_KEY environment variable not set")?;
 
@@ -175,7 +185,10 @@ impl JinaProvider {
             })
             .collect();
 
-        Ok(embeddings)
+        let input_tokens = response_json["usage"]["total_tokens"]
+            .as_u64()
+            .unwrap_or(est_tokens);
+        Ok((embeddings, EmbeddingUsage::from_tokens(model, input_tokens)))
     }
 }
 

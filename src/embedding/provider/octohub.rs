@@ -25,6 +25,7 @@ use anyhow::{Context, Result};
 use serde_json::{json, Value};
 
 use super::super::types::InputType;
+use super::super::EmbeddingUsage;
 use super::{EmbeddingProvider, HTTP_CLIENT};
 
 const OCTOHUB_API_KEY_ENV: &str = "OCTOHUB_API_KEY";
@@ -129,21 +130,27 @@ impl OctoHubEmbeddingProvider {
 
 #[async_trait::async_trait]
 impl EmbeddingProvider for OctoHubEmbeddingProvider {
-    async fn generate_embedding(&self, text: &str) -> Result<Vec<f32>> {
+    async fn generate_embedding(&self, text: &str) -> Result<(Vec<f32>, EmbeddingUsage)> {
         let response = self.call_api(json!(text)).await?;
-        Self::parse_single(&response)
+        let vector = Self::parse_single(&response)?;
+        // OctoHub's embedding response is a bare vector array (no usage envelope),
+        // so estimate; the underlying provider bills the real tokens upstream.
+        let usage = EmbeddingUsage::estimate(&self.model_name, &[text.to_string()]);
+        Ok((vector, usage))
     }
 
     async fn generate_embeddings_batch(
         &self,
         texts: Vec<String>,
         _input_type: InputType,
-    ) -> Result<Vec<Vec<f32>>> {
+    ) -> Result<(Vec<Vec<f32>>, EmbeddingUsage)> {
         if texts.is_empty() {
-            return Ok(Vec::new());
+            return Ok((Vec::new(), EmbeddingUsage::from_tokens(&self.model_name, 0)));
         }
+        let usage = EmbeddingUsage::estimate(&self.model_name, &texts);
         let response = self.call_api(json!(texts)).await?;
-        Self::parse_batch(&response)
+        let vectors = Self::parse_batch(&response)?;
+        Ok((vectors, usage))
     }
 
     /// Dimension is unknown until the underlying provider responds;

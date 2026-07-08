@@ -28,6 +28,7 @@ use std::collections::HashMap;
 use std::sync::{LazyLock, RwLock};
 
 use super::super::types::InputType;
+use super::super::EmbeddingUsage;
 use super::{EmbeddingProvider, HTTP_CLIENT};
 
 const LOCAL_EMBED_API_KEY_ENV: &str = "LOCAL_EMBED_API_KEY";
@@ -84,7 +85,7 @@ impl LocalEmbeddingProvider {
             .generate_embedding("dimension probe")
             .await
             .context("Failed to probe embedding dimension from the local server")?;
-        provider.dimension = probe.len();
+        provider.dimension = probe.0.len();
         if provider.dimension == 0 {
             return Err(anyhow::anyhow!(
                 "Local embedding model '{}' returned a zero-length embedding while probing dimension",
@@ -119,30 +120,36 @@ struct LocalEmbeddingData {
 
 #[async_trait::async_trait]
 impl EmbeddingProvider for LocalEmbeddingProvider {
-    async fn generate_embedding(&self, text: &str) -> Result<Vec<f32>> {
+    async fn generate_embedding(&self, text: &str) -> Result<(Vec<f32>, EmbeddingUsage)> {
         let texts = vec![text.to_string()];
-        let batch = self
+        let (batch, usage) = self
             .generate_embeddings_batch(texts, InputType::None)
             .await?;
-        batch
+        let first = batch
             .into_iter()
             .next()
-            .ok_or_else(|| anyhow::anyhow!("No embedding returned"))
+            .ok_or_else(|| anyhow::anyhow!("No embedding returned"))?;
+        Ok((first, usage))
     }
 
     async fn generate_embeddings_batch(
         &self,
         texts: Vec<String>,
         input_type: InputType,
-    ) -> Result<Vec<Vec<f32>>> {
+    ) -> Result<(Vec<Vec<f32>>, EmbeddingUsage)> {
         if texts.is_empty() {
-            return Ok(Vec::new());
+            return Ok((Vec::new(), EmbeddingUsage::from_tokens(&self.model_name, 0)));
         }
 
         let processed_texts: Vec<String> = texts
             .into_iter()
             .map(|text| input_type.apply_prefix(&text))
             .collect();
+        // Local servers are unpriced (cost stays None); estimate tokens with tiktoken.
+        let est_tokens: u64 = processed_texts
+            .iter()
+            .map(|t| crate::embedding::count_tokens(t) as u64)
+            .sum();
 
         let url = Self::api_url();
 
@@ -186,7 +193,11 @@ impl EmbeddingProvider for LocalEmbeddingProvider {
             .collect();
         embeddings.sort_by_key(|(i, _)| *i);
 
-        Ok(embeddings.into_iter().map(|(_, e)| e).collect())
+        let vectors: Vec<Vec<f32>> = embeddings.into_iter().map(|(_, e)| e).collect();
+        Ok((
+            vectors,
+            EmbeddingUsage::from_tokens(&self.model_name, est_tokens),
+        ))
     }
 
     fn get_dimension(&self) -> usize {

@@ -22,6 +22,7 @@ use reqwest::Client;
 use std::sync::LazyLock;
 use std::time::Duration;
 
+use super::pricing::EmbeddingUsage;
 use super::types::{EmbeddingProviderType, InputType};
 
 // Shared HTTP client with connection pooling for optimal performance
@@ -68,12 +69,14 @@ pub use voyage::{VoyageProvider, VoyageProviderImpl};
 /// Trait for embedding providers
 #[async_trait::async_trait]
 pub trait EmbeddingProvider: Send + Sync {
-    async fn generate_embedding(&self, text: &str) -> Result<Vec<f32>>;
+    /// Returns the embedding vector plus usage (real provider token count + cost).
+    async fn generate_embedding(&self, text: &str) -> Result<(Vec<f32>, EmbeddingUsage)>;
+    /// Returns the embedding vectors plus usage for the whole batch.
     async fn generate_embeddings_batch(
         &self,
         texts: Vec<String>,
         input_type: InputType,
-    ) -> Result<Vec<Vec<f32>>>;
+    ) -> Result<(Vec<Vec<f32>>, EmbeddingUsage)>;
 
     /// Get the vector dimension for this provider's model
     fn get_dimension(&self) -> usize;

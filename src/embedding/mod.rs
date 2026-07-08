@@ -28,7 +28,9 @@ use anyhow::Result;
 use std::sync::LazyLock;
 use tiktoken_rs::cl100k_base;
 
-pub use pricing::{calculate_embedding_cost, EmbeddingPricingTuple, EMBEDDING_PRICING};
+pub use pricing::{
+    calculate_embedding_cost, EmbeddingPricingTuple, EmbeddingUsage, EMBEDDING_PRICING,
+};
 pub use provider::{
     create_embedding_provider_from_parts, EmbeddingProvider, LocalEmbeddingProvider,
     OctoHubEmbeddingProvider,
@@ -44,7 +46,10 @@ pub async fn generate_embeddings(contents: &str, provider: &str, model: &str) ->
     let (provider_type, model_name) = parse_provider_model(&format!("{}:{}", provider, model))?;
 
     let provider_impl = create_embedding_provider_from_parts(&provider_type, &model_name).await?;
-    provider_impl.generate_embedding(contents).await
+    // High-level helpers stay vector-only for existing callers; usage is available
+    // to callers that use the provider trait directly (octohub).
+    let (vector, _usage) = provider_impl.generate_embedding(contents).await?;
+    Ok(vector)
 }
 
 /// Count tokens in a text using tiktoken (cl100k_base tokenizer)
@@ -142,7 +147,7 @@ pub async fn generate_embeddings_batch(
 
     // Process each batch with input_type
     for batch in batches {
-        let batch_embeddings = provider_impl
+        let (batch_embeddings, _usage) = provider_impl
             .generate_embeddings_batch(batch, input_type.clone())
             .await?;
         all_embeddings.extend(batch_embeddings);

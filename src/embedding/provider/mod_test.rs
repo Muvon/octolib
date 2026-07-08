@@ -364,7 +364,7 @@ mod tests {
                 let embedding = provider.generate_embedding(text).await;
 
                 match embedding {
-                    Ok(vec) => {
+                    Ok((vec, _usage)) => {
                         assert!(!vec.is_empty(), "Embedding should not be empty");
                         assert!(
                             vec.iter().all(|v| v.is_finite()),
@@ -411,7 +411,7 @@ mod tests {
                 let embedding = provider.generate_embedding(text).await;
 
                 match embedding {
-                    Ok(vec) => {
+                    Ok((vec, _usage)) => {
                         assert!(!vec.is_empty(), "Embedding should not be empty");
                         assert!(
                             vec.iter().all(|v| v.is_finite()),
@@ -482,7 +482,7 @@ mod tests {
                 let embedding = provider.generate_embedding(text).await;
 
                 match embedding {
-                    Ok(vec) => {
+                    Ok((vec, _usage)) => {
                         assert!(!vec.is_empty(), "Embedding should not be empty");
                         assert_eq!(
                             vec.len(),
@@ -565,7 +565,7 @@ mod tests {
                 let embedding = provider.generate_embedding(text).await;
 
                 match embedding {
-                    Ok(vec) => {
+                    Ok((vec, _usage)) => {
                         assert!(!vec.is_empty(), "Embedding should not be empty");
                         assert_eq!(
                             vec.len(),

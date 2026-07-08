@@ -18,6 +18,7 @@ use anyhow::{Context, Result};
 use serde_json::{json, Value};
 
 use super::super::types::InputType;
+use super::super::EmbeddingUsage;
 use super::{EmbeddingProvider, HTTP_CLIENT};
 
 /// Voyage provider implementation for trait
@@ -82,7 +83,7 @@ impl VoyageProviderImpl {
 
 #[async_trait::async_trait]
 impl EmbeddingProvider for VoyageProviderImpl {
-    async fn generate_embedding(&self, text: &str) -> Result<Vec<f32>> {
+    async fn generate_embedding(&self, text: &str) -> Result<(Vec<f32>, EmbeddingUsage)> {
         VoyageProvider::generate_embeddings(text, &self.model_name).await
     }
 
@@ -90,7 +91,7 @@ impl EmbeddingProvider for VoyageProviderImpl {
         &self,
         texts: Vec<String>,
         input_type: InputType,
-    ) -> Result<Vec<Vec<f32>>> {
+    ) -> Result<(Vec<Vec<f32>>, EmbeddingUsage)> {
         VoyageProvider::generate_embeddings_batch(texts, &self.model_name, input_type).await
     }
 
@@ -123,21 +124,31 @@ impl EmbeddingProvider for VoyageProviderImpl {
 pub struct VoyageProvider;
 
 impl VoyageProvider {
-    pub async fn generate_embeddings(contents: &str, model: &str) -> Result<Vec<f32>> {
-        let result =
+    pub async fn generate_embeddings(
+        contents: &str,
+        model: &str,
+    ) -> Result<(Vec<f32>, EmbeddingUsage)> {
+        let (vectors, usage) =
             Self::generate_embeddings_batch(vec![contents.to_string()], model, InputType::None)
                 .await?;
-        result
-            .first()
-            .cloned()
-            .ok_or_else(|| anyhow::anyhow!("No embeddings found"))
+        let first = vectors
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("No embeddings found"))?;
+        Ok((first, usage))
     }
 
     pub async fn generate_embeddings_batch(
         texts: Vec<String>,
         model: &str,
         input_type: InputType,
-    ) -> Result<Vec<Vec<f32>>> {
+    ) -> Result<(Vec<Vec<f32>>, EmbeddingUsage)> {
+        // Fallback token estimate before `texts` is moved into the request body;
+        // Voyage returns a real `usage.total_tokens`, so this rarely applies.
+        let est_tokens: u64 = texts
+            .iter()
+            .map(|t| crate::embedding::count_tokens(t) as u64)
+            .sum();
         let voyage_api_key = std::env::var("VOYAGE_API_KEY")
             .context("VOYAGE_API_KEY environment variable not set")?;
 
@@ -181,7 +192,10 @@ impl VoyageProvider {
             })
             .collect();
 
-        Ok(embeddings)
+        let input_tokens = response_json["usage"]["total_tokens"]
+            .as_u64()
+            .unwrap_or(est_tokens);
+        Ok((embeddings, EmbeddingUsage::from_tokens(model, input_tokens)))
     }
 }
 

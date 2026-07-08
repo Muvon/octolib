@@ -41,7 +41,7 @@ use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 use std::sync::{Arc, Mutex};
 
 #[cfg(feature = "fastembed")]
-use super::super::{types::InputType, EmbeddingProvider};
+use super::super::{types::InputType, EmbeddingProvider, EmbeddingUsage};
 
 #[cfg(feature = "fastembed")]
 /// FastEmbed provider implementation for trait
@@ -135,7 +135,9 @@ impl FastEmbedProviderImpl {
 #[cfg(feature = "fastembed")]
 #[async_trait::async_trait]
 impl EmbeddingProvider for FastEmbedProviderImpl {
-    async fn generate_embedding(&self, text: &str) -> Result<Vec<f32>> {
+    async fn generate_embedding(&self, text: &str) -> Result<(Vec<f32>, EmbeddingUsage)> {
+        // In-process, local, always unpriced → cost None; tokens estimated (tiktoken).
+        let input_tokens = super::super::count_tokens(text) as u64;
         let text = text.to_string();
         let model = self.model.clone();
 
@@ -151,14 +153,20 @@ impl EmbeddingProvider for FastEmbedProviderImpl {
         })
         .await??;
 
-        Ok(embedding)
+        Ok((
+            embedding,
+            EmbeddingUsage {
+                input_tokens,
+                cost: None,
+            },
+        ))
     }
 
     async fn generate_embeddings_batch(
         &self,
         texts: Vec<String>,
         input_type: InputType,
-    ) -> Result<Vec<Vec<f32>>> {
+    ) -> Result<(Vec<Vec<f32>>, EmbeddingUsage)> {
         let model = self.model.clone();
 
         // Apply prefix manually for FastEmbed (doesn't support input_type API)
@@ -166,6 +174,10 @@ impl EmbeddingProvider for FastEmbedProviderImpl {
             .into_iter()
             .map(|text| input_type.apply_prefix(&text))
             .collect();
+        let input_tokens: u64 = processed_texts
+            .iter()
+            .map(|t| super::super::count_tokens(t) as u64)
+            .sum();
 
         let embeddings = tokio::task::spawn_blocking(move || -> Result<Vec<Vec<f32>>> {
             let text_refs: Vec<&str> = processed_texts.iter().map(|s| s.as_str()).collect();
@@ -176,7 +188,13 @@ impl EmbeddingProvider for FastEmbedProviderImpl {
         })
         .await??;
 
-        Ok(embeddings)
+        Ok((
+            embeddings,
+            EmbeddingUsage {
+                input_tokens,
+                cost: None,
+            },
+        ))
     }
 
     fn get_dimension(&self) -> usize {

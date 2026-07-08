@@ -624,6 +624,7 @@ impl HuggingFaceProvider {
     }
 }
 use super::super::types::InputType;
+use super::super::EmbeddingUsage;
 use super::EmbeddingProvider;
 
 /// HuggingFace provider implementation for trait
@@ -777,21 +778,43 @@ impl HuggingFaceProviderImpl {
 #[cfg(feature = "huggingface")]
 #[async_trait::async_trait]
 impl EmbeddingProvider for HuggingFaceProviderImpl {
-    async fn generate_embedding(&self, text: &str) -> Result<Vec<f32>> {
-        HuggingFaceProvider::generate_embeddings(text, &self.model_name).await
+    async fn generate_embedding(&self, text: &str) -> Result<(Vec<f32>, EmbeddingUsage)> {
+        // In-process, local, always unpriced → cost None; tokens estimated (tiktoken).
+        let input_tokens = super::super::count_tokens(text) as u64;
+        let vector = HuggingFaceProvider::generate_embeddings(text, &self.model_name).await?;
+        Ok((
+            vector,
+            EmbeddingUsage {
+                input_tokens,
+                cost: None,
+            },
+        ))
     }
 
     async fn generate_embeddings_batch(
         &self,
         texts: Vec<String>,
         input_type: InputType,
-    ) -> Result<Vec<Vec<f32>>> {
+    ) -> Result<(Vec<Vec<f32>>, EmbeddingUsage)> {
         // Apply prefix manually for HuggingFace (doesn't support input_type API)
         let processed_texts: Vec<String> = texts
             .into_iter()
             .map(|text| input_type.apply_prefix(&text))
             .collect();
-        HuggingFaceProvider::generate_embeddings_batch(processed_texts, &self.model_name).await
+        let input_tokens: u64 = processed_texts
+            .iter()
+            .map(|t| super::super::count_tokens(t) as u64)
+            .sum();
+        let vectors =
+            HuggingFaceProvider::generate_embeddings_batch(processed_texts, &self.model_name)
+                .await?;
+        Ok((
+            vectors,
+            EmbeddingUsage {
+                input_tokens,
+                cost: None,
+            },
+        ))
     }
 
     fn get_dimension(&self) -> usize {

@@ -23,18 +23,23 @@ use crate::llm::types::{
     SamplingSupport, ThinkingBlock, TokenUsage, ToolCall,
 };
 use crate::llm::utils::{
-    calculate_cost_from_pricing_table, get_model_pricing, is_model_in_pricing_table,
-    normalize_model_name, PricingTuple,
+    get_model_pricing, is_model_in_pricing_table, normalize_model_name, PricingTuple,
 };
 use anyhow::Result;
 use serde::Deserialize;
 use std::env;
 
 /// OpenAI pricing constants (per 1M tokens in USD)
-/// Source: https://developers.openai.com/api/docs/pricing (verified Apr 24, 2026)
+/// Source: https://developers.openai.com/api/docs/pricing (verified Jul 10, 2026)
 /// Format: (model, input, output, cache_write, cache_read)
 /// Note: For models without caching, cache_write = input and cache_read = input
 const PRICING: &[PricingTuple] = &[
+    // GPT-5.6 family. The gpt-5.6 alias routes to gpt-5.6-sol.
+    // Cache writes cost 1.25x uncached input; cache reads cost 0.1x.
+    ("gpt-5.6-sol", 5.00, 30.00, 6.25, 0.50),
+    ("gpt-5.6-terra", 2.50, 15.00, 3.125, 0.25),
+    ("gpt-5.6-luna", 1.00, 6.00, 1.25, 0.10),
+    ("gpt-5.6", 5.00, 30.00, 6.25, 0.50),
     // GPT-5.5 family
     ("gpt-5.5-pro", 30.00, 180.00, 30.00, 30.00),
     ("gpt-5.5", 5.00, 30.00, 5.00, 0.50),
@@ -105,9 +110,33 @@ const PRICING: &[PricingTuple] = &[
     ("gpt-3.5-turbo", 0.50, 1.50, 0.50, 0.50),
 ];
 
+/// GPT-5.6 requests above this many input tokens use the long-context tier for
+/// the entire request: 2x input/cache rates and 1.5x output rates.
+const GPT_5_6_LONG_CONTEXT_THRESHOLD: u64 = 272_000;
+
+fn get_usage_pricing(model: &str, input_tokens: u64) -> Option<(f64, f64, f64, f64)> {
+    let (mut input, mut output, mut cache_write, mut cache_read) =
+        get_model_pricing(model, PRICING)?;
+
+    if normalize_model_name(model).starts_with("gpt-5.6")
+        && input_tokens > GPT_5_6_LONG_CONTEXT_THRESHOLD
+    {
+        input *= 2.0;
+        output *= 1.5;
+        cache_write *= 2.0;
+        cache_read *= 2.0;
+    }
+
+    Some((input, output, cache_write, cache_read))
+}
+
 /// Calculate cost for OpenAI models with basic pricing (case-insensitive)
 fn calculate_cost(model: &str, input_tokens: u64, completion_tokens: u64) -> Option<f64> {
-    calculate_cost_from_pricing_table(model, PRICING, input_tokens, 0, 0, completion_tokens)
+    let (input, output, _, _) = get_usage_pricing(model, input_tokens)?;
+    Some(
+        (input_tokens as f64 / 1_000_000.0) * input
+            + (completion_tokens as f64 / 1_000_000.0) * output,
+    )
 }
 
 /// Calculate cost with cache-aware pricing (case-insensitive)
@@ -117,16 +146,20 @@ fn calculate_cost(model: &str, input_tokens: u64, completion_tokens: u64) -> Opt
 fn calculate_cost_with_cache(
     model: &str,
     regular_input_tokens: u64,
+    cache_write_tokens: u64,
     cache_read_tokens: u64,
     completion_tokens: u64,
 ) -> Option<f64> {
-    calculate_cost_from_pricing_table(
-        model,
-        PRICING,
-        regular_input_tokens,
-        0,
-        cache_read_tokens,
-        completion_tokens,
+    let total_input_tokens = regular_input_tokens
+        .saturating_add(cache_write_tokens)
+        .saturating_add(cache_read_tokens);
+    let (input, output, cache_write, cache_read) = get_usage_pricing(model, total_input_tokens)?;
+
+    Some(
+        (regular_input_tokens as f64 / 1_000_000.0) * input
+            + (cache_write_tokens as f64 / 1_000_000.0) * cache_write
+            + (cache_read_tokens as f64 / 1_000_000.0) * cache_read
+            + (completion_tokens as f64 / 1_000_000.0) * output,
     )
 }
 
@@ -287,6 +320,10 @@ impl AiProvider for OpenAiProvider {
         // These are the actual context windows - API handles output limits
         let normalized = normalize_model_name(model);
 
+        // GPT-5.6 family: 1.05M context window (922K max input + 128K max output)
+        if normalized.starts_with("gpt-5.6") {
+            return 1_050_000;
+        }
         // GPT-5.5 family: 1M context window
         if normalized.starts_with("gpt-5.5") {
             return 1_000_000;
@@ -431,7 +468,7 @@ impl AiProvider for OpenAiProvider {
 
         // Add reasoning effort for reasoning models (o1/o3/o4/gpt-5/gpt-5.5+).
         // Maps generic ReasoningEffort -> OpenAI Responses API "effort" string.
-        // OpenAI accepts: "none" | "low" | "medium" | "high" | "xhigh" (gpt-5.5+).
+        // GPT-5.6 additionally accepts "max".
         // Default when caller omits is "medium" (per OpenAI guidance).
         if params.model.starts_with("o1")
             || params.model.starts_with("o3")
@@ -443,6 +480,7 @@ impl AiProvider for OpenAiProvider {
                 Some(ReasoningEffort::Medium) => "medium",
                 Some(ReasoningEffort::High) => "high",
                 Some(ReasoningEffort::XHigh) => "xhigh",
+                Some(ReasoningEffort::Max) if params.model.starts_with("gpt-5.6") => "max",
                 Some(ReasoningEffort::Max) => "xhigh",
                 None => "medium",
             };
@@ -512,8 +550,10 @@ impl AiProvider for OpenAiProvider {
             }
         }
 
-        // Enable extended prompt cache retention when long cache is configured
-        if params.use_long_cache {
+        // GPT-5.6 replaced the old maximum-retention field with
+        // prompt_cache_options.ttl. Its sole supported TTL is already the 30m
+        // default, so do not send the deprecated 24h field for this family.
+        if params.use_long_cache && !normalize_model_name(&params.model).starts_with("gpt-5.6") {
             request_body["prompt_cache_retention"] = serde_json::json!("24h");
         }
 
@@ -593,6 +633,8 @@ struct ResponseUsage {
 struct InputTokensDetails {
     #[serde(default)]
     cached_tokens: u64,
+    #[serde(default)]
+    cache_write_tokens: u64,
 }
 
 #[derive(Deserialize, Debug)]
@@ -815,14 +857,22 @@ async fn execute_openai_request(
                 .as_ref()
                 .map(|d| d.cached_tokens)
                 .unwrap_or(0);
-            if cached_tokens > 0 {
+            let cache_write_tokens = api_response
+                .usage
+                .input_tokens_details
+                .as_ref()
+                .map(|d| d.cache_write_tokens)
+                .unwrap_or(0);
+            if cached_tokens > 0 || cache_write_tokens > 0 {
                 let regular_input_tokens = api_response
                     .usage
                     .input_tokens
-                    .saturating_sub(cached_tokens);
+                    .saturating_sub(cached_tokens)
+                    .saturating_sub(cache_write_tokens);
                 calculate_cost_with_cache(
                     model,
                     regular_input_tokens,
+                    cache_write_tokens,
                     cached_tokens,
                     api_response.usage.output_tokens,
                 )
@@ -835,8 +885,7 @@ async fn execute_openai_request(
             }
         });
 
-    // OpenAI reports cache_read in input_tokens_details, but NOT cache_write
-    // input_tokens from API includes: regular_input + cache_read
+    // input_tokens includes regular input, cache reads, and cache writes.
     let cache_read_tokens = api_response
         .usage
         .input_tokens_details
@@ -844,19 +893,24 @@ async fn execute_openai_request(
         .map(|d| d.cached_tokens)
         .unwrap_or(0);
 
-    // OpenAI does NOT report cache_write tokens in API response
-    let cache_write_tokens = 0_u64;
+    let cache_write_tokens = api_response
+        .usage
+        .input_tokens_details
+        .as_ref()
+        .map(|d| d.cache_write_tokens)
+        .unwrap_or(0);
 
     // Calculate CLEAN input tokens (no cache)
     let input_tokens_clean = api_response
         .usage
         .input_tokens
-        .saturating_sub(cache_read_tokens);
+        .saturating_sub(cache_read_tokens)
+        .saturating_sub(cache_write_tokens);
 
     let usage = TokenUsage {
         input_tokens: input_tokens_clean, // CLEAN input (no cache)
         cache_read_tokens,                // Tokens read from cache
-        cache_write_tokens,               // OpenAI doesn't expose this (0)
+        cache_write_tokens,
         output_tokens: api_response.usage.output_tokens,
         reasoning_tokens,
         total_tokens: api_response.usage.total_tokens + reasoning_tokens,
@@ -962,6 +1016,10 @@ mod tests {
         assert!(provider.supports_model("gpt-5-nano-2025-08-07"));
         assert!(provider.supports_model("gpt-5.5"));
         assert!(provider.supports_model("gpt-5.5-pro"));
+        assert!(provider.supports_model("gpt-5.6"));
+        assert!(provider.supports_model("gpt-5.6-sol"));
+        assert!(provider.supports_model("gpt-5.6-terra"));
+        assert!(provider.supports_model("gpt-5.6-luna"));
         assert!(provider.supports_model("gpt-5.2-codex"));
         assert!(provider.supports_model("gpt-5.3-codex"));
         assert!(provider.supports_model("gpt-5.2-chat-latest"));
@@ -997,6 +1055,12 @@ mod tests {
     #[test]
     fn test_get_max_input_tokens_gpt5() {
         let provider = OpenAiProvider::new();
+
+        // GPT-5.6 models have a 1.05M context window.
+        assert_eq!(provider.get_max_input_tokens("gpt-5.6"), 1_050_000);
+        assert_eq!(provider.get_max_input_tokens("gpt-5.6-sol"), 1_050_000);
+        assert_eq!(provider.get_max_input_tokens("gpt-5.6-terra"), 1_050_000);
+        assert_eq!(provider.get_max_input_tokens("gpt-5.6-luna"), 1_050_000);
 
         // GPT-5.5 models should have 1M context window
         assert_eq!(provider.get_max_input_tokens("gpt-5.5"), 1_000_000);
@@ -1419,7 +1483,57 @@ mod tests {
     #[test]
     fn test_cache_pricing_for_gpt_5_2_codex() {
         // (regular 1000 * 1.75 + cached 1000 * 0.175 + output 500 * 14) / 1M
-        let cost = calculate_cost_with_cache("gpt-5.2-codex", 1000, 1000, 500).unwrap();
+        let cost = calculate_cost_with_cache("gpt-5.2-codex", 1000, 0, 1000, 500).unwrap();
         assert!((cost - 0.008925).abs() < 0.0000001);
+    }
+
+    #[test]
+    fn test_gpt_5_6_pricing_and_alias() {
+        let provider = OpenAiProvider::new();
+        let cases = [
+            ("gpt-5.6", 5.00, 30.00, 6.25, 0.50),
+            ("gpt-5.6-sol", 5.00, 30.00, 6.25, 0.50),
+            ("gpt-5.6-terra", 2.50, 15.00, 3.125, 0.25),
+            ("gpt-5.6-luna", 1.00, 6.00, 1.25, 0.10),
+        ];
+
+        for (model, input, output, cache_write, cache_read) in cases {
+            let pricing = provider.get_model_pricing(model).unwrap();
+            assert_eq!(pricing.input_price_per_1m, input);
+            assert_eq!(pricing.output_price_per_1m, output);
+            assert_eq!(pricing.cache_write_price_per_1m, cache_write);
+            assert_eq!(pricing.cache_read_price_per_1m, cache_read);
+        }
+    }
+
+    #[test]
+    fn test_gpt_5_6_long_context_and_cache_write_pricing() {
+        // Standard tier: regular input + cache write + cache read + output.
+        let standard =
+            calculate_cost_with_cache("gpt-5.6-terra", 100_000, 50_000, 50_000, 10_000).unwrap();
+        assert!((standard - 0.56875).abs() < 0.0000001);
+
+        // Above 272K total input: 2x every input/cache rate and 1.5x output.
+        let long =
+            calculate_cost_with_cache("gpt-5.6-terra", 200_000, 50_000, 50_001, 10_000).unwrap();
+        assert!((long - 1.5625005).abs() < 0.0000001);
+    }
+
+    #[test]
+    fn test_gpt_5_6_usage_deserializes_cache_writes() {
+        let usage: ResponseUsage = serde_json::from_value(serde_json::json!({
+            "input_tokens": 3_000,
+            "output_tokens": 500,
+            "total_tokens": 3_500,
+            "input_tokens_details": {
+                "cached_tokens": 1_000,
+                "cache_write_tokens": 500
+            }
+        }))
+        .unwrap();
+
+        let details = usage.input_tokens_details.unwrap();
+        assert_eq!(details.cached_tokens, 1_000);
+        assert_eq!(details.cache_write_tokens, 500);
     }
 }

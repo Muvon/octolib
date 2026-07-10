@@ -79,6 +79,21 @@ const fn pricing(
 /// substring matching resolves aliases such as `gpt-4o-mini` before `gpt-4o`.
 const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     ReferenceModelEntry {
+        pattern: "gpt-5.6-terra",
+        capabilities: caps(true, false, true, 1_050_000),
+        pricing: pricing(2.50, 15.00, 3.125, 0.25),
+    },
+    ReferenceModelEntry {
+        pattern: "gpt-5.6-luna",
+        capabilities: caps(true, false, true, 1_050_000),
+        pricing: pricing(1.00, 6.00, 1.25, 0.10),
+    },
+    ReferenceModelEntry {
+        pattern: "gpt-5.6-sol",
+        capabilities: caps(true, false, true, 1_050_000),
+        pricing: pricing(5.00, 30.00, 6.25, 0.50),
+    },
+    ReferenceModelEntry {
         pattern: "gpt-4o-mini-realtime-preview",
         capabilities: caps(false, false, true, 128_000),
         pricing: pricing(0.60, 2.40, 0.60, 0.30),
@@ -1112,6 +1127,12 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pattern: "gpt-5.5",
         capabilities: caps(false, false, true, 1_000_000),
         pricing: pricing(5.00, 30.00, 5.00, 0.50),
+    },
+    ReferenceModelEntry {
+        // OpenAI routes the bare alias to gpt-5.6-sol.
+        pattern: "gpt-5.6",
+        capabilities: caps(true, false, true, 1_050_000),
+        pricing: pricing(5.00, 30.00, 6.25, 0.50),
     },
     ReferenceModelEntry {
         pattern: "gpt-5.4",

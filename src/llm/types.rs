@@ -455,7 +455,8 @@ impl ThinkingBlock {
 ///
 /// # Provider-Specific Notes
 /// - **Anthropic**: Reports cache_read and cache_creation (write) separately; input_tokens includes everything
-/// - **OpenAI**: Reports cache_read in details; input_tokens includes regular + cache_read; NO cache_write info
+/// - **OpenAI**: GPT-5.6 reports cache reads and writes in input token details;
+///   input_tokens includes regular + cache_read + cache_write
 /// - **DeepSeek**: Reports cache_hit (read) and cache_miss; input_tokens includes everything
 /// - **OpenRouter**: NO cache info provided
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -829,7 +830,8 @@ pub struct ChatCompletionParams {
     pub response_format: Option<StructuredOutputRequest>,
     /// Previous response ID for multi-turn conversations (OpenAI Responses API)
     pub previous_id: Option<String>,
-    /// Enable long-lived cache (provider-specific: OpenAI "24h" retention, Anthropic 1h TTL)
+    /// Enable long-lived cache (provider-specific: pre-GPT-5.6 OpenAI "24h"
+    /// retention, Anthropic 1h TTL). GPT-5.6 has only a fixed 30m minimum TTL.
     pub use_long_cache: bool,
     /// Explicit prompt-cache routing key (OpenAI `prompt_cache_key`). Optional hint
     /// that pins requests sharing a long common prefix to the same cache, improving

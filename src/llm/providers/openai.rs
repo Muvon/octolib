@@ -180,7 +180,26 @@ const NO_TEMPERATURE_PREFIXES: &[&str] = &["o1", "o2", "o3", "o4", "gpt-5"];
 /// # Arguments
 /// * `messages` - Full conversation history
 /// * `has_previous_response` - Whether we have a previous_id (continuation)
-fn messages_to_input(messages: &[Message], has_previous_response: bool) -> Vec<serde_json::Value> {
+/// * `explicit_cache_breakpoints` - Map `Message.cached` to GPT-5.6 content breakpoints
+fn messages_to_input(
+    messages: &[Message],
+    has_previous_response: bool,
+    explicit_cache_breakpoints: bool,
+) -> Vec<serde_json::Value> {
+    let content = |msg: &Message| {
+        if explicit_cache_breakpoints && msg.cached {
+            serde_json::json!([{
+                "type": "input_text",
+                "text": msg.content,
+                "prompt_cache_breakpoint": {
+                    "mode": "explicit"
+                }
+            }])
+        } else {
+            serde_json::json!(msg.content)
+        }
+    };
+
     if has_previous_response {
         // Everything after the last assistant_id is new input. Send tool
         // results AND user follow-ups together — splitting them silently
@@ -209,7 +228,7 @@ fn messages_to_input(messages: &[Message], has_previous_response: bool) -> Vec<s
                 }
                 "user" | "system" => Some(serde_json::json!({
                     "role": msg.role,
-                    "content": msg.content
+                    "content": content(msg)
                 })),
                 _ => None,
             })
@@ -221,12 +240,42 @@ fn messages_to_input(messages: &[Message], has_previous_response: bool) -> Vec<s
             .filter_map(|msg| match msg.role.as_str() {
                 "user" | "system" => Some(serde_json::json!({
                     "role": msg.role,
-                    "content": msg.content
+                    "content": content(msg)
                 })),
                 _ => None,
             })
             .collect()
     }
+}
+
+fn count_explicit_cache_breakpoints(input: &[serde_json::Value]) -> usize {
+    input
+        .iter()
+        .filter_map(|item| item.get("content").and_then(serde_json::Value::as_array))
+        .flatten()
+        .filter(|block| block.get("prompt_cache_breakpoint").is_some())
+        .count()
+}
+
+fn apply_explicit_cache_options(
+    request_body: &mut serde_json::Value,
+    breakpoint_count: usize,
+) -> Result<()> {
+    if breakpoint_count > 4 {
+        return Err(anyhow::anyhow!(
+            "OpenAI GPT-5.6 supports at most 4 explicit prompt cache breakpoints per request; got {}",
+            breakpoint_count
+        ));
+    }
+
+    if breakpoint_count > 0 {
+        request_body["prompt_cache_options"] = serde_json::json!({
+            "mode": "explicit",
+            "ttl": "30m"
+        });
+    }
+
+    Ok(())
 }
 
 /// OpenAI provider
@@ -438,13 +487,20 @@ impl AiProvider for OpenAiProvider {
         });
 
         // Convert messages to array input format for Responses API
-        let input_array = messages_to_input(&params.messages, previous_id.is_some());
+        let is_gpt_5_6 = normalize_model_name(&params.model).starts_with("gpt-5.6");
+        let input_array = messages_to_input(&params.messages, previous_id.is_some(), is_gpt_5_6);
+        let explicit_cache_breakpoints = count_explicit_cache_breakpoints(&input_array);
 
         // Create the request body for Responses API
         let mut request_body = serde_json::json!({
             "model": params.model,
             "input": input_array,
         });
+
+        // `Message.cached` means the caller selected exact write boundaries.
+        // Disable the additional implicit latest-message write so only those
+        // marked prefixes can incur GPT-5.6 cache-write charges.
+        apply_explicit_cache_options(&mut request_body, explicit_cache_breakpoints)?;
 
         // Apply sampling parameters based on model support
         let sampling = self.effective_sampling_params(&params);
@@ -1199,7 +1255,7 @@ mod tests {
             },
         ];
 
-        let input = messages_to_input(&messages, false);
+        let input = messages_to_input(&messages, false, false);
         assert_eq!(input.len(), 2);
 
         // First message - content is plain string
@@ -1211,6 +1267,45 @@ mod tests {
         let second = &input[1];
         assert_eq!(second["role"], "user");
         assert_eq!(second["content"], "Hello!");
+    }
+
+    #[test]
+    fn test_gpt_5_6_explicit_cache_breakpoint_wire_shape() {
+        let messages = vec![
+            Message::system("Stable instructions").with_cache_marker(),
+            Message::user("Variable request"),
+        ];
+
+        let input = messages_to_input(&messages, false, true);
+        assert_eq!(count_explicit_cache_breakpoints(&input), 1);
+        assert_eq!(input[0]["content"][0]["type"], "input_text");
+        assert_eq!(input[0]["content"][0]["text"], "Stable instructions");
+        assert_eq!(
+            input[0]["content"][0]["prompt_cache_breakpoint"]["mode"],
+            "explicit"
+        );
+        assert_eq!(input[1]["content"], "Variable request");
+
+        let mut request_body = serde_json::json!({"input": input});
+        apply_explicit_cache_options(&mut request_body, 1).unwrap();
+        assert_eq!(request_body["prompt_cache_options"]["mode"], "explicit");
+        assert_eq!(request_body["prompt_cache_options"]["ttl"], "30m");
+    }
+
+    #[test]
+    fn test_explicit_cache_breakpoint_limit() {
+        let mut request_body = serde_json::json!({});
+        let error = apply_explicit_cache_options(&mut request_body, 5).unwrap_err();
+        assert!(error.to_string().contains("at most 4"));
+    }
+
+    #[test]
+    fn test_pre_gpt_5_6_keeps_cached_messages_in_legacy_shape() {
+        let messages = vec![Message::system("Stable instructions").with_cache_marker()];
+        let input = messages_to_input(&messages, false, false);
+
+        assert_eq!(input[0]["content"], "Stable instructions");
+        assert_eq!(count_explicit_cache_breakpoints(&input), 0);
     }
 
     #[test]
@@ -1269,7 +1364,7 @@ mod tests {
         ];
 
         // When there are NEW tool responses after assistant, send only those tool outputs
-        let input = messages_to_input(&messages, true);
+        let input = messages_to_input(&messages, true, false);
         assert_eq!(input.len(), 1); // Only the NEW tool response
 
         // Tool response uses function_call_output format
@@ -1366,7 +1461,7 @@ mod tests {
         ];
 
         // Should send only the NEW user message, NOT the old tool result
-        let input = messages_to_input(&messages, true);
+        let input = messages_to_input(&messages, true, false);
         assert_eq!(input.len(), 1);
 
         // Should be the new user message
@@ -1445,7 +1540,7 @@ mod tests {
             },
         ];
 
-        let input = messages_to_input(&messages, true);
+        let input = messages_to_input(&messages, true, false);
         assert_eq!(
             input.len(),
             2,

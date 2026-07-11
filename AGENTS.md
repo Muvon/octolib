@@ -1,4 +1,4 @@
-# Octolib — AI Provider Library Guide
+#! Octolib — AI Provider Library Guide
 
 Rust library providing a unified interface to multiple AI providers (OpenAI, Anthropic, OpenRouter, NVIDIA, Ollama, Google, Amazon, Cloudflare, DeepSeek, Moonshot, Z.ai, BytePlus, Groq, Cerebras, Together, Featherless, Fireworks, OctoHub, CLI proxies). Handles chat completions, embeddings, reranking, cost tracking, caching, structured output, vision, and tool calls. No panics, no `println!`, always `Result`. Copyright year is **2026**.
 

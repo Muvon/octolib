@@ -100,9 +100,9 @@ pub trait AiProvider: Send + Sync {
     ///   5m default, 1h opt-in. Returns `Some`.
     /// - **OpenRouter** ✓ — passes `cache_control` through to upstream, working only
     ///   for Anthropic/Claude routes. Returns `Some` when model is Claude-family.
-    /// - **OpenAI** ✗ — fully automatic prompt caching, no `cache_control` primitive
-    ///   the client can attach. A "ping" would be a billed-in-full duplicate
-    ///   request, not a cache extension. `None`.
+    /// - **OpenAI** ✗ — GPT-5.6 supports explicit write breakpoints, but exposes
+    ///   no client-controlled refresh/keepalive primitive. A duplicate request
+    ///   can incur another cache-write charge rather than extending a TTL. `None`.
     /// - **Google Gemini** ✗ via chat completion — implicit cache only here; the
     ///   explicit `cachedContent` resource lives behind a separate REST endpoint
     ///   and is refreshed by `PATCH cachedContents/{id}` with a new `expireTime`,

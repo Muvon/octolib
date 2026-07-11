@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.25.0] - 2026-07-11
+
+### 📋 Release Summary
+
+This release introduces support for GPT-5.6, including advanced prompt cache tracking (9a8b8607, ba2fe98c). It also implements comprehensive token and cost usage tracking for embedding models to improve budget management (f7e1f4a2, eb46b27c).
+
+
+### ✨ New Features & Enhancements
+
+- **openai**: implement gpt-5.6 prompt cache breakpoints `9a8b8607`
+- **llm**: add GPT-5.6 support and cache tracking `ba2fe98c`
+- **embedding**: implement token and cost usage tracking `f7e1f4a2`
+- **embedding**: add pricing calculation for models `eb46b27c`
+
+### 🔄 Other Changes
+
+2 maintenance, dependency, and tooling updates not listed individually.
+
 ## [0.24.0] - 2026-07-06
 
 ### 📋 Release Summary

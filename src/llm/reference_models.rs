@@ -494,6 +494,14 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(0.95, 4.00, 0.95, 0.19),
     },
     ReferenceModelEntry {
+        // Alias without the "k" (self-hosted / gateway deployments name it this
+        // way) — the sanitizer can't bridge a real letter difference, so an
+        // explicit twin keeps these calls priced.
+        pattern: "kimi-2.7-code",
+        capabilities: caps(true, true, true, 256_000),
+        pricing: pricing(0.95, 4.00, 0.95, 0.19),
+    },
+    ReferenceModelEntry {
         pattern: "moonshot-v1-8k",
         capabilities: caps(false, false, true, 8_192),
         pricing: pricing(0.20, 2.00, 0.20, 0.20),
@@ -1015,6 +1023,12 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "kimi-k2.6",
+        capabilities: caps(false, false, true, 256_000),
+        pricing: pricing(0.60, 2.50, 0.60, 0.15),
+    },
+    ReferenceModelEntry {
+        // Alias twin of kimi-k2.6 (see kimi-2.7-code above).
+        pattern: "kimi-2.6",
         capabilities: caps(false, false, true, 256_000),
         pricing: pricing(0.60, 2.50, 0.60, 0.15),
     },

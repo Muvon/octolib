@@ -125,6 +125,16 @@ mod tests {
         let p = get_reference_pricing("kimi-k2.7-code").unwrap();
         assert_eq!(p.input_price_per_1m, 0.95);
         assert_eq!(p.output_price_per_1m, 4.00);
+        // "k"-less aliases (gateway/self-hosted deployment names) price identically —
+        // the sanitizer bridges qwen3.7→qwen-3.7 but not a real letter difference.
+        let p = get_reference_pricing("kimi-2.6").unwrap();
+        assert_eq!(p.input_price_per_1m, 0.60);
+        let p = get_reference_pricing("kimi-2.7-code").unwrap();
+        assert_eq!(p.input_price_per_1m, 0.95);
+        let p = get_reference_pricing("qwen3.7-max").unwrap();
+        assert_eq!(p.input_price_per_1m, 1.25);
+        let p = get_reference_pricing("qwen3.7-plus").unwrap();
+        assert_eq!(p.input_price_per_1m, 0.32);
         // highspeed must NOT fall back to the base kimi-k2.7-code entry
         let p = get_reference_pricing("kimi-k2.7-code-highspeed").unwrap();
         assert_eq!(p.input_price_per_1m, 1.90);

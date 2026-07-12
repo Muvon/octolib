@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.25.1] - 2026-07-12
+
+### 📋 Release Summary
+
+This release expands cost tracking capabilities by adding pricing models for Voyage and Jina embeddings, including Jina v5 omni (204e8d37, 44d3271e). Additionally, new model aliases have been introduced for Kimi to ensure accurate LLM pricing (af57a2dc).
+
+
+### ✨ New Features & Enhancements
+
+- **embedding**: add Jina v5 omni pricing models `204e8d37`
+- **llm**: add Kimi model aliases for pricing `af57a2dc`
+- **embedding**: add voyage and jina pricing models `44d3271e`
+
 ## [0.25.0] - 2026-07-11
 
 ### 📋 Release Summary

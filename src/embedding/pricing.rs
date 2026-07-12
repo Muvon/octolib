@@ -84,6 +84,8 @@ pub const EMBEDDING_PRICING: &[EmbeddingPricingTuple] = &[
     ("text-embedding-3-large", 0.13),
     ("text-embedding-ada-002", 0.10),
     // ── Jina (v3 verified: jina.ai; others estimate at Jina's flat $0.02/M) ──
+    ("jina-embeddings-v5-omni-small", 0.02), // estimate
+    ("jina-embeddings-v5-omni-nano", 0.02),  // estimate
     ("jina-embeddings-v5-text-small", 0.02), // estimate
     ("jina-embeddings-v5-text-nano", 0.02),  // estimate
     ("jina-embeddings-v3", 0.02),

@@ -1133,6 +1133,13 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(0.03, 0.03, 0.00, 0.00),
     },
     ReferenceModelEntry {
+        // Thinking Machines Inkling (open-weights, no first-party inference API;
+        // served via partners — pricing from Together, verified July 17, 2026).
+        pattern: "inkling",
+        capabilities: caps(true, false, true, 524_288),
+        pricing: pricing(1.00, 4.05, 0.00, 0.17),
+    },
+    ReferenceModelEntry {
         pattern: "kimi-k3",
         capabilities: caps(true, true, true, 1_048_576),
         pricing: pricing(3.00, 15.00, 3.00, 0.30),

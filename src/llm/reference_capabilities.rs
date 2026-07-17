@@ -249,6 +249,14 @@ mod tests {
     }
 
     #[test]
+    fn test_kimi_k3_1m() {
+        let caps = get_reference_capabilities("kimi-k3").unwrap();
+        assert!(caps.vision);
+        assert!(caps.video);
+        assert_eq!(caps.max_input_tokens, 1_048_576);
+    }
+
+    #[test]
     fn test_kimi_k2_256k() {
         // All Kimi K2 variants now report 256K (matches MoonshotProvider override)
         assert_eq!(

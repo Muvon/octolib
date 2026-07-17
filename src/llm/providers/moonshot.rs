@@ -14,14 +14,16 @@
 
 //! Moonshot AI (Kimi) provider implementation
 //!
-//! PRICING UPDATE: June 2026 (verified June 13, 2026)
-//! Source: <https://platform.kimi.ai/docs/pricing/chat-k27-code.md>,
+//! PRICING UPDATE: July 2026 (verified July 17, 2026)
+//! Source: <https://platform.kimi.ai/docs/pricing/chat-k3.md>,
+//!         <https://platform.kimi.ai/docs/pricing/chat-k27-code.md>,
 //!         <https://platform.kimi.ai/docs/pricing/chat-k26.md>,
 //!         <https://platform.kimi.ai/docs/pricing/chat-k25.md>,
 //!         <https://platform.kimi.ai/docs/pricing/chat-k2.md>,
 //!         <https://platform.kimi.ai/docs/pricing/chat-v1.md>
 //!
 //! Per 1M tokens (USD): (cache_hit, cache_miss_input, output)
+//! - kimi-k3:                    $0.30 / $3.00 / $15.00
 //! - kimi-k2.7-code:             $0.19 / $0.95 / $4.00
 //! - kimi-k2.7-code-highspeed:   $0.38 / $1.90 / $8.00
 //! - kimi-k2.6:                  $0.16 / $0.95 / $4.00
@@ -60,6 +62,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// - V1 legacy models have no cache support → `cache_write` = `cache_read` = `input`.
 /// - Order matters: more specific patterns first (substring matching).
 const PRICING: &[PricingTuple] = &[
+    // Kimi K3 (1M-context multimodal reasoning flagship)
+    ("kimi-k3", 3.00, 15.00, 3.00, 0.30),
     // Kimi K2.7 Code HighSpeed (high-throughput variant; must precede the
     // general kimi-k2.7 entry since that pattern is a substring of this name)
     ("kimi-k2.7-code-highspeed", 1.90, 8.00, 1.90, 0.38),
@@ -517,16 +521,17 @@ impl AiProvider for MoonshotProvider {
     }
 
     fn supports_caching(&self, model: &str) -> bool {
-        // Only Kimi K2.x series supports automatic context caching.
+        // Kimi K2.x and K3 series support automatic context caching.
         // Moonshot V1 legacy models have no caching (no cache-hit pricing).
-        contains_ignore_ascii_case(model, "kimi-k2")
+        contains_ignore_ascii_case(model, "kimi-k2") || contains_ignore_ascii_case(model, "kimi-k3")
     }
 
     fn supports_vision(&self, model: &str) -> bool {
-        // Kimi K2.5, K2.6 and K2.7 support vision/multimodal
+        // Kimi K2.5, K2.6, K2.7 and K3 support vision/multimodal
         contains_ignore_ascii_case(model, "kimi-k2.5")
             || contains_ignore_ascii_case(model, "kimi-k2.6")
             || contains_ignore_ascii_case(model, "kimi-k2.7")
+            || contains_ignore_ascii_case(model, "kimi-k3")
     }
 
     fn supports_structured_output(&self, _model: &str) -> bool {
@@ -549,6 +554,10 @@ impl AiProvider for MoonshotProvider {
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {
+        // Kimi K3 — 1M context window per official model spec.
+        if contains_ignore_ascii_case(model, "kimi-k3") {
+            return 1_048_576;
+        }
         // Kimi K2 family — context windows per official model spec
         // (kimi-k2.6/k2.5/k2-0905/turbo/thinking → 256K = 262_144;
         //  kimi-k2-0711 → 128K = 131_072).
@@ -574,10 +583,12 @@ impl AiProvider for MoonshotProvider {
 
     fn supported_sampling_params(&self, model: &str) -> SamplingSupport {
         // Kimi K2.5, K2.6 and K2.7 only accept temperature=1.0 — not user-controllable.
+        // Kimi K3 has no temperature parameter at all (always-reasoning model).
         // Other Moonshot models support temperature. None support top_p or top_k.
         let fixed_temp = contains_ignore_ascii_case(model, "kimi-k2.5")
             || contains_ignore_ascii_case(model, "kimi-k2.6")
-            || contains_ignore_ascii_case(model, "kimi-k2.7");
+            || contains_ignore_ascii_case(model, "kimi-k2.7")
+            || contains_ignore_ascii_case(model, "kimi-k3");
         SamplingSupport {
             temperature: !fixed_temp,
             top_p: false,
@@ -593,7 +604,9 @@ impl AiProvider for MoonshotProvider {
         // Manual caching via /v1/caching endpoint is deprecated (returns "model family is invalid")
         let messages = convert_messages(&params.messages, &params.model);
 
-        // Kimi K2.5, K2.6 and K2.7 only accept temperature=1.0; other models use user-requested value.
+        // Kimi K2.5, K2.6 and K2.7 only accept temperature=1.0; other models use
+        // user-requested value. Kimi K3 has no temperature parameter — it falls
+        // through to sampling.temperature which is None (unsupported → omitted).
         let sampling = self.effective_sampling_params(&params);
         let temperature = if contains_ignore_ascii_case(&params.model, "kimi-k2.5")
             || contains_ignore_ascii_case(&params.model, "kimi-k2.6")
@@ -842,6 +855,8 @@ mod tests {
     #[test]
     fn test_supports_model() {
         let provider = MoonshotProvider::new();
+        // Kimi K3
+        assert!(provider.supports_model("kimi-k3"));
         // Kimi K2 series
         assert!(provider.supports_model("kimi-k2"));
         assert!(provider.supports_model("kimi-k2-thinking"));
@@ -866,6 +881,7 @@ mod tests {
     #[test]
     fn test_supports_vision() {
         let provider = MoonshotProvider::new();
+        assert!(provider.supports_vision("kimi-k3"));
         assert!(provider.supports_vision("kimi-k2.5"));
         assert!(provider.supports_vision("kimi-k2.6"));
         assert!(provider.supports_vision("kimi-k2.7-code"));
@@ -875,7 +891,8 @@ mod tests {
     #[test]
     fn test_supports_caching() {
         let provider = MoonshotProvider::new();
-        // K2 family supports automatic context caching
+        // K2/K3 families support automatic context caching
+        assert!(provider.supports_caching("kimi-k3"));
         assert!(provider.supports_caching("kimi-k2"));
         assert!(provider.supports_caching("kimi-k2.5"));
         assert!(provider.supports_caching("kimi-k2.6"));
@@ -925,6 +942,8 @@ mod tests {
     #[test]
     fn test_get_max_input_tokens() {
         let provider = MoonshotProvider::new();
+        // Kimi K3 — 1M = 1_048_576
+        assert_eq!(provider.get_max_input_tokens("kimi-k3"), 1_048_576);
         // Kimi K2 family — 256K = 262_144 (kimi-k2-0711 is 128K = 131_072)
         assert_eq!(provider.get_max_input_tokens("kimi-k2"), 262_144);
         assert_eq!(provider.get_max_input_tokens("kimi-k2.5"), 262_144);
@@ -991,6 +1010,21 @@ mod tests {
         let expected_hs = 1.90 + (0.5 * 8.00);
         assert!((cost_hs.unwrap() - expected_hs).abs() < 0.01);
     }
+    #[test]
+    fn test_calculate_cost_k3() {
+        // kimi-k3: Input (cache miss): $3.00/1M, Output: $15.00/1M, Cache hit: $0.30/1M
+        let cost = calculate_cost("kimi-k3", 1_000_000, 500_000);
+        assert!(cost.is_some());
+        let expected = 3.00 + (0.5 * 15.00);
+        assert!((cost.unwrap() - expected).abs() < 0.01);
+
+        // kimi-k3 with cache (50/50 split, 250k output)
+        let cost_cached = calculate_cost_with_cache("kimi-k3", 500_000, 500_000, 250_000);
+        assert!(cost_cached.is_some());
+        let expected_cached = (0.5 * 3.00) + (0.5 * 0.30) + (0.25 * 15.00);
+        assert!((cost_cached.unwrap() - expected_cached).abs() < 0.01);
+    }
+
     #[test]
     fn test_moonshot_v1_pricing() {
         // moonshot-v1-8k: Input: $0.20/1M, Output: $2.00/1M (no cache)

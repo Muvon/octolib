@@ -120,6 +120,10 @@ mod tests {
         let p = get_reference_pricing("claude-fable-5").unwrap();
         assert_eq!(p.input_price_per_1m, 10.00);
         assert_eq!(p.output_price_per_1m, 50.00);
+        let p = get_reference_pricing("kimi-k3").unwrap();
+        assert_eq!(p.input_price_per_1m, 3.00);
+        assert_eq!(p.output_price_per_1m, 15.00);
+        assert_eq!(p.cache_read_price_per_1m, 0.30);
         let p = get_reference_pricing("kimi-k2.6").unwrap();
         assert_eq!(p.input_price_per_1m, 0.60);
         let p = get_reference_pricing("kimi-k2.7-code").unwrap();

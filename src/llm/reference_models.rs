@@ -1133,6 +1133,11 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(0.03, 0.03, 0.00, 0.00),
     },
     ReferenceModelEntry {
+        pattern: "kimi-k3",
+        capabilities: caps(true, true, true, 1_048_576),
+        pricing: pricing(3.00, 15.00, 3.00, 0.30),
+    },
+    ReferenceModelEntry {
         pattern: "kimi-k2",
         capabilities: caps(false, false, true, 256_000),
         pricing: pricing(0.60, 2.50, 0.60, 0.15),

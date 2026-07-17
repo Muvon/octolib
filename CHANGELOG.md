@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.25.2] - 2026-07-17
+
+### 📋 Release Summary
+
+This release expands provider support with the addition of the Inkling reference model and pricing, as well as integration for the Moonshot Kimi K3 model (fc679cf2, 734fa638).
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: add Inkling reference model and pricing `fc679cf2`
+- **llm**: add Moonshot Kimi K3 model support `734fa638`
+
 ## [0.25.1] - 2026-07-12
 
 ### 📋 Release Summary

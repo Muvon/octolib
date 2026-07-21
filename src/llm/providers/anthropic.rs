@@ -569,6 +569,7 @@ impl AiProvider for AnthropicProvider {
             params.request_timeout,
             params.cancellation_token.as_ref(),
             needs_extended_cache,
+            params.extra_headers.clone(),
         )
         .await?;
 
@@ -812,6 +813,7 @@ async fn execute_anthropic_request(
     request_timeout: Option<std::time::Duration>,
     cancellation_token: Option<&tokio::sync::watch::Receiver<bool>>,
     extended_cache_ttl: bool,
+    extra_headers: Option<std::collections::HashMap<String, String>>,
 ) -> Result<ProviderResponse> {
     let start_time = std::time::Instant::now();
 
@@ -825,6 +827,7 @@ async fn execute_anthropic_request(
     let response = retry::retry_with_exponential_backoff(
         || {
             let client = shared::http_client();
+            let extra_headers = extra_headers.clone();
             let auth_header_name = auth_header_name.clone();
             let auth_header_value = auth_header_value.clone();
             let api_url = api_url.clone();
@@ -839,7 +842,8 @@ async fn execute_anthropic_request(
                     .header("anthropic-beta", &beta_header)
                     .json(&request_body);
 
-                let captured = shared::send_and_read(req, request_timeout).await?;
+                let captured =
+                    shared::send_and_read(req, request_timeout, extra_headers.as_ref()).await?;
 
                 // Return Err for retryable HTTP errors so the retry loop catches them
                 if retry::is_retryable_status(captured.status.as_u16()) {

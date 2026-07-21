@@ -141,6 +141,36 @@ pub(super) struct CapturedResponse {
     pub body: String,
 }
 
+/// Fold caller-supplied extra headers into a request builder, LAST, with
+/// upsert semantics: `RequestBuilder::headers` replaces any existing value for
+/// a name present in the map (reqwest's `replace_headers`), so a caller can
+/// override even a provider-set header, while every untouched name survives.
+/// Invalid header names/values are skipped with a warning — a malformed extra
+/// header must not fail the request it was riding on.
+pub(super) fn apply_extra_headers(
+    request: reqwest::RequestBuilder,
+    extra: Option<&std::collections::HashMap<String, String>>,
+) -> reqwest::RequestBuilder {
+    let Some(map) = extra.filter(|m| !m.is_empty()) else {
+        return request;
+    };
+    let mut headers = reqwest::header::HeaderMap::new();
+    for (name, value) in map {
+        match (
+            name.parse::<reqwest::header::HeaderName>(),
+            value.parse::<reqwest::header::HeaderValue>(),
+        ) {
+            (Ok(n), Ok(v)) => {
+                headers.insert(n, v);
+            }
+            _ => {
+                tracing::warn!(header = %name, "skipping invalid extra header");
+            }
+        }
+    }
+    request.headers(headers)
+}
+
 /// Send a request and read its entire body, all within one awaited unit.
 ///
 /// Both the `send()` (connect/headers) and the body read happen here, so any
@@ -148,10 +178,18 @@ pub(super) struct CapturedResponse {
 /// `text()` — is returned as an `Err` to the surrounding retry loop, where
 /// `is_connection_error` classifies it and `refresh_http_client` runs before
 /// the next attempt. Status and headers are cloned before the body is consumed.
+///
+/// `extra_headers` ([`ChatCompletionParams::extra_headers`]) are folded in here
+/// — the one choke point every provider's chat path goes through — so the
+/// upsert semantics hold uniformly no matter which provider built the request.
+///
+/// [`ChatCompletionParams::extra_headers`]: crate::llm::types::ChatCompletionParams
 pub(super) async fn send_and_read(
     request: reqwest::RequestBuilder,
     timeout: Option<Duration>,
+    extra_headers: Option<&std::collections::HashMap<String, String>>,
 ) -> anyhow::Result<CapturedResponse> {
+    let request = apply_extra_headers(request, extra_headers);
     let response = apply_request_timeout(request, timeout)
         .send()
         .await
@@ -408,6 +446,39 @@ mod tests {
         assert!(parse_structured_output_from_text("[1,2]").is_some());
         assert!(parse_structured_output_from_text("not json").is_none());
         assert!(parse_structured_output_from_text("{not-json").is_none());
+    }
+
+    #[test]
+    fn test_apply_extra_headers_upserts_and_preserves() {
+        let mut extra = std::collections::HashMap::new();
+        extra.insert("X-Model-Purpose".to_string(), "compression".to_string());
+        extra.insert("Authorization".to_string(), "Bearer override".to_string());
+        extra.insert("bad name!".to_string(), "ignored".to_string());
+
+        let builder = http_client()
+            .post("http://localhost/never-sent")
+            .header("Authorization", "Bearer original")
+            .header("Content-Type", "application/json");
+        let req = apply_extra_headers(builder, Some(&extra)).build().unwrap();
+
+        // Override wins, without duplicating the header.
+        let auth: Vec<_> = req.headers().get_all("Authorization").iter().collect();
+        assert_eq!(auth.len(), 1);
+        assert_eq!(auth[0], "Bearer override");
+        // New name lands; provider-set names not in the map survive.
+        assert_eq!(req.headers()["X-Model-Purpose"], "compression");
+        assert_eq!(req.headers()["Content-Type"], "application/json");
+        // Invalid names are skipped, not fatal.
+        assert!(req.headers().get("bad name!").is_none());
+
+        // None / empty map are no-ops.
+        let untouched = apply_extra_headers(
+            http_client().post("http://localhost/x").header("A", "1"),
+            None,
+        )
+        .build()
+        .unwrap();
+        assert_eq!(untouched.headers()["A"], "1");
     }
 
     #[test]

@@ -58,6 +58,22 @@ impl OctoHubProvider {
     }
 }
 
+/// A rejected credential is the one failure users can actually fix, so say how.
+/// `octomind login` both obtains the key and stores it — telling someone to
+/// "set OCTOHUB_API_KEY" leaves them to work out where a key comes from.
+fn auth_aware_error(status: u16, body: &str) -> anyhow::Error {
+    if status == 401 || status == 403 {
+        let has_key = OctoHubProvider::api_key().is_some_and(|k| !k.trim().is_empty());
+        let hint = if has_key {
+            "the stored OctoHub key was rejected (revoked, or replaced by a newer login) — run `octomind login` to sign in again"
+        } else {
+            "no OctoHub key is set — run `octomind login` to sign in"
+        };
+        return anyhow::anyhow!("OctoHub API error {status}: {hint}. Server said: {body}");
+    }
+    anyhow::anyhow!("OctoHub API error {status}: {body}")
+}
+
 #[async_trait::async_trait]
 impl AiProvider for OctoHubProvider {
     fn name(&self) -> &str {
@@ -237,6 +253,7 @@ impl AiProvider for OctoHubProvider {
         let api_key = Self::api_key();
         let start_time = std::time::Instant::now();
         let request_timeout = params.request_timeout;
+        let extra_headers = params.extra_headers.clone();
 
         let response = retry::retry_with_exponential_backoff(
             || {
@@ -244,6 +261,7 @@ impl AiProvider for OctoHubProvider {
                 let api_key = api_key.clone();
                 let api_url = api_url.clone();
                 let request_body = request_body.clone();
+                let extra_headers = extra_headers.clone();
                 Box::pin(async move {
                     let mut req = client
                         .post(&api_url)
@@ -255,8 +273,12 @@ impl AiProvider for OctoHubProvider {
                         }
                     }
 
-                    let captured =
-                        shared::send_and_read(req.json(&request_body), request_timeout).await?;
+                    let captured = shared::send_and_read(
+                        req.json(&request_body),
+                        request_timeout,
+                        extra_headers.as_ref(),
+                    )
+                    .await?;
 
                     if retry::is_retryable_status(captured.status.as_u16()) {
                         return Err(anyhow::anyhow!(
@@ -286,11 +308,7 @@ impl AiProvider for OctoHubProvider {
         let request_time_ms = start_time.elapsed().as_millis() as u64;
 
         if !response.status.is_success() {
-            return Err(anyhow::anyhow!(
-                "OctoHub API error {}: {}",
-                response.status,
-                response.body
-            ));
+            return Err(auth_aware_error(response.status.as_u16(), &response.body));
         }
 
         let response_text = response.body;

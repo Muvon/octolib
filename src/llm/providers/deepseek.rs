@@ -391,11 +391,13 @@ impl AiProvider for DeepSeekProvider {
 
         let start_time = std::time::Instant::now();
         let request_timeout = params.request_timeout;
+        let extra_headers = params.extra_headers.clone();
         let response = retry::retry_with_exponential_backoff(
             || {
                 let client = shared::http_client();
                 let api_key = api_key.clone();
                 let request = request.clone();
+                let extra_headers = extra_headers.clone();
                 Box::pin(async move {
                     let req = client
                         .post("https://api.deepseek.com/chat/completions")
@@ -403,7 +405,8 @@ impl AiProvider for DeepSeekProvider {
                         .header("Content-Type", "application/json")
                         .json(&request);
 
-                    let captured = shared::send_and_read(req, request_timeout).await?;
+                    let captured =
+                        shared::send_and_read(req, request_timeout, extra_headers.as_ref()).await?;
 
                     // Return Err for retryable HTTP errors so the retry loop catches them
                     if retry::is_retryable_status(captured.status.as_u16()) {

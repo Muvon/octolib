@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.26.0] - 2026-07-21
+
+### 📋 Release Summary
+
+This release introduces support for custom HTTP headers in LLM requests, providing greater flexibility for authentication and provider-specific configurations (87ff13c7, 84d760ae).
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: support custom HTTP headers in requests `87ff13c7`
+
+### 🐛 Bug Fixes & Stability
+
+- **examples**: add missing extra_headers field `84d760ae`
+
 ## [0.25.2] - 2026-07-17
 
 ### 📋 Release Summary

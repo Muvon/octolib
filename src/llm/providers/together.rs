@@ -190,6 +190,7 @@ impl AiProvider for TogetherProvider {
             params.retry_timeout,
             params.request_timeout,
             params.cancellation_token.as_ref(),
+            params.extra_headers.clone(),
         )
         .await
     }
@@ -483,12 +484,14 @@ async fn execute_together_request(
     base_timeout: std::time::Duration,
     request_timeout: Option<std::time::Duration>,
     cancellation_token: Option<&tokio::sync::watch::Receiver<bool>>,
+    extra_headers: Option<std::collections::HashMap<String, String>>,
 ) -> Result<ProviderResponse> {
     let start_time = std::time::Instant::now();
 
     let response = retry::retry_with_exponential_backoff(
         || {
             let client = shared::http_client();
+            let extra_headers = extra_headers.clone();
             let api_key = api_key.clone();
             let request_body = request_body.clone();
 
@@ -499,7 +502,8 @@ async fn execute_together_request(
                     .header("Authorization", format!("Bearer {}", api_key))
                     .json(&request_body);
 
-                let captured = shared::send_and_read(req, request_timeout).await?;
+                let captured =
+                    shared::send_and_read(req, request_timeout, extra_headers.as_ref()).await?;
 
                 if retry::is_retryable_status(captured.status.as_u16()) {
                     return Err(anyhow::anyhow!(

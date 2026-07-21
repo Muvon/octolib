@@ -840,6 +840,12 @@ pub struct ChatCompletionParams {
     /// Reasoning effort hint for thinking-capable models. `None` = provider default
     /// (most providers omit the field; hybrid models stay non-thinking).
     pub reasoning_effort: Option<ReasoningEffort>,
+    /// Extra HTTP headers for the upstream request, applied LAST with upsert
+    /// semantics: a passed header replaces the provider's value for that name,
+    /// everything else the provider set stays. The library attaches no meaning
+    /// to them — callers use this to talk to proxies (e.g. octohub's
+    /// `X-Model-Purpose`). `None`/empty = no change to the request.
+    pub extra_headers: Option<std::collections::HashMap<String, String>>,
 }
 
 impl ChatCompletionParams {
@@ -869,6 +875,7 @@ impl ChatCompletionParams {
             use_long_cache: false,
             prompt_cache_key: None,
             reasoning_effort: None,
+            extra_headers: None,
         }
     }
 
@@ -881,6 +888,16 @@ impl ChatCompletionParams {
     /// Set an explicit prompt-cache routing key (OpenAI `prompt_cache_key`).
     pub fn with_prompt_cache_key(mut self, key: impl Into<String>) -> Self {
         self.prompt_cache_key = Some(key.into());
+        self
+    }
+
+    /// Set extra HTTP headers for the upstream request (upsert semantics —
+    /// see [`ChatCompletionParams::extra_headers`]).
+    pub fn with_extra_headers(
+        mut self,
+        headers: std::collections::HashMap<String, String>,
+    ) -> Self {
+        self.extra_headers = Some(headers);
         self
     }
 

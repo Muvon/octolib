@@ -386,6 +386,7 @@ async fn execute_request(
             let api_url = api_url.clone();
             let request_body = request_body.clone();
             let provider_name = config.provider_name.to_string();
+            let extra_headers = params.extra_headers.clone();
 
             Box::pin(async move {
                 let mut request = client
@@ -397,7 +398,8 @@ async fn execute_request(
                     request = request.header("Authorization", format!("Bearer {}", api_key));
                 }
 
-                let captured = shared::send_and_read(request, request_timeout).await?;
+                let captured =
+                    shared::send_and_read(request, request_timeout, extra_headers.as_ref()).await?;
 
                 // Return Err for retryable HTTP errors so the retry loop catches them
                 if retry::is_retryable_status(captured.status.as_u16()) {

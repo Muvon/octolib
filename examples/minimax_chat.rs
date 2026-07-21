@@ -119,6 +119,7 @@ async fn main() -> anyhow::Result<()> {
         previous_id: None,
         use_long_cache: false,
         prompt_cache_key: None,
+        extra_headers: None,
         reasoning_effort: None,
         request_timeout: None,
     };
@@ -188,6 +189,7 @@ async fn main() -> anyhow::Result<()> {
         previous_id: None,
         use_long_cache: false,
         prompt_cache_key: None,
+        extra_headers: None,
         reasoning_effort: None,
         request_timeout: None,
     };

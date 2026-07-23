@@ -167,6 +167,66 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    #[cfg(feature = "huggingface")]
+    async fn test_load_qwen3_embedding_model() {
+        let model = crate::embedding::provider::huggingface::HuggingFaceModel::load(
+            "Qwen/Qwen3-Embedding-0.6B",
+        )
+        .await
+        .expect("Qwen3 embedding model must load");
+        let embedding = model
+            .encode("Qwen3 embedding regression test")
+            .expect("Qwen3 embedding model must encode");
+
+        assert_eq!(embedding.len(), 1024);
+        assert!(embedding.iter().all(|value| value.is_finite()));
+    }
+
+    #[tokio::test]
+    #[cfg(feature = "huggingface")]
+    async fn test_qwen3_batch_embeddings_match_single_inputs() {
+        let model = crate::embedding::provider::huggingface::HuggingFaceModel::load(
+            "Qwen/Qwen3-Embedding-0.6B",
+        )
+        .await
+        .expect("Qwen3 embedding model must load");
+        let texts = [
+            "Generate a normalized embedding for this short Rust function.",
+            "Batch inference must preserve each source text's vector.",
+        ];
+
+        let singles: Vec<_> = texts
+            .iter()
+            .map(|text| {
+                model
+                    .encode(text)
+                    .expect("single Qwen3 embedding must encode")
+            })
+            .collect();
+        let batch = model
+            .encode_batch(&texts.iter().map(ToString::to_string).collect::<Vec<_>>())
+            .expect("batched Qwen3 embeddings must encode");
+
+        assert_eq!(batch.len(), singles.len());
+        for (index, (single, batched)) in singles.iter().zip(&batch).enumerate() {
+            assert_eq!(batched.len(), 1024);
+            let cosine: f32 = single.iter().zip(batched).map(|(a, b)| a * b).sum();
+            assert!(cosine > 0.999, "batch embedding {index} diverged: {cosine}");
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "huggingface")]
+    fn test_embedding_device_matches_acceleration_feature() {
+        let device = crate::embedding::provider::huggingface::embedding_device().unwrap();
+
+        #[cfg(feature = "metal")]
+        assert!(device.is_metal());
+        #[cfg(not(feature = "metal"))]
+        assert!(!device.is_metal());
+    }
+
     #[test]
     #[cfg(feature = "huggingface")]
     fn test_model_architecture_detection() {

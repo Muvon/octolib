@@ -61,17 +61,26 @@ impl OctoHubProvider {
 /// A rejected credential is the one failure users can actually fix, so say how.
 /// `octomind login` both obtains the key and stores it — telling someone to
 /// "set OCTOHUB_API_KEY" leaves them to work out where a key comes from.
+/// Only 401 gets the login hint: 403 is a plan/key restriction (e.g. "model
+/// 'X' is not permitted for this API key") where the server message is
+/// precise and logging in again would not help — pass it through.
 fn auth_aware_error(status: u16, body: &str) -> anyhow::Error {
-    if status == 401 || status == 403 {
+    // Server bodies are JSON like {"error":{"message":"..."}} — surface the
+    // message text, not the raw blob.
+    let msg = serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .and_then(|v| v["error"]["message"].as_str().map(str::to_string))
+        .unwrap_or_else(|| body.to_string());
+    if status == 401 {
         let has_key = OctoHubProvider::api_key().is_some_and(|k| !k.trim().is_empty());
         let hint = if has_key {
             "the stored OctoHub key was rejected (revoked, or replaced by a newer login) — run `octomind login` to sign in again"
         } else {
             "no OctoHub key is set — run `octomind login` to sign in"
         };
-        return anyhow::anyhow!("OctoHub API error {status}: {hint}. Server said: {body}");
+        return anyhow::anyhow!("OctoHub API error {status}: {hint}. Server said: {msg}");
     }
-    anyhow::anyhow!("OctoHub API error {status}: {body}")
+    anyhow::anyhow!("OctoHub API error {status}: {msg}")
 }
 
 #[async_trait::async_trait]

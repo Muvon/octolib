@@ -61,6 +61,8 @@ use candle_transformers::models::jina_bert::{
 #[cfg(feature = "huggingface")]
 use candle_transformers::models::qwen2::{Config as Qwen2Config, Model as Qwen2Model};
 #[cfg(feature = "huggingface")]
+use candle_transformers::models::qwen3::{Config as Qwen3Config, Model as Qwen3Model};
+#[cfg(feature = "huggingface")]
 use candle_transformers::models::xlm_roberta::{Config as XLMRobertaConfig, XLMRobertaModel};
 #[cfg(feature = "huggingface")]
 use hf_hub::{api::tokio::ApiBuilder, Repo, RepoType};
@@ -78,6 +80,19 @@ use std::sync::{Arc, LazyLock};
 use tokenizers::Tokenizer;
 #[cfg(feature = "huggingface")]
 use tokio::sync::RwLock;
+
+/// Select Metal when this build enables it; otherwise preserve CPU portability.
+#[cfg(feature = "huggingface")]
+pub(crate) fn embedding_device() -> Result<Device> {
+    #[cfg(feature = "metal")]
+    {
+        Device::metal_if_available(0).context("Failed to initialize Metal embedding device")
+    }
+    #[cfg(not(feature = "metal"))]
+    {
+        Ok(Device::Cpu)
+    }
+}
 
 /// Model architecture types supported by this provider
 #[cfg(feature = "huggingface")]
@@ -204,6 +219,8 @@ pub enum HuggingFaceModel {
     JinaBert(JinaBertModel, Tokenizer, Device),
     // Qwen2Model::forward takes &mut self, so wrap in Mutex for shared access
     Qwen2(std::sync::Mutex<Qwen2Model>, Tokenizer, Device),
+    // Qwen3 maintains a KV cache during inference. Clone its empty base per input.
+    Qwen3(Qwen3Model, Tokenizer, Device),
     JinaCodeBert(JinaCodeBertModel, Tokenizer, Device),
     MPNet(MPNetModel, Tokenizer, Device),
 }
@@ -212,7 +229,7 @@ pub enum HuggingFaceModel {
 impl HuggingFaceModel {
     /// Load a SentenceTransformer model from HuggingFace Hub
     pub async fn load(model_name: &str) -> Result<Self> {
-        let device = Device::Cpu; // Use CPU for now, can be extended to support GPU
+        let device = embedding_device()?;
 
         // Use our custom cache directory for consistency with FastEmbed
         // Set HF_HOME environment variable to control where models are downloaded
@@ -323,9 +340,7 @@ impl HuggingFaceModel {
             return Err(anyhow::anyhow!("PyTorch .bin format not supported in this implementation. Please use a model with safetensors format."));
         };
 
-        // For Qwen2/Qwen3 models, check if tensors need "model." prefix
-        // Some SentenceTransformer models save weights without the "model." prefix
-        // but Candle's Qwen2Model::new() expects tensors with "model." prefix
+        // Qwen decoder models may omit Candle's required `model.` prefix.
         if matches!(
             architecture,
             ModelArchitecture::Qwen2 | ModelArchitecture::Qwen3
@@ -392,12 +407,19 @@ impl HuggingFaceModel {
                     .with_context(|| "Failed to load JinaCodeBert (QK-post-norm) model")?;
                 HuggingFaceModel::JinaCodeBert(model, tokenizer, device)
             }
-            ModelArchitecture::Qwen2 | ModelArchitecture::Qwen3 => {
+            ModelArchitecture::Qwen2 => {
                 let config: Qwen2Config = serde_json::from_str(&config_content)
                     .with_context(|| "Failed to parse config.json as Qwen2 config")?;
                 let model = Qwen2Model::new(&config, var_builder)
                     .with_context(|| "Failed to load Qwen2 model")?;
                 HuggingFaceModel::Qwen2(std::sync::Mutex::new(model), tokenizer, device)
+            }
+            ModelArchitecture::Qwen3 => {
+                let config: Qwen3Config = serde_json::from_str(&config_content)
+                    .with_context(|| "Failed to parse config.json as Qwen3 config")?;
+                let model = Qwen3Model::new(&config, var_builder)
+                    .with_context(|| "Failed to load Qwen3 model")?;
+                HuggingFaceModel::Qwen3(model, tokenizer, device)
             }
             ModelArchitecture::MPNet => {
                 let config: MPNetConfig = serde_json::from_str(&config_content)
@@ -492,6 +514,15 @@ impl HuggingFaceModel {
                     let attention_mask = Tensor::ones((1, tokens.len()), DType::U8, device)?;
                     Self::mean_pool_and_normalize(&output, &attention_mask)?
                 }
+                HuggingFaceModel::Qwen3(model, tokenizer, device) => {
+                    let encoding = tokenizer
+                        .encode(text.as_str(), true)
+                        .map_err(|e| anyhow::anyhow!("Tokenization failed: {}", e))?;
+                    let tokens = encoding.get_ids();
+                    let token_ids = Tensor::new(tokens, device)?.unsqueeze(0)?;
+                    let output = model.clone().forward(&token_ids, 0)?;
+                    Self::last_token_pool_and_normalize(&output)?
+                }
                 HuggingFaceModel::MPNet(model, tokenizer, device) => {
                     let encoding = tokenizer
                         .encode(text.as_str(), true)
@@ -534,6 +565,18 @@ impl HuggingFaceModel {
         let normalized = mean_pooled.broadcast_div(&norm)?;
 
         Ok(normalized.squeeze(0)?.to_vec1::<f32>()?)
+    }
+
+    /// Qwen3 Embedding uses the final hidden state, followed by L2 normalization.
+    fn last_token_pool_and_normalize(hidden_states: &Tensor) -> Result<Vec<f32>> {
+        let (_, sequence_length, _) = hidden_states.dims3()?;
+        let last_token = hidden_states.narrow(1, sequence_length.saturating_sub(1), 1)?;
+        let norm = last_token.sqr()?.sum_keepdim(2)?.sqrt()?;
+        Ok(last_token
+            .broadcast_div(&norm)?
+            .squeeze(1)?
+            .squeeze(0)?
+            .to_vec1::<f32>()?)
     }
 }
 #[cfg(feature = "huggingface")]

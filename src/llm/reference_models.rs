@@ -384,6 +384,11 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(10.00, 50.00, 12.50, 1.00),
     },
     ReferenceModelEntry {
+        pattern: "claude-opus-5",
+        capabilities: caps(true, false, false, 1_000_000),
+        pricing: pricing(5.00, 25.00, 6.25, 0.50),
+    },
+    ReferenceModelEntry {
         pattern: "claude-opus-4-7",
         capabilities: caps(true, false, false, 1_000_000),
         pricing: pricing(5.00, 25.00, 6.25, 0.50),
@@ -1384,6 +1389,25 @@ mod tests {
         let props = get_reference_model_properties("llama3.1:8b").unwrap();
         assert!(props.capabilities.unwrap().structured_output);
         assert_eq!(props.pricing.unwrap().input_price_per_1m, 0.10);
+    }
+
+    #[test]
+    fn opus_5_properties_match_anthropic_model_facts() {
+        let props = get_reference_model_properties("claude-opus-5").unwrap();
+        assert_eq!(props.capability_pattern, Some("claude-opus-5"));
+        assert_eq!(props.pricing_pattern, Some("claude-opus-5"));
+
+        let capabilities = props.capabilities.unwrap();
+        assert!(capabilities.vision);
+        assert!(!capabilities.video);
+        assert!(!capabilities.structured_output);
+        assert_eq!(capabilities.max_input_tokens, 1_000_000);
+
+        let pricing = props.pricing.unwrap();
+        assert_eq!(pricing.input_price_per_1m, 5.0);
+        assert_eq!(pricing.output_price_per_1m, 25.0);
+        assert_eq!(pricing.cache_write_price_per_1m, 6.25);
+        assert_eq!(pricing.cache_read_price_per_1m, 0.50);
     }
 
     #[test]

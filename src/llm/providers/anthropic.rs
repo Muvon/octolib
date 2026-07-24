@@ -31,13 +31,15 @@ use std::env;
 
 /// Anthropic pricing constants (per 1M tokens in USD)
 /// Model IDs sourced from Anthropic model docs / models API.
-/// Prices sourced from Anthropic pricing docs (verified Mar 18, 2026).
+/// Prices sourced from Anthropic pricing docs (verified Jul 25, 2026).
 /// Format: (model, input, output, cache_write, cache_read)
 const PRICING: &[PricingTuple] = &[
     // Mythos-class (Fable 5): $10/$50, cache write 1.25x, cache read 0.1x
     ("claude-fable-5", 10.00, 50.00, 12.50, 1.00),
     // Claude Mythos 5 (Project Glasswing only): same pricing/capabilities as Fable 5
     ("claude-mythos-5", 10.00, 50.00, 12.50, 1.00),
+    // Claude Opus 5
+    ("claude-opus-5", 5.00, 25.00, 6.25, 0.50),
     // Claude 4.8
     ("claude-opus-4-8", 5.00, 25.00, 6.25, 0.50),
     // Claude 4.7
@@ -95,13 +97,14 @@ struct CacheTokenUsage {
 }
 
 /// Models that reject ALL sampling parameters (temperature, top_p, top_k).
-const NO_SAMPLING_MODELS: &[&str] = &["fable-5", "mythos-5", "opus-4-8", "opus-4-7"];
+const NO_SAMPLING_MODELS: &[&str] = &["fable-5", "mythos-5", "opus-5", "opus-4-8", "opus-4-7"];
 
 /// Models that support extended thinking via the `thinking` block.
 /// Substring match against `params.model`. Order matters only for documentation.
 const THINKING_MODELS: &[&str] = &[
     "fable-5",
     "mythos-5",
+    "opus-5",
     "opus-4-8",
     "opus-4-7",
     "opus-4-6",
@@ -122,6 +125,7 @@ const THINKING_MODELS: &[&str] = &[
 const ADAPTIVE_THINKING_MODELS: &[&str] = &[
     "fable-5",
     "mythos-5",
+    "opus-5",
     "opus-4-8",
     "opus-4-7",
     "opus-4-6",
@@ -135,10 +139,11 @@ const ADAPTIVE_THINKING_MODELS: &[&str] = &[
 const ADAPTIVE_ONLY_MODELS: &[&str] = &["fable-5", "mythos-5", "opus-4-7"];
 
 /// Models that accept `output_config.effort`. Per Anthropic docs:
-/// Fable 5, Mythos 5, Opus 4.7, Opus 4.6, Sonnet 4.6, Opus 4.5.
+/// Fable 5, Mythos 5, Opus 5, Opus 4.7, Opus 4.6, Sonnet 4.6, Opus 4.5.
 const EFFORT_PARAM_MODELS: &[&str] = &[
     "fable-5",
     "mythos-5",
+    "opus-5",
     "opus-4-7",
     "opus-4-6",
     "sonnet-4-6",
@@ -220,6 +225,18 @@ fn calculate_anthropic_cost(
     calculate_cost_with_cache(model, usage)
 }
 
+fn effort_value(model: &str, effort: ReasoningEffort, supports_adaptive: bool) -> &'static str {
+    let supports_xhigh = model.contains("opus-5") || model.contains("opus-4-7");
+    match effort {
+        ReasoningEffort::Low => "low",
+        ReasoningEffort::Medium => "medium",
+        ReasoningEffort::High => "high",
+        ReasoningEffort::XHigh if supports_xhigh => "xhigh",
+        ReasoningEffort::Max if supports_adaptive => "max",
+        ReasoningEffort::XHigh | ReasoningEffort::Max => "high",
+    }
+}
+
 /// Anthropic provider
 #[derive(Debug, Clone)]
 pub struct AnthropicProvider;
@@ -291,10 +308,11 @@ impl AiProvider for AnthropicProvider {
     }
 
     fn supports_vision(&self, model: &str) -> bool {
-        // Claude 3+ and Mythos-class models support vision (case-insensitive)
+        // Claude 3+, Opus 5, and Mythos-class models support vision (case-insensitive)
         let model_lower = normalize_model_name(model);
         model_lower.contains("claude-3")
             || model_lower.contains("claude-4")
+            || model_lower.contains("claude-opus-5")
             || model_lower.contains("claude-fable-5")
             || model_lower.contains("claude-mythos-5")
     }
@@ -302,12 +320,13 @@ impl AiProvider for AnthropicProvider {
     fn get_max_input_tokens(&self, model: &str) -> usize {
         // Anthropic model context window limits (case-insensitive)
         let model_lower = normalize_model_name(model);
-        if model_lower.contains("claude-fable-5")
+        if model_lower.contains("claude-opus-5")
+            || model_lower.contains("claude-fable-5")
             || model_lower.contains("claude-mythos-5")
             || model_lower.contains("claude-opus-4-8")
             || model_lower.contains("claude-opus-4-7")
         {
-            // Claude Fable 5, Mythos 5, and Opus 4.8 / 4.7 have 1M context window
+            // Claude Opus 5, Fable 5, Mythos 5, and Opus 4.8 / 4.7 have 1M context
             1_000_000
         } else if model_lower.contains("claude-opus-4")
             || model_lower.contains("claude-sonnet-4")
@@ -476,6 +495,7 @@ impl AiProvider for AnthropicProvider {
 
         // Translate `reasoning_effort` into Anthropic's thinking + effort knobs.
         // The API surface diverged across model generations:
+        //   - Opus 5 defaults to adaptive thinking and supports low through max effort.
         //   - Opus 4.7 only accepts `thinking.type: "adaptive"` (manual is 400).
         //   - Opus 4.6 / Sonnet 4.6 accept adaptive (recommended) or manual; manual deprecated.
         //   - Opus 4.5 keeps manual `budget_tokens` but also supports `output_config.effort`.
@@ -523,30 +543,10 @@ impl AiProvider for AnthropicProvider {
 
                 if supports_effort_param {
                     // Per-model value constraints:
-                    //   "xhigh" — Opus 4.7 only
-                    //   "max"   — Opus 4.7, Opus 4.6, Sonnet 4.6 (NOT Opus 4.5)
+                    //   "xhigh" — Opus 5 and Opus 4.7
+                    //   "max"   — adaptive models (NOT Opus 4.5)
                     // Downgrade unsupported levels to "high" rather than 400ing the call.
-                    let supports_xhigh = params.model.contains("opus-4-7");
-                    let supports_max = supports_adaptive;
-                    let effort_str = match effort {
-                        ReasoningEffort::Low => "low",
-                        ReasoningEffort::Medium => "medium",
-                        ReasoningEffort::High => "high",
-                        ReasoningEffort::XHigh => {
-                            if supports_xhigh {
-                                "xhigh"
-                            } else {
-                                "high"
-                            }
-                        }
-                        ReasoningEffort::Max => {
-                            if supports_max {
-                                "max"
-                            } else {
-                                "high"
-                            }
-                        }
-                    };
+                    let effort_str = effort_value(&params.model, effort, supports_adaptive);
                     request_body["output_config"] = serde_json::json!({"effort": effort_str});
                 }
             }
@@ -1226,6 +1226,33 @@ mod tests {
 
         // Test unknown model
         assert!(provider.get_model_pricing("unknown-model").is_none());
+    }
+
+    #[test]
+    fn test_opus_5() {
+        let provider = AnthropicProvider::new();
+        let model = "claude-opus-5";
+
+        assert!(provider.supports_model(model));
+
+        let pricing = provider.get_model_pricing(model).unwrap();
+        assert_eq!(pricing.input_price_per_1m, 5.0);
+        assert_eq!(pricing.output_price_per_1m, 25.0);
+        assert_eq!(pricing.cache_write_price_per_1m, 6.25);
+        assert_eq!(pricing.cache_read_price_per_1m, 0.50);
+
+        assert_eq!(provider.get_max_input_tokens(model), 1_000_000);
+        assert!(provider.supports_vision(model));
+        assert_eq!(
+            provider.supported_sampling_params(model),
+            SamplingSupport::NONE
+        );
+
+        assert!(THINKING_MODELS.contains(&"opus-5"));
+        assert!(ADAPTIVE_THINKING_MODELS.contains(&"opus-5"));
+        assert!(EFFORT_PARAM_MODELS.contains(&"opus-5"));
+        assert_eq!(effort_value(model, ReasoningEffort::XHigh, true), "xhigh");
+        assert_eq!(effort_value(model, ReasoningEffort::Max, true), "max");
     }
 
     #[test]

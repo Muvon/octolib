@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.26.1] - 2026-07-26
+
+### 📋 Release Summary
+
+This release adds support for the claude-opus-5 model to expand available LLM options (e33326d0). Additionally, authentication error handling for OctoHub has been refined to provide a more reliable user experience (bef5e1d5).
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: add support for claude-opus-5 `e33326d0`
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: refine OctoHub auth error handling `bef5e1d5`
+
 ## [0.26.0] - 2026-07-21
 
 ### 📋 Release Summary

@@ -91,11 +91,12 @@ pub struct GenericToolCall {
 
 // Metadata is automatically handled by providers
 // For OpenRouter with Gemini 3, reasoning_details are preserved
-// For direct Google API, thought signatures are preserved
+// For google-studio (Gemini API), extra_content thought signatures are preserved
 ```
 
 **Supported metadata:**
 - **OpenRouter + Gemini**: `reasoning_details` array (thought signatures)
+- **Google Studio (Gemini)**: `extra_content` per tool call (thought signatures)
 - **Extensible architecture**: The `meta` field supports any provider-specific data
 
 ## Vision Support

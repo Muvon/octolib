@@ -236,7 +236,7 @@ async fn tool_calling_example() -> anyhow::Result<()> {
 ```
 
 **Tool Calling Features:**
-- ✅ Cross-provider support (OpenAI, Anthropic, Google, Amazon, OpenRouter)
+- ✅ Cross-provider support (OpenAI, Anthropic, Google Vertex, Google Studio, Amazon, OpenRouter)
 - ✅ Automatic parameter validation via JSON Schema
 - ✅ Multi-turn conversations with tool results
 - ✅ Parallel tool execution support

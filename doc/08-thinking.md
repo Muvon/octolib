@@ -165,7 +165,7 @@ OpenRouter passes through reasoning from underlying providers:
 
 **Usage:**
 ```rust
-let (provider, model) = ProviderFactory::get_provider_for_model("openrouter:google/gemini-pro")?;
+let (provider, model) = ProviderFactory::get_provider_for_model("openrouter:google/gemini-2.5-pro")?;
 let response = provider.chat_completion(params).await?;
 ```
 

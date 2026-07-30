@@ -85,6 +85,7 @@ Each provider requires its specific API key:
 - `TOGETHER_API_KEY`: Together AI API key
 - `OCTOHUB_API_KEY`: OctoHub API key
 - `GOOGLE_VERTEX_CREDENTIAL_FILE` (or `GOOGLE_APPLICATION_CREDENTIALS`): Google Vertex AI credentials
+- `GOOGLE_VERTEX_PROJECT_ID`, `GOOGLE_VERTEX_LOCATION`: Optional Vertex project/location overrides (default location: `us-central1`)
 - `GOOGLE_STUDIO_API_KEY`: Google AI Studio (Gemini API) key
 - `AWS_ACCESS_KEY_ID` & `AWS_SECRET_ACCESS_KEY`: Amazon Bedrock credentials
 
@@ -108,6 +109,7 @@ All providers support custom API URLs via environment variables. If not set, def
 | Cerebras | `CEREBRAS_API_KEY` | `CEREBRAS_API_URL` | `https://api.cerebras.ai/v1/chat/completions` |
 | OctoHub | `OCTOHUB_API_KEY` | `OCTOHUB_API_URL` | `http://127.0.0.1:8080` |
 | Google Studio | `GOOGLE_STUDIO_API_KEY` | `GOOGLE_STUDIO_API_URL` | `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions` |
+| Google Vertex | `GOOGLE_VERTEX_CREDENTIAL_FILE` (service account) | `GOOGLE_VERTEX_API_URL` | Derived from `GOOGLE_VERTEX_PROJECT_ID`/`GOOGLE_VERTEX_LOCATION` |
 
 Example usage with custom endpoints:
 

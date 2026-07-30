@@ -1,6 +1,6 @@
 #! Octolib — AI Provider Library Guide
 
-Rust library providing a unified interface to multiple AI providers (OpenAI, Anthropic, OpenRouter, NVIDIA, Ollama, Google, Amazon, Cloudflare, DeepSeek, Moonshot, Z.ai, BytePlus, Groq, Cerebras, Together, Featherless, Fireworks, OctoHub, CLI proxies). Handles chat completions, embeddings, reranking, cost tracking, caching, structured output, vision, and tool calls. No panics, no `println!`, always `Result`. Copyright year is **2026**.
+Rust library providing a unified interface to multiple AI providers (OpenAI, Anthropic, OpenRouter, NVIDIA, Ollama, Google Vertex, Google Studio, Amazon, Cloudflare, DeepSeek, Moonshot, Z.ai, BytePlus, Groq, Cerebras, Together, Featherless, Fireworks, OctoHub, CLI proxies). Handles chat completions, embeddings, reranking, cost tracking, caching, structured output, vision, and tool calls. No panics, no `println!`, always `Result`. Copyright year is **2026**.
 
 ## Project Structure
 
@@ -25,7 +25,8 @@ src/
 │       ├── shared.rs               → HTTP client (arc-swap pool), cache control helpers, tool call parsers
 │       ├── openai.rs               → Native — PRICING table, Responses API, OAuth support
 │       ├── anthropic.rs            → Native — PRICING table, caching, thinking blocks, OAuth support
-│       ├── google.rs               → Native — Vertex AI
+│       ├── google_vertex.rs        → Vertex AI — service-account auth, delegates to openai_compat; shared Gemini PRICING table + model-cache helpers
+│       ├── google_studio.rs        → AI Studio (Gemini API) — API-key auth, delegates to openai_compat; reuses google_vertex PRICING
 │       ├── amazon.rs               → Native — Bedrock
 │       ├── deepseek.rs             → Native — PRICING table
 │       ├── moonshot.rs             → Native — PRICING table
@@ -82,14 +83,14 @@ examples/                           → One file per feature — use as integrat
 
 ### Provider Shape: Native vs. Proxy
 
-**Native** (OpenAI, Anthropic, Google, Amazon, DeepSeek, Moonshot, MiniMax, Z.ai, BytePlus, Groq):
+**Native** (OpenAI, Anthropic, Amazon, DeepSeek, Moonshot, MiniMax, Z.ai, BytePlus, Groq):
 - Own `PRICING` const table in the provider file — `(model, input, output, cache_write, cache_read)` per 1M tokens
 - Own `chat_completion()` implementation with provider-specific request/response structs
 - Override `supports_caching()`, `supports_vision()`, `get_max_input_tokens()`, `supports_structured_output()` directly
 - `get_model_pricing()` reads from the local `PRICING` table via `get_model_pricing()` from `utils.rs`
 - `supports_model()` uses `is_model_in_pricing_table()` — strict, unknown models rejected
 
-**Proxy / OpenAI-compatible** (NVIDIA, Cerebras, Together, Ollama, Local, Cloudflare, OpenRouter, OctoHub, Featherless):
+**Proxy / OpenAI-compatible** (NVIDIA, Cerebras, Together, Ollama, Local, Cloudflare, OpenRouter, OctoHub, Featherless, Google Vertex, Google Studio):
 - Delegates to `openai_compat_chat_completion(OpenAiCompatConfig { provider_name, usage_fallback_cost, use_response_cost }, api_key, api_url, params)`
 - `OpenAiCompatConfig.use_response_cost = true` → use cost from API response if present; `usage_fallback_cost` → fixed fallback cost (rarely used)
 - `supports_model()` returns `!model.is_empty()` — accepts anything

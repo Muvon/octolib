@@ -24,7 +24,7 @@
 //!
 //! **Difference from Vertex AI:**
 //! - Google AI Studio: Simple API key authentication (this provider)
-//! - Vertex AI: Service account JSON + OAuth tokens (see llm/providers/google.rs)
+//! - Vertex AI: Service account JSON + OAuth tokens (see llm/providers/google_vertex.rs)
 //!
 //! For production use with Vertex AI embeddings, you would need to implement
 //! the same JWT authentication as the LLM provider.

@@ -18,17 +18,17 @@
 //!
 //! # Prerequisites
 //!
-//! 1. Set `GOOGLE_CREDENTIAL_FILE` to your downloaded Google service-account JSON file.
+//! 1. Set `GOOGLE_VERTEX_CREDENTIAL_FILE` to your downloaded Google service-account JSON file.
 //!    (`GOOGLE_APPLICATION_CREDENTIALS` is also accepted.)
 //! 2. Optionally set:
-//!    - `GOOGLE_CLOUD_PROJECT_ID` (otherwise read from credential file)
-//!    - `GOOGLE_CLOUD_LOCATION` (default: `us-central1`)
+//!    - `GOOGLE_VERTEX_PROJECT_ID` (otherwise read from credential file)
+//!    - `GOOGLE_VERTEX_LOCATION` (default: `us-central1`)
 //!
 //! # Running the example
 //!
 //! ```bash
-//! export GOOGLE_CREDENTIAL_FILE="/path/to/service-account.json"
-//! export GOOGLE_CLOUD_LOCATION="us-central1"
+//! export GOOGLE_VERTEX_CREDENTIAL_FILE="/path/to/service-account.json"
+//! export GOOGLE_VERTEX_LOCATION="us-central1"
 //! cargo run --example google_vertex_ai
 //! ```
 
@@ -38,26 +38,26 @@ use std::env;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Check for credential file
-    let credential_file = env::var("GOOGLE_CREDENTIAL_FILE");
+    let credential_file = env::var("GOOGLE_VERTEX_CREDENTIAL_FILE");
     let application_credentials = env::var("GOOGLE_APPLICATION_CREDENTIALS");
 
     if credential_file.is_err() && application_credentials.is_err() {
         eprintln!(
-            "Error: Set GOOGLE_CREDENTIAL_FILE or GOOGLE_APPLICATION_CREDENTIALS to your service-account JSON file"
+            "Error: Set GOOGLE_VERTEX_CREDENTIAL_FILE or GOOGLE_APPLICATION_CREDENTIALS to your service-account JSON file"
         );
         std::process::exit(1);
     }
 
-    if env::var("GOOGLE_CLOUD_PROJECT_ID").is_err() {
-        println!("Info: GOOGLE_CLOUD_PROJECT_ID not set, provider will read project_id from credential file");
+    if env::var("GOOGLE_VERTEX_PROJECT_ID").is_err() {
+        println!("Info: GOOGLE_VERTEX_PROJECT_ID not set, provider will read project_id from credential file");
     }
 
-    if env::var("GOOGLE_CLOUD_LOCATION").is_err() {
-        println!("Info: GOOGLE_CLOUD_LOCATION not set, defaulting to us-central1");
+    if env::var("GOOGLE_VERTEX_LOCATION").is_err() {
+        println!("Info: GOOGLE_VERTEX_LOCATION not set, defaulting to us-central1");
     }
 
-    if env::var("GOOGLE_API_URL").is_ok() {
-        println!("Info: using GOOGLE_API_URL override");
+    if env::var("GOOGLE_VERTEX_API_URL").is_ok() {
+        println!("Info: using GOOGLE_VERTEX_API_URL override");
     }
 
     println!("🚀 Google Vertex AI Example");
@@ -65,7 +65,8 @@ async fn main() -> anyhow::Result<()> {
 
     // Example 1: Basic chat completion with Gemini 2.5 Flash
     println!("\n📝 Example 1: Gemini 2.5 Flash");
-    let (provider, model) = ProviderFactory::get_provider_for_model("google:gemini-2.5-flash")?;
+    let (provider, model) =
+        ProviderFactory::get_provider_for_model("google-vertex:gemini-2.5-flash")?;
     println!("Provider: {}", provider.name());
     println!("Model: {}", model);
 
@@ -90,9 +91,10 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    // Example 2: Chat completion with Gemini 1.5 Pro
-    println!("\n📝 Example 2: Gemini 1.5 Pro");
-    let (provider, model) = ProviderFactory::get_provider_for_model("google:gemini-1.5-pro")?;
+    // Example 2: Chat completion with Gemini 2.5 Pro
+    println!("\n📝 Example 2: Gemini 2.5 Pro");
+    let (provider, model) =
+        ProviderFactory::get_provider_for_model("google-vertex:gemini-2.5-pro")?;
     println!("Provider: {}", provider.name());
     println!("Model: {}", model);
 
@@ -119,7 +121,8 @@ async fn main() -> anyhow::Result<()> {
 
     // Example 3: Chat completion with Gemini 2.0 Flash
     println!("\n📝 Example 3: Gemini 2.0 Flash");
-    let (provider, model) = ProviderFactory::get_provider_for_model("google:gemini-2.0-flash")?;
+    let (provider, model) =
+        ProviderFactory::get_provider_for_model("google-vertex:gemini-2.0-flash")?;
     println!("Provider: {}", provider.name());
     println!("Model: {}", model);
 

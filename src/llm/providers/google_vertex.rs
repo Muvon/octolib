@@ -15,7 +15,7 @@
 //! Google Vertex AI provider implementation
 //!
 //! Authentication: Uses service account JSON key file for authentication.
-//! Set GOOGLE_APPLICATION_CREDENTIALS or GOOGLE_CREDENTIAL_FILE to the path of your service account JSON file.
+//! Set GOOGLE_VERTEX_CREDENTIAL_FILE or GOOGLE_APPLICATION_CREDENTIALS to the path of your service account JSON file.
 //!
 //! To create a service account:
 //! 1. Go to Google Cloud Console → IAM & Admin → Service Accounts
@@ -55,31 +55,38 @@ impl GoogleVertexProvider {
     }
 }
 
-/// Google Vertex AI / Gemini API pricing (per 1M tokens in USD)
-/// Source: https://cloud.google.com/vertex-ai/generative-ai/pricing (verified Apr 6, 2026)
+/// Gemini model pricing (per 1M tokens in USD), shared with the google-studio
+/// provider — both APIs bill Gemini models at the same rates.
+/// Sources: https://ai.google.dev/gemini-api/docs/pricing and
+/// https://cloud.google.com/vertex-ai/generative-ai/pricing (verified Jul 30, 2026)
 /// Using ≤200K context tier prices. Format: (model, input, output, cache_write, cache_read)
-const PRICING: &[PricingTuple] = &[
-    // Gemini 3.5 series (GA May 2026; gemini-flash-latest points here)
+/// Matching is substring-based and first-match-wins: keep "-lite"/"-pro" variants
+/// before their shorter prefixes.
+pub(super) const PRICING: &[PricingTuple] = &[
+    // Gemini 3.6 series
+    ("gemini-3.6-flash", 1.50, 7.50, 1.50, 0.15),
+    // Gemini 3.5 series (gemini-flash-latest points here)
+    ("gemini-3.5-flash-lite", 0.30, 2.50, 0.30, 0.03),
     ("gemini-3.5-flash", 1.50, 9.00, 1.50, 0.15),
     // Gemini 3.x series
     ("gemini-3.1-pro", 2.00, 12.00, 2.00, 0.20),
-    ("gemini-3.1-flash", 0.50, 3.00, 0.50, 0.05),
     ("gemini-3.1-flash-lite", 0.25, 1.50, 0.25, 0.025),
+    ("gemini-3.1-flash", 0.50, 3.00, 0.50, 0.05),
     ("gemini-3-pro", 2.00, 12.00, 2.00, 0.20),
     ("gemini-3-flash", 0.50, 3.00, 0.50, 0.05),
     // Gemini 2.5 series
     ("gemini-2.5-flash-lite", 0.10, 0.40, 0.10, 0.01),
     ("gemini-2.5-flash", 0.30, 2.50, 0.30, 0.03),
-    ("gemini-2.5-pro", 1.25, 10.00, 1.25, 0.13),
+    ("gemini-2.5-pro", 1.25, 10.00, 1.25, 0.125),
     // Gemini 2.0 series
     ("gemini-2.0-flash", 0.15, 0.60, 0.10, 0.025),
 ];
 
-const GOOGLE_CREDENTIAL_FILE_ENV: &str = "GOOGLE_CREDENTIAL_FILE";
+const GOOGLE_VERTEX_CREDENTIAL_FILE_ENV: &str = "GOOGLE_VERTEX_CREDENTIAL_FILE";
 const GOOGLE_APPLICATION_CREDENTIALS_ENV: &str = "GOOGLE_APPLICATION_CREDENTIALS";
-const GOOGLE_CLOUD_PROJECT_ID_ENV: &str = "GOOGLE_CLOUD_PROJECT_ID";
-const GOOGLE_CLOUD_LOCATION_ENV: &str = "GOOGLE_CLOUD_LOCATION";
-const GOOGLE_API_URL_ENV: &str = "GOOGLE_API_URL";
+const GOOGLE_VERTEX_PROJECT_ID_ENV: &str = "GOOGLE_VERTEX_PROJECT_ID";
+const GOOGLE_VERTEX_LOCATION_ENV: &str = "GOOGLE_VERTEX_LOCATION";
+const GOOGLE_VERTEX_API_URL_ENV: &str = "GOOGLE_VERTEX_API_URL";
 const GOOGLE_VERTEX_API_URL_TEMPLATE: &str =
     "https://aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/endpoints/openapi/chat/completions";
 
@@ -91,11 +98,11 @@ fn default_vertex_api_url(project: &str, location: &str) -> String {
 
 // --- Lazy model discovery ---
 
-/// Cached model from the API
+/// Cached model from the API (shared with the google-studio provider)
 #[derive(Debug, Clone)]
-struct CachedModel {
-    id: String,
-    input_token_limit: Option<usize>,
+pub(super) struct CachedModel {
+    pub(super) id: String,
+    pub(super) input_token_limit: Option<usize>,
 }
 
 /// Process-wide cache of available models, populated on first chat_completion()
@@ -117,7 +124,10 @@ struct ApiModelEntry {
 
 /// Fetch available models from the OpenAI-compat /models endpoint.
 /// Derives the URL from the chat completions URL by replacing the path suffix.
-async fn fetch_available_models(access_token: &str, chat_url: &str) -> Result<Vec<CachedModel>> {
+pub(super) async fn fetch_available_models(
+    access_token: &str,
+    chat_url: &str,
+) -> Result<Vec<CachedModel>> {
     let models_url = chat_url.replace("/chat/completions", "/models");
 
     let response = super::shared::http_client()
@@ -146,15 +156,16 @@ async fn fetch_available_models(access_token: &str, chat_url: &str) -> Result<Ve
         .data
         .into_iter()
         .map(|m| CachedModel {
-            id: m.id,
+            // Gemini API returns ids as "models/gemini-..." — strip the prefix
+            id: m.id.trim_start_matches("models/").to_string(),
             input_token_limit: m.input_token_limit,
         })
         .collect())
 }
 
 /// Check if a model exists in the cached model list (case-insensitive)
-fn is_model_cached(model: &str) -> Option<bool> {
-    let models = MODELS_CACHE.get()?;
+pub(super) fn is_model_cached(cache: &OnceCell<Vec<CachedModel>>, model: &str) -> Option<bool> {
+    let models = cache.get()?;
     let normalized = normalize_model_name(model);
     Some(
         models
@@ -164,13 +175,32 @@ fn is_model_cached(model: &str) -> Option<bool> {
 }
 
 /// Get cached input token limit for a model
-fn get_cached_input_limit(model: &str) -> Option<usize> {
-    let models = MODELS_CACHE.get()?;
+pub(super) fn get_cached_input_limit(
+    cache: &OnceCell<Vec<CachedModel>>,
+    model: &str,
+) -> Option<usize> {
+    let models = cache.get()?;
     let normalized = normalize_model_name(model);
     models
         .iter()
         .find(|m| normalize_model_name(&m.id) == normalized)
         .and_then(|m| m.input_token_limit)
+}
+
+/// Fallback input-token limits for Gemini models (shared with the google-studio provider)
+pub(super) fn gemini_max_input_tokens(model: &str) -> usize {
+    let normalized = normalize_model_name(model);
+    if normalized.contains("gemini-3") || normalized.contains("gemini-2") {
+        1_048_576 // Gemini 2.x/3.x has ~1M context
+    } else if normalized.contains("gemini-1.5") {
+        1_000_000 // Gemini 1.5 has 1M context
+    } else if normalized.contains("gemini-1.0") || normalized.contains("bison-32k") {
+        32_768
+    } else if normalized.contains("bison") {
+        8_192
+    } else {
+        32_768 // Conservative default
+    }
 }
 
 // --- Auth ---
@@ -200,8 +230,8 @@ struct TokenResponse {
 
 /// Resolve the path to the Google service account credentials file
 fn resolve_credentials_file() -> Result<String> {
-    // Try GOOGLE_CREDENTIAL_FILE first (our preferred env var)
-    if let Ok(path) = env::var(GOOGLE_CREDENTIAL_FILE_ENV) {
+    // Try GOOGLE_VERTEX_CREDENTIAL_FILE first (our preferred env var)
+    if let Ok(path) = env::var(GOOGLE_VERTEX_CREDENTIAL_FILE_ENV) {
         let path = path.trim().to_string();
         if !path.is_empty() {
             return Ok(path);
@@ -219,7 +249,7 @@ fn resolve_credentials_file() -> Result<String> {
     Err(anyhow::anyhow!(
         "Google service account credentials file not found. Set {} (preferred) or {}. \
         Download a service account JSON key from Google Cloud Console → IAM & Admin → Service Accounts.",
-        GOOGLE_CREDENTIAL_FILE_ENV,
+        GOOGLE_VERTEX_CREDENTIAL_FILE_ENV,
         GOOGLE_APPLICATION_CREDENTIALS_ENV
     ))
 }
@@ -272,7 +302,7 @@ async fn generate_access_token(credentials_file: &str) -> Result<String> {
 /// Extract project ID from service account JSON file or environment variable
 fn resolve_vertex_project_id(credentials_file: &str) -> Result<String> {
     // Try environment variable first
-    if let Ok(project) = env::var(GOOGLE_CLOUD_PROJECT_ID_ENV) {
+    if let Ok(project) = env::var(GOOGLE_VERTEX_PROJECT_ID_ENV) {
         let project = project.trim().to_string();
         if !project.is_empty() {
             return Ok(project);
@@ -299,7 +329,7 @@ fn resolve_vertex_project_id(credentials_file: &str) -> Result<String> {
 
     Err(anyhow::anyhow!(
         "Google Cloud project ID not found. Set {} or ensure 'project_id' field exists in service account file '{}'.",
-        GOOGLE_CLOUD_PROJECT_ID_ENV,
+        GOOGLE_VERTEX_PROJECT_ID_ENV,
         credentials_file
     ))
 }
@@ -307,7 +337,7 @@ fn resolve_vertex_project_id(credentials_file: &str) -> Result<String> {
 #[async_trait::async_trait]
 impl AiProvider for GoogleVertexProvider {
     fn name(&self) -> &str {
-        "google"
+        "google-vertex"
     }
 
     fn supports_model(&self, model: &str) -> bool {
@@ -315,7 +345,7 @@ impl AiProvider for GoogleVertexProvider {
             return false;
         }
         // Use cached model list if available (populated on first chat_completion)
-        is_model_cached(model).unwrap_or(true)
+        is_model_cached(&MODELS_CACHE, model).unwrap_or(true)
     }
 
     fn get_api_key(&self) -> Result<String> {
@@ -356,22 +386,10 @@ impl AiProvider for GoogleVertexProvider {
 
     fn get_max_input_tokens(&self, model: &str) -> usize {
         // Prefer cached value from API if available
-        if let Some(limit) = get_cached_input_limit(model) {
+        if let Some(limit) = get_cached_input_limit(&MODELS_CACHE, model) {
             return limit;
         }
-        // Fallback to hardcoded limits
-        let normalized = normalize_model_name(model);
-        if normalized.contains("gemini-3") || normalized.contains("gemini-2") {
-            1_048_576 // Gemini 2.x/3.x has ~1M context
-        } else if normalized.contains("gemini-1.5") {
-            1_000_000 // Gemini 1.5 has 1M context
-        } else if normalized.contains("gemini-1.0") || normalized.contains("bison-32k") {
-            32_768
-        } else if normalized.contains("bison") {
-            8_192
-        } else {
-            32_768 // Conservative default
-        }
+        gemini_max_input_tokens(model)
     }
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
@@ -379,11 +397,11 @@ impl AiProvider for GoogleVertexProvider {
         let credentials_file = resolve_credentials_file()?;
         let api_key = generate_access_token(&credentials_file).await?;
 
-        let api_url = if let Ok(url) = env::var(GOOGLE_API_URL_ENV) {
+        let api_url = if let Ok(url) = env::var(GOOGLE_VERTEX_API_URL_ENV) {
             url
         } else {
             let project = resolve_vertex_project_id(&credentials_file)?;
-            let location = env::var(GOOGLE_CLOUD_LOCATION_ENV)
+            let location = env::var(GOOGLE_VERTEX_LOCATION_ENV)
                 .ok()
                 .filter(|s| !s.trim().is_empty())
                 .unwrap_or_else(|| "us-central1".to_string());
@@ -399,7 +417,7 @@ impl AiProvider for GoogleVertexProvider {
 
         openai_compat_chat_completion(
             OpenAiCompatConfig {
-                provider_name: "google",
+                provider_name: "google-vertex",
                 usage_fallback_cost: None,
                 use_response_cost: true,
             },
@@ -448,7 +466,20 @@ mod tests {
         assert_eq!(p.input_price_per_1m, 1.50);
         assert_eq!(p.output_price_per_1m, 9.00);
 
+        let p = provider.get_model_pricing("gemini-3.6-flash").unwrap();
+        assert_eq!(p.input_price_per_1m, 1.50);
+        assert_eq!(p.output_price_per_1m, 7.50);
+
         let p = provider.get_model_pricing("gemini-2.5-flash").unwrap();
+        assert_eq!(p.input_price_per_1m, 0.30);
+        assert_eq!(p.output_price_per_1m, 2.50);
+
+        // "-lite" variants must not be shadowed by their shorter prefixes
+        let p = provider.get_model_pricing("gemini-3.1-flash-lite").unwrap();
+        assert_eq!(p.input_price_per_1m, 0.25);
+        assert_eq!(p.output_price_per_1m, 1.50);
+
+        let p = provider.get_model_pricing("gemini-3.5-flash-lite").unwrap();
         assert_eq!(p.input_price_per_1m, 0.30);
         assert_eq!(p.output_price_per_1m, 2.50);
 

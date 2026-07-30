@@ -72,6 +72,7 @@ export MOONSHOT_API_KEY="your_moonshot_api_key"
 export CLOUDFLARE_API_KEY="your_cloudflare_api_key"
 export TOGETHER_API_KEY="your_together_api_key"
 export OCTOHUB_API_KEY="your_octohub_api_key"
+export GOOGLE_STUDIO_API_KEY="your_google_studio_api_key"
 
 # Embedding Providers
 export JINA_API_KEY="your_jina_api_key"
@@ -82,7 +83,7 @@ export GOOGLE_API_KEY="your_google_api_key"
 export COHERE_API_KEY="your_cohere_api_key"
 
 # Cloud Providers
-export GOOGLE_APPLICATION_CREDENTIALS="/path/to/credentials.json"
+export GOOGLE_VERTEX_CREDENTIAL_FILE="/path/to/credentials.json"
 export AWS_ACCESS_KEY_ID="your_access_key"
 export AWS_SECRET_ACCESS_KEY="your_secret_key"
 ```

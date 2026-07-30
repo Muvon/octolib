@@ -18,6 +18,7 @@
 | Cerebras | ✅ Full Support | Fast Inference, Structured Output |
 | OctoHub | ✅ Supported | Local AI Serving |
 | Google Vertex AI | ✅ Supported | Enterprise AI Integration |
+| Google AI Studio | ✅ Supported | Gemini API, API-Key Auth |
 | Amazon Bedrock | ✅ Supported | Cloud AI Services |
 | Cloudflare Workers AI | ✅ Supported | Edge AI Compute |
 | Local LLM | ✅ Supported | Ollama, LM Studio, LocalAI, Jan, vLLM |
@@ -83,7 +84,8 @@ Each provider requires its specific API key:
 - `CLOUDFLARE_API_KEY`: Cloudflare API key
 - `TOGETHER_API_KEY`: Together AI API key
 - `OCTOHUB_API_KEY`: OctoHub API key
-- `GOOGLE_APPLICATION_CREDENTIALS`: Google Vertex AI credentials
+- `GOOGLE_VERTEX_CREDENTIAL_FILE` (or `GOOGLE_APPLICATION_CREDENTIALS`): Google Vertex AI credentials
+- `GOOGLE_STUDIO_API_KEY`: Google AI Studio (Gemini API) key
 - `AWS_ACCESS_KEY_ID` & `AWS_SECRET_ACCESS_KEY`: Amazon Bedrock credentials
 
 ### Custom API Endpoints (Optional)
@@ -105,6 +107,7 @@ All providers support custom API URLs via environment variables. If not set, def
 | Together AI | `TOGETHER_API_KEY` | `TOGETHER_API_URL` | `https://api.together.xyz/v1/chat/completions` |
 | Cerebras | `CEREBRAS_API_KEY` | `CEREBRAS_API_URL` | `https://api.cerebras.ai/v1/chat/completions` |
 | OctoHub | `OCTOHUB_API_KEY` | `OCTOHUB_API_URL` | `http://127.0.0.1:8080` |
+| Google Studio | `GOOGLE_STUDIO_API_KEY` | `GOOGLE_STUDIO_API_URL` | `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions` |
 
 Example usage with custom endpoints:
 

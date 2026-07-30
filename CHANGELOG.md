@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.26.2] - 2026-07-30
+
+### 📋 Release Summary
+
+This release enables parallel tool calling for OpenAI providers to enhance agentic workflows (dc57748a). Additionally, cost tracking accuracy has been improved by incorporating cached read tokens into calculations (d2f8e51f).
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: enable parallel tool calls for OpenAI providers `dc57748a`
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: incorporate cache read tokens in cost calculation `d2f8e51f`
+
 ## [0.26.1] - 2026-07-26
 
 ### 📋 Release Summary

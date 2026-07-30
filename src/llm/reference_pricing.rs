@@ -25,8 +25,18 @@ pub fn get_reference_pricing(model: &str) -> Option<ModelPricing> {
 }
 
 /// Calculate cost using reference pricing.
-pub fn calculate_reference_cost(model: &str, input_tokens: u64, output_tokens: u64) -> Option<f64> {
-    crate::llm::reference_models::calculate_reference_cost(model, input_tokens, output_tokens)
+pub fn calculate_reference_cost(
+    model: &str,
+    input_tokens: u64,
+    cache_read_tokens: u64,
+    output_tokens: u64,
+) -> Option<f64> {
+    crate::llm::reference_models::calculate_reference_cost(
+        model,
+        input_tokens,
+        cache_read_tokens,
+        output_tokens,
+    )
 }
 
 #[cfg(test)]
@@ -105,7 +115,7 @@ mod tests {
 
     #[test]
     fn test_calculate_reference_cost() {
-        let cost = calculate_reference_cost("llama-3.1-8b", 1_000_000, 500_000).unwrap();
+        let cost = calculate_reference_cost("llama-3.1-8b", 1_000_000, 0, 500_000).unwrap();
         // 1M input * $0.10/1M + 500K output * $0.10/1M = $0.10 + $0.05 = $0.15
         assert!((cost - 0.15).abs() < 0.001);
     }

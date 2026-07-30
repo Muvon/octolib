@@ -186,7 +186,7 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     ReferenceModelEntry {
         pattern: "glm-4-32b-0414-128k",
         capabilities: caps(false, false, true, 128_000),
-        pricing: pricing(0.10, 0.10, 0.00, 0.01),
+        pricing: pricing(0.10, 0.10, 0.00, 0.00),
     },
     ReferenceModelEntry {
         pattern: "gpt-5.3-chat-latest",
@@ -1347,9 +1347,14 @@ pub fn get_reference_pricing(model: &str) -> Option<ModelPricing> {
 }
 
 /// Calculate cost using reference pricing.
-pub fn calculate_reference_cost(model: &str, input_tokens: u64, output_tokens: u64) -> Option<f64> {
+pub fn calculate_reference_cost(
+    model: &str,
+    input_tokens: u64,
+    cache_read_tokens: u64,
+    output_tokens: u64,
+) -> Option<f64> {
     let pricing = get_reference_pricing(model)?;
-    Some(pricing.calculate_cost(input_tokens, 0, 0, output_tokens))
+    Some(pricing.calculate_cost(input_tokens, 0, cache_read_tokens, output_tokens))
 }
 
 /// Schema-enforcement policy for proxy/aggregator routes.

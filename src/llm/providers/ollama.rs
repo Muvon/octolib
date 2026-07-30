@@ -105,6 +105,7 @@ impl AiProvider for OllamaProvider {
                 usage.cost = crate::llm::reference_models::calculate_reference_cost(
                     &model,
                     usage.input_tokens,
+                    usage.cache_read_tokens,
                     usage.output_tokens,
                 );
             }

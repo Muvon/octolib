@@ -17,11 +17,11 @@
 //! PRICING UPDATE: April 2026 (from <https://docs.z.ai/guides/overview/pricing>)
 //!
 //! GLM-5.2 series:
-//! - GLM-5.2: Input $1.00/1M, Cached $0.20/1M, Output $3.20/1M (pricing mirrors GLM-5.1)
+//! - GLM-5.2: Input $1.40/1M, Cached $0.26/1M, Output $4.40/1M (pricing mirrors GLM-5.1)
 //!
 //! GLM-5.1 series:
-//! - GLM-5.1: Input $1.00/1M, Cached $0.20/1M, Output $3.20/1M
-//! - GLM-5.1-Turbo: Input $1.00/1M, Cached $0.20/1M, Output $3.20/1M
+//! - GLM-5.1: Input $1.40/1M, Cached $0.26/1M, Output $4.40/1M
+//! - GLM-5.1-Turbo: Input $1.40/1M, Cached $0.26/1M, Output $4.40/1M
 //!
 //! GLM-5 series:
 //! - GLM-5: Input $1.00/1M, Cached $0.20/1M, Output $3.20/1M
@@ -98,7 +98,8 @@ const PRICING: &[PricingTuple] = &[
     ("glm-4.5-x", 2.20, 8.90, 0.00, 0.45),
     ("glm-4.5", 0.60, 2.20, 0.00, 0.11),
     // GLM-4 series
-    ("glm-4-32b-0414-128k", 0.10, 0.10, 0.00, 0.01),
+    // Official pricing lists Cached Input as N/A for this model
+    ("glm-4-32b-0414-128k", 0.10, 0.10, 0.00, 0.00),
 ];
 
 /// Calculate cost for Z.ai models (case-insensitive)

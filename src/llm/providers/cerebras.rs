@@ -74,8 +74,20 @@ const PRICING: &[PricingTuple] = &[
     ("llama-3.1-8b", 0.10, 0.10, 0.10, 0.10),
 ];
 
-fn calculate_cost(model: &str, input_tokens: u64, output_tokens: u64) -> Option<f64> {
-    calculate_cost_from_pricing_table(model, PRICING, input_tokens, 0, 0, output_tokens)
+fn calculate_cost(
+    model: &str,
+    input_tokens: u64,
+    cache_read_tokens: u64,
+    output_tokens: u64,
+) -> Option<f64> {
+    calculate_cost_from_pricing_table(
+        model,
+        PRICING,
+        input_tokens,
+        0,
+        cache_read_tokens,
+        output_tokens,
+    )
 }
 
 #[async_trait::async_trait]
@@ -145,7 +157,12 @@ impl AiProvider for CerebrasProvider {
 
         if let Some(ref mut usage) = response.exchange.usage {
             if usage.cost.is_none() {
-                usage.cost = calculate_cost(&model, usage.input_tokens, usage.output_tokens);
+                usage.cost = calculate_cost(
+                    &model,
+                    usage.input_tokens,
+                    usage.cache_read_tokens,
+                    usage.output_tokens,
+                );
             }
         }
 

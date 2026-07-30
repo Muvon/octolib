@@ -97,6 +97,9 @@ pub(crate) async fn chat_completion(
 
             request_body["tools"] = serde_json::json!(openai_tools);
             request_body["tool_choice"] = serde_json::json!("auto");
+            // Explicit: ensures proxied backends honor parallel function calling
+            // rather than falling back to their own defaults (which may differ).
+            request_body["parallel_tool_calls"] = serde_json::json!(true);
         }
     }
 

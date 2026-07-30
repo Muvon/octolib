@@ -272,6 +272,9 @@ impl AiProvider for OpenRouterProvider {
 
                 request_body["tools"] = serde_json::json!(openai_tools);
                 request_body["tool_choice"] = serde_json::json!("auto");
+                // Explicit: OpenRouter proxies to many backends; forward the flag
+                // so providers that default to single-call honor parallel batching.
+                request_body["parallel_tool_calls"] = serde_json::json!(true);
             }
         }
 

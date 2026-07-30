@@ -82,6 +82,7 @@ Cross-provider tool call standardization:
 - MiniMax - with thinking support
 - Z.ai
 - Google Vertex AI
+- Google AI Studio (Gemini API)
 - Amazon Bedrock
 - Cloudflare Workers AI
 - Local (Ollama, LM Studio, LocalAI, Jan, vLLM)

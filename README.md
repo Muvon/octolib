@@ -10,7 +10,7 @@
 Octolib is a comprehensive, self-sufficient AI provider library that provides a unified, type-safe interface for interacting with multiple AI services. It offers intelligent model selection, robust error handling, and advanced features like cross-provider tool calling and vision support.
 
 ## ✨ Key Features
-- **🔌 Multi-Provider Support**: OpenAI, Anthropic, OpenRouter, Cerebras, NVIDIA NIM, Groq, BytePlus, Ollama, Together, Featherless, Google, Amazon, Cloudflare, DeepSeek, MiniMax, Moonshot AI (Kimi), Z.ai, OctoHub, Local, CLI proxies
+- **🔌 Multi-Provider Support**: OpenAI, Anthropic, OpenRouter, Cerebras, NVIDIA NIM, Groq, BytePlus, Ollama, Together, Featherless, Google Vertex, Google Studio, Amazon, Cloudflare, DeepSeek, MiniMax, Moonshot AI (Kimi), Z.ai, OctoHub, Local, CLI proxies
 - **🛡️ Unified Interface**: Consistent API across different providers
 - **🔍 Intelligent Model Validation**: Strict `provider:model` format parsing with case-insensitive model support
 - **📋 Structured Output**: JSON and JSON Schema support for OpenAI, OpenRouter, DeepSeek, Together, and Z.ai
@@ -369,6 +369,7 @@ The library automatically detects OAuth credentials and prefers them over API ke
 | **Cerebras** | ✅ JSON + Schema | ❌ No | ❌ No | ❌ No |
 | **Featherless** | ✅ JSON + Schema | ❌ No | ❌ No | ❌ No |
 | **Google Vertex** | ❌ No | ✅ Yes | ✅ Yes | ❌ No |
+| **Google Studio** | ✅ JSON + Schema | ✅ Yes | ✅ Yes | ✅ Yes |
 | **Amazon Bedrock** | ❌ No | ✅ Yes | ✅ Yes | ❌ No |
 | **OctoHub** | Per-model | Per-model | ✅ Yes | ✅ Yes |
 | **Together** | Per-model | Per-model | ✅ Yes | ❌ No |
@@ -476,6 +477,7 @@ if let Some(usage) = &response.exchange.usage {
 | Featherless | ✅ Full Support | Open-Weight Models (Qwen, Llama, Mistral, DeepSeek, RWKV), Subscription Billing |
 | OctoHub | ✅ Supported | Local AI Serving |
 | Google Vertex AI | ✅ Supported | Enterprise AI Integration |
+| Google AI Studio | ✅ Supported | Gemini API, API-Key Auth |
 | Amazon Bedrock | ✅ Supported | Cloud AI Services |
 | Cloudflare Workers AI | ✅ Supported | Edge AI Compute |
 | Local LLM | ✅ Supported | Ollama, LM Studio, LocalAI, Jan, vLLM |

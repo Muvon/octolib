@@ -17,9 +17,9 @@
 use crate::llm::providers::{
     AmazonBedrockProvider, AnthropicProvider, BytePlusProvider, CerebrasProvider, CliProvider,
     CloudflareWorkersAiProvider, DeepSeekProvider, FeatherlessProvider, FireworksProvider,
-    GoogleVertexProvider, GroqProvider, LocalProvider, MinimaxProvider, MoonshotProvider,
-    NvidiaProvider, OctoHubProvider, OllamaProvider, OpenAiProvider, OpenRouterProvider,
-    TogetherProvider, ZaiProvider,
+    GoogleStudioProvider, GoogleVertexProvider, GroqProvider, LocalProvider, MinimaxProvider,
+    MoonshotProvider, NvidiaProvider, OctoHubProvider, OllamaProvider, OpenAiProvider,
+    OpenRouterProvider, TogetherProvider, ZaiProvider,
 };
 use crate::llm::traits::AiProvider;
 use anyhow::Result;
@@ -61,7 +61,8 @@ impl ProviderFactory {
             "ollama" => Ok(Box::new(OllamaProvider::new())),
             "anthropic" => Ok(Box::new(AnthropicProvider::new())),
             "byteplus" => Ok(Box::new(BytePlusProvider::new())),
-            "google" => Ok(Box::new(GoogleVertexProvider::new())),
+            "google-vertex" => Ok(Box::new(GoogleVertexProvider::new())),
+            "google-studio" => Ok(Box::new(GoogleStudioProvider::new())),
             "groq" => Ok(Box::new(GroqProvider::new())),
             "amazon" => Ok(Box::new(AmazonBedrockProvider::new())),
             "cloudflare" => Ok(Box::new(CloudflareWorkersAiProvider::new())),
@@ -77,7 +78,7 @@ impl ProviderFactory {
             "cli" => Err(anyhow::anyhow!(
                 "CLI provider requires a model string like 'cli:<backend>/<model>'. Use ProviderFactory::get_provider_for_model instead."
             )),
-            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported: openai, anthropic, openrouter, cerebras, local, ollama, google, groq, amazon, cloudflare, deepseek, featherless, fireworks, minimax, moonshot, nvidia, octohub, together, zai, byteplus, cli", provider_name))
+            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported: openai, anthropic, openrouter, cerebras, local, ollama, google-vertex, google-studio, groq, amazon, cloudflare, deepseek, featherless, fireworks, minimax, moonshot, nvidia, octohub, together, zai, byteplus, cli", provider_name))
         }
     }
 
@@ -111,7 +112,8 @@ impl ProviderFactory {
             "local",
             "ollama",
             "anthropic",
-            "google",
+            "google-vertex",
+            "google-studio",
             "groq",
             "amazon",
             "cloudflare",
@@ -191,7 +193,8 @@ mod tests {
         assert!(providers.contains(&"openrouter"));
         assert!(providers.contains(&"cerebras"));
         assert!(providers.contains(&"ollama"));
-        assert!(providers.contains(&"google"));
+        assert!(providers.contains(&"google-vertex"));
+        assert!(providers.contains(&"google-studio"));
         assert!(providers.contains(&"amazon"));
         assert!(providers.contains(&"cloudflare"));
         assert!(providers.contains(&"deepseek"));
@@ -218,7 +221,9 @@ mod tests {
         assert!(ProviderFactory::create_provider("openrouter").is_ok());
         assert!(ProviderFactory::create_provider("cerebras").is_ok());
         assert!(ProviderFactory::create_provider("ollama").is_ok());
-        assert!(ProviderFactory::create_provider("google").is_ok());
+        assert!(ProviderFactory::create_provider("google-vertex").is_ok());
+        assert!(ProviderFactory::create_provider("google-studio").is_ok());
+        assert!(ProviderFactory::create_provider("google").is_err());
         assert!(ProviderFactory::create_provider("amazon").is_ok());
         assert!(ProviderFactory::create_provider("cloudflare").is_ok());
         assert!(ProviderFactory::create_provider("deepseek").is_ok());
@@ -309,11 +314,17 @@ mod tests {
         assert_eq!(model, "kimi-k2");
 
         // Generic multi-model providers should accept arbitrary non-empty model IDs
-        let result = ProviderFactory::get_provider_for_model("google:any-gemini-variant");
+        let result = ProviderFactory::get_provider_for_model("google-vertex:any-gemini-variant");
         assert!(result.is_ok());
         let (provider, model) = result.unwrap();
-        assert_eq!(provider.name(), "google");
+        assert_eq!(provider.name(), "google-vertex");
         assert_eq!(model, "any-gemini-variant");
+
+        let result = ProviderFactory::get_provider_for_model("google-studio:gemini-2.5-flash");
+        assert!(result.is_ok());
+        let (provider, model) = result.unwrap();
+        assert_eq!(provider.name(), "google-studio");
+        assert_eq!(model, "gemini-2.5-flash");
 
         let result = ProviderFactory::get_provider_for_model("cloudflare:@cf/custom/model");
         assert!(result.is_ok());

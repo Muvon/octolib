@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.27.0] - 2026-07-30
+
+### 📋 Release Summary
+
+This release expands Google AI integration by splitting support between Vertex AI and Google AI Studio, while adding preservation of Gemini thought signatures (725c5df3, 8397d8fd, 5cc53697). Additionally, DeepSeek model pricing has been corrected to ensure accurate cost tracking (e04a8260).
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: preserve Gemini thought signatures `5cc53697`
+- **llm**: add Google AI Studio and split Vertex AI `725c5df3`
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: correct deepseek model pricing rates `e04a8260`
+
+### 📚 Documentation & Examples
+
+- **google**: split google provider into vertex and studio `8397d8fd`
+
 ## [0.26.2] - 2026-07-30
 
 ### 📋 Release Summary

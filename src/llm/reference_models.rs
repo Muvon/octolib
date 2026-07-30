@@ -241,7 +241,9 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     ReferenceModelEntry {
         pattern: "deepseek-v4-flash",
         capabilities: caps(false, false, true, 1_000_000),
-        pricing: pricing(0.14, 0.28, 0.14, 0.028),
+        // 2026-04-24 DeepSeek revision (matches providers/deepseek.rs): cache
+        // hit is $0.0028, not $0.028.
+        pricing: pricing(0.14, 0.28, 0.14, 0.0028),
     },
     ReferenceModelEntry {
         pattern: "claude-sonnet-4-6",
@@ -361,7 +363,9 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     ReferenceModelEntry {
         pattern: "deepseek-v4-pro",
         capabilities: caps(false, false, true, 1_000_000),
-        pricing: pricing(1.74, 3.48, 1.74, 0.145),
+        // 2026-04-24 DeepSeek price cut (matches providers/deepseek.rs) — the
+        // old 1.74/3.48 billed 4× through the ollama/together lanes.
+        pricing: pricing(0.435, 0.87, 0.435, 0.003625),
     },
     ReferenceModelEntry {
         pattern: "mistral-large-3",
@@ -834,7 +838,8 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     ReferenceModelEntry {
         pattern: "deepseek-v4",
         capabilities: caps(false, false, true, 1_000_000),
-        pricing: pricing(0.14, 0.28, 0.14, 0.028),
+        // Generic fallback rides flash rates — same 2026-04-24 cache-hit fix.
+        pricing: pricing(0.14, 0.28, 0.14, 0.0028),
     },
     ReferenceModelEntry {
         pattern: "deepseek-v3",

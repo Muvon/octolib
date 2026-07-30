@@ -115,11 +115,11 @@ let generic_calls = provider_calls.to_generic_tool_calls();
 // are automatically restored at the message level
 ```
 
-**Direct Google API:**
+**Google Studio (Gemini API):**
 ```rust
-// For direct Google Gemini API (not currently implemented)
-// thought_signature would be stored in meta and restored
-// to the function call part when sending back
+// Thought signatures arrive as `extra_content` on each tool call.
+// They are stored per-call in meta.extra_content and restored on the
+// tool call when sending history back
 ```
 ### Metadata Structure
 
@@ -133,7 +133,7 @@ pub struct GenericToolCall {
 // Example metadata:
 // {
 //   "reasoning_details": [...],  // OpenRouter Gemini
-//   "thought_signature": "...",  // Direct Google API
+//   "extra_content": {...},      // Google Studio (thought signatures)
 //   "custom_field": "..."        // Extensible architecture
 // }
 ```
@@ -230,7 +230,7 @@ async fn tool_calling_example() -> anyhow::Result<()> {
 | Provider | Metadata Type | Automatic Handling |
 |----------|--------------|-------------------|
 | **OpenRouter + Gemini** | `reasoning_details` | ✅ Yes |
-| **Direct Google API** | `thought_signature` | ❌ Not supported |
+| **Google Studio (Gemini)** | `extra_content` (thought signatures) | ✅ Yes |
 | **OpenAI** | None | N/A |
 | **Anthropic** | None | N/A |
 | **DeepSeek** | None | N/A |
@@ -242,9 +242,10 @@ async fn tool_calling_example() -> anyhow::Result<()> {
 - Restores at message level when sending back
 - Fixes 400 errors: "Function call is missing a thought_signature"
 
-**Direct Google Gemini API:**
-- The `meta` field architecture supports `thought_signature` storage
-- Not currently implemented in direct Google provider
+**Google Studio (Gemini API):**
+- Automatically stores each tool call's `extra_content` (thought signature) in `GenericToolCall.meta`
+- Restores it on the tool call when sending history back
+- Fixes 400 errors: "Function call is missing a thought_signature"
 ## Best Practices
 
 ### 1. Use Appropriate Type for Context
@@ -294,7 +295,7 @@ let generic_calls = provider_calls.to_generic_tool_calls();
 // ❌ BAD: Manual provider-specific handling
 match provider_name {
     "openrouter" => { /* extract reasoning_details */ }
-    "google" => { /* extract thought_signature */ }
+    "google-vertex" => { /* extract thought_signature */ }
     _ => {}
 }
 // Duplicates logic, error-prone

@@ -175,6 +175,11 @@ struct OpenAiCompatToolCall {
     #[serde(rename = "type")]
     tool_type: String,
     function: OpenAiCompatFunction,
+    /// Gemini thought signatures (`extra_content.google.thought_signature`).
+    /// Gemini 3 rejects replayed tool-call turns that omit them, so this field
+    /// must round-trip through history.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    extra_content: Option<serde_json::Value>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -293,6 +298,11 @@ fn convert_messages(messages: &[Message]) -> Vec<OpenAiCompatMessage> {
                                     arguments: serde_json::to_string(&tc.arguments)
                                         .unwrap_or_default(),
                                 },
+                                extra_content: tc
+                                    .meta
+                                    .as_ref()
+                                    .and_then(|m| m.get("extra_content"))
+                                    .cloned(),
                             })
                             .collect(),
                     )
@@ -487,6 +497,20 @@ async fn execute_request(
         None => None,
     };
 
+    // Per-call extra_content (Gemini thought signatures), filtered the same way
+    // as the conversion below so indexes stay aligned with `tool_calls`.
+    let tool_call_extras: Vec<Option<serde_json::Value>> = message
+        .tool_calls
+        .as_ref()
+        .map(|calls| {
+            calls
+                .iter()
+                .filter(|c| c.tool_type == "function")
+                .map(|c| c.extra_content.clone())
+                .collect()
+        })
+        .unwrap_or_default();
+
     let tool_calls: Option<Vec<ToolCall>> = message.tool_calls.map(|calls| {
         calls
             .into_iter()
@@ -592,6 +616,19 @@ async fn execute_request(
             None
         };
         shared::set_response_tool_calls(&mut response_json, tc, reasoning_meta.as_ref());
+
+        // Attach per-call extra_content to the unified tool_calls meta so history
+        // replays can send Gemini thought signatures back (Gemini 3 rejects
+        // tool-call turns without them).
+        if tool_call_extras.iter().any(Option::is_some) {
+            if let Some(arr) = response_json["tool_calls"].as_array_mut() {
+                for (call, extra) in arr.iter_mut().zip(&tool_call_extras) {
+                    if let Some(extra) = extra {
+                        call["meta"]["extra_content"] = extra.clone();
+                    }
+                }
+            }
+        }
     }
 
     let exchange = ProviderExchange::new(request_body, response_json, usage, config.provider_name);
@@ -607,4 +644,72 @@ async fn execute_request(
         structured_output,
         id: api_response.id,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_gemini_thought_signature_round_trip() {
+        // Response side: extra_content survives deserialization
+        let call: OpenAiCompatToolCall = serde_json::from_value(serde_json::json!({
+            "id": "call_1",
+            "type": "function",
+            "function": {"name": "search", "arguments": "{}"},
+            "extra_content": {"google": {"thought_signature": "sig123"}}
+        }))
+        .unwrap();
+        assert!(call.extra_content.is_some());
+
+        // Replay side: meta.extra_content is emitted back on the tool call
+        let tool_calls_json = serde_json::to_value(vec![crate::llm::tool_calls::GenericToolCall {
+            id: "call_1".to_string(),
+            name: "search".to_string(),
+            arguments: serde_json::json!({}),
+            meta: serde_json::json!({
+                "extra_content": {"google": {"thought_signature": "sig123"}}
+            })
+            .as_object()
+            .cloned(),
+        }])
+        .unwrap();
+
+        let msg = Message {
+            role: "assistant".to_string(),
+            content: String::new(),
+            timestamp: 0,
+            cached: false,
+            cache_ttl: None,
+            tool_call_id: None,
+            name: None,
+            tool_calls: Some(tool_calls_json),
+            images: None,
+            videos: None,
+            thinking: None,
+            id: None,
+        };
+        let converted = convert_messages(std::slice::from_ref(&msg));
+        let json = serde_json::to_value(&converted[0]).unwrap();
+        assert_eq!(
+            json["tool_calls"][0]["extra_content"]["google"]["thought_signature"],
+            "sig123"
+        );
+
+        // Tool calls without meta must not gain an extra_content field
+        let plain = serde_json::to_value(vec![crate::llm::tool_calls::GenericToolCall {
+            id: "call_2".to_string(),
+            name: "search".to_string(),
+            arguments: serde_json::json!({}),
+            meta: None,
+        }])
+        .unwrap();
+        let msg_plain = Message {
+            tool_calls: Some(plain),
+            ..msg
+        };
+        let converted = convert_messages(std::slice::from_ref(&msg_plain));
+        let json = serde_json::to_value(&converted[0]).unwrap();
+        assert!(json["tool_calls"][0].get("extra_content").is_none());
+    }
 }

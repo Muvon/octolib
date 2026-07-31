@@ -67,6 +67,10 @@ impl AiProvider for OllamaProvider {
         false
     }
 
+    fn supports_video(&self, _model: &str) -> bool {
+        false
+    }
+
     // supports_vision, supports_video, supports_structured_output, get_max_input_tokens
     // are resolved via reference capabilities (trait defaults)
 
@@ -151,8 +155,8 @@ mod tests {
     #[test]
     fn test_video_model_specific() {
         let provider = OllamaProvider::new();
-        // Only VL models support video
-        assert!(provider.supports_video("qwen2.5-vl:72b"));
+        // Ollama chat API does not support video (only text and images)
+        assert!(!provider.supports_video("qwen2.5-vl:72b"));
         assert!(!provider.supports_video("llama3.1:8b"));
         assert!(!provider.supports_video("llava:latest"));
     }

@@ -144,6 +144,8 @@ struct MoonshotRequest {
     tools: Option<Vec<MoonshotTool>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thinking: Option<serde_json::Value>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -157,11 +159,12 @@ struct MoonshotMessage {
     tool_call_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<String>,
-    /// Required for kimi-k2.5 and thinking models when tool_calls are present
+    /// Kimi reasoning state. K2.7 requires it to be preserved across all
+    /// assistant turns; K2.5/K2.6 also require it on tool-call turns.
     /// - Some("") = empty reasoning (required for tool calls)
     /// - Some(content) = actual reasoning content
     /// - None = omit field (backward compatible for non-thinking models)
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, alias = "reasoning", skip_serializing_if = "Option::is_none")]
     reasoning_content: Option<String>,
 }
 
@@ -313,7 +316,22 @@ fn inline_refs(value: &mut serde_json::Value, defs: &serde_json::Map<String, ser
 }
 
 // Convert messages to Moonshot (OpenAI-compatible) format
-fn convert_messages(messages: &[crate::llm::types::Message], _model: &str) -> Vec<MoonshotMessage> {
+fn preserves_historical_thinking(model: &str) -> bool {
+    contains_ignore_ascii_case(model, "kimi-k2.6")
+        || contains_ignore_ascii_case(model, "kimi-k2.7")
+        || contains_ignore_ascii_case(model, "kimi-k3")
+}
+
+fn thinking_config(model: &str) -> Option<serde_json::Value> {
+    contains_ignore_ascii_case(model, "kimi-k2.6").then(|| {
+        serde_json::json!({
+            "type": "enabled",
+            "keep": "all"
+        })
+    })
+}
+
+fn convert_messages(messages: &[crate::llm::types::Message], model: &str) -> Vec<MoonshotMessage> {
     let mut result = Vec::new();
 
     for message in messages {
@@ -470,8 +488,15 @@ fn convert_messages(messages: &[crate::llm::types::Message], _model: &str) -> Ve
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
-                    // Regular messages without tool calls don't need reasoning_content
-                    reasoning_content: None,
+                    // Kimi K2.7 preserve_thinking retains reasoning across every
+                    // assistant turn, including turns without tool calls.
+                    reasoning_content: if message.role == "assistant"
+                        && preserves_historical_thinking(model)
+                    {
+                        message.thinking.as_ref().map(|t| t.content.clone())
+                    } else {
+                        None
+                    },
                 });
             }
             _ => {
@@ -582,7 +607,7 @@ impl AiProvider for MoonshotProvider {
     }
 
     fn supported_sampling_params(&self, model: &str) -> SamplingSupport {
-        // Kimi K2.5, K2.6 and K2.7 only accept temperature=1.0 — not user-controllable.
+        // Kimi K2.5, K2.6 and K2.7 do not expose a modifiable temperature.
         // Kimi K3 has no temperature parameter at all (always-reasoning model).
         // Other Moonshot models support temperature. None support top_p or top_k.
         let fixed_temp = contains_ignore_ascii_case(model, "kimi-k2.5")
@@ -604,18 +629,10 @@ impl AiProvider for MoonshotProvider {
         // Manual caching via /v1/caching endpoint is deprecated (returns "model family is invalid")
         let messages = convert_messages(&params.messages, &params.model);
 
-        // Kimi K2.5, K2.6 and K2.7 only accept temperature=1.0; other models use
-        // user-requested value. Kimi K3 has no temperature parameter — it falls
-        // through to sampling.temperature which is None (unsupported → omitted).
+        // Kimi K2.5, K2.6, K2.7 and K3 do not expose a modifiable temperature,
+        // so effective sampling support omits it from the request.
         let sampling = self.effective_sampling_params(&params);
-        let temperature = if contains_ignore_ascii_case(&params.model, "kimi-k2.5")
-            || contains_ignore_ascii_case(&params.model, "kimi-k2.6")
-            || contains_ignore_ascii_case(&params.model, "kimi-k2.7")
-        {
-            Some(1.0) // Fixed value — these models reject anything else
-        } else {
-            sampling.temperature
-        };
+        let temperature = sampling.temperature;
 
         let mut request = MoonshotRequest {
             model: params.model.clone(),
@@ -630,6 +647,7 @@ impl AiProvider for MoonshotProvider {
             response_format: None,
             tools: None,
             tool_choice: None,
+            thinking: thinking_config(&params.model),
         };
 
         // Add tools if available (Moonshot is OpenAI-compatible)
@@ -1123,7 +1141,7 @@ mod tests {
         assert!(converted[0].reasoning_content.is_some());
         assert_eq!(converted[0].reasoning_content.as_ref().unwrap(), "");
 
-        // Test 3: Regular assistant message without tool calls (no reasoning_content)
+        // Test 3: Regular assistant message without tool calls or stored thinking
         let regular_msg = crate::llm::types::Message {
             role: "assistant".to_string(),
             content: "Hello, how can I help?".to_string(),
@@ -1148,7 +1166,31 @@ mod tests {
         assert_eq!(converted.len(), 1);
         assert!(converted[0].reasoning_content.is_none());
 
-        // Test 4: Tool response message (no reasoning_content)
+        // Test 4: K2.7 preserves thinking even on assistant turns without tools.
+        let regular_msg_with_thinking = crate::llm::types::Message {
+            thinking: Some(ThinkingBlock {
+                content: "I chose the first three numbers and retained two.".to_string(),
+                tokens: 12,
+            }),
+            ..regular_msg
+        };
+        let converted = convert_messages(&[regular_msg_with_thinking], "kimi-k2.7-code");
+        assert_eq!(
+            converted[0].reasoning_content.as_deref(),
+            Some("I chose the first three numbers and retained two.")
+        );
+
+        let k25_plain_with_thinking = crate::llm::types::Message {
+            thinking: Some(ThinkingBlock {
+                content: "K2.5 trace".to_string(),
+                tokens: 3,
+            }),
+            ..crate::llm::types::Message::assistant("answer")
+        };
+        let converted = convert_messages(&[k25_plain_with_thinking], "kimi-k2.5");
+        assert!(converted[0].reasoning_content.is_none());
+
+        // Test 5: Tool response message (no reasoning_content)
         let tool_msg = crate::llm::types::Message {
             role: "tool".to_string(),
             content: "Weather is sunny".to_string(),
@@ -1168,7 +1210,7 @@ mod tests {
         assert_eq!(converted.len(), 1);
         assert!(converted[0].reasoning_content.is_none());
 
-        // Test 5: Verify JSON serialization behavior
+        // Test 6: Verify JSON serialization behavior
         let msg_with_reasoning = MoonshotMessage {
             role: "assistant".to_string(),
             content: Some(serde_json::json!("test")),
@@ -1185,7 +1227,7 @@ mod tests {
             "thinking"
         );
 
-        // Test 6: None reasoning_content should be omitted
+        // Test 7: None reasoning_content should be omitted
         let msg_without_reasoning = MoonshotMessage {
             role: "assistant".to_string(),
             content: Some(serde_json::json!("test")),
@@ -1198,7 +1240,7 @@ mod tests {
         let json = serde_json::to_value(&msg_without_reasoning).unwrap();
         assert!(json.get("reasoning_content").is_none());
 
-        // Test 7: Empty reasoning_content (Some("")) should be serialized
+        // Test 8: Empty reasoning_content (Some("")) should be serialized
         let msg_with_empty_reasoning = MoonshotMessage {
             role: "assistant".to_string(),
             content: Some(serde_json::json!("test")),
@@ -1211,6 +1253,40 @@ mod tests {
         let json = serde_json::to_value(&msg_with_empty_reasoning).unwrap();
         assert!(json.get("reasoning_content").is_some());
         assert_eq!(json.get("reasoning_content").unwrap().as_str().unwrap(), "");
+
+        // Test 9: Some Kimi-compatible servers return `reasoning`; store it
+        // through the same internal field while continuing to emit Moonshot's
+        // documented `reasoning_content` request field.
+        let aliased: MoonshotMessage = serde_json::from_value(serde_json::json!({
+            "role": "assistant",
+            "content": "answer",
+            "reasoning": "retained trace"
+        }))
+        .unwrap();
+        assert_eq!(aliased.reasoning_content.as_deref(), Some("retained trace"));
+        let json = serde_json::to_value(&aliased).unwrap();
+        assert_eq!(
+            json.get("reasoning_content")
+                .and_then(serde_json::Value::as_str),
+            Some("retained trace")
+        );
+        assert!(json.get("reasoning").is_none());
+    }
+
+    #[test]
+    fn test_preserved_thinking_model_contract() {
+        assert!(preserves_historical_thinking("kimi-k2.6"));
+        assert!(preserves_historical_thinking("kimi-k2.7-code"));
+        assert!(preserves_historical_thinking("kimi-k3"));
+        assert!(!preserves_historical_thinking("kimi-k2.5"));
+
+        assert_eq!(
+            thinking_config("kimi-k2.6"),
+            Some(serde_json::json!({"type": "enabled", "keep": "all"}))
+        );
+        assert!(thinking_config("kimi-k2.7-code").is_none());
+        assert!(thinking_config("kimi-k2.5").is_none());
+        assert!(thinking_config("kimi-k3").is_none());
     }
 
     #[test]

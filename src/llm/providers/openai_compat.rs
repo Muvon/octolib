@@ -37,13 +37,29 @@ pub(crate) fn get_api_url(env_name: &str, default_url: &str) -> String {
     std::env::var(env_name).unwrap_or_else(|_| default_url.to_string())
 }
 
+fn reasoning_effort_value(
+    provider_name: &str,
+    effort: crate::llm::types::ReasoningEffort,
+) -> &'static str {
+    match effort {
+        crate::llm::types::ReasoningEffort::Low => "low",
+        crate::llm::types::ReasoningEffort::Medium => "medium",
+        crate::llm::types::ReasoningEffort::High => "high",
+        crate::llm::types::ReasoningEffort::XHigh => "high",
+        crate::llm::types::ReasoningEffort::Max if provider_name.eq_ignore_ascii_case("ollama") => {
+            "max"
+        }
+        crate::llm::types::ReasoningEffort::Max => "high",
+    }
+}
+
 pub(crate) async fn chat_completion(
     config: OpenAiCompatConfig,
     api_key: String,
     api_url: String,
     params: ChatCompletionParams,
 ) -> Result<ProviderResponse> {
-    let messages = convert_messages(&params.messages);
+    let messages = convert_messages(&params.messages, config.provider_name);
 
     let mut request_body = serde_json::json!({
         "model": params.model,
@@ -66,13 +82,7 @@ pub(crate) async fn chat_completion(
     // `reasoning_effort` parameter with values: "low" | "medium" | "high".
     // Providers that don't recognize it will ignore it.
     if let Some(effort) = params.reasoning_effort {
-        let s = match effort {
-            crate::llm::types::ReasoningEffort::Low => "low",
-            crate::llm::types::ReasoningEffort::Medium => "medium",
-            crate::llm::types::ReasoningEffort::High => "high",
-            crate::llm::types::ReasoningEffort::XHigh => "high",
-            crate::llm::types::ReasoningEffort::Max => "high",
-        };
+        let s = reasoning_effort_value(config.provider_name, effort);
         request_body["reasoning_effort"] = serde_json::json!(s);
     }
 
@@ -167,6 +177,11 @@ struct OpenAiCompatMessage {
     tool_calls: Option<Vec<OpenAiCompatToolCall>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_call_id: Option<String>,
+    /// Ollama's OpenAI compatibility layer maps this field to its native
+    /// `message.thinking` value. Replaying it is required by Kimi models that
+    /// preserve reasoning across turns.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -221,6 +236,15 @@ struct OpenAiCompatResponseMessage {
     tool_calls: Option<Vec<OpenAiCompatToolCall>>,
     #[serde(default)]
     reasoning_details: Option<serde_json::Value>,
+    /// OpenAI-compatible reasoning text. Ollama emits `reasoning`; Kimi/vLLM
+    /// deployments commonly emit `reasoning_content`; Ollama's native chat
+    /// response uses `thinking`.
+    #[serde(default)]
+    reasoning: Option<String>,
+    #[serde(default)]
+    reasoning_content: Option<String>,
+    #[serde(default)]
+    thinking: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -263,7 +287,7 @@ struct PromptTokensDetails {
     cached_tokens: u64,
 }
 
-fn convert_messages(messages: &[Message]) -> Vec<OpenAiCompatMessage> {
+fn convert_messages(messages: &[Message], provider_name: &str) -> Vec<OpenAiCompatMessage> {
     let mut result = Vec::new();
 
     for message in messages {
@@ -274,6 +298,7 @@ fn convert_messages(messages: &[Message]) -> Vec<OpenAiCompatMessage> {
                     content: Some(serde_json::json!(message.content)),
                     tool_calls: None,
                     tool_call_id: message.tool_call_id.clone(),
+                    reasoning: None,
                 });
             }
             "assistant" if message.tool_calls.is_some() => {
@@ -315,6 +340,11 @@ fn convert_messages(messages: &[Message]) -> Vec<OpenAiCompatMessage> {
                     content,
                     tool_calls,
                     tool_call_id: None,
+                    reasoning: if provider_name.eq_ignore_ascii_case("ollama") {
+                        message.thinking.as_ref().map(|t| t.content.clone())
+                    } else {
+                        None
+                    },
                 });
             }
             "user" | "assistant" | "system" => {
@@ -371,6 +401,13 @@ fn convert_messages(messages: &[Message]) -> Vec<OpenAiCompatMessage> {
                     content,
                     tool_calls: None,
                     tool_call_id: None,
+                    reasoning: if message.role == "assistant"
+                        && provider_name.eq_ignore_ascii_case("ollama")
+                    {
+                        message.thinking.as_ref().map(|t| t.content.clone())
+                    } else {
+                        None
+                    },
                 });
             }
             _ => {
@@ -380,6 +417,39 @@ fn convert_messages(messages: &[Message]) -> Vec<OpenAiCompatMessage> {
     }
 
     result
+}
+
+fn extract_thinking(message: &OpenAiCompatResponseMessage) -> Option<ThinkingBlock> {
+    let plain_text = message
+        .reasoning_content
+        .as_ref()
+        .or(message.reasoning.as_ref())
+        .or(message.thinking.as_ref());
+
+    if let Some(content) = plain_text {
+        return Some(ThinkingBlock {
+            content: content.clone(),
+            tokens: (content.len() / 4) as u64,
+        });
+    }
+
+    message.reasoning_details.as_ref().map(|details| {
+        let content = details
+            .as_array()
+            .and_then(|items| {
+                let texts = items
+                    .iter()
+                    .filter_map(|item| item.get("text").and_then(serde_json::Value::as_str))
+                    .collect::<Vec<_>>();
+                (!texts.is_empty()).then(|| texts.join("\n\n"))
+            })
+            .unwrap_or_else(|| details.to_string());
+
+        ThinkingBlock {
+            tokens: (content.len() / 4) as u64,
+            content,
+        }
+    })
 }
 
 async fn execute_request(
@@ -466,36 +536,7 @@ async fn execute_request(
     let content = message.content.clone().unwrap_or_default();
 
     let reasoning_details = &message.reasoning_details;
-    let thinking = match reasoning_details.as_ref() {
-        Some(rd) => {
-            let thinking_text = rd
-                .as_array()
-                .and_then(|arr| {
-                    let texts: Vec<String> = arr
-                        .iter()
-                        .filter_map(|item| {
-                            item.get("text")
-                                .and_then(|t| t.as_str().map(|s| s.to_string()))
-                        })
-                        .collect();
-                    if texts.is_empty() {
-                        None
-                    } else {
-                        Some(texts)
-                    }
-                })
-                .map(|texts| texts.join("\n\n"))
-                .unwrap_or_else(|| rd.to_string());
-
-            let estimated = (thinking_text.len() / 4) as u64;
-
-            Some(ThinkingBlock {
-                content: thinking_text,
-                tokens: estimated,
-            })
-        }
-        None => None,
-    };
+    let thinking = extract_thinking(&message);
 
     // Per-call extra_content (Gemini thought signatures), filtered the same way
     // as the conversion below so indexes stay aligned with `tool_calls`.
@@ -689,7 +730,7 @@ mod tests {
             thinking: None,
             id: None,
         };
-        let converted = convert_messages(std::slice::from_ref(&msg));
+        let converted = convert_messages(std::slice::from_ref(&msg), "local");
         let json = serde_json::to_value(&converted[0]).unwrap();
         assert_eq!(
             json["tool_calls"][0]["extra_content"]["google"]["thought_signature"],
@@ -708,8 +749,84 @@ mod tests {
             tool_calls: Some(plain),
             ..msg
         };
-        let converted = convert_messages(std::slice::from_ref(&msg_plain));
+        let converted = convert_messages(std::slice::from_ref(&msg_plain), "local");
         let json = serde_json::to_value(&converted[0]).unwrap();
         assert!(json["tool_calls"][0].get("extra_content").is_none());
+    }
+
+    #[test]
+    fn test_ollama_reasoning_is_stored_and_replayed() {
+        let response_message: OpenAiCompatResponseMessage =
+            serde_json::from_value(serde_json::json!({
+                "content": "I need the repository state.",
+                "reasoning": "The first step is to inspect git status.",
+                "tool_calls": [{
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "git_status", "arguments": "{}"}
+                }]
+            }))
+            .unwrap();
+
+        let thinking = extract_thinking(&response_message).expect("reasoning must be stored");
+        assert_eq!(thinking.content, "The first step is to inspect git status.");
+
+        let tool_calls = serde_json::to_value(vec![crate::llm::tool_calls::GenericToolCall {
+            id: "call_1".to_string(),
+            name: "git_status".to_string(),
+            arguments: serde_json::json!({}),
+            meta: None,
+        }])
+        .unwrap();
+        let history = Message {
+            role: "assistant".to_string(),
+            content: "I need the repository state.".to_string(),
+            timestamp: 0,
+            cached: false,
+            cache_ttl: None,
+            tool_call_id: None,
+            name: None,
+            tool_calls: Some(tool_calls),
+            images: None,
+            videos: None,
+            thinking: Some(thinking),
+            id: None,
+        };
+
+        let converted = convert_messages(&[history], "ollama");
+        let json = serde_json::to_value(&converted[0]).unwrap();
+        assert_eq!(
+            json.get("reasoning").and_then(serde_json::Value::as_str),
+            Some("The first step is to inspect git status.")
+        );
+    }
+
+    #[test]
+    fn test_openai_compat_reasoning_field_variants_are_stored() {
+        for (field, value) in [
+            ("reasoning_content", "reasoning-content trace"),
+            ("reasoning", "reasoning trace"),
+            ("thinking", "native Ollama trace"),
+        ] {
+            let mut json = serde_json::json!({"content": "answer"});
+            json[field] = serde_json::json!(value);
+            let message: OpenAiCompatResponseMessage = serde_json::from_value(json).unwrap();
+            assert_eq!(
+                extract_thinking(&message).map(|thinking| thinking.content),
+                Some(value.to_string())
+            );
+        }
+    }
+
+    #[test]
+    fn test_ollama_max_reasoning_effort_is_not_downgraded() {
+        assert_eq!(
+            reasoning_effort_value("ollama", crate::llm::types::ReasoningEffort::Max),
+            "max"
+        );
+        assert_eq!(
+            reasoning_effort_value("nvidia", crate::llm::types::ReasoningEffort::Max),
+            "high"
+        );
     }
 }

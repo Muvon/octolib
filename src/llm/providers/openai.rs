@@ -19,8 +19,8 @@ use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, ReasoningEffort,
-    SamplingSupport, ThinkingBlock, TokenUsage, ToolCall,
+    ChatCompletionParams, ImageData, Message, ProviderExchange, ProviderResponse, ReasoningEffort,
+    SamplingSupport, ThinkingBlock, TokenUsage, ToolCall, VideoData,
 };
 use crate::llm::utils::{
     get_model_pricing, is_model_in_pricing_table, normalize_model_name, PricingTuple,
@@ -188,16 +188,66 @@ fn messages_to_input(
     explicit_cache_breakpoints: bool,
 ) -> Vec<serde_json::Value> {
     let content = |msg: &Message| {
-        if explicit_cache_breakpoints && msg.cached {
-            serde_json::json!([{
+        let has_images = msg.images.as_ref().is_some_and(|v| !v.is_empty());
+        let has_videos = msg.videos.as_ref().is_some_and(|v| !v.is_empty());
+
+        if !has_images && !has_videos {
+            // No attachments: keep the simple string shape unless a cache breakpoint
+            // is explicitly requested.
+            if explicit_cache_breakpoints && msg.cached {
+                serde_json::json!([{
+                    "type": "input_text",
+                    "text": msg.content,
+                    "prompt_cache_breakpoint": {
+                        "mode": "explicit"
+                    }
+                }])
+            } else {
+                serde_json::json!(msg.content)
+            }
+        } else {
+            // Multimodal input: build an array of typed parts for the Responses API.
+            let mut parts = Vec::new();
+            let mut text_part = serde_json::json!({
                 "type": "input_text",
                 "text": msg.content,
-                "prompt_cache_breakpoint": {
-                    "mode": "explicit"
+            });
+            if explicit_cache_breakpoints && msg.cached {
+                text_part["prompt_cache_breakpoint"] = serde_json::json!({ "mode": "explicit" });
+            }
+            parts.push(text_part);
+
+            if let Some(images) = &msg.images {
+                for image in images {
+                    let url = match &image.data {
+                        ImageData::Base64(data) => {
+                            format!("data:{};base64,{}", image.media_type, data)
+                        }
+                        ImageData::Url(u) => u.clone(),
+                    };
+                    parts.push(serde_json::json!({
+                        "type": "input_image",
+                        "image_url": url,
+                    }));
                 }
-            }])
-        } else {
-            serde_json::json!(msg.content)
+            }
+
+            if let Some(videos) = &msg.videos {
+                for video in videos {
+                    let url = match &video.data {
+                        VideoData::Base64(data) => {
+                            format!("data:{};base64,{}", video.media_type, data)
+                        }
+                        VideoData::Url(u) => u.clone(),
+                    };
+                    parts.push(serde_json::json!({
+                        "type": "input_video",
+                        "video_url": url,
+                    }));
+                }
+            }
+
+            serde_json::Value::Array(parts)
         }
     };
 
@@ -1302,6 +1352,67 @@ mod tests {
         let second = &input[1];
         assert_eq!(second["role"], "user");
         assert_eq!(second["content"], "Hello!");
+    }
+
+    #[test]
+    fn test_messages_to_input_with_images() {
+        let image_attachment = crate::llm::types::ImageAttachment {
+            data: ImageData::Base64("fakebase64data".to_string()),
+            media_type: "image/png".to_string(),
+            source_type: crate::llm::types::SourceType::File(std::path::PathBuf::from("test.png")),
+            dimensions: None,
+            size_bytes: None,
+        };
+
+        let messages = vec![
+            Message::system("You are a helpful assistant."),
+            Message::user("What is in this image?").with_images(vec![image_attachment]),
+        ];
+
+        let input = messages_to_input(&messages, None, false);
+        assert_eq!(input.len(), 2);
+
+        // System message remains a plain string.
+        assert_eq!(input[0]["role"], "system");
+        assert_eq!(input[0]["content"], "You are a helpful assistant.");
+
+        // User message with an image is an array of typed parts.
+        assert_eq!(input[1]["role"], "user");
+        let content = &input[1]["content"];
+        assert!(content.is_array());
+        assert_eq!(content.as_array().unwrap().len(), 2);
+        assert_eq!(content[0]["type"], "input_text");
+        assert_eq!(content[0]["text"], "What is in this image?");
+        assert_eq!(content[1]["type"], "input_image");
+        assert_eq!(
+            content[1]["image_url"],
+            "data:image/png;base64,fakebase64data"
+        );
+    }
+
+    #[test]
+    fn test_messages_to_input_with_image_url_and_cache() {
+        let image_attachment = crate::llm::types::ImageAttachment {
+            data: ImageData::Url("https://example.com/image.png".to_string()),
+            media_type: "image/png".to_string(),
+            source_type: crate::llm::types::SourceType::Url,
+            dimensions: None,
+            size_bytes: None,
+        };
+
+        let messages = vec![Message::user("Describe this")
+            .with_images(vec![image_attachment])
+            .with_cache_marker()];
+
+        let input = messages_to_input(&messages, None, true);
+        assert_eq!(input.len(), 1);
+
+        let content = &input[0]["content"];
+        assert_eq!(content.as_array().unwrap().len(), 2);
+        assert_eq!(content[0]["type"], "input_text");
+        assert_eq!(content[0]["prompt_cache_breakpoint"]["mode"], "explicit");
+        assert_eq!(content[1]["type"], "input_image");
+        assert_eq!(content[1]["image_url"], "https://example.com/image.png");
     }
 
     #[test]

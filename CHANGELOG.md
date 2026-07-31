@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.28.0] - 2026-07-31
+
+### 📋 Release Summary
+
+This release enhances LLM reasoning and thinking capabilities to provide more sophisticated model responses (b60e2733). Additionally, several fixes improve OpenAI integration, including corrected pricing for Terra and Luna models and more reliable transcript handling (48f8649c, 4c7f671a).
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: enhance reasoning and thinking support `b60e2733`
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: align openai pricing for terra and luna models `48f8649c`
+- **openai**: improve transcript handling during rebases `4c7f671a`
+
 ## [0.27.0] - 2026-07-30
 
 ### 📋 Release Summary

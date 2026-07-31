@@ -81,12 +81,12 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     ReferenceModelEntry {
         pattern: "gpt-5.6-terra",
         capabilities: caps(true, false, true, 1_050_000),
-        pricing: pricing(2.50, 15.00, 3.125, 0.25),
+        pricing: pricing(2.00, 12.00, 2.50, 0.20),
     },
     ReferenceModelEntry {
         pattern: "gpt-5.6-luna",
         capabilities: caps(true, false, true, 1_050_000),
-        pricing: pricing(1.00, 6.00, 1.25, 0.10),
+        pricing: pricing(0.20, 1.20, 0.25, 0.02),
     },
     ReferenceModelEntry {
         pattern: "gpt-5.6-sol",

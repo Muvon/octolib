@@ -30,15 +30,15 @@ use serde::Deserialize;
 use std::env;
 
 /// OpenAI pricing constants (per 1M tokens in USD)
-/// Source: https://developers.openai.com/api/docs/pricing (verified Jul 10, 2026)
+/// Source: https://developers.openai.com/api/docs/pricing (verified Jul 31, 2026)
 /// Format: (model, input, output, cache_write, cache_read)
 /// Note: For models without caching, cache_write = input and cache_read = input
 const PRICING: &[PricingTuple] = &[
     // GPT-5.6 family. The gpt-5.6 alias routes to gpt-5.6-sol.
     // Cache writes cost 1.25x uncached input; cache reads cost 0.1x.
     ("gpt-5.6-sol", 5.00, 30.00, 6.25, 0.50),
-    ("gpt-5.6-terra", 2.50, 15.00, 3.125, 0.25),
-    ("gpt-5.6-luna", 1.00, 6.00, 1.25, 0.10),
+    ("gpt-5.6-terra", 2.00, 12.00, 2.50, 0.20),
+    ("gpt-5.6-luna", 0.20, 1.20, 0.25, 0.02),
     ("gpt-5.6", 5.00, 30.00, 6.25, 0.50),
     // GPT-5.5 family
     ("gpt-5.5-pro", 30.00, 180.00, 30.00, 30.00),
@@ -1679,8 +1679,8 @@ mod tests {
         let cases = [
             ("gpt-5.6", 5.00, 30.00, 6.25, 0.50),
             ("gpt-5.6-sol", 5.00, 30.00, 6.25, 0.50),
-            ("gpt-5.6-terra", 2.50, 15.00, 3.125, 0.25),
-            ("gpt-5.6-luna", 1.00, 6.00, 1.25, 0.10),
+            ("gpt-5.6-terra", 2.00, 12.00, 2.50, 0.20),
+            ("gpt-5.6-luna", 0.20, 1.20, 0.25, 0.02),
         ];
 
         for (model, input, output, cache_write, cache_read) in cases {
@@ -1689,6 +1689,18 @@ mod tests {
             assert_eq!(pricing.output_price_per_1m, output);
             assert_eq!(pricing.cache_write_price_per_1m, cache_write);
             assert_eq!(pricing.cache_read_price_per_1m, cache_read);
+
+            let reference = crate::llm::reference_models::get_reference_pricing(model).unwrap();
+            assert_eq!(reference.input_price_per_1m, pricing.input_price_per_1m);
+            assert_eq!(reference.output_price_per_1m, pricing.output_price_per_1m);
+            assert_eq!(
+                reference.cache_write_price_per_1m,
+                pricing.cache_write_price_per_1m
+            );
+            assert_eq!(
+                reference.cache_read_price_per_1m,
+                pricing.cache_read_price_per_1m
+            );
         }
     }
 
@@ -1697,12 +1709,12 @@ mod tests {
         // Standard tier: regular input + cache write + cache read + output.
         let standard =
             calculate_cost_with_cache("gpt-5.6-terra", 100_000, 50_000, 50_000, 10_000).unwrap();
-        assert!((standard - 0.56875).abs() < 0.0000001);
+        assert!((standard - 0.455).abs() < 0.0000001);
 
         // Above 272K total input: 2x every input/cache rate and 1.5x output.
         let long =
             calculate_cost_with_cache("gpt-5.6-terra", 200_000, 50_000, 50_001, 10_000).unwrap();
-        assert!((long - 1.5625005).abs() < 0.0000001);
+        assert!((long - 1.2500004).abs() < 0.0000001);
     }
 
     #[test]

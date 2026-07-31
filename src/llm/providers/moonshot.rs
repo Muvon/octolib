@@ -40,12 +40,20 @@
 //! `prompt_tokens_details.cached_tokens`. `prompt_tokens` is the TOTAL prompt
 //! including cached portion, so clean input = prompt_tokens - cached_tokens.
 //! Cache writes are NOT separately billed by Moonshot — only hits are discounted.
+//!
+//! Kimi K3 specifics (<https://platform.kimi.ai/docs/api/chat>):
+//! - K3 always reasons; effort is set via top-level `reasoning_effort`
+//!   ("low" / "high" / "max", default "max"). High effort = more output tokens
+//!   billed at the output price, so the caller's ReasoningEffort is forwarded.
+//! - Output is capped via `max_completion_tokens`; `max_tokens` is deprecated for K3.
+//! - `usage.completion_tokens_details.reasoning_tokens` reports reasoning tokens.
 use super::shared;
 use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-    ChatCompletionParams, ProviderExchange, ProviderResponse, SamplingSupport, TokenUsage, ToolCall,
+    ChatCompletionParams, ProviderExchange, ProviderResponse, ReasoningEffort, SamplingSupport,
+    TokenUsage, ToolCall,
 };
 use crate::llm::utils::{contains_ignore_ascii_case, is_model_in_pricing_table, PricingTuple};
 use anyhow::Result;
@@ -136,6 +144,12 @@ struct MoonshotRequest {
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
+    /// Kimi K3 output cap (`max_tokens` is deprecated for K3 per API docs)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_completion_tokens: Option<u32>,
+    /// Kimi K3 reasoning effort: "low" / "high" / "max" (K3 default: "max")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stream: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -195,12 +209,20 @@ struct MoonshotUsage {
     cached_tokens: u64,
     #[serde(default)]
     prompt_tokens_details: Option<MoonshotPromptTokensDetails>,
+    #[serde(default)]
+    completion_tokens_details: Option<MoonshotCompletionTokensDetails>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct MoonshotPromptTokensDetails {
     #[serde(default)]
     cached_tokens: u64,
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
+struct MoonshotCompletionTokensDetails {
+    #[serde(default)]
+    reasoning_tokens: u64,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -329,6 +351,23 @@ fn thinking_config(model: &str) -> Option<serde_json::Value> {
             "keep": "all"
         })
     })
+}
+
+/// Map generic ReasoningEffort to Kimi K3's `reasoning_effort` string.
+/// K3 supports only "low" / "high" / "max" (default "max" when the field is
+/// omitted), so intermediate levels floor to the nearest supported lower
+/// effort. Returns None for non-K3 models and when the caller leaves the
+/// effort unset (K3 then applies its own default).
+fn k3_reasoning_effort(model: &str, effort: Option<ReasoningEffort>) -> Option<&'static str> {
+    if !contains_ignore_ascii_case(model, "kimi-k3") {
+        return None;
+    }
+    match effort {
+        Some(ReasoningEffort::Low) | Some(ReasoningEffort::Medium) => Some("low"),
+        Some(ReasoningEffort::High) | Some(ReasoningEffort::XHigh) => Some("high"),
+        Some(ReasoningEffort::Max) => Some("max"),
+        None => None,
+    }
 }
 
 fn convert_messages(messages: &[crate::llm::types::Message], model: &str) -> Vec<MoonshotMessage> {
@@ -634,15 +673,26 @@ impl AiProvider for MoonshotProvider {
         let sampling = self.effective_sampling_params(&params);
         let temperature = sampling.temperature;
 
+        // Kimi K3 caps output via `max_completion_tokens`; `max_tokens` is
+        // deprecated for K3 per the API docs. Older Kimi models keep max_tokens.
+        let is_k3 = contains_ignore_ascii_case(&params.model, "kimi-k3");
+        let (max_tokens, max_completion_tokens) = if params.max_tokens > 0 {
+            if is_k3 {
+                (None, Some(params.max_tokens))
+            } else {
+                (Some(params.max_tokens), None)
+            }
+        } else {
+            (None, None)
+        };
+
         let mut request = MoonshotRequest {
             model: params.model.clone(),
             messages,
             temperature,
-            max_tokens: if params.max_tokens > 0 {
-                Some(params.max_tokens)
-            } else {
-                None
-            },
+            max_tokens,
+            max_completion_tokens,
+            reasoning_effort: k3_reasoning_effort(&params.model, params.reasoning_effort),
             stream: Some(false),
             response_format: None,
             tools: None,
@@ -775,6 +825,12 @@ impl AiProvider for MoonshotProvider {
                     .unwrap_or(0),
             );
 
+            let reasoning_tokens = usage
+                .completion_tokens_details
+                .as_ref()
+                .map(|d| d.reasoning_tokens)
+                .unwrap_or(0);
+
             let input_tokens_clean = usage.prompt_tokens.saturating_sub(cache_read_tokens);
 
             let cost = if cache_read_tokens > 0 {
@@ -793,7 +849,7 @@ impl AiProvider for MoonshotProvider {
                 cache_read_tokens,
                 cache_write_tokens: 0,
                 output_tokens: usage.completion_tokens,
-                reasoning_tokens: 0,
+                reasoning_tokens,
                 total_tokens: usage.total_tokens,
                 cost,
                 request_time_ms: Some(request_time_ms),
@@ -807,12 +863,18 @@ impl AiProvider for MoonshotProvider {
         // Extract reasoning_content from response and convert to ThinkingBlock
         // CRITICAL: Preserve even empty reasoning_content for thinking models
         // Empty reasoning_content is required when replaying tool call messages
-        let thinking = choice.message.reasoning_content.map(|rc| {
-            crate::llm::types::ThinkingBlock {
-                content: rc,
-                tokens: 0, // Moonshot doesn't provide separate reasoning token count
-            }
-        });
+        let reasoning_token_count = token_usage
+            .as_ref()
+            .map(|u| u.reasoning_tokens)
+            .unwrap_or(0);
+        let thinking =
+            choice
+                .message
+                .reasoning_content
+                .map(|rc| crate::llm::types::ThinkingBlock {
+                    content: rc,
+                    tokens: reasoning_token_count,
+                });
 
         let tool_calls: Option<Vec<ToolCall>> = choice.message.tool_calls.map(|calls| {
             calls
@@ -1065,6 +1127,59 @@ mod tests {
         assert!(cost_128k.is_some());
         let expected_128k = 2.00 + (0.5 * 5.00);
         assert!((cost_128k.unwrap() - expected_128k).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_k3_reasoning_effort() {
+        // Only kimi-k3 gets the reasoning_effort field
+        assert_eq!(
+            k3_reasoning_effort("kimi-k3", Some(ReasoningEffort::Low)),
+            Some("low")
+        );
+        assert_eq!(
+            k3_reasoning_effort("kimi-k3", Some(ReasoningEffort::Medium)),
+            Some("low")
+        );
+        assert_eq!(
+            k3_reasoning_effort("kimi-k3", Some(ReasoningEffort::High)),
+            Some("high")
+        );
+        assert_eq!(
+            k3_reasoning_effort("kimi-k3", Some(ReasoningEffort::XHigh)),
+            Some("high")
+        );
+        assert_eq!(
+            k3_reasoning_effort("kimi-k3", Some(ReasoningEffort::Max)),
+            Some("max")
+        );
+        // Unset effort → field omitted → K3 applies its own default ("max")
+        assert_eq!(k3_reasoning_effort("kimi-k3", None), None);
+        // Non-K3 models never get the field
+        assert_eq!(
+            k3_reasoning_effort("kimi-k2.6", Some(ReasoningEffort::Max)),
+            None
+        );
+    }
+
+    #[test]
+    fn test_usage_parses_reasoning_and_cached_tokens() {
+        // Real K3 response shape: top-level cached_tokens, plus
+        // prompt/completion token details (see platform.kimi.ai/docs/api/chat)
+        let usage: MoonshotUsage = serde_json::from_value(serde_json::json!({
+            "prompt_tokens": 208,
+            "completion_tokens": 98,
+            "total_tokens": 306,
+            "cached_tokens": 208,
+            "prompt_tokens_details": { "cached_tokens": 208 },
+            "completion_tokens_details": { "reasoning_tokens": 35 }
+        }))
+        .unwrap();
+        assert_eq!(usage.cached_tokens, 208);
+        assert_eq!(usage.prompt_tokens_details.unwrap().cached_tokens, 208);
+        assert_eq!(
+            usage.completion_tokens_details.unwrap().reasoning_tokens,
+            35
+        );
     }
 
     #[test]

@@ -170,20 +170,21 @@ const NO_TEMPERATURE_PREFIXES: &[&str] = &["o1", "o2", "o3", "o4", "gpt-5"];
 /// Convert messages to Responses API input format
 ///
 /// The OpenAI Responses API maintains conversation history server-side via `previous_id`.
-/// This means we only send NEW messages/tool results, not the full conversation history.
+/// When there is no compatible OpenAI response to continue, the complete local transcript
+/// is sent so provider switches and compacted summaries retain their context.
 ///
 /// # Behavior
-/// - **Initial request** (no previous_id): Send all user/system messages
+/// - **Initial/rebased request** (no previous_id): Send the complete local transcript
 /// - **Tool response**: Send ONLY new tool results after last assistant message as function_call_output
 /// - **Continuation**: Send ONLY new user/system messages after last assistant message
 ///
 /// # Arguments
 /// * `messages` - Full conversation history
-/// * `has_previous_response` - Whether we have a previous_id (continuation)
+/// * `previous_response_id` - Exact OpenAI response being continued, if any
 /// * `explicit_cache_breakpoints` - Map `Message.cached` to GPT-5.6 content breakpoints
 fn messages_to_input(
     messages: &[Message],
-    has_previous_response: bool,
+    previous_response_id: Option<&str>,
     explicit_cache_breakpoints: bool,
 ) -> Vec<serde_json::Value> {
     let content = |msg: &Message| {
@@ -200,8 +201,49 @@ fn messages_to_input(
         }
     };
 
-    if has_previous_response {
-        // Everything after the last assistant_id is new input. Send tool
+    let input_items = |msg: &Message| {
+        let mut items = Vec::new();
+
+        match msg.role.as_str() {
+            "tool" => {
+                let call_id = msg.tool_call_id.clone().unwrap_or_default();
+                items.push(serde_json::json!({
+                    "type": "function_call_output",
+                    "call_id": call_id,
+                    "output": msg.content
+                }));
+            }
+            "user" | "system" => items.push(serde_json::json!({
+                "role": msg.role,
+                "content": content(msg)
+            })),
+            "assistant" => {
+                if !msg.content.is_empty() {
+                    items.push(serde_json::json!({
+                        "role": "assistant",
+                        "content": content(msg)
+                    }));
+                }
+
+                for call in
+                    shared::parse_generic_tool_calls_lossy(msg.tool_calls.as_ref(), "openai")
+                {
+                    items.push(serde_json::json!({
+                        "type": "function_call",
+                        "call_id": call.id,
+                        "name": call.name,
+                        "arguments": call.arguments.to_string()
+                    }));
+                }
+            }
+            _ => {}
+        }
+
+        items
+    };
+
+    if let Some(previous_response_id) = previous_response_id {
+        // Everything after the exact response being continued is new input. Send tool
         // results AND user follow-ups together — splitting them silently
         // drops the user message when both exist (e.g. after a multi-turn
         // cancel that left a tool_result without a follow-up assistant).
@@ -209,42 +251,35 @@ fn messages_to_input(
             .iter()
             .enumerate()
             .rev()
-            .find(|(_, m)| m.role == "assistant" && m.id.is_some())
+            .find(|(_, m)| m.role == "assistant" && m.id.as_deref() == Some(previous_response_id))
             .map(|(idx, _)| idx);
 
         let start = last_assistant_idx.map(|idx| idx + 1).unwrap_or(0);
 
-        messages
-            .iter()
-            .skip(start)
-            .filter_map(|msg| match msg.role.as_str() {
-                "tool" => {
-                    let call_id_str = msg.tool_call_id.clone().unwrap_or_default();
-                    Some(serde_json::json!({
-                        "type": "function_call_output",
-                        "call_id": call_id_str,
-                        "output": msg.content
-                    }))
-                }
-                "user" | "system" => Some(serde_json::json!({
-                    "role": msg.role,
-                    "content": content(msg)
-                })),
-                _ => None,
-            })
-            .collect()
+        messages.iter().skip(start).flat_map(input_items).collect()
     } else {
-        // Initial request: send all user/system messages (skip assistant messages)
-        messages
+        // Initial or provider-rebased request: OpenAI has no server-side chain for
+        // this transcript. Include assistant summaries/history as manual state.
+        messages.iter().flat_map(input_items).collect()
+    }
+}
+
+fn is_openai_response_id(id: &str) -> bool {
+    id.starts_with("resp_")
+}
+
+/// Select a continuation only when the current local tail is an OpenAI Responses
+/// turn. Chat Completions-compatible providers also return an `id` (commonly
+/// `chatcmpl-*`), but that is request metadata, not Responses API conversation state.
+fn resolve_previous_response_id(messages: &[Message], explicit: Option<String>) -> Option<String> {
+    match explicit {
+        Some(id) => is_openai_response_id(&id).then_some(id),
+        None => messages
             .iter()
-            .filter_map(|msg| match msg.role.as_str() {
-                "user" | "system" => Some(serde_json::json!({
-                    "role": msg.role,
-                    "content": content(msg)
-                })),
-                _ => None,
-            })
-            .collect()
+            .rev()
+            .find(|m| m.role == "assistant")
+            .and_then(|m| m.id.clone())
+            .filter(|id| is_openai_response_id(id)),
     }
 }
 
@@ -474,21 +509,14 @@ impl AiProvider for OpenAiProvider {
             self.get_api_key()?
         };
 
-        // Extract previous_id from messages if not explicitly provided
-        // Find the LAST message with an ID - this is the most recent response from the API
-        // The Responses API maintains conversation state server-side via this ID
-        let previous_id = params.previous_id.clone().or_else(|| {
-            params
-                .messages
-                .iter()
-                .rev()
-                .find(|m| m.id.is_some())
-                .and_then(|m| m.id.clone())
-        });
+        // Only a Responses API id from the current local tail can continue an
+        // OpenAI server-side chain. Other provider ids force a transcript rebase.
+        let previous_id =
+            resolve_previous_response_id(&params.messages, params.previous_id.clone());
 
         // Convert messages to array input format for Responses API
         let is_gpt_5_6 = normalize_model_name(&params.model).starts_with("gpt-5.6");
-        let input_array = messages_to_input(&params.messages, previous_id.is_some(), is_gpt_5_6);
+        let input_array = messages_to_input(&params.messages, previous_id.as_deref(), is_gpt_5_6);
         let explicit_cache_breakpoints = count_explicit_cache_breakpoints(&input_array);
 
         // Create the request body for Responses API
@@ -1262,7 +1290,7 @@ mod tests {
             },
         ];
 
-        let input = messages_to_input(&messages, false, false);
+        let input = messages_to_input(&messages, None, false);
         assert_eq!(input.len(), 2);
 
         // First message - content is plain string
@@ -1277,13 +1305,69 @@ mod tests {
     }
 
     #[test]
+    fn test_ollama_compaction_tail_rebases_and_keeps_summary() {
+        let mut old_openai = Message::assistant("Older OpenAI answer");
+        old_openai.id = Some("resp_old".to_string());
+
+        let mut summary = Message::assistant("Compacted Ollama conversation");
+        summary.name = Some("plan_compression".to_string());
+        summary.id = Some("chatcmpl-18".to_string());
+
+        let messages = vec![
+            Message::system("System instructions"),
+            old_openai,
+            summary,
+            Message::user("Please finalize the task"),
+        ];
+
+        let previous_id = resolve_previous_response_id(&messages, None);
+        assert_eq!(
+            previous_id, None,
+            "Ollama ids must start a fresh OpenAI chain"
+        );
+
+        let input = messages_to_input(&messages, previous_id.as_deref(), false);
+        assert_eq!(input.len(), 4);
+        assert_eq!(input[2]["role"], "assistant");
+        assert_eq!(input[2]["content"], "Compacted Ollama conversation");
+        assert_eq!(input[3]["role"], "user");
+        assert_eq!(input[3]["content"], "Please finalize the task");
+    }
+
+    #[test]
+    fn test_latest_openai_response_id_continues_exact_turn() {
+        let mut assistant = Message::assistant("OpenAI answer");
+        assistant.id = Some("resp_latest".to_string());
+        let messages = vec![assistant, Message::user("Follow-up")];
+
+        let previous_id = resolve_previous_response_id(&messages, None);
+        assert_eq!(previous_id.as_deref(), Some("resp_latest"));
+
+        let input = messages_to_input(&messages, previous_id.as_deref(), false);
+        assert_eq!(input.len(), 1);
+        assert_eq!(input[0]["role"], "user");
+        assert_eq!(input[0]["content"], "Follow-up");
+    }
+
+    #[test]
+    fn test_invalid_explicit_previous_id_forces_rebase() {
+        let messages = vec![Message::user("Fresh input")];
+        let previous_id = resolve_previous_response_id(&messages, Some("chatcmpl-18".to_string()));
+
+        assert_eq!(previous_id, None);
+        let input = messages_to_input(&messages, previous_id.as_deref(), false);
+        assert_eq!(input.len(), 1);
+        assert_eq!(input[0]["content"], "Fresh input");
+    }
+
+    #[test]
     fn test_gpt_5_6_explicit_cache_breakpoint_wire_shape() {
         let messages = vec![
             Message::system("Stable instructions").with_cache_marker(),
             Message::user("Variable request"),
         ];
 
-        let input = messages_to_input(&messages, false, true);
+        let input = messages_to_input(&messages, None, true);
         assert_eq!(count_explicit_cache_breakpoints(&input), 1);
         assert_eq!(input[0]["content"][0]["type"], "input_text");
         assert_eq!(input[0]["content"][0]["text"], "Stable instructions");
@@ -1309,7 +1393,7 @@ mod tests {
     #[test]
     fn test_pre_gpt_5_6_keeps_cached_messages_in_legacy_shape() {
         let messages = vec![Message::system("Stable instructions").with_cache_marker()];
-        let input = messages_to_input(&messages, false, false);
+        let input = messages_to_input(&messages, None, false);
 
         assert_eq!(input[0]["content"], "Stable instructions");
         assert_eq!(count_explicit_cache_breakpoints(&input), 0);
@@ -1371,7 +1455,7 @@ mod tests {
         ];
 
         // When there are NEW tool responses after assistant, send only those tool outputs
-        let input = messages_to_input(&messages, true, false);
+        let input = messages_to_input(&messages, Some("resp_abc123"), false);
         assert_eq!(input.len(), 1); // Only the NEW tool response
 
         // Tool response uses function_call_output format
@@ -1468,7 +1552,7 @@ mod tests {
         ];
 
         // Should send only the NEW user message, NOT the old tool result
-        let input = messages_to_input(&messages, true, false);
+        let input = messages_to_input(&messages, Some("resp_second"), false);
         assert_eq!(input.len(), 1);
 
         // Should be the new user message
@@ -1547,7 +1631,7 @@ mod tests {
             },
         ];
 
-        let input = messages_to_input(&messages, true, false);
+        let input = messages_to_input(&messages, Some("resp_x"), false);
         assert_eq!(
             input.len(),
             2,

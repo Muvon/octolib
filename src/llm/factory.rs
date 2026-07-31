@@ -19,7 +19,7 @@ use crate::llm::providers::{
     CloudflareWorkersAiProvider, DeepSeekProvider, FeatherlessProvider, FireworksProvider,
     GoogleStudioProvider, GoogleVertexProvider, GroqProvider, LocalProvider, MinimaxProvider,
     MoonshotProvider, NvidiaProvider, OctoHubProvider, OllamaProvider, OpenAiProvider,
-    OpenRouterProvider, TogetherProvider, ZaiProvider,
+    OpenRouterProvider, TogetherProvider, XaiProvider, ZaiProvider,
 };
 use crate::llm::traits::AiProvider;
 use anyhow::Result;
@@ -74,11 +74,12 @@ impl ProviderFactory {
             "nvidia" => Ok(Box::new(NvidiaProvider::new())),
             "octohub" => Ok(Box::new(OctoHubProvider::new())),
             "together" => Ok(Box::new(TogetherProvider::new())),
+            "xai" => Ok(Box::new(XaiProvider::new())),
             "zai" => Ok(Box::new(ZaiProvider::new())),
             "cli" => Err(anyhow::anyhow!(
                 "CLI provider requires a model string like 'cli:<backend>/<model>'. Use ProviderFactory::get_provider_for_model instead."
             )),
-            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported: openai, anthropic, openrouter, cerebras, local, ollama, google-vertex, google-studio, groq, amazon, cloudflare, deepseek, featherless, fireworks, minimax, moonshot, nvidia, octohub, together, zai, byteplus, cli", provider_name))
+            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported: openai, anthropic, openrouter, cerebras, local, ollama, google-vertex, google-studio, groq, amazon, cloudflare, deepseek, featherless, fireworks, minimax, moonshot, nvidia, octohub, together, xai, zai, byteplus, cli", provider_name))
         }
     }
 
@@ -125,6 +126,7 @@ impl ProviderFactory {
             "nvidia",
             "octohub",
             "together",
+            "xai",
             "zai",
             "byteplus",
             "cli",
@@ -201,6 +203,7 @@ mod tests {
         assert!(providers.contains(&"minimax"));
         assert!(providers.contains(&"moonshot"));
         assert!(providers.contains(&"groq"));
+        assert!(providers.contains(&"xai"));
         assert!(providers.contains(&"cli"));
     }
 
@@ -231,6 +234,7 @@ mod tests {
         assert!(ProviderFactory::create_provider("moonshot").is_ok());
         assert!(ProviderFactory::create_provider("nvidia").is_ok());
         assert!(ProviderFactory::create_provider("groq").is_ok());
+        assert!(ProviderFactory::create_provider("xai").is_ok());
         assert!(ProviderFactory::create_provider("cli").is_err());
 
         // Test case insensitive
@@ -241,6 +245,7 @@ mod tests {
         assert!(ProviderFactory::create_provider("NVIDIA").is_ok());
         assert!(ProviderFactory::create_provider("OLLAMA").is_ok());
         assert!(ProviderFactory::create_provider("CEREBRAS").is_ok());
+        assert!(ProviderFactory::create_provider("XAI").is_ok());
 
         // Test invalid provider
         assert!(ProviderFactory::create_provider("invalid").is_err());

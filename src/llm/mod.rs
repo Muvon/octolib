@@ -52,5 +52,5 @@ pub use providers::{
     CloudflareWorkersAiProvider, DeepSeekProvider, FireworksProvider, GoogleStudioProvider,
     GoogleVertexProvider, GroqProvider, LocalProvider, MinimaxProvider, MoonshotProvider,
     OctoHubProvider, OllamaProvider, OpenAiProvider, OpenRouterProvider, TogetherProvider,
-    ZaiProvider,
+    XaiProvider, ZaiProvider,
 };

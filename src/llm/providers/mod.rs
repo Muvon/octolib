@@ -37,6 +37,7 @@ mod openai_compat;
 pub mod openrouter;
 pub(crate) mod shared;
 pub mod together;
+pub mod xai;
 pub mod zai;
 
 // Re-export provider implementations
@@ -61,4 +62,5 @@ pub use ollama::OllamaProvider;
 pub use openai::OpenAiProvider;
 pub use openrouter::OpenRouterProvider;
 pub use together::TogetherProvider;
+pub use xai::XaiProvider;
 pub use zai::ZaiProvider;

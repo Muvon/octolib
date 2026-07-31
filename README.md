@@ -10,10 +10,10 @@
 Octolib is a comprehensive, self-sufficient AI provider library that provides a unified, type-safe interface for interacting with multiple AI services. It offers intelligent model selection, robust error handling, and advanced features like cross-provider tool calling and vision support.
 
 ## ✨ Key Features
-- **🔌 Multi-Provider Support**: OpenAI, Anthropic, OpenRouter, Cerebras, NVIDIA NIM, Groq, BytePlus, Ollama, Together, Featherless, Google Vertex, Google Studio, Amazon, Cloudflare, DeepSeek, MiniMax, Moonshot AI (Kimi), Z.ai, OctoHub, Local, CLI proxies
+- **🔌 Multi-Provider Support**: OpenAI, Anthropic, xAI, OpenRouter, Cerebras, NVIDIA NIM, Groq, BytePlus, Ollama, Together, Featherless, Google Vertex, Google Studio, Amazon, Cloudflare, DeepSeek, MiniMax, Moonshot AI (Kimi), Z.ai, OctoHub, Local, CLI proxies
 - **🛡️ Unified Interface**: Consistent API across different providers
 - **🔍 Intelligent Model Validation**: Strict `provider:model` format parsing with case-insensitive model support
-- **📋 Structured Output**: JSON and JSON Schema support for OpenAI, OpenRouter, DeepSeek, Together, and Z.ai
+- **📋 Structured Output**: JSON and JSON Schema support for OpenAI, xAI, OpenRouter, DeepSeek, Together, and Z.ai
 - **💰 Cost Tracking**: Automatic token usage and cost calculation
 - **🖼️ Vision Support**: Image and video attachment handling for compatible models (Moonshot Kimi K2.5)
 - **🧰 Tool Calling**: Cross-provider tool call standardization
@@ -357,6 +357,7 @@ The library automatically detects OAuth credentials and prefers them over API ke
 | Provider | Structured Output | Vision | Tool Calls | Caching |
 |----------|------------------|--------|------------|---------|
 | **OpenAI** | ✅ JSON + Schema | ✅ Yes | ✅ Yes | ✅ Yes |
+| **xAI** | ✅ JSON + Schema | ✅ Yes | ✅ Yes | ✅ Yes |
 | **OpenRouter** | ✅ JSON + Schema | ✅ Yes | ✅ Yes | ✅ Yes |
 | **DeepSeek** | ✅ JSON Mode | ❌ No | ❌ No | ✅ Yes |
 | **Moonshot AI (Kimi)** | ✅ JSON Mode | ✅ kimi-k2.5 | ✅ Yes | ✅ Yes |
@@ -427,6 +428,7 @@ async fn thinking_example() -> anyhow::Result<()> {
 | Provider | Thinking Format | Notes |
 |----------|----------------|-------|
 | **MiniMax** | Content blocks (`{"type": "thinking"}`) | Full thinking block extraction |
+| **xAI** | Responses API reasoning items | Summary extraction plus encrypted reasoning preservation across tool rounds |
 | **OpenAI o-series** | `reasoning_content` field | o1, o3, o4 models |
 | **OpenRouter** | `reasoning_details` | Gemini and other providers |
 
@@ -463,6 +465,7 @@ if let Some(usage) = &response.exchange.usage {
 | Provider | Status | Capabilities |
 |----------|--------|--------------|
 | OpenAI | ✅ Full Support | Chat, Vision, Tools, Structured Output, Caching |
+| xAI | ✅ Full Support | Grok 4.5/4.3/4.20/Build, Vision, Tools, Structured Output, Caching, Encrypted Reasoning |
 | Anthropic | ✅ Full Support | Claude Models, Vision, Tools, Caching |
 | OpenRouter | ✅ Full Support | Multi-Provider Proxy, Vision, Caching, Structured Output |
 | Groq | ✅ Full Support | Fast Inference, Structured Output, Caching |

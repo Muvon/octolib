@@ -606,9 +606,49 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(0.90, 0.90, 0.90, 0.90),
     },
     ReferenceModelEntry {
+        pattern: "grok-4.20-multi-agent",
+        capabilities: caps(true, false, true, 1_000_000),
+        pricing: pricing(1.25, 2.50, 1.25, 0.20),
+    },
+    ReferenceModelEntry {
+        pattern: "grok-4.20",
+        capabilities: caps(true, false, true, 1_000_000),
+        pricing: pricing(1.25, 2.50, 1.25, 0.20),
+    },
+    ReferenceModelEntry {
+        pattern: "grok-build-latest",
+        capabilities: caps(true, false, true, 500_000),
+        pricing: pricing(2.00, 6.00, 2.00, 0.30),
+    },
+    ReferenceModelEntry {
+        pattern: "grok-build-0.1",
+        capabilities: caps(true, false, true, 256_000),
+        pricing: pricing(1.00, 2.00, 1.00, 0.20),
+    },
+    ReferenceModelEntry {
+        pattern: "grok-code-fast",
+        capabilities: caps(true, false, true, 256_000),
+        pricing: pricing(1.00, 2.00, 1.00, 0.20),
+    },
+    ReferenceModelEntry {
+        pattern: "grok-4.5",
+        capabilities: caps(true, false, true, 500_000),
+        pricing: pricing(2.00, 6.00, 2.00, 0.30),
+    },
+    ReferenceModelEntry {
+        pattern: "grok-4.3",
+        capabilities: caps(true, false, true, 1_000_000),
+        pricing: pricing(1.25, 2.50, 1.25, 0.20),
+    },
+    ReferenceModelEntry {
+        pattern: "grok-latest",
+        capabilities: caps(true, false, true, 1_000_000),
+        pricing: pricing(1.25, 2.50, 1.25, 0.20),
+    },
+    ReferenceModelEntry {
         pattern: "grok-4.1-fast",
-        capabilities: caps(true, false, true, 131_072),
-        pricing: pricing(0.20, 0.50, 0.20, 0.05),
+        capabilities: caps(true, false, true, 1_000_000),
+        pricing: pricing(1.25, 2.50, 1.25, 0.20),
     },
     ReferenceModelEntry {
         pattern: "glm-5.1-turbo",
@@ -858,8 +898,8 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "grok-4-fast",
-        capabilities: caps(true, false, true, 131_072),
-        pricing: pricing(0.20, 0.50, 0.20, 0.05),
+        capabilities: caps(true, false, true, 1_000_000),
+        pricing: pricing(1.25, 2.50, 1.25, 0.20),
     },
     ReferenceModelEntry {
         pattern: "gemma-4-31b",
@@ -1217,13 +1257,13 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "grok-4",
-        capabilities: caps(true, false, true, 131_072),
-        pricing: pricing(3.00, 15.00, 3.00, 0.75),
+        capabilities: caps(true, false, true, 1_000_000),
+        pricing: pricing(1.25, 2.50, 1.25, 0.20),
     },
     ReferenceModelEntry {
         pattern: "grok-3",
-        capabilities: caps(true, false, true, 131_072),
-        pricing: pricing(3.00, 15.00, 3.00, 0.75),
+        capabilities: caps(true, false, true, 1_000_000),
+        pricing: pricing(1.25, 2.50, 1.25, 0.20),
     },
     ReferenceModelEntry {
         pattern: "glm-5v",

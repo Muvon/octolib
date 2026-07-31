@@ -72,6 +72,25 @@ println!("Response: {}", response.content);
 
 ## Provider Support
 
+### xAI
+
+xAI uses the native Responses API. Octolib requests
+`reasoning.encrypted_content` on every call, extracts any available reasoning
+summary into `ThinkingBlock`, and stores the raw reasoning item with tool-call
+metadata so locally rebuilt tool rounds can replay it. Normal multi-turn calls
+use xAI's `previous_response_id` state directly.
+
+```rust
+let (provider, model) = ProviderFactory::get_provider_for_model("xai:grok-4.5")?;
+let params = ChatCompletionParams::new(&messages, &model, 0.2, 0.9, 40, 2048)
+    .with_reasoning_effort(ReasoningEffort::High);
+let response = provider.chat_completion(params).await?;
+```
+
+`grok-4.5` accepts low, medium, and high effort. Grok 4.20 multi-agent also
+accepts xhigh; the provider maps the generic Max level to xhigh. Fixed
+reasoning/non-reasoning variants do not receive an undocumented effort field.
+
 ### MiniMax
 
 MiniMax uses Anthropic-compatible API with content blocks:

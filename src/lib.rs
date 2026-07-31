@@ -18,10 +18,10 @@
 //!
 //! ## Features
 //!
-//! - **Multi-provider support**: OpenAI, Anthropic, OpenRouter, Cerebras, Ollama, Local (LM Studio, LocalAI, Jan, vLLM), Google Vertex AI, Google AI Studio (Gemini API), Amazon Bedrock, Cloudflare Workers AI, DeepSeek, Moonshot AI (Kimi), Z.ai, CLI proxies (codex, claude, gemini, others)
+//! - **Multi-provider support**: OpenAI, Anthropic, xAI, OpenRouter, Cerebras, Ollama, Local (LM Studio, LocalAI, Jan, vLLM), Google Vertex AI, Google AI Studio (Gemini API), Amazon Bedrock, Cloudflare Workers AI, DeepSeek, Moonshot AI (Kimi), Z.ai, CLI proxies (codex, claude, gemini, others)
 //! - **Unified interface**: Single trait for all providers with consistent API
 //! - **Model validation**: Strict `provider:model` format validation
-//! - **Structured output**: JSON and JSON Schema support for OpenAI, OpenRouter, DeepSeek, and Z.ai
+//! - **Structured output**: JSON and JSON Schema support for OpenAI, xAI, OpenRouter, DeepSeek, and Z.ai
 //! - **Cost tracking**: Automatic token usage and cost calculation
 //! - **Vision support**: Image attachment support for compatible models
 //! - **Caching support**: Automatic detection of caching-capable models
@@ -129,7 +129,7 @@ pub use llm::{
     ProviderFactory, ProviderResponse, ProviderStrategy, ProviderToolCalls, ReasoningEffort,
     ResponseMode, SamplingSupport, SourceType, StrategyFactory, StructuredOutputRequest,
     ThinkingBlock, TogetherProvider, TokenUsage, ToolCall, ToolResult, VideoAttachment, VideoData,
-    ZaiProvider,
+    XaiProvider, ZaiProvider,
 };
 pub use reranker::{
     create_rerank_provider_from_parts, parse_provider_model as parse_rerank_provider_model, rerank,

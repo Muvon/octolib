@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.29.1] - 2026-08-01
+
+### 📋 Release Summary
+
+This release includes a bug fix to ensure correct message handling for OpenAI assistants (ebc1388d). This improvement ensures more reliable text output when interacting with assistant-based models.
+
+
+### 🐛 Bug Fixes & Stability
+
+- **openai**: use output_text for assistant messages `ebc1388d`
+
 ## [0.29.0] - 2026-08-01
 
 ### 📋 Release Summary

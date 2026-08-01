@@ -190,13 +190,18 @@ fn messages_to_input(
     let content = |msg: &Message| {
         let has_images = msg.images.as_ref().is_some_and(|v| !v.is_empty());
         let has_videos = msg.videos.as_ref().is_some_and(|v| !v.is_empty());
+        let text_type = if msg.role == "assistant" {
+            "output_text"
+        } else {
+            "input_text"
+        };
 
         if !has_images && !has_videos {
             // No attachments: keep the simple string shape unless a cache breakpoint
             // is explicitly requested.
             if explicit_cache_breakpoints && msg.cached {
                 serde_json::json!([{
-                    "type": "input_text",
+                    "type": text_type,
                     "text": msg.content,
                     "prompt_cache_breakpoint": {
                         "mode": "explicit"
@@ -209,7 +214,7 @@ fn messages_to_input(
             // Multimodal input: build an array of typed parts for the Responses API.
             let mut parts = Vec::new();
             let mut text_part = serde_json::json!({
-                "type": "input_text",
+                "type": text_type,
                 "text": msg.content,
             });
             if explicit_cache_breakpoints && msg.cached {
@@ -1492,6 +1497,22 @@ mod tests {
         apply_explicit_cache_options(&mut request_body, 1).unwrap();
         assert_eq!(request_body["prompt_cache_options"]["mode"], "explicit");
         assert_eq!(request_body["prompt_cache_options"]["ttl"], "30m");
+    }
+
+    #[test]
+    fn test_gpt_5_6_cached_assistant_uses_output_text() {
+        let mut summary = Message::assistant("Compressed task summary");
+        summary.name = Some("plan_compression".to_string());
+        summary.cached = true;
+
+        let input = messages_to_input(&[summary], None, true);
+
+        assert_eq!(input[0]["role"], "assistant");
+        assert_eq!(input[0]["content"][0]["type"], "output_text");
+        assert_eq!(
+            input[0]["content"][0]["prompt_cache_breakpoint"]["mode"],
+            "explicit"
+        );
     }
 
     #[test]

@@ -75,11 +75,11 @@ use serde::Deserialize;
 #[cfg(feature = "huggingface")]
 use std::collections::HashMap;
 #[cfg(feature = "huggingface")]
-use std::sync::{Arc, LazyLock};
+use std::sync::{Arc, LazyLock, Weak};
 #[cfg(feature = "huggingface")]
 use tokenizers::Tokenizer;
 #[cfg(feature = "huggingface")]
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex as AsyncMutex, RwLock};
 
 /// Select Metal when this build enables it; otherwise preserve CPU portability.
 #[cfg(feature = "huggingface")]
@@ -229,6 +229,12 @@ pub enum HuggingFaceModel {
 impl HuggingFaceModel {
     /// Load a SentenceTransformer model from HuggingFace Hub
     pub async fn load(model_name: &str) -> Result<Self> {
+        let load_lock = model_load_lock(model_name).await;
+        let _load_guard = load_lock.lock().await;
+        Self::load_inner(model_name).await
+    }
+
+    async fn load_inner(model_name: &str) -> Result<Self> {
         let device = embedding_device()?;
 
         // Use our custom cache directory for consistency with FastEmbed
@@ -585,6 +591,24 @@ static MODEL_CACHE: LazyLock<Arc<RwLock<HashMap<String, Arc<HuggingFaceModel>>>>
     LazyLock::new(|| Arc::new(RwLock::new(HashMap::new())));
 
 #[cfg(feature = "huggingface")]
+static MODEL_LOAD_LOCKS: LazyLock<AsyncMutex<HashMap<String, Weak<AsyncMutex<()>>>>> =
+    LazyLock::new(|| AsyncMutex::new(HashMap::new()));
+
+#[cfg(feature = "huggingface")]
+async fn model_load_lock(model_name: &str) -> Arc<AsyncMutex<()>> {
+    let mut locks = MODEL_LOAD_LOCKS.lock().await;
+    locks.retain(|_, lock| lock.strong_count() > 0);
+
+    if let Some(lock) = locks.get(model_name).and_then(Weak::upgrade) {
+        return lock;
+    }
+
+    let lock = Arc::new(AsyncMutex::new(()));
+    locks.insert(model_name.to_string(), Arc::downgrade(&lock));
+    lock
+}
+
+#[cfg(feature = "huggingface")]
 /// HuggingFace provider implementation
 pub struct HuggingFaceProvider;
 
@@ -599,8 +623,19 @@ impl HuggingFaceProvider {
             }
         }
 
-        // Model not in cache, load it
-        let model = HuggingFaceModel::load(model_name)
+        // Coordinate the first load per model. Different models can still load in parallel.
+        let load_lock = model_load_lock(model_name).await;
+        let _load_guard = load_lock.lock().await;
+
+        // Another request may have populated the cache while this one was waiting.
+        {
+            let cache = MODEL_CACHE.read().await;
+            if let Some(model) = cache.get(model_name) {
+                return Ok(model.clone());
+            }
+        }
+
+        let model = HuggingFaceModel::load_inner(model_name)
             .await
             .with_context(|| format!("Failed to load HuggingFace model: {}", model_name))?;
 
@@ -613,6 +648,11 @@ impl HuggingFaceProvider {
         }
 
         Ok(model_arc)
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn get_model_for_test(model_name: &str) -> Result<Arc<HuggingFaceModel>> {
+        Self::get_model(model_name).await
     }
 
     /// Generate embeddings for a single text
@@ -873,6 +913,25 @@ impl EmbeddingProvider for HuggingFaceProviderImpl {
 
 #[cfg(all(test, feature = "huggingface"))]
 mod tests {
+    use super::model_load_lock;
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn test_model_load_locks_are_scoped_per_model() {
+        let first = model_load_lock("same-model").await;
+        let second = model_load_lock("same-model").await;
+        let other = model_load_lock("other-model").await;
+
+        assert!(Arc::ptr_eq(&first, &second));
+        assert!(!Arc::ptr_eq(&first, &other));
+
+        let first_guard = first.lock().await;
+        assert!(second.try_lock().is_err());
+        assert!(other.try_lock().is_ok());
+        drop(first_guard);
+        assert!(second.try_lock().is_ok());
+    }
+
     #[test]
     fn test_roberta_tokenizer_building() {
         // Test that we can build a RoBERTa-style tokenizer using BPE::from_file approach

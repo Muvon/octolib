@@ -24,6 +24,7 @@
 //! - **Structured output**: JSON and JSON Schema support for OpenAI, xAI, OpenRouter, DeepSeek, and Z.ai
 //! - **Cost tracking**: Automatic token usage and cost calculation
 //! - **Vision support**: Image attachment support for compatible models
+//! - **Media generation**: Images, asynchronous video, speech, and transcription through OpenRouter and Replicate
 //! - **Caching support**: Automatic detection of caching-capable models
 //! - **Retry logic**: Exponential backoff with smart rate limit handling
 //! - **Embeddings**: Multi-provider embedding support (Jina, Voyage, Google, OpenAI, FastEmbed, HuggingFace)
@@ -58,6 +59,23 @@
 //!
 //!     Ok(())
 //! }
+//! ```
+
+//! ## Media generation
+//!
+//! ```rust,no_run
+//! use octolib::{generate_image, ImageGenerationRequest};
+//!
+//! # async fn example() -> octolib::MediaResult<()> {
+//! let request = ImageGenerationRequest::new("A red panda astronaut");
+//! let result = generate_image(
+//!     "openrouter:openai/gpt-image-1",
+//!     request,
+//! ).await?;
+//! let cost = result.usage.as_ref().and_then(|usage| usage.best_available_cost());
+//! # let _ = cost;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ### Structured Output
@@ -105,6 +123,7 @@
 pub mod embedding;
 pub mod errors;
 pub mod llm;
+pub mod media;
 pub mod reranker;
 pub mod storage;
 pub mod utils;
@@ -131,6 +150,22 @@ pub use llm::{
     ReasoningEffort, ResponseMode, SamplingSupport, SourceType, StrategyFactory,
     StructuredOutputRequest, ThinkingBlock, TogetherProvider, TokenUsage, ToolCall, ToolChoice,
     ToolResult, VideoAttachment, VideoData, XaiProvider, ZaiProvider,
+};
+pub use media::{
+    download_artifact, generate_image, generate_video, synthesize_speech, transcribe,
+    ArtifactSource, AudioFormat, AudioOutputSpec, CapabilitySupport, CostEstimate, Dimensions,
+    FailureCategory, ImageCapabilities, ImageFormat, ImageGenerationMode, ImageGenerationProvider,
+    ImageGenerationRequest, ImageGenerationResult, JobHandle, MediaArtifact, MediaError, MediaKind,
+    MediaLimits, MediaModelDescriptor, MediaProviderFactory, MediaResult, MediaSource, MediaTask,
+    MediaUsage, Modality, OpenRouterMediaOptions, OpenRouterMediaProvider, Operation,
+    OperationStatus, OutputGeometry, ParameterCapabilities, ProviderOptions, ProviderWarning,
+    ReplicateMediaOptions, ReplicateMediaProvider, RequestOptions, SafetyReport, SafetyStatus,
+    SpeechCapabilities, SpeechStream, SpeechSynthesisProvider, SpeechSynthesisRequest,
+    SpeechSynthesisResult, TimestampGranularity, TranscriptSegment, TranscriptWord,
+    TranscriptionCapabilities, TranscriptionProvider, TranscriptionRequest, TranscriptionResult,
+    UnsupportedParameterPolicy, UsageLineItem, UsageUnit, VideoCapabilities, VideoFormat,
+    VideoGenerationMode, VideoGenerationProvider, VideoGenerationRequest, VideoGenerationResult,
+    WarningCode,
 };
 pub use reranker::{
     create_rerank_provider_from_parts, parse_provider_model as parse_rerank_provider_model, rerank,

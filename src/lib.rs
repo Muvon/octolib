@@ -28,6 +28,7 @@
 //! - **Retry logic**: Exponential backoff with smart rate limit handling
 //! - **Embeddings**: Multi-provider embedding support (Jina, Voyage, Google, OpenAI, FastEmbed, HuggingFace)
 //! - **Reranking**: Document relevance scoring with cross-encoder models (Voyage AI)
+//! - **Configuration migration**: Comment-preserving TOML upgrades with locking, backups, and atomic writes
 //! - **Self-sufficient**: No external dependencies on application-specific types
 //! - **CLI provider**: `cli:<backend>/<model>` proxies CLIs; tool calling/MCP is not used or controllable (prompt-only)
 //!

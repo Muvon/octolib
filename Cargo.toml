@@ -1,6 +1,6 @@
 [package]
 name = "octolib"
-version = "0.28.0"
+version = "0.29.0"
 edition = "2021"
 authors = ["Muvon Un Limited <contact@muvon.io>"]
 license = "Apache-2.0"
@@ -47,6 +47,13 @@ jsonschema = { version = "0.46.9", default-features = false }
 sha2 = "0.10"
 hex = "0.4"
 
+# Configuration file handling (utils::config_migration / utils::config_file):
+# toml_edit preserves user comments and formatting across migrations, fs4 gives
+# the cross-platform advisory lock, uuid names the atomic-write temp file.
+toml_edit = "0.25.13"
+fs4 = "0.8.4"
+uuid = { version = "1", features = ["v4"] }
+
 # Embedding dependencies
 tiktoken-rs = "0.9.1"
 
@@ -65,6 +72,8 @@ hf-hub = { version = "0.4.3", default-features = false, features = ["tokio", "ru
 [dev-dependencies]
 serial_test = "3.4.0"
 tracing-subscriber = "0.3"
+# Migration tests assert on the parsed result, not on the edited document.
+toml = "1.1"
 
 # Release build: optimized for distribution (no native-specific instructions)
 [profile.release]

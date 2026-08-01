@@ -14,7 +14,12 @@
 
 //! Utility functions shared across Octo projects.
 //!
-//! Currently includes git project ID derivation. More utilities may be added here.
+//! - git project ID derivation (this module)
+//! - [`config_migration`] — versioned TOML configuration upgrades
+//! - [`config_file`] — crash-safe, lock-guarded configuration file writes
+
+pub mod config_file;
+pub mod config_migration;
 
 use sha2::{Digest, Sha256};
 use std::path::Path;

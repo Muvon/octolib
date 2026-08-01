@@ -20,6 +20,7 @@ Octolib is a comprehensive, self-sufficient AI provider library that provides a 
 - **🧩 CLI Provider**: Use `cli:<backend>/<model>` (e.g. `cli:codex/gpt-5.2-codex`). Proxy-only: tools/MCP are not used or controllable.
 - **⏱️ Retry Management**: Configurable exponential backoff
 - **🔒 Secure Design**: Environment-based API key management
+- **⚙️ Configuration Migration**: Reusable, comment-preserving TOML upgrades with locking, versioned backups, and atomic writes
 - **🎯 Embedding Support**: Multi-provider embedding generation with Jina, Voyage, Google, OpenAI, Together, OctoHub, Local (Ollama, llama.cpp, LM Studio, vLLM), FastEmbed, and HuggingFace
 - **🔄 Reranking**: Document relevance scoring with cross-encoder models (Voyage AI, Cohere, Jina AI, Mixedbread, Local (llama.cpp, vLLM, TEI), HuggingFace)
 
@@ -459,6 +460,7 @@ if let Some(usage) = &response.exchange.usage {
 - **[Reranking Guide](doc/06-reranking.md)** - Document relevance scoring
 - **[Tool Calling](doc/07-tool-calling.md)** - Cross-provider tool calling
 - **[Thinking/Reasoning](doc/08-thinking.md)** - Reasoning model support
+- **[Configuration Migration](doc/09-configuration-migration.md)** - Versioned TOML upgrades and safe file persistence
 
 ## 🌐 Supported Providers
 

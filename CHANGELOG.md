@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.29.0] - 2026-08-01
+
+### 📋 Release Summary
+
+This release expands provider support to include xAI and Moonshot Kimi K3, while introducing multimodal image and video capabilities for OpenAI (ab40eab3, b9fa5460, fe2cbefa). A new versioned configuration system ensures smoother updates via TOML migration (7d6cec4d). Additionally, several improvements enhance embedding model stability and compatibility, specifically for Qwen3 and cold-load synchronization (d8ad3d53, e5ed5572, f61e7a71, a8f72451).
+
+
+### ✨ New Features & Enhancements
+
+- **config**: implement versioned TOML migration system `7d6cec4d`
+- **openai**: add multimodal image and video support `fe2cbefa`
+- **moonshot**: add Kimi K3 reasoning and token support `b9fa5460`
+- **llm**: add xAI provider support `ab40eab3`
+
+### 🔧 Improvements & Optimizations
+
+- **embedding**: avoid concurrent Qwen3 model loads `f61e7a71`
+
+### 🐛 Bug Fixes & Stability
+
+- **embedding**: synchronize cold model loads `e5ed5572`
+- **embedding**: support Qwen3 models `d8ad3d53`
+- **llm**: disable video support for ollama provider `a8f72451`
+
 ## [0.28.0] - 2026-07-31
 
 ### 📋 Release Summary

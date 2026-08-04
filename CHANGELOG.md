@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.29.2] - 2026-08-04
+
+### 📋 Release Summary
+
+This release expands LLM capabilities by enhancing DeepSeek integration and introducing support for the inkling-small model (d30a6354).
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: expand DeepSeek capabilities and add inkling-small `d30a6354`
+
 ## [0.29.1] - 2026-08-01
 
 ### 📋 Release Summary

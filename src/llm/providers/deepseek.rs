@@ -14,7 +14,8 @@
 
 //! DeepSeek provider implementation
 //!
-//! PRICING UPDATE: April 2026 (revised 2026-04-24 per change log)
+//! PRICING VERIFIED: August 2026 (unchanged since 2026-04-24 revision;
+//! `deepseek-v4-flash` points to the retrained 0731 snapshot since 2026-07-31)
 //! Source: <https://api-docs.deepseek.com/quick_start/pricing>
 //!
 //! deepseek-v4-flash (1M context, thinking by default):
@@ -27,10 +28,12 @@
 //! - Cache Miss (Input): $0.435
 //! - Output: $0.87
 //!
-//! Legacy aliases (deprecated, routed to v4-flash non-thinking/thinking modes
-//! since 2026-04-24, billed at v4-flash rates; scheduled for removal
-//! 2026-07-24 15:59 UTC per <https://api-docs.deepseek.com/updates>):
-//! deepseek-chat (non-thinking), deepseek-reasoner (thinking)
+//! Legacy aliases deepseek-chat / deepseek-reasoner were removed by DeepSeek
+//! on 2026-07-24 15:59 UTC per <https://api-docs.deepseek.com/updates>.
+//!
+//! Thinking is enabled by default (effort "high"); effort is controlled via
+//! the top-level `reasoning_effort` field: "low" | "high" | "max"
+//! (<https://api-docs.deepseek.com/guides/thinking_mode>).
 
 use crate::errors::ProviderError;
 use crate::llm::providers::shared;
@@ -45,7 +48,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::env;
 
-// Model pricing (per 1M tokens in USD) - Updated Apr 2026
+// Model pricing (per 1M tokens in USD) - Verified Aug 2026
 // Source: https://api-docs.deepseek.com/quick_start/pricing
 /// Format: (model, input, output, cache_write, cache_read)
 /// Note: DeepSeek uses cache_hit/cache_miss model - cache_write = cache_miss (input), cache_read = cache_hit
@@ -53,10 +56,23 @@ const PRICING: &[PricingTuple] = &[
     // V4 family (1M context)
     ("deepseek-v4-pro", 0.435, 0.87, 0.435, 0.003625),
     ("deepseek-v4-flash", 0.14, 0.28, 0.14, 0.0028),
-    // Legacy aliases (deprecated, routed to v4-flash rates since 2026-04-24)
-    ("deepseek-chat", 0.14, 0.28, 0.14, 0.0028),
-    ("deepseek-reasoner", 0.14, 0.28, 0.14, 0.0028),
 ];
+
+/// Map generic ReasoningEffort to DeepSeek's `reasoning_effort` string.
+/// DeepSeek supports only "low" / "high" / "max" (default "high" when the
+/// field is omitted, thinking enabled by default), so intermediate levels
+/// floor to the nearest supported lower effort.
+fn map_reasoning_effort(
+    effort: Option<crate::llm::types::ReasoningEffort>,
+) -> Option<&'static str> {
+    use crate::llm::types::ReasoningEffort;
+    match effort {
+        Some(ReasoningEffort::Low) | Some(ReasoningEffort::Medium) => Some("low"),
+        Some(ReasoningEffort::High) | Some(ReasoningEffort::XHigh) => Some("high"),
+        Some(ReasoningEffort::Max) => Some("max"),
+        None => None,
+    }
+}
 
 /// Get pricing tuple for a specific model (case-insensitive)
 /// Returns None if the model is not in the pricing table (not supported)
@@ -115,6 +131,8 @@ struct DeepSeekRequest {
     tools: Option<Vec<DeepSeekTool>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<&'static str>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -318,21 +336,14 @@ impl AiProvider for DeepSeekProvider {
         ))
     }
 
-    fn get_max_input_tokens(&self, model: &str) -> usize {
-        let model_lower = crate::llm::utils::normalize_model_name(model);
-        if model_lower.contains("v4") {
-            1_000_000 // DeepSeek V4: 1M context
-        } else {
-            64_000 // Legacy models
-        }
+    fn get_max_input_tokens(&self, _model: &str) -> usize {
+        1_000_000 // All supported models are V4: 1M context
     }
 
-    fn supported_sampling_params(&self, model: &str) -> SamplingSupport {
-        let model_lower = crate::llm::utils::normalize_model_name(model);
+    fn supported_sampling_params(&self, _model: &str) -> SamplingSupport {
         // DeepSeek API only supports temperature (no top_p, no top_k).
-        // The reasoner model silently ignores temperature, so omit it.
         SamplingSupport {
-            temperature: !model_lower.contains("reasoner"),
+            temperature: true,
             top_p: false,
             top_k: false,
         }
@@ -352,6 +363,7 @@ impl AiProvider for DeepSeekProvider {
             response_format: None,
             tools: None,
             tool_choice: None,
+            reasoning_effort: map_reasoning_effort(params.reasoning_effort),
         };
 
         // Add structured output format if specified
@@ -615,8 +627,9 @@ mod tests {
         let provider = DeepSeekProvider::new();
         assert!(provider.supports_model("deepseek-v4-flash"));
         assert!(provider.supports_model("deepseek-v4-pro"));
-        assert!(provider.supports_model("deepseek-chat"));
-        assert!(provider.supports_model("deepseek-reasoner"));
+        // Legacy aliases removed by DeepSeek 2026-07-24
+        assert!(!provider.supports_model("deepseek-chat"));
+        assert!(!provider.supports_model("deepseek-reasoner"));
         assert!(!provider.supports_model("gpt-4"));
         assert!(!provider.supports_model("deepseek-coder")); // Not in current API
     }
@@ -626,8 +639,6 @@ mod tests {
         let provider = DeepSeekProvider::new();
         assert!(provider.supports_model("DEEPSEEK-V4-FLASH"));
         assert!(provider.supports_model("DEEPSEEK-V4-PRO"));
-        assert!(provider.supports_model("DEEPSEEK-CHAT"));
-        assert!(provider.supports_model("DEEPSEEK-REASONER"));
         assert!(provider.supports_model("DeepSeek-V4-Flash"));
     }
 
@@ -639,15 +650,39 @@ mod tests {
             1_000_000
         );
         assert_eq!(provider.get_max_input_tokens("deepseek-v4-pro"), 1_000_000);
-        assert_eq!(provider.get_max_input_tokens("deepseek-chat"), 64_000);
-        assert_eq!(provider.get_max_input_tokens("deepseek-reasoner"), 64_000);
+    }
+
+    #[test]
+    fn test_map_reasoning_effort() {
+        use crate::llm::types::ReasoningEffort;
+        assert_eq!(
+            map_reasoning_effort(Some(ReasoningEffort::Low)),
+            Some("low")
+        );
+        assert_eq!(
+            map_reasoning_effort(Some(ReasoningEffort::Medium)),
+            Some("low")
+        );
+        assert_eq!(
+            map_reasoning_effort(Some(ReasoningEffort::High)),
+            Some("high")
+        );
+        assert_eq!(
+            map_reasoning_effort(Some(ReasoningEffort::XHigh)),
+            Some("high")
+        );
+        assert_eq!(
+            map_reasoning_effort(Some(ReasoningEffort::Max)),
+            Some("max")
+        );
+        // None = provider default (thinking on, effort "high"); field omitted.
+        assert_eq!(map_reasoning_effort(None), None);
     }
 
     #[test]
     fn test_calculate_cost() {
-        // Test basic cost calculation with v4-flash-routed pricing (since 2026-04-24)
-        // deepseek-chat: Input: $0.14/1M, Output: $0.28/1M
-        let cost = calculate_cost("deepseek-chat", 1_000_000, 500_000);
+        // deepseek-v4-flash: Input: $0.14/1M, Output: $0.28/1M
+        let cost = calculate_cost("deepseek-v4-flash", 1_000_000, 500_000);
         assert!(cost.is_some());
         let cost_value = cost.unwrap();
 
@@ -655,16 +690,17 @@ mod tests {
         let expected = 0.14 + (0.5 * 0.28);
         assert!((cost_value - expected).abs() < 0.01);
 
-        // Both models now share the same v4-flash pricing
-        let cost2 = calculate_cost("deepseek-reasoner", 1_000_000, 500_000);
+        // deepseek-v4-pro: Input: $0.435/1M, Output: $0.87/1M
+        let cost2 = calculate_cost("deepseek-v4-pro", 1_000_000, 500_000);
         assert!(cost2.is_some());
-        assert!((cost2.unwrap() - expected).abs() < 0.01);
+        let expected2 = 0.435 + (0.5 * 0.87);
+        assert!((cost2.unwrap() - expected2).abs() < 0.01);
     }
 
     #[test]
     fn test_calculate_cost_with_cache() {
-        // v4-flash-routed pricing: Cache hit: $0.0028/1M, Cache miss: $0.14/1M, Output: $0.28/1M
-        let cost = calculate_cost_with_cache("deepseek-chat", 500_000, 500_000, 250_000);
+        // deepseek-v4-flash: Cache hit: $0.0028/1M, Cache miss: $0.14/1M, Output: $0.28/1M
+        let cost = calculate_cost_with_cache("deepseek-v4-flash", 500_000, 500_000, 250_000);
         assert!(cost.is_some());
         let cost_value = cost.unwrap();
 
@@ -674,7 +710,7 @@ mod tests {
         assert!((cost_value - expected).abs() < 0.01);
 
         // Cost with cache should be less than without cache for same total input
-        let cost_no_cache = calculate_cost("deepseek-chat", 1_000_000, 250_000);
+        let cost_no_cache = calculate_cost("deepseek-v4-flash", 1_000_000, 250_000);
         assert!(cost_no_cache.is_some());
         assert!(cost_value < cost_no_cache.unwrap());
     }

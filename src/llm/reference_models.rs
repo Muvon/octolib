@@ -1183,6 +1183,14 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(0.03, 0.03, 0.00, 0.00),
     },
     ReferenceModelEntry {
+        // Inkling Small (Jul 29, 2026) — same partner-served setup as Inkling
+        // below; pricing from Together, verified Aug 3, 2026. Must stay above
+        // the bare "inkling" entry (substring match, first entry wins).
+        pattern: "inkling-small",
+        capabilities: caps(true, false, true, 1_048_576),
+        pricing: pricing(0.50, 1.20, 0.00, 0.10),
+    },
+    ReferenceModelEntry {
         // Thinking Machines Inkling (open-weights, no first-party inference API;
         // served via partners — pricing from Together, verified July 17, 2026).
         pattern: "inkling",

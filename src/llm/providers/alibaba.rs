@@ -187,6 +187,14 @@ mod tests {
         assert!(!provider.enforces_response_schema("qwen3.8-max"));
         // qwen3.8-max carries a 1M context window via reference capabilities
         assert_eq!(provider.get_max_input_tokens("qwen3.8-max"), 1_000_000);
+        // Verified live: 3.8-max/3.7-plus/3.6-flash take images and video,
+        // 3.7-max rejects image parts outright
+        assert!(provider.supports_vision("qwen3.8-max"));
+        assert!(provider.supports_vision("qwen3.7-plus"));
+        assert!(provider.supports_vision("qwen3.6-flash"));
+        assert!(provider.supports_video("qwen3.8-max"));
+        assert!(provider.supports_video("qwen3.6-flash"));
+        assert!(!provider.supports_vision("qwen3.7-max"));
     }
 
     #[test]

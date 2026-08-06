@@ -542,17 +542,17 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "qwen-3.6-flash",
-        capabilities: None,
+        capabilities: caps(true, true, true, 1_000_000),
         pricing: pricing(0.25, 1.50, 0.25, 0.025),
     },
     ReferenceModelEntry {
         pattern: "qwen-3.5-flash",
-        capabilities: None,
+        capabilities: caps(true, true, true, 1_000_000),
         pricing: pricing(0.10, 0.40, 0.10, 0.01),
     },
     ReferenceModelEntry {
         pattern: "qwen-3-vl-plus",
-        capabilities: None,
+        capabilities: caps(true, true, true, 262_144),
         pricing: pricing(0.20, 1.60, 0.20, 0.02),
     },
     ReferenceModelEntry {
@@ -707,17 +707,17 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "qwen-3.7-plus",
-        capabilities: None,
+        capabilities: caps(true, true, true, 1_000_000),
         pricing: pricing(0.32, 1.28, 0.32, 0.03),
     },
     ReferenceModelEntry {
         pattern: "qwen-3.6-plus",
-        capabilities: None,
+        capabilities: caps(true, true, true, 1_000_000),
         pricing: pricing(0.50, 3.00, 0.50, 0.05),
     },
     ReferenceModelEntry {
         pattern: "qwen-3.5-plus",
-        capabilities: None,
+        capabilities: caps(true, true, true, 1_000_000),
         pricing: pricing(0.40, 2.40, 0.40, 0.04),
     },
     ReferenceModelEntry {
@@ -742,7 +742,7 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "qwen-3.8-max",
-        capabilities: caps(false, false, true, 1_000_000),
+        capabilities: caps(true, true, true, 1_000_000),
         // Priced by providers/alibaba.rs — no third-party host yet.
         pricing: None,
     },

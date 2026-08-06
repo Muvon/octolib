@@ -473,7 +473,7 @@ if let Some(usage) = &response.exchange.usage {
 | OpenRouter | ✅ Full Support | Multi-Provider Proxy, Vision, Caching, Structured Output |
 | Groq | ✅ Full Support | Fast Inference, Structured Output, Caching |
 | BytePlus | ✅ Full Support | Seed Models, Structured Output, Caching |
-| Alibaba Model Studio | ✅ Full Support | Qwen Models + Resold DeepSeek/GLM, Tools, Thinking, Caching |
+| Alibaba Model Studio | ✅ Full Support | Qwen Models + Resold DeepSeek/GLM, Vision, Video, Tools, Thinking, Caching |
 | DeepSeek | ✅ Full Support | Open-Source AI Models, Structured Output, Caching |
 | Moonshot AI (Kimi) | ✅ Full Support | Kimi K2 Series, Vision (kimi-k2.5), Tools, Structured Output, Caching, Thinking |
 | MiniMax | ✅ Full Support | Anthropic-Compatible API, Tools, Caching, Thinking, Structured Output |

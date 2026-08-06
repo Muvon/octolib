@@ -114,7 +114,7 @@ pub trait AiProvider: Send + Sync {
     /// - **DeepSeek / Groq / Moonshot Kimi K2** ✗ — automatic disk/prefix caching
     ///   with no client-controllable refresh primitive. `None`.
     /// - **Cloudflare / Together / Fireworks / Cerebras / Nvidia / BytePlus /
-    ///   Minimax / Featherless / Octohub / Local / Ollama / Zai / CLI providers** ✗
+    ///   Alibaba / Minimax / Featherless / Octohub / Local / Ollama / Zai / CLI providers** ✗
     ///   — no caching primitive worth pinging. `None`.
     fn keepalive_policy(&self, _model: &str, _use_long_cache: bool) -> Option<KeepalivePolicy> {
         None

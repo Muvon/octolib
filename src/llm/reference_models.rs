@@ -741,6 +741,12 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(0.10, 0.10, 0.10, 0.10),
     },
     ReferenceModelEntry {
+        pattern: "qwen-3.8-max",
+        capabilities: caps(false, false, true, 1_000_000),
+        // Priced by providers/alibaba.rs — no third-party host yet.
+        pricing: None,
+    },
+    ReferenceModelEntry {
         pattern: "qwen-3.7-max",
         capabilities: caps(false, false, true, 262_144),
         pricing: pricing(1.25, 3.75, 1.25, 0.13),

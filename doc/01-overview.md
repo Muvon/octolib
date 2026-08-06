@@ -74,6 +74,7 @@ Cross-provider tool call standardization:
 - Cerebras
 - Groq (with prompt caching)
 - BytePlus (Seed models, with prompt caching)
+- Alibaba Model Studio (Qwen models, with context caching)
 - NVIDIA NIM
 - Ollama
 - Together AI

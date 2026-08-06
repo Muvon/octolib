@@ -14,6 +14,7 @@
 
 //! AI provider implementations
 
+pub mod alibaba;
 pub mod amazon;
 pub mod anthropic;
 pub mod byteplus;
@@ -41,6 +42,7 @@ pub mod xai;
 pub mod zai;
 
 // Re-export provider implementations
+pub use alibaba::AlibabaProvider;
 pub use amazon::AmazonBedrockProvider;
 pub use anthropic::AnthropicProvider;
 pub use byteplus::BytePlusProvider;

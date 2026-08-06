@@ -10,7 +10,7 @@
 Octolib is a comprehensive, self-sufficient AI provider library that provides a unified, type-safe interface for interacting with multiple AI services. It offers intelligent model selection, robust error handling, and advanced features like cross-provider tool calling and vision support.
 
 ## ✨ Key Features
-- **🔌 Multi-Provider Support**: OpenAI, Anthropic, xAI, OpenRouter, Cerebras, NVIDIA NIM, Groq, BytePlus, Ollama, Together, Featherless, Google Vertex, Google Studio, Amazon, Cloudflare, DeepSeek, MiniMax, Moonshot AI (Kimi), Z.ai, OctoHub, Local, CLI proxies
+- **🔌 Multi-Provider Support**: OpenAI, Anthropic, xAI, OpenRouter, Cerebras, NVIDIA NIM, Groq, BytePlus, Alibaba Model Studio, Ollama, Together, Featherless, Google Vertex, Google Studio, Amazon, Cloudflare, DeepSeek, MiniMax, Moonshot AI (Kimi), Z.ai, OctoHub, Local, CLI proxies
 - **🛡️ Unified Interface**: Consistent API across different providers
 - **🔍 Intelligent Model Validation**: Strict `provider:model` format parsing with case-insensitive model support
 - **📋 Structured Output**: JSON and JSON Schema support for OpenAI, xAI, OpenRouter, DeepSeek, Together, and Z.ai
@@ -368,6 +368,7 @@ The library automatically detects OAuth credentials and prefers them over API ke
 | **NVIDIA NIM** | ✅ JSON + Schema | Per-model | ✅ Yes | ❌ No |
 | **Groq** | ✅ JSON + Schema | Per-model | ❌ No | ✅ Select models |
 | **BytePlus** | ✅ JSON + Schema | Per-model | ❌ No | ✅ Yes |
+| **Alibaba Model Studio** | ❌ No | Per-model | ✅ Yes | ✅ Yes |
 | **Cerebras** | ✅ JSON + Schema | ❌ No | ❌ No | ❌ No |
 | **Featherless** | ✅ JSON + Schema | ❌ No | ❌ No | ❌ No |
 | **Google Vertex** | ❌ No | ✅ Yes | ✅ Yes | ❌ No |
@@ -472,6 +473,7 @@ if let Some(usage) = &response.exchange.usage {
 | OpenRouter | ✅ Full Support | Multi-Provider Proxy, Vision, Caching, Structured Output |
 | Groq | ✅ Full Support | Fast Inference, Structured Output, Caching |
 | BytePlus | ✅ Full Support | Seed Models, Structured Output, Caching |
+| Alibaba Model Studio | ✅ Full Support | Qwen Models + Resold DeepSeek/GLM, Tools, Thinking, Caching |
 | DeepSeek | ✅ Full Support | Open-Source AI Models, Structured Output, Caching |
 | Moonshot AI (Kimi) | ✅ Full Support | Kimi K2 Series, Vision (kimi-k2.5), Tools, Structured Output, Caching, Thinking |
 | MiniMax | ✅ Full Support | Anthropic-Compatible API, Tools, Caching, Thinking, Structured Output |

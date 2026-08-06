@@ -1,6 +1,6 @@
 #! Octolib — AI Provider Library Guide
 
-Rust library providing a unified interface to multiple AI providers (OpenAI, Anthropic, OpenRouter, NVIDIA, Ollama, Google Vertex, Google Studio, Amazon, Cloudflare, DeepSeek, Moonshot, Z.ai, BytePlus, Groq, Cerebras, Together, Featherless, Fireworks, OctoHub, CLI proxies). Handles chat completions, embeddings, reranking, cost tracking, caching, structured output, vision, and tool calls. No panics, no `println!`, always `Result`. Copyright year is **2026**.
+Rust library providing a unified interface to multiple AI providers (OpenAI, Anthropic, OpenRouter, NVIDIA, Ollama, Google Vertex, Google Studio, Amazon, Cloudflare, DeepSeek, Moonshot, Z.ai, BytePlus, Alibaba, Groq, Cerebras, Together, Featherless, Fireworks, OctoHub, CLI proxies). Handles chat completions, embeddings, reranking, cost tracking, caching, structured output, vision, and tool calls. No panics, no `println!`, always `Result`. Copyright year is **2026**.
 
 ## Project Structure
 
@@ -33,6 +33,7 @@ src/
 │       ├── minimax.rs              → Native — PRICING table
 │       ├── zai.rs                  → Native — PRICING table
 │       ├── byteplus.rs             → Native — PRICING table (ByteDance Seed models)
+│       ├── alibaba.rs              → Native — PRICING table (Qwen + resold DeepSeek/GLM)
 │       ├── groq.rs                 → Native — PRICING table
 │       ├── nvidia.rs               → Proxy — delegates to openai_compat, reference pricing
 │       ├── cerebras.rs             → Proxy — delegates to openai_compat, reference pricing
@@ -83,7 +84,7 @@ examples/                           → One file per feature — use as integrat
 
 ### Provider Shape: Native vs. Proxy
 
-**Native** (OpenAI, Anthropic, Amazon, DeepSeek, Moonshot, MiniMax, Z.ai, BytePlus, Groq):
+**Native** (OpenAI, Anthropic, Amazon, DeepSeek, Moonshot, MiniMax, Z.ai, BytePlus, Alibaba, Groq):
 - Own `PRICING` const table in the provider file — `(model, input, output, cache_write, cache_read)` per 1M tokens
 - Own `chat_completion()` implementation with provider-specific request/response structs
 - Override `supports_caching()`, `supports_vision()`, `get_max_input_tokens()`, `supports_structured_output()` directly

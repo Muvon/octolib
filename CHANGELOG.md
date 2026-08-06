@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.30.0] - 2026-08-06
+
+### 📋 Release Summary
+
+This release introduces comprehensive support for Alibaba Model Studio, including the addition of the AlibabaProvider (a610f8b4, 7a6408cd). Users can now leverage advanced multimodal capabilities with vision and video support for Qwen models (6f40945d).
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: add AlibabaProvider export `a610f8b4`
+- **alibaba**: add vision and video support for Qwen models `6f40945d`
+- **llm**: add Alibaba Model Studio provider support `7a6408cd`
+
 ## [0.29.2] - 2026-08-04
 
 ### 📋 Release Summary

@@ -42,38 +42,48 @@ use std::time::Duration;
 /// **Transport / pool reliability**
 /// - `connect_timeout(20s)`: bound DNS, TCP, and TLS establishment without
 ///   limiting how long an established LLM request may run
-/// - `tcp_keepalive(30s)`: OS-level probes detect dead connections before reuse
+/// - `tcp_keepalive(10s)` + `tcp_keepalive_interval(5s)`: OS-level probes
+///   detect dead connections before reuse. The first probe fires at 10s —
+///   before `pool_idle_timeout` evicts the connection — so stale sockets are
+///   surfaced and removed rather than reused. Subsequent probes every 5s
+///   catch connections that go bad while idle in the pool.
 /// - `tcp_nodelay(true)`: disable Nagle's algorithm — request bodies ship
 ///   immediately instead of waiting for ACK coalescing (lower latency)
-/// - `pool_idle_timeout(30s)`: evict idle pooled connections before NAT/firewall
+/// - `pool_idle_timeout(15s)`: evict idle pooled connections before NAT/firewall
 ///   or the upstream edge silently drops them. Some upstream edges (notably
-///   CN-hosted endpoints like DeepSeek / Moonshot) close idle keep-alive
-///   connections aggressively; reusing such a half-closed socket produces
-///   "error sending request" / TCP RST mid-write
+///   CN-hosted endpoints like DeepSeek / Moonshot, and Alibaba Token Plan NLBs
+///   in ap-southeast-1) close idle keep-alive connections aggressively; reusing
+///   such a half-closed socket produces "error sending request" / TCP RST
+///   mid-write. 15s is short enough to stay ahead of most NLB idle timeouts
+///   (typically 60s) while still allowing connection reuse for rapid
+///   successive requests.
 ///
 /// **HTTP/2 keep-alive (only takes effect when ALPN negotiates h2)**
-/// - `http2_keep_alive_interval(20s)`: PING frames detect dead peers proactively
-///   and prevent NAT/firewall idle-timeout from silently dropping the
-///   multiplexed connection
+/// - `http2_keep_alive_interval(10s)`: PING frames detect dead peers
+///   proactively and prevent NAT/firewall idle-timeout from silently dropping
+///   the multiplexed connection. 10s is well within any NLB idle timeout and
+///   shorter than `pool_idle_timeout` so stale h2 connections are torn down
+///   before reuse. PING frames count as data transfer for L4 NLB idle
+///   timeouts, keeping the connection alive.
 /// - `http2_keep_alive_while_idle(true)`: keep PINGing even with no active streams
 /// - `http2_keep_alive_timeout(10s)`: drop conn if PING unACKed within 10s
 ///
-/// **Compression** (cargo features: `gzip`, `brotli`, `zstd`, `deflate`)
-/// - reqwest sends `Accept-Encoding: zstd, br, gzip, deflate` automatically
-///   and decompresses response bodies transparently. Server picks whichever
-///   it supports; we never need per-provider configuration. For LLM JSON
-///   responses this typically saves 40–70% bandwidth depending on the algo
-///   the provider chose
+/// **Design principle**: keepalive intervals (10s) < pool_idle_timeout (15s) <
+/// NLB idle timeout (typically 60s). This ensures stale connections are
+/// probed and removed before they can be reused, regardless of whether the
+/// connection is HTTP/2 (PING-based detection) or HTTP/1.1 (TCP keepalive
+/// probe-based detection).
 static HTTP_CLIENT: LazyLock<ArcSwap<reqwest::Client>> =
     LazyLock::new(|| ArcSwap::from_pointee(build_http_client()));
 
 fn build_http_client() -> reqwest::Client {
     reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(20))
-        .tcp_keepalive(Duration::from_secs(30))
+        .tcp_keepalive(Duration::from_secs(10))
+        .tcp_keepalive_interval(Duration::from_secs(5))
         .tcp_nodelay(true)
-        .pool_idle_timeout(Duration::from_secs(30))
-        .http2_keep_alive_interval(Duration::from_secs(20))
+        .pool_idle_timeout(Duration::from_secs(15))
+        .http2_keep_alive_interval(Duration::from_secs(10))
         .http2_keep_alive_while_idle(true)
         .http2_keep_alive_timeout(Duration::from_secs(10))
         .build()

@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.30.1] - 2026-08-06
+
+### 📋 Release Summary
+
+This release improves connection stability and reliability when using Network Load Balancers (NLB) (92c5a0bb).
+
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: tune keepalive and idle timeouts for NLB stability `92c5a0bb`
+
 ## [0.30.0] - 2026-08-06
 
 ### 📋 Release Summary

@@ -15,11 +15,11 @@
 //! Provider factory for creating AI provider instances
 
 use crate::llm::providers::{
-    AmazonBedrockProvider, AnthropicProvider, BytePlusProvider, CerebrasProvider, CliProvider,
-    CloudflareWorkersAiProvider, DeepSeekProvider, FeatherlessProvider, FireworksProvider,
-    GoogleStudioProvider, GoogleVertexProvider, GroqProvider, LocalProvider, MinimaxProvider,
-    MoonshotProvider, NvidiaProvider, OctoHubProvider, OllamaProvider, OpenAiProvider,
-    OpenRouterProvider, TogetherProvider, XaiProvider, ZaiProvider,
+    AlibabaProvider, AmazonBedrockProvider, AnthropicProvider, BytePlusProvider, CerebrasProvider,
+    CliProvider, CloudflareWorkersAiProvider, DeepSeekProvider, FeatherlessProvider,
+    FireworksProvider, GoogleStudioProvider, GoogleVertexProvider, GroqProvider, LocalProvider,
+    MinimaxProvider, MoonshotProvider, NvidiaProvider, OctoHubProvider, OllamaProvider,
+    OpenAiProvider, OpenRouterProvider, TogetherProvider, XaiProvider, ZaiProvider,
 };
 use crate::llm::traits::AiProvider;
 use anyhow::Result;
@@ -61,6 +61,7 @@ impl ProviderFactory {
             "ollama" => Ok(Box::new(OllamaProvider::new())),
             "anthropic" => Ok(Box::new(AnthropicProvider::new())),
             "byteplus" => Ok(Box::new(BytePlusProvider::new())),
+            "alibaba" => Ok(Box::new(AlibabaProvider::new())),
             "google-vertex" => Ok(Box::new(GoogleVertexProvider::new())),
             "google-studio" => Ok(Box::new(GoogleStudioProvider::new())),
             "groq" => Ok(Box::new(GroqProvider::new())),
@@ -79,7 +80,7 @@ impl ProviderFactory {
             "cli" => Err(anyhow::anyhow!(
                 "CLI provider requires a model string like 'cli:<backend>/<model>'. Use ProviderFactory::get_provider_for_model instead."
             )),
-            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported: openai, anthropic, openrouter, cerebras, local, ollama, google-vertex, google-studio, groq, amazon, cloudflare, deepseek, featherless, fireworks, minimax, moonshot, nvidia, octohub, together, xai, zai, byteplus, cli", provider_name))
+            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported: openai, anthropic, openrouter, cerebras, local, ollama, google-vertex, google-studio, groq, alibaba, amazon, cloudflare, deepseek, featherless, fireworks, minimax, moonshot, nvidia, octohub, together, xai, zai, byteplus, cli", provider_name))
         }
     }
 
@@ -116,6 +117,7 @@ impl ProviderFactory {
             "google-vertex",
             "google-studio",
             "groq",
+            "alibaba",
             "amazon",
             "cloudflare",
             "deepseek",
@@ -227,6 +229,7 @@ mod tests {
         assert!(ProviderFactory::create_provider("google-vertex").is_ok());
         assert!(ProviderFactory::create_provider("google-studio").is_ok());
         assert!(ProviderFactory::create_provider("google").is_err());
+        assert!(ProviderFactory::create_provider("alibaba").is_ok());
         assert!(ProviderFactory::create_provider("amazon").is_ok());
         assert!(ProviderFactory::create_provider("cloudflare").is_ok());
         assert!(ProviderFactory::create_provider("deepseek").is_ok());

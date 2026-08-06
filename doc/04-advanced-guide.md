@@ -9,6 +9,7 @@
 | OpenRouter | ✅ Full Support | Multi-Provider Proxy, Vision, Caching, Structured Output |
 | Groq | ✅ Full Support | Fast Inference, Structured Output, Caching |
 | BytePlus | ✅ Full Support | Seed Models, Structured Output, Caching |
+| Alibaba Model Studio | ✅ Full Support | Qwen Models + Resold DeepSeek/GLM, Tools, Thinking, Caching |
 | DeepSeek | ✅ Full Support | Open-Source AI Models, Structured Output, Caching |
 | Moonshot AI (Kimi) | ✅ Full Support | Kimi K2 Series, Vision (kimi-k2.5), Tools, Structured Output, Caching, Thinking |
 | MiniMax | ✅ Full Support | Anthropic-Compatible API, Tools, Caching, Thinking |
@@ -80,6 +81,7 @@ Each provider requires its specific API key:
 - `OPENROUTER_API_KEY`: OpenRouter API key
 - `GROQ_API_KEY`: Groq API key
 - `BYTEPLUS_API_KEY`: BytePlus API key
+- `ALIBABA_API_KEY`: Alibaba Cloud Model Studio (DashScope) API key
 - `NVIDIA_API_KEY`: NVIDIA NIM API key
 - `CLOUDFLARE_API_KEY`: Cloudflare API key
 - `TOGETHER_API_KEY`: Together AI API key
@@ -100,6 +102,7 @@ All providers support custom API URLs via environment variables. If not set, def
 | OpenRouter | `OPENROUTER_API_KEY` | `OPENROUTER_API_URL` | `https://openrouter.ai/api/v1/chat/completions` |
 | Groq | `GROQ_API_KEY` | `GROQ_API_URL` | `https://api.groq.com/openai/v1/chat/completions` |
 | BytePlus | `BYTEPLUS_API_KEY` | `BYTEPLUS_API_URL` | `https://ark.ap-southeast.bytepluses.com/api/v3/chat/completions` |
+| Alibaba Model Studio | `ALIBABA_API_KEY` | `ALIBABA_API_URL` | `https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions` |
 | DeepSeek | `DEEPSEEK_API_KEY` | `DEEPSEEK_API_URL` | `https://api.deepseek.com/chat/completions` |
 | MiniMax | `MINIMAX_API_KEY` | `MINIMAX_API_URL` | `https://api.minimax.io/anthropic/v1/messages` |
 | Moonshot | `MOONSHOT_API_KEY` | `MOONSHOT_API_URL` | `https://api.moonshot.cn/v1/chat/completions` |
@@ -278,9 +281,12 @@ async fn structured_output_example() -> anyhow::Result<()> {
 | MiniMax | ✅ Yes | ❌ No | ❌ No |
 | Z.ai | ✅ Yes | ❌ No | ❌ No |
 | Local/Ollama/OctoHub | Per-model | Per-model | Per-model |
+| Alibaba Model Studio | ❌ No** | ❌ No | ❌ No |
 | Others | ❌ No | ❌ No | ❌ No |
 
 *DeepSeek falls back to JSON mode when JSON Schema is requested.
+
+**Alibaba compatible mode maps JSON Schema onto JSON mode without enforcing the schema, and rejects the request unless the prompt itself contains the word "json" — so octolib never advertises structured output for it.
 
 ## 📊 Token Usage & Tracking
 

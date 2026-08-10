@@ -338,7 +338,7 @@ fn inline_refs(value: &mut serde_json::Value, defs: &serde_json::Map<String, ser
 }
 
 // Convert messages to Moonshot (OpenAI-compatible) format
-fn preserves_historical_thinking(model: &str) -> bool {
+pub(crate) fn preserves_historical_thinking(model: &str) -> bool {
     contains_ignore_ascii_case(model, "kimi-k2.6")
         || contains_ignore_ascii_case(model, "kimi-k2.7")
         || contains_ignore_ascii_case(model, "kimi-k3")

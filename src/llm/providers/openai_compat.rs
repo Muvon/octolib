@@ -59,7 +59,7 @@ pub(crate) async fn chat_completion(
     api_url: String,
     params: ChatCompletionParams,
 ) -> Result<ProviderResponse> {
-    let messages = convert_messages(&params.messages, config.provider_name);
+    let messages = convert_messages(&params.messages, config.provider_name, &params.model);
 
     let mut request_body = serde_json::json!({
         "model": params.model,
@@ -287,10 +287,25 @@ struct PromptTokensDetails {
     cached_tokens: u64,
 }
 
-fn convert_messages(messages: &[Message], provider_name: &str) -> Vec<OpenAiCompatMessage> {
+fn convert_messages(
+    messages: &[Message],
+    provider_name: &str,
+    model: &str,
+) -> Vec<OpenAiCompatMessage> {
     let mut result = Vec::new();
 
-    for message in messages {
+    // Reasoning replay is per-request context the provider re-renders (and bills)
+    // every call on cache-less endpoints, so only the trailing assistant message —
+    // the chain the model is continuing — carries it. Kimi models are the
+    // exception: they require their reasoning preserved across every turn.
+    let last_assistant = messages.iter().rposition(|m| m.role == "assistant");
+    let replays_reasoning = |idx: usize| {
+        provider_name.eq_ignore_ascii_case("ollama")
+            && (Some(idx) == last_assistant
+                || crate::llm::providers::moonshot::preserves_historical_thinking(model))
+    };
+
+    for (msg_idx, message) in messages.iter().enumerate() {
         match message.role.as_str() {
             "tool" => {
                 result.push(OpenAiCompatMessage {
@@ -340,7 +355,7 @@ fn convert_messages(messages: &[Message], provider_name: &str) -> Vec<OpenAiComp
                     content,
                     tool_calls,
                     tool_call_id: None,
-                    reasoning: if provider_name.eq_ignore_ascii_case("ollama") {
+                    reasoning: if replays_reasoning(msg_idx) {
                         message.thinking.as_ref().map(|t| t.content.clone())
                     } else {
                         None
@@ -401,9 +416,7 @@ fn convert_messages(messages: &[Message], provider_name: &str) -> Vec<OpenAiComp
                     content,
                     tool_calls: None,
                     tool_call_id: None,
-                    reasoning: if message.role == "assistant"
-                        && provider_name.eq_ignore_ascii_case("ollama")
-                    {
+                    reasoning: if message.role == "assistant" && replays_reasoning(msg_idx) {
                         message.thinking.as_ref().map(|t| t.content.clone())
                     } else {
                         None
@@ -730,7 +743,7 @@ mod tests {
             thinking: None,
             id: None,
         };
-        let converted = convert_messages(std::slice::from_ref(&msg), "local");
+        let converted = convert_messages(std::slice::from_ref(&msg), "local", "test-model");
         let json = serde_json::to_value(&converted[0]).unwrap();
         assert_eq!(
             json["tool_calls"][0]["extra_content"]["google"]["thought_signature"],
@@ -749,7 +762,7 @@ mod tests {
             tool_calls: Some(plain),
             ..msg
         };
-        let converted = convert_messages(std::slice::from_ref(&msg_plain), "local");
+        let converted = convert_messages(std::slice::from_ref(&msg_plain), "local", "test-model");
         let json = serde_json::to_value(&converted[0]).unwrap();
         assert!(json["tool_calls"][0].get("extra_content").is_none());
     }
@@ -793,12 +806,43 @@ mod tests {
             id: None,
         };
 
-        let converted = convert_messages(&[history], "ollama");
+        let converted = convert_messages(&[history], "ollama", "glm-5.2");
         let json = serde_json::to_value(&converted[0]).unwrap();
         assert_eq!(
             json.get("reasoning").and_then(serde_json::Value::as_str),
             Some("The first step is to inspect git status.")
         );
+    }
+
+    #[test]
+    fn test_ollama_reasoning_replays_only_on_last_assistant() {
+        let assistant = |text: &str| Message {
+            role: "assistant".to_string(),
+            content: text.to_string(),
+            timestamp: 0,
+            cached: false,
+            cache_ttl: None,
+            tool_call_id: None,
+            name: None,
+            tool_calls: None,
+            images: None,
+            videos: None,
+            thinking: Some(ThinkingBlock {
+                content: format!("thinking for {text}"),
+                tokens: 4,
+            }),
+            id: None,
+        };
+        let messages = [assistant("one"), assistant("two")];
+
+        let converted = convert_messages(&messages, "ollama", "glm-5.2");
+        assert!(converted[0].reasoning.is_none());
+        assert_eq!(converted[1].reasoning.as_deref(), Some("thinking for two"));
+
+        // Kimi preserve-thinking models keep reasoning on every assistant turn.
+        let converted = convert_messages(&messages, "ollama", "kimi-k2.7-code");
+        assert_eq!(converted[0].reasoning.as_deref(), Some("thinking for one"));
+        assert_eq!(converted[1].reasoning.as_deref(), Some("thinking for two"));
     }
 
     #[test]

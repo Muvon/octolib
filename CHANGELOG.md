@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.30.2] - 2026-08-10
+
+### 📋 Release Summary
+
+This release adds support for preserving reasoning outputs when using Kimi models via Ollama (116663f5).
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: preserve reasoning for Kimi models via Ollama `116663f5`
+
 ## [0.30.1] - 2026-08-06
 
 ### 📋 Release Summary

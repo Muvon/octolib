@@ -23,14 +23,15 @@
 //!    truncated config.
 //! 2. **Locked** — an exclusive advisory lock on a sibling `.<name>.lock`
 //!    serialises concurrent starts so two processes cannot both migrate.
-//! 3. **Backed up** — the pre-migration bytes land in `<name>.v<N>.bak` before
-//!    the rewrite, and a backup that already exists with DIFFERENT contents
-//!    aborts the migration rather than overwriting the user's only copy.
+//! 3. **Backed up** — the pre-migration bytes land in `<name>.v<N>.<digest>.bak`
+//!    before the rewrite. The digest names the content, so repeated migrations
+//!    never overwrite an earlier backup.
 
 use anyhow::{Context, Result};
+use sha2::{Digest, Sha256};
 use std::fs::{self, OpenOptions, Permissions};
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use super::config_migration::Migration;
 
@@ -108,20 +109,21 @@ pub fn atomic_write(path: &Path, content: &[u8], permissions: Option<Permissions
     result
 }
 
-/// Write `content` to `<config file name>.v<version>.bak`, unless that backup
-/// already holds exactly these bytes (re-running a migration must be a no-op).
+/// Write `content` to `<config file name>.v<version>.<digest>.bak`.
 ///
-/// A same-named backup with different contents is an ERROR: it means an
-/// earlier, different config was already saved under this version, and
-/// clobbering it would destroy the user's only pre-migration copy.
+/// The name carries a digest of the content, so an existing file at that path
+/// already holds these bytes: re-running a migration is a no-op, and a config
+/// the user edited between runs gets its own backup instead of clobbering the
+/// previous one.
 pub fn write_backup_if_missing(
     config_path: &Path,
     version: u32,
     content: &[u8],
     permissions: Permissions,
-) -> Result<()> {
+) -> Result<PathBuf> {
     let file_name = file_name_of(config_path)?;
-    let backup_path = config_path.with_file_name(format!("{file_name}.v{version}.bak"));
+    let digest = hex::encode(&Sha256::digest(content)[..4]);
+    let backup_path = config_path.with_file_name(format!("{file_name}.v{version}.{digest}.bak"));
 
     let mut backup = match OpenOptions::new()
         .write(true)
@@ -129,21 +131,7 @@ pub fn write_backup_if_missing(
         .open(&backup_path)
     {
         Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-            let existing = fs::read(&backup_path).with_context(|| {
-                format!(
-                    "failed to verify existing configuration backup {}",
-                    backup_path.display()
-                )
-            })?;
-            if existing == content {
-                return Ok(());
-            }
-            anyhow::bail!(
-                "configuration backup {} already exists with different contents",
-                backup_path.display()
-            );
-        }
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => return Ok(backup_path),
         Err(error) => {
             return Err(error).with_context(|| {
                 format!(
@@ -167,16 +155,21 @@ pub fn write_backup_if_missing(
         let _ = fs::remove_file(&backup_path);
     }
 
-    result
+    result.map(|()| backup_path)
 }
 
 /// Persist a migration: back up `original` under its old version, then write
 /// the migrated content atomically, preserving the file's permissions.
+/// Returns the backup path.
 ///
 /// The caller MUST have validated that the migrated content actually
 /// deserializes before calling this — the user's file is only replaced once we
 /// know the result is loadable.
-pub fn apply_migration(config_path: &Path, original: &[u8], migration: &Migration) -> Result<()> {
+pub fn apply_migration(
+    config_path: &Path,
+    original: &[u8],
+    migration: &Migration,
+) -> Result<PathBuf> {
     let permissions = fs::metadata(config_path)
         .with_context(|| {
             format!(
@@ -186,13 +179,14 @@ pub fn apply_migration(config_path: &Path, original: &[u8], migration: &Migratio
         })?
         .permissions();
 
-    write_backup_if_missing(
+    let backup_path = write_backup_if_missing(
         config_path,
         migration.from_version,
         original,
         permissions.clone(),
     )?;
-    atomic_write(config_path, migration.content.as_bytes(), Some(permissions))
+    atomic_write(config_path, migration.content.as_bytes(), Some(permissions))?;
+    Ok(backup_path)
 }
 
 fn file_name_of(path: &Path) -> Result<String> {
@@ -278,6 +272,11 @@ mod tests {
         assert_eq!(fs::read_to_string(&path).unwrap(), "fresh");
     }
 
+    fn backup_name(version: u32, content: &[u8]) -> String {
+        let digest = hex::encode(&Sha256::digest(content)[..4]);
+        format!("config.toml.v{version}.{digest}.bak")
+    }
+
     #[test]
     fn backup_is_written_once_and_is_idempotent() {
         let dir = TempDir::new();
@@ -290,25 +289,28 @@ mod tests {
         write_backup_if_missing(&path, 1, b"v1 body", permissions).unwrap();
 
         assert_eq!(
-            fs::read_to_string(dir.file("config.toml.v1.bak")).unwrap(),
+            fs::read_to_string(dir.file(&backup_name(1, b"v1 body"))).unwrap(),
             "v1 body"
         );
     }
 
     #[test]
-    fn conflicting_backup_is_never_overwritten() {
+    fn re_migrating_an_edited_config_keeps_both_backups() {
         let dir = TempDir::new();
         let path = dir.file("config.toml");
-        fs::write(&path, "current").unwrap();
-        fs::write(dir.file("config.toml.v1.bak"), "someone else's backup").unwrap();
+        fs::write(&path, "edited").unwrap();
         let permissions = fs::metadata(&path).unwrap().permissions();
 
-        let error = write_backup_if_missing(&path, 1, b"current", permissions).unwrap_err();
+        write_backup_if_missing(&path, 1, b"original", permissions.clone()).unwrap();
+        write_backup_if_missing(&path, 1, b"edited", permissions).unwrap();
 
-        assert!(error.to_string().contains("different contents"));
         assert_eq!(
-            fs::read_to_string(dir.file("config.toml.v1.bak")).unwrap(),
-            "someone else's backup"
+            fs::read_to_string(dir.file(&backup_name(1, b"original"))).unwrap(),
+            "original"
+        );
+        assert_eq!(
+            fs::read_to_string(dir.file(&backup_name(1, b"edited"))).unwrap(),
+            "edited"
         );
     }
 
@@ -322,20 +324,9 @@ mod tests {
 
         assert_eq!(fs::read_to_string(&path).unwrap(), "version = 2\n");
         assert_eq!(
-            fs::read_to_string(dir.file("config.toml.v1.bak")).unwrap(),
+            fs::read_to_string(dir.file(&backup_name(1, b"version = 1\n"))).unwrap(),
             "version = 1\n"
         );
-    }
-
-    #[test]
-    fn apply_migration_leaves_the_config_intact_when_the_backup_conflicts() {
-        let dir = TempDir::new();
-        let path = dir.file("config.toml");
-        fs::write(&path, "version = 1\n").unwrap();
-        fs::write(dir.file("config.toml.v1.bak"), "other").unwrap();
-
-        assert!(apply_migration(&path, b"version = 1\n", &migration()).is_err());
-        assert_eq!(fs::read_to_string(&path).unwrap(), "version = 1\n");
     }
 
     #[test]

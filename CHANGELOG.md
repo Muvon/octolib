@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.30.3] - 2026-08-11
+
+### 📋 Release Summary
+
+This release improves data reliability by implementing content-based naming for backup files (752327f6). This ensures more accurate versioning and prevents potential filename collisions during backups.
+
+
+### ✨ New Features & Enhancements
+
+- **config**: use content digests for backup filenames `752327f6`
+
 ## [0.30.2] - 2026-08-10
 
 ### 📋 Release Summary

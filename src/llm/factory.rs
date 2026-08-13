@@ -17,9 +17,9 @@
 use crate::llm::providers::{
     AlibabaProvider, AmazonBedrockProvider, AnthropicProvider, BytePlusProvider, CerebrasProvider,
     CliProvider, CloudflareWorkersAiProvider, DeepSeekProvider, FeatherlessProvider,
-    FireworksProvider, GoogleStudioProvider, GoogleVertexProvider, GroqProvider, LocalProvider,
-    MinimaxProvider, MoonshotProvider, NvidiaProvider, OctoHubProvider, OllamaProvider,
-    OpenAiProvider, OpenRouterProvider, TogetherProvider, XaiProvider, ZaiProvider,
+    FireworksProvider, GoogleStudioProvider, GoogleVertexProvider, GroqProvider, HetznerProvider,
+    LocalProvider, MinimaxProvider, MoonshotProvider, NvidiaProvider, OctoHubProvider,
+    OllamaProvider, OpenAiProvider, OpenRouterProvider, TogetherProvider, XaiProvider, ZaiProvider,
 };
 use crate::llm::traits::AiProvider;
 use anyhow::Result;
@@ -70,6 +70,7 @@ impl ProviderFactory {
             "deepseek" => Ok(Box::new(DeepSeekProvider::new())),
             "featherless" => Ok(Box::new(FeatherlessProvider::new())),
             "fireworks" => Ok(Box::new(FireworksProvider::new())),
+            "hetzner" => Ok(Box::new(HetznerProvider::new())),
             "minimax" => Ok(Box::new(MinimaxProvider::new())),
             "moonshot" | "kimi" => Ok(Box::new(MoonshotProvider::new())),
             "nvidia" => Ok(Box::new(NvidiaProvider::new())),
@@ -80,7 +81,7 @@ impl ProviderFactory {
             "cli" => Err(anyhow::anyhow!(
                 "CLI provider requires a model string like 'cli:<backend>/<model>'. Use ProviderFactory::get_provider_for_model instead."
             )),
-            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported: openai, anthropic, openrouter, cerebras, local, ollama, google-vertex, google-studio, groq, alibaba, amazon, cloudflare, deepseek, featherless, fireworks, minimax, moonshot, nvidia, octohub, together, xai, zai, byteplus, cli", provider_name))
+            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported: openai, anthropic, openrouter, cerebras, local, ollama, google-vertex, google-studio, groq, alibaba, amazon, cloudflare, deepseek, featherless, fireworks, hetzner, minimax, moonshot, nvidia, octohub, together, xai, zai, byteplus, cli", provider_name))
         }
     }
 
@@ -123,6 +124,7 @@ impl ProviderFactory {
             "deepseek",
             "featherless",
             "fireworks",
+            "hetzner",
             "minimax",
             "moonshot",
             "nvidia",

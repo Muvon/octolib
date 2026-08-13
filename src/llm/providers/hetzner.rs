@@ -1,0 +1,132 @@
+// Copyright 2026 Muvon Un Limited
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+//! Hetzner provider implementation.
+//!
+//! Uses Hetzner's Inference API (Experiments Platform), an OpenAI-compatible
+//! endpoint at: `https://inference.hetzner.com/api/v1/chat/completions`
+//!
+//! Serves a small curated set of open-weight models (DeepSeek, GLM, Kimi,
+//! Qwen). The catalogue is expected to grow while the platform is in
+//! experimental status, so any non-empty model ID is accepted and validated
+//! by the API itself.
+//!
+//! The API is **free of charge** while in experimental status, so cost is
+//! reported as $0. Rate limits per API key: 4M input / 100k output tokens
+//! and 10 requests per 60s.
+//!
+//! Source: <https://docs.hetzner.com/experiments/inference>
+//!
+//! Configuration:
+//! - `HETZNER_API_KEY`: Required API key
+//! - `HETZNER_API_URL`: Optional endpoint override
+
+use crate::llm::providers::openai_compat::{
+    chat_completion as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
+};
+use crate::llm::traits::AiProvider;
+use crate::llm::types::{ChatCompletionParams, ModelPricing, ProviderResponse};
+use anyhow::Result;
+use std::env;
+
+/// Hetzner provider
+#[derive(Debug, Clone, Default)]
+pub struct HetznerProvider;
+
+impl HetznerProvider {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+const HETZNER_API_KEY_ENV: &str = "HETZNER_API_KEY";
+const HETZNER_API_URL_ENV: &str = "HETZNER_API_URL";
+const HETZNER_API_URL: &str = "https://inference.hetzner.com/api/v1/chat/completions";
+
+#[async_trait::async_trait]
+impl AiProvider for HetznerProvider {
+    fn name(&self) -> &str {
+        "hetzner"
+    }
+
+    fn supports_model(&self, model: &str) -> bool {
+        !model.is_empty()
+    }
+
+    fn get_api_key(&self) -> Result<String> {
+        env::var(HETZNER_API_KEY_ENV).map_err(|_| {
+            anyhow::anyhow!(
+                "Hetzner API key not found in environment variable: {}",
+                HETZNER_API_KEY_ENV
+            )
+        })
+    }
+
+    fn get_model_pricing(&self, _model: &str) -> Option<ModelPricing> {
+        // Free while in experimental status — no per-token billing.
+        Some(ModelPricing {
+            input_price_per_1m: 0.0,
+            output_price_per_1m: 0.0,
+            cache_write_price_per_1m: 0.0,
+            cache_read_price_per_1m: 0.0,
+        })
+    }
+
+    async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
+        let api_key = self.get_api_key()?;
+        let api_url = get_api_url(HETZNER_API_URL_ENV, HETZNER_API_URL);
+
+        openai_compat_chat_completion(
+            OpenAiCompatConfig {
+                provider_name: "hetzner",
+                usage_fallback_cost: Some(0.0),
+                use_response_cost: false,
+            },
+            api_key,
+            api_url,
+            params,
+        )
+        .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_supports_model() {
+        let provider = HetznerProvider::new();
+        assert!(provider.supports_model("Qwen/Qwen3.6-35B-A3B-FP8"));
+        assert!(provider.supports_model("DeepSeek-V4-Flash-0731"));
+        assert!(provider.supports_model("Kimi-K2.7-Code"));
+        assert!(provider.supports_model("any-future-model"));
+        assert!(!provider.supports_model(""));
+    }
+
+    #[test]
+    fn test_default_capabilities() {
+        let provider = HetznerProvider::new();
+        assert_eq!(provider.name(), "hetzner");
+        assert!(!provider.supports_caching("any-model"));
+    }
+
+    #[test]
+    fn test_free_pricing() {
+        let provider = HetznerProvider::new();
+        let pricing = provider.get_model_pricing("GLM-5.2-NVFP4").unwrap();
+        assert_eq!(pricing.input_price_per_1m, 0.0);
+        assert_eq!(pricing.output_price_per_1m, 0.0);
+    }
+}

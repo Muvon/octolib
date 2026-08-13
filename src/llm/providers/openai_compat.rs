@@ -16,8 +16,8 @@ use super::shared;
 use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::types::{
-    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, ThinkingBlock, TokenUsage,
-    ToolCall,
+    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, SamplingSupport,
+    ThinkingBlock, TokenUsage, ToolCall,
 };
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -59,14 +59,33 @@ pub(crate) async fn chat_completion(
     api_url: String,
     params: ChatCompletionParams,
 ) -> Result<ProviderResponse> {
+    chat_completion_with_sampling(config, SamplingSupport::ALL, api_key, api_url, params).await
+}
+
+/// Like [`chat_completion`], but omits sampling parameters the model rejects.
+/// Proxy providers whose upstreams pin temperature/top_p (e.g. OpenCode routing
+/// to Kimi K2.7/K3) must use this entry point.
+pub(crate) async fn chat_completion_with_sampling(
+    config: OpenAiCompatConfig,
+    sampling: SamplingSupport,
+    api_key: String,
+    api_url: String,
+    params: ChatCompletionParams,
+) -> Result<ProviderResponse> {
     let messages = convert_messages(&params.messages, config.provider_name, &params.model);
 
     let mut request_body = serde_json::json!({
         "model": params.model,
         "messages": messages,
-        "temperature": params.temperature,
-        "top_p": params.top_p,
     });
+
+    let effective = sampling.effective(params.temperature, params.top_p, params.top_k);
+    if let Some(temperature) = effective.temperature {
+        request_body["temperature"] = serde_json::json!(temperature);
+    }
+    if let Some(top_p) = effective.top_p {
+        request_body["top_p"] = serde_json::json!(top_p);
+    }
 
     if config.provider_name.eq_ignore_ascii_case("ollama") {
         request_body["stream"] = serde_json::json!(false);

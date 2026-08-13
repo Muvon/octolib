@@ -42,10 +42,10 @@
 //! - `OPENCODE_ZEN_API_URL` / `OPENCODE_GO_API_URL`: Optional endpoint overrides
 
 use crate::llm::providers::openai_compat::{
-    chat_completion as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
+    chat_completion_with_sampling as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
 };
 use crate::llm::traits::AiProvider;
-use crate::llm::types::{ChatCompletionParams, ProviderResponse};
+use crate::llm::types::{ChatCompletionParams, ProviderResponse, SamplingSupport};
 use anyhow::Result;
 use std::env;
 
@@ -67,6 +67,25 @@ fn get_opencode_api_key(provider_label: &str) -> Result<String> {
     })
 }
 
+/// Upstream sampling restrictions for models routed through the proxy.
+///
+/// The router forwards temperature/top_p verbatim to the upstream vendor
+/// (verified live: Kimi K2.7/K3 reject them with "only 1 is allowed" /
+/// "only 0.95 is allowed"), so mirror the per-vendor rules already encoded
+/// in the sibling providers. Unknown families pass everything through.
+fn sampling_support(model: &str) -> SamplingSupport {
+    let model = model.to_ascii_lowercase();
+    if model.starts_with("claude") {
+        crate::llm::providers::anthropic::AnthropicProvider::new().supported_sampling_params(&model)
+    } else if model.starts_with("gpt") {
+        crate::llm::providers::openai::OpenAiProvider::new().supported_sampling_params(&model)
+    } else if model.starts_with("kimi") {
+        crate::llm::providers::moonshot::MoonshotProvider::new().supported_sampling_params(&model)
+    } else {
+        SamplingSupport::ALL
+    }
+}
+
 async fn opencode_chat_completion(
     provider_name: &'static str,
     api_key: String,
@@ -81,6 +100,7 @@ async fn opencode_chat_completion(
             usage_fallback_cost: None,
             use_response_cost: true,
         },
+        sampling_support(&model),
         api_key,
         api_url,
         params,
@@ -122,6 +142,10 @@ impl AiProvider for OpenCodeZenProvider {
 
     fn supports_model(&self, model: &str) -> bool {
         !model.is_empty()
+    }
+
+    fn supported_sampling_params(&self, model: &str) -> SamplingSupport {
+        sampling_support(model)
     }
 
     fn get_api_key(&self) -> Result<String> {
@@ -166,6 +190,10 @@ impl AiProvider for OpenCodeGoProvider {
         true
     }
 
+    fn supported_sampling_params(&self, model: &str) -> SamplingSupport {
+        sampling_support(model)
+    }
+
     fn get_api_key(&self) -> Result<String> {
         get_opencode_api_key("OpenCode Go")
     }
@@ -193,6 +221,30 @@ mod tests {
         assert!(go.supports_model("kimi-k2.7-code"));
         assert!(go.supports_model("glm-5.2"));
         assert!(!go.supports_model(""));
+    }
+
+    #[test]
+    fn test_sampling_support_mirrors_upstream_restrictions() {
+        // Kimi K2.7/K3 pin temperature=1 and top_p=0.95 upstream (verified live on Go)
+        assert!(!sampling_support("kimi-k2.7-code").temperature);
+        assert!(!sampling_support("kimi-k2.7-code").top_p);
+        assert!(!sampling_support("kimi-k3").temperature);
+        assert!(!sampling_support("Kimi-K3").temperature);
+
+        // GPT-5 family reasoning models reject non-default temperature/top_p
+        assert!(!sampling_support("gpt-5.6-luna").temperature);
+        assert!(!sampling_support("gpt-5.5").top_p);
+
+        // Claude Fable/Opus 5 reject all sampling; Sonnet 4.5 rejects top_p only
+        assert_eq!(sampling_support("claude-fable-5"), SamplingSupport::NONE);
+        assert!(!sampling_support("claude-opus-5").temperature);
+        assert!(sampling_support("claude-sonnet-4-5").temperature);
+        assert!(!sampling_support("claude-sonnet-4-5").top_p);
+
+        // Other families pass through untouched
+        assert_eq!(sampling_support("glm-5.2"), SamplingSupport::ALL);
+        assert_eq!(sampling_support("minimax-m3"), SamplingSupport::ALL);
+        assert_eq!(sampling_support("deepseek-v4-pro"), SamplingSupport::ALL);
     }
 
     #[test]

@@ -44,7 +44,7 @@ src/
 │       ├── openrouter.rs           → Proxy — delegates to openai_compat
 │       ├── octohub.rs              → Proxy — delegates to openai_compat
 │       ├── featherless.rs          → Proxy — delegates to openai_compat
-│       ├── hetzner.rs              → Proxy — delegates to openai_compat (free, experimental)
+│       ├── hetzner.rs              → Proxy — delegates to openai_compat (free, experimental, fixed MODELS table)
 │       ├── opencode.rs             → Proxy — Zen + Go providers, delegates to openai_compat (shared OPENCODE_API_KEY)
 │       ├── fireworks.rs            → Proxy — delegates to openai_compat (auto prefix-cache)
 │       └── cli/                    → CLI proxy: claude, codex, cursor, gemini, generic backends

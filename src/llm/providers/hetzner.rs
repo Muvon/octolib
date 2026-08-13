@@ -18,9 +18,9 @@
 //! endpoint at: `https://inference.hetzner.com/api/v1/chat/completions`
 //!
 //! Serves a small curated set of open-weight models (DeepSeek, GLM, Kimi,
-//! Qwen). The catalogue is expected to grow while the platform is in
-//! experimental status, so any non-empty model ID is accepted and validated
-//! by the API itself.
+//! Qwen). The catalogue is fixed and known (see `MODELS`), so unknown model
+//! IDs are rejected — update the table when Hetzner adds models
+//! (`GET /v1/models`).
 //!
 //! The API is **free of charge** while in experimental status, so cost is
 //! reported as $0. Rate limits per API key: 4M input / 100k output tokens
@@ -54,6 +54,19 @@ const HETZNER_API_KEY_ENV: &str = "HETZNER_API_KEY";
 const HETZNER_API_URL_ENV: &str = "HETZNER_API_URL";
 const HETZNER_API_URL: &str = "https://inference.hetzner.com/api/v1/chat/completions";
 
+/// (model id, vision, max input tokens) — from the Hetzner models table and
+/// `GET /v1/models` (`max_model_len`).
+const MODELS: &[(&str, bool, usize)] = &[
+    ("DeepSeek-V4-Flash-0731", false, 512_000),
+    ("GLM-5.2-NVFP4", false, 512_000),
+    ("Kimi-K2.7-Code", true, 262_144),
+    ("Qwen/Qwen3.6-35B-A3B-FP8", true, 262_144),
+];
+
+fn find_model(model: &str) -> Option<&'static (&'static str, bool, usize)> {
+    MODELS.iter().find(|(id, _, _)| *id == model)
+}
+
 #[async_trait::async_trait]
 impl AiProvider for HetznerProvider {
     fn name(&self) -> &str {
@@ -61,7 +74,17 @@ impl AiProvider for HetznerProvider {
     }
 
     fn supports_model(&self, model: &str) -> bool {
-        !model.is_empty()
+        find_model(model).is_some()
+    }
+
+    fn supports_vision(&self, model: &str) -> bool {
+        find_model(model)
+            .map(|(_, vision, _)| *vision)
+            .unwrap_or(false)
+    }
+
+    fn get_max_input_tokens(&self, model: &str) -> usize {
+        find_model(model).map(|(_, _, max)| *max).unwrap_or(262_144)
     }
 
     fn get_api_key(&self) -> Result<String> {
@@ -120,9 +143,23 @@ mod tests {
         let provider = HetznerProvider::new();
         assert!(provider.supports_model("Qwen/Qwen3.6-35B-A3B-FP8"));
         assert!(provider.supports_model("DeepSeek-V4-Flash-0731"));
+        assert!(provider.supports_model("GLM-5.2-NVFP4"));
         assert!(provider.supports_model("Kimi-K2.7-Code"));
-        assert!(provider.supports_model("any-future-model"));
+        assert!(!provider.supports_model("unknown-model"));
         assert!(!provider.supports_model(""));
+    }
+
+    #[test]
+    fn test_model_capabilities() {
+        let provider = HetznerProvider::new();
+        assert!(provider.supports_vision("Kimi-K2.7-Code"));
+        assert!(provider.supports_vision("Qwen/Qwen3.6-35B-A3B-FP8"));
+        assert!(!provider.supports_vision("GLM-5.2-NVFP4"));
+        assert_eq!(
+            provider.get_max_input_tokens("DeepSeek-V4-Flash-0731"),
+            512_000
+        );
+        assert_eq!(provider.get_max_input_tokens("Kimi-K2.7-Code"), 262_144);
     }
 
     #[test]

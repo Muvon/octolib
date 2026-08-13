@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.31.0] - 2026-08-13
+
+### 📋 Release Summary
+
+This release expands provider support by introducing OpenCode and Hetzner integration, featuring improved model validation and case-insensitive model handling (7f4339a5, 7fa74b0c, a31382db, bacdb354).
+
+
+### ✨ New Features & Enhancements
+
+- **hetzner**: implement strict model validation `a31382db`
+- **llm**: add OpenCode providers and enhance Hetzner `7fa74b0c`
+- **llm**: add Hetzner provider support `7f4339a5`
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: handle case-insensitive models for hetzner `bacdb354`
+
 ## [0.30.3] - 2026-08-11
 
 ### 📋 Release Summary

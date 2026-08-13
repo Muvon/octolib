@@ -1,6 +1,6 @@
 #! Octolib — AI Provider Library Guide
 
-Rust library providing a unified interface to multiple AI providers (OpenAI, Anthropic, OpenRouter, NVIDIA, Ollama, Google Vertex, Google Studio, Amazon, Cloudflare, DeepSeek, Moonshot, Z.ai, BytePlus, Alibaba, Groq, Cerebras, Together, Featherless, Fireworks, OctoHub, CLI proxies). Handles chat completions, embeddings, reranking, cost tracking, caching, structured output, vision, and tool calls. No panics, no `println!`, always `Result`. Copyright year is **2026**.
+Rust library providing a unified interface to multiple AI providers (OpenAI, Anthropic, OpenRouter, NVIDIA, Ollama, Google Vertex, Google Studio, Amazon, Cloudflare, DeepSeek, Moonshot, Z.ai, BytePlus, Alibaba, Groq, Cerebras, Together, Featherless, Fireworks, Hetzner, OpenCode Zen/Go, OctoHub, CLI proxies). Handles chat completions, embeddings, reranking, cost tracking, caching, structured output, vision, and tool calls. No panics, no `println!`, always `Result`. Copyright year is **2026**.
 
 ## Project Structure
 
@@ -45,6 +45,7 @@ src/
 │       ├── octohub.rs              → Proxy — delegates to openai_compat
 │       ├── featherless.rs          → Proxy — delegates to openai_compat
 │       ├── hetzner.rs              → Proxy — delegates to openai_compat (free, experimental)
+│       ├── opencode.rs             → Proxy — Zen + Go providers, delegates to openai_compat (shared OPENCODE_API_KEY)
 │       ├── fireworks.rs            → Proxy — delegates to openai_compat (auto prefix-cache)
 │       └── cli/                    → CLI proxy: claude, codex, cursor, gemini, generic backends
 ├── embedding/
@@ -92,7 +93,7 @@ examples/                           → One file per feature — use as integrat
 - `get_model_pricing()` reads from the local `PRICING` table via `get_model_pricing()` from `utils.rs`
 - `supports_model()` uses `is_model_in_pricing_table()` — strict, unknown models rejected
 
-**Proxy / OpenAI-compatible** (NVIDIA, Cerebras, Together, Ollama, Local, Cloudflare, OpenRouter, OctoHub, Featherless, Google Vertex, Google Studio):
+**Proxy / OpenAI-compatible** (NVIDIA, Cerebras, Together, Ollama, Local, Cloudflare, OpenRouter, OctoHub, Featherless, Hetzner, OpenCode Zen/Go, Google Vertex, Google Studio):
 - Delegates to `openai_compat_chat_completion(OpenAiCompatConfig { provider_name, usage_fallback_cost, use_response_cost }, api_key, api_url, params)`
 - `OpenAiCompatConfig.use_response_cost = true` → use cost from API response if present; `usage_fallback_cost` → fixed fallback cost (rarely used)
 - `supports_model()` returns `!model.is_empty()` — accepts anything

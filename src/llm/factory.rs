@@ -19,7 +19,8 @@ use crate::llm::providers::{
     CliProvider, CloudflareWorkersAiProvider, DeepSeekProvider, FeatherlessProvider,
     FireworksProvider, GoogleStudioProvider, GoogleVertexProvider, GroqProvider, HetznerProvider,
     LocalProvider, MinimaxProvider, MoonshotProvider, NvidiaProvider, OctoHubProvider,
-    OllamaProvider, OpenAiProvider, OpenRouterProvider, TogetherProvider, XaiProvider, ZaiProvider,
+    OllamaProvider, OpenAiProvider, OpenCodeGoProvider, OpenCodeZenProvider, OpenRouterProvider,
+    TogetherProvider, XaiProvider, ZaiProvider,
 };
 use crate::llm::traits::AiProvider;
 use anyhow::Result;
@@ -75,13 +76,15 @@ impl ProviderFactory {
             "moonshot" | "kimi" => Ok(Box::new(MoonshotProvider::new())),
             "nvidia" => Ok(Box::new(NvidiaProvider::new())),
             "octohub" => Ok(Box::new(OctoHubProvider::new())),
+            "opencode-zen" => Ok(Box::new(OpenCodeZenProvider::new())),
+            "opencode-go" => Ok(Box::new(OpenCodeGoProvider::new())),
             "together" => Ok(Box::new(TogetherProvider::new())),
             "xai" => Ok(Box::new(XaiProvider::new())),
             "zai" => Ok(Box::new(ZaiProvider::new())),
             "cli" => Err(anyhow::anyhow!(
                 "CLI provider requires a model string like 'cli:<backend>/<model>'. Use ProviderFactory::get_provider_for_model instead."
             )),
-            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported: openai, anthropic, openrouter, cerebras, local, ollama, google-vertex, google-studio, groq, alibaba, amazon, cloudflare, deepseek, featherless, fireworks, hetzner, minimax, moonshot, nvidia, octohub, together, xai, zai, byteplus, cli", provider_name))
+            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported: openai, anthropic, openrouter, cerebras, local, ollama, google-vertex, google-studio, groq, alibaba, amazon, cloudflare, deepseek, featherless, fireworks, hetzner, minimax, moonshot, nvidia, octohub, opencode-zen, opencode-go, together, xai, zai, byteplus, cli", provider_name))
         }
     }
 
@@ -129,6 +132,8 @@ impl ProviderFactory {
             "moonshot",
             "nvidia",
             "octohub",
+            "opencode-zen",
+            "opencode-go",
             "together",
             "xai",
             "zai",

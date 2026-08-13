@@ -10,7 +10,7 @@
 Octolib is a comprehensive, self-sufficient AI provider library that provides a unified, type-safe interface for interacting with multiple AI services. It offers intelligent model selection, robust error handling, and advanced features like cross-provider tool calling and vision support.
 
 ## ✨ Key Features
-- **🔌 Multi-Provider Support**: OpenAI, Anthropic, xAI, OpenRouter, Cerebras, NVIDIA NIM, Groq, BytePlus, Alibaba Model Studio, Ollama, Together, Featherless, Google Vertex, Google Studio, Amazon, Cloudflare, DeepSeek, MiniMax, Moonshot AI (Kimi), Z.ai, OctoHub, Local, CLI proxies
+- **🔌 Multi-Provider Support**: OpenAI, Anthropic, xAI, OpenRouter, Cerebras, NVIDIA NIM, Groq, BytePlus, Alibaba Model Studio, Ollama, Together, Featherless, Hetzner, Google Vertex, Google Studio, Amazon, Cloudflare, DeepSeek, MiniMax, Moonshot AI (Kimi), Z.ai, OctoHub, Local, CLI proxies
 - **🛡️ Unified Interface**: Consistent API across different providers
 - **🔍 Intelligent Model Validation**: Strict `provider:model` format parsing with case-insensitive model support
 - **📋 Structured Output**: JSON and JSON Schema support for OpenAI, xAI, OpenRouter, DeepSeek, Together, and Z.ai
@@ -482,6 +482,7 @@ if let Some(usage) = &response.exchange.usage {
 | Together AI | ✅ Full Support | Multi-Provider Proxy, Vision, Tools, Structured Output |
 | Cerebras | ✅ Full Support | Fast Inference, Structured Output |
 | Featherless | ✅ Full Support | Open-Weight Models (Qwen, Llama, Mistral, DeepSeek, RWKV), Subscription Billing |
+| Hetzner | ✅ Full Support | Open-Weight Models (DeepSeek, GLM, Kimi, Qwen), Free While Experimental |
 | OctoHub | ✅ Supported | Local AI Serving |
 | Google Vertex AI | ✅ Supported | Enterprise AI Integration |
 | Google AI Studio | ✅ Supported | Gemini API, API-Key Auth |

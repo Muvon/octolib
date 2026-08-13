@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.31.1] - 2026-08-13
+
+### 📋 Release Summary
+
+This release introduces support for conditional sampling within OpenAI-compatible LLM providers (c40afcf5), offering greater control over model output generation.
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: implement conditional sampling for OpenAI compat `c40afcf5`
+
 ## [0.31.0] - 2026-08-13
 
 ### 📋 Release Summary

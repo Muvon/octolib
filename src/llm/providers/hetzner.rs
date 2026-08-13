@@ -73,6 +73,16 @@ impl AiProvider for HetznerProvider {
         })
     }
 
+    fn supports_structured_output(&self, _model: &str) -> bool {
+        // Verified live: json_schema response_format is honored (vLLM guided
+        // decoding) even though the Hetzner docs don't document it.
+        true
+    }
+
+    fn enforces_response_schema(&self, _model: &str) -> bool {
+        true
+    }
+
     fn get_model_pricing(&self, _model: &str) -> Option<ModelPricing> {
         // Free while in experimental status — no per-token billing.
         Some(ModelPricing {
@@ -120,6 +130,7 @@ mod tests {
         let provider = HetznerProvider::new();
         assert_eq!(provider.name(), "hetzner");
         assert!(!provider.supports_caching("any-model"));
+        assert!(provider.supports_structured_output("any-model"));
     }
 
     #[test]

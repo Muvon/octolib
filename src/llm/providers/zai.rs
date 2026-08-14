@@ -177,7 +177,7 @@ struct ZaiMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_calls: Option<Vec<ZaiToolCall>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_calls_id: Option<String>,
+    tool_call_id: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -320,17 +320,7 @@ impl AiProvider for ZaiProvider {
         let (api_key, api_url) = get_api_key_and_url()?;
 
         // Convert messages to Z.ai format
-        let messages: Vec<ZaiMessage> = params
-            .messages
-            .iter()
-            .map(|msg| ZaiMessage {
-                role: msg.role.clone(),
-                content: msg.content.clone(),
-                reasoning_content: msg.thinking.as_ref().map(|t| t.content.clone()),
-                tool_calls: msg.tool_calls.as_ref().map(convert_tool_calls),
-                tool_calls_id: None,
-            })
-            .collect();
+        let messages = convert_messages(&params.messages);
 
         // Build request
         // Z.ai API is strict about floating point precision - convert f32 to f64 and round to 2 decimal places
@@ -388,6 +378,22 @@ impl AiProvider for ZaiProvider {
 
         Ok(response)
     }
+}
+
+/// Convert generic conversation messages to Z.ai's OpenAI-compatible wire format.
+fn convert_messages(messages: &[crate::llm::types::Message]) -> Vec<ZaiMessage> {
+    messages
+        .iter()
+        .map(|msg| ZaiMessage {
+            role: msg.role.clone(),
+            content: msg.content.clone(),
+            reasoning_content: msg.thinking.as_ref().map(|t| t.content.clone()),
+            tool_calls: msg.tool_calls.as_ref().map(convert_tool_calls),
+            // Tool results must reference the matching assistant tool call. Without
+            // this field Z.ai cannot associate the returned content with the call.
+            tool_call_id: msg.tool_call_id.clone(),
+        })
+        .collect()
 }
 
 /// Convert tool calls from unified format to Z.ai format
@@ -691,6 +697,46 @@ fn extract_thinking(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_tool_call_and_result_round_trip() {
+        use crate::llm::tool_calls::GenericToolCall;
+        use crate::llm::types::Message;
+
+        let tool_calls = serde_json::to_value(vec![GenericToolCall {
+            id: "call_weather".to_string(),
+            name: "get_weather".to_string(),
+            arguments: serde_json::json!({"city": "Bangkok"}),
+            meta: None,
+        }])
+        .unwrap();
+
+        let assistant = Message {
+            tool_calls: Some(tool_calls),
+            ..Message::assistant("")
+        };
+        let tool_result = Message::tool(
+            r#"{"temperature_c":31,"condition":"sunny"}"#,
+            "call_weather",
+            "get_weather",
+        );
+
+        let converted = convert_messages(&[assistant, tool_result]);
+        let serialized = serde_json::to_value(converted).unwrap();
+
+        assert_eq!(serialized[0]["tool_calls"][0]["id"], "call_weather");
+        assert_eq!(
+            serialized[0]["tool_calls"][0]["function"]["arguments"],
+            r#"{"city":"Bangkok"}"#
+        );
+        assert_eq!(serialized[1]["role"], "tool");
+        assert_eq!(serialized[1]["tool_call_id"], "call_weather");
+        assert_eq!(
+            serialized[1]["content"],
+            r#"{"temperature_c":31,"condition":"sunny"}"#
+        );
+        assert!(serialized[1].get("tool_calls_id").is_none());
+    }
 
     #[test]
     fn test_model_support() {

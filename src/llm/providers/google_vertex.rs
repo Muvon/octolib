@@ -26,11 +26,9 @@
 //! Model discovery: Available models are lazy-loaded from the Vertex AI API on first
 //! chat_completion() call. The list is cached for the lifetime of the process.
 
-use crate::llm::providers::openai_compat::{
-    chat_completion as openai_compat_chat_completion, OpenAiCompatConfig,
-};
+use crate::llm::providers::openai_compat::{chat_completion_with_sampling, OpenAiCompatConfig};
 use crate::llm::traits::AiProvider;
-use crate::llm::types::{ChatCompletionParams, ProviderResponse};
+use crate::llm::types::{ChatCompletionParams, ProviderResponse, SamplingSupport};
 use crate::llm::utils::{get_model_pricing, normalize_model_name, PricingTuple};
 use anyhow::{Context, Result};
 use jsonwebtoken::{Algorithm, EncodingKey, Header};
@@ -58,13 +56,15 @@ impl GoogleVertexProvider {
 /// Gemini model pricing (per 1M tokens in USD), shared with the google-studio
 /// provider — both APIs bill Gemini models at the same rates.
 /// Sources: https://ai.google.dev/gemini-api/docs/pricing and
-/// https://cloud.google.com/vertex-ai/generative-ai/pricing (verified Jul 30, 2026)
+/// https://cloud.google.com/vertex-ai/generative-ai/pricing (verified Aug 14, 2026)
 /// Using ≤200K context tier prices. Format: (model, input, output, cache_write, cache_read)
 /// Matching is substring-based and first-match-wins: keep "-lite"/"-pro" variants
 /// before their shorter prefixes.
 pub(super) const PRICING: &[PricingTuple] = &[
-    // Gemini 3.6 series
-    ("gemini-3.6-flash", 1.50, 7.50, 1.50, 0.15),
+    // Gemini 3.7 / 3.6 series — introductory pricing through Dec 31, 2026;
+    // standard rates from Jan 1, 2027: input $1.50, output $7.50, cache read $0.15
+    ("gemini-3.7-flash", 0.75, 3.75, 0.75, 0.075),
+    ("gemini-3.6-flash", 0.75, 3.75, 0.75, 0.075),
     // Gemini 3.5 series (gemini-flash-latest points here)
     ("gemini-3.5-flash-lite", 0.30, 2.50, 0.30, 0.03),
     ("gemini-3.5-flash", 1.50, 9.00, 1.50, 0.15),
@@ -200,6 +200,17 @@ pub(super) fn gemini_max_input_tokens(model: &str) -> usize {
         8_192
     } else {
         32_768 // Conservative default
+    }
+}
+
+/// Sampling-parameter support for Gemini models (shared with the google-studio
+/// provider). Gemini 3.6/3.7 dropped temperature/top_p/top_k support.
+pub(super) fn gemini_sampling_support(model: &str) -> SamplingSupport {
+    let normalized = normalize_model_name(model);
+    if normalized.contains("gemini-3.6") || normalized.contains("gemini-3.7") {
+        SamplingSupport::NONE
+    } else {
+        SamplingSupport::ALL
     }
 }
 
@@ -392,6 +403,10 @@ impl AiProvider for GoogleVertexProvider {
         gemini_max_input_tokens(model)
     }
 
+    fn supported_sampling_params(&self, model: &str) -> SamplingSupport {
+        gemini_sampling_support(model)
+    }
+
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
         // Generate access token from service account
         let credentials_file = resolve_credentials_file()?;
@@ -415,12 +430,13 @@ impl AiProvider for GoogleVertexProvider {
             .get_or_try_init(|| async move { fetch_available_models(&token, &url).await })
             .await;
 
-        openai_compat_chat_completion(
+        chat_completion_with_sampling(
             OpenAiCompatConfig {
                 provider_name: "google-vertex",
                 usage_fallback_cost: None,
                 use_response_cost: true,
             },
+            self.supported_sampling_params(&params.model),
             api_key,
             api_url,
             params,
@@ -466,9 +482,14 @@ mod tests {
         assert_eq!(p.input_price_per_1m, 1.50);
         assert_eq!(p.output_price_per_1m, 9.00);
 
+        let p = provider.get_model_pricing("gemini-3.7-flash").unwrap();
+        assert_eq!(p.input_price_per_1m, 0.75);
+        assert_eq!(p.output_price_per_1m, 3.75);
+
+        // Intro rate applies to 3.6 Flash too, through Dec 31, 2026
         let p = provider.get_model_pricing("gemini-3.6-flash").unwrap();
-        assert_eq!(p.input_price_per_1m, 1.50);
-        assert_eq!(p.output_price_per_1m, 7.50);
+        assert_eq!(p.input_price_per_1m, 0.75);
+        assert_eq!(p.output_price_per_1m, 3.75);
 
         let p = provider.get_model_pricing("gemini-2.5-flash").unwrap();
         assert_eq!(p.input_price_per_1m, 0.30);
@@ -494,5 +515,26 @@ mod tests {
         assert_eq!(provider.get_max_input_tokens("gemini-2.5-pro"), 1_048_576);
         assert_eq!(provider.get_max_input_tokens("gemini-1.5-pro"), 1_000_000);
         assert_eq!(provider.get_max_input_tokens("text-bison"), 8_192);
+    }
+
+    #[test]
+    fn test_sampling_params() {
+        let provider = GoogleVertexProvider::new();
+        assert_eq!(
+            provider.supported_sampling_params("gemini-3.7-flash"),
+            SamplingSupport::NONE
+        );
+        assert_eq!(
+            provider.supported_sampling_params("gemini-3.6-flash"),
+            SamplingSupport::NONE
+        );
+        assert_eq!(
+            provider.supported_sampling_params("gemini-3.5-flash"),
+            SamplingSupport::ALL
+        );
+        assert_eq!(
+            provider.supported_sampling_params("gemini-2.5-pro"),
+            SamplingSupport::ALL
+        );
     }
 }

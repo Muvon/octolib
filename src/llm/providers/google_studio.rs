@@ -27,14 +27,14 @@
 //! chat_completion() call. The list is cached for the lifetime of the process.
 
 use crate::llm::providers::google_vertex::{
-    fetch_available_models, gemini_max_input_tokens, get_cached_input_limit, is_model_cached,
-    CachedModel, PRICING,
+    fetch_available_models, gemini_max_input_tokens, gemini_sampling_support,
+    get_cached_input_limit, is_model_cached, CachedModel, PRICING,
 };
 use crate::llm::providers::openai_compat::{
-    chat_completion as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
+    chat_completion_with_sampling, get_api_url, OpenAiCompatConfig,
 };
 use crate::llm::traits::AiProvider;
-use crate::llm::types::{ChatCompletionParams, ProviderResponse};
+use crate::llm::types::{ChatCompletionParams, ProviderResponse, SamplingSupport};
 use crate::llm::utils::{
     calculate_cost_from_pricing_table, get_model_pricing, normalize_model_name,
 };
@@ -123,6 +123,10 @@ impl AiProvider for GoogleStudioProvider {
         gemini_max_input_tokens(model)
     }
 
+    fn supported_sampling_params(&self, model: &str) -> SamplingSupport {
+        gemini_sampling_support(model)
+    }
+
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
         let api_key = self.get_api_key()?;
         let api_url = get_api_url(GOOGLE_STUDIO_API_URL_ENV, GOOGLE_STUDIO_API_URL);
@@ -135,12 +139,13 @@ impl AiProvider for GoogleStudioProvider {
             .get_or_try_init(|| async move { fetch_available_models(&key, &url).await })
             .await;
 
-        let mut response = openai_compat_chat_completion(
+        let mut response = chat_completion_with_sampling(
             OpenAiCompatConfig {
                 provider_name: "google-studio",
                 usage_fallback_cost: None,
                 use_response_cost: true,
             },
+            self.supported_sampling_params(&model),
             api_key,
             api_url,
             params,
@@ -176,6 +181,7 @@ mod tests {
         // Before cache is populated, accept any non-empty model
         assert!(provider.supports_model("gemini-2.5-flash"));
         assert!(provider.supports_model("gemini-3.6-flash"));
+        assert!(provider.supports_model("gemini-3.7-flash"));
         assert!(!provider.supports_model(""));
     }
 
@@ -192,12 +198,34 @@ mod tests {
     }
 
     #[test]
+    fn test_sampling_params() {
+        let provider = GoogleStudioProvider::new();
+        assert_eq!(
+            provider.supported_sampling_params("gemini-3.7-flash"),
+            SamplingSupport::NONE
+        );
+        assert_eq!(
+            provider.supported_sampling_params("gemini-3.6-flash"),
+            SamplingSupport::NONE
+        );
+        assert_eq!(
+            provider.supported_sampling_params("gemini-2.5-flash"),
+            SamplingSupport::ALL
+        );
+    }
+
+    #[test]
     fn test_model_pricing() {
         let provider = GoogleStudioProvider::new();
 
+        let p = provider.get_model_pricing("gemini-3.7-flash").unwrap();
+        assert_eq!(p.input_price_per_1m, 0.75);
+        assert_eq!(p.output_price_per_1m, 3.75);
+
+        // Intro rate applies to 3.6 Flash too, through Dec 31, 2026
         let p = provider.get_model_pricing("gemini-3.6-flash").unwrap();
-        assert_eq!(p.input_price_per_1m, 1.50);
-        assert_eq!(p.output_price_per_1m, 7.50);
+        assert_eq!(p.input_price_per_1m, 0.75);
+        assert_eq!(p.output_price_per_1m, 3.75);
 
         // Preview suffixes resolve to the base model's pricing
         let p = provider

@@ -299,6 +299,12 @@ mod tests {
                 .max_input_tokens,
             200_000
         );
+        assert_eq!(
+            get_reference_capabilities("glm-5.3")
+                .unwrap()
+                .max_input_tokens,
+            200_000
+        );
     }
 
     #[test]

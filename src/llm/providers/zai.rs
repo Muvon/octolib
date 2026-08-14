@@ -16,6 +16,10 @@
 //!
 //! PRICING UPDATE: April 2026 (from <https://docs.z.ai/guides/overview/pricing>)
 //!
+//! GLM-5.3 series (added Aug 2026):
+//! - GLM-5.3: Input $1.40/1M, Cached $0.26/1M, Output $4.40/1M (mirrors GLM-5.2;
+//!   official 5.3 pricing not yet published — same base model, post-training update)
+//!
 //! GLM-5.2 series:
 //! - GLM-5.2: Input $1.40/1M, Cached $0.26/1M, Output $4.40/1M (pricing mirrors GLM-5.1)
 //!
@@ -71,6 +75,8 @@ use std::env;
 /// Source: https://docs.z.ai/guides/overview/pricing (verified Apr 6, 2026)
 /// Format: (model, input, output, cache_write, cache_read)
 const PRICING: &[PricingTuple] = &[
+    // GLM-5.3 — official pricing pending; mirrors GLM-5.2 (same base model, post-training update)
+    ("glm-5.3", 1.40, 4.40, 0.00, 0.26),
     // GLM-5.2 series (pricing mirrors GLM-5.1)
     ("glm-5.2", 1.40, 4.40, 0.00, 0.26),
     // GLM-5.1 series
@@ -301,8 +307,11 @@ impl AiProvider for ZaiProvider {
     fn get_max_input_tokens(&self, model: &str) -> usize {
         // Z.ai model context window limits (case-insensitive)
         let model_lower = normalize_model_name(model);
-        if model_lower.contains("glm-5.2") || model_lower.contains("glm-5.1") {
-            200_000 // 200K context window for GLM-5.1/5.2
+        if model_lower.contains("glm-5.3")
+            || model_lower.contains("glm-5.2")
+            || model_lower.contains("glm-5.1")
+        {
+            200_000 // 200K context window for GLM-5.1/5.2/5.3
         } else if model_lower.contains("glm-5") {
             128_000 // 128K context window for GLM-5
         } else if model_lower.contains("glm-4.7") {
@@ -354,10 +363,12 @@ impl AiProvider for ZaiProvider {
                     "type": mode_str
                 })
             }),
-            // Z.ai GLM hybrid thinking models (4.5/4.6/4.7/5/5.1) accept
+            // Z.ai GLM hybrid thinking models (4.5/4.6/4.7/5.x) accept
             // `thinking: { "type": "enabled" | "disabled" }`. The API is binary —
             // there is no budget knob, so any non-None ReasoningEffort enables it.
             // Models without hybrid thinking (e.g. glm-4-32b, glm-ocr) ignore the field.
+            // GLM-5.3 requires thinking ("disabled" is rejected); omitting the field
+            // uses the API default, which is enabled.
             thinking: params
                 .reasoning_effort
                 .map(|_| serde_json::json!({ "type": "enabled" })),
@@ -742,6 +753,7 @@ mod tests {
     fn test_model_support() {
         let provider = ZaiProvider::new();
         assert!(provider.supports_model("glm-5.1"));
+        assert!(provider.supports_model("glm-5.3"));
         assert!(provider.supports_model("glm-5.1-turbo"));
         assert!(provider.supports_model("glm-5"));
         assert!(provider.supports_model("glm-5-turbo"));
@@ -776,6 +788,10 @@ mod tests {
 
         // Test GLM-5.1: $1.40 input, $4.40 output
         let cost = calculate_cost("glm-5.1", 1_000_000, 0, 1_000_000);
+        assert!((cost.unwrap() - 5.80).abs() < 0.01); // 1.40 + 4.40
+
+        // Test GLM-5.3: mirrors GLM-5.2 pricing ($1.40 input, $4.40 output)
+        let cost = calculate_cost("glm-5.3", 1_000_000, 0, 1_000_000);
         assert!((cost.unwrap() - 5.80).abs() < 0.01); // 1.40 + 4.40
 
         // Test GLM-4.5: $0.60 input, $2.20 output

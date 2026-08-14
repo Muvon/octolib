@@ -1159,6 +1159,14 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: None,
     },
     ReferenceModelEntry {
+        // GLM-5.3 (Aug 14, 2026) — same base as GLM-5.2, post-training update.
+        // Official 5.3 pricing not yet published; mirrors GLM-5.2 rates.
+        // Must stay above the bare "glm-5" entry (substring match, first wins).
+        pattern: "glm-5.3",
+        capabilities: caps(false, false, true, 200_000),
+        pricing: pricing(1.40, 4.40, 0.00, 0.26),
+    },
+    ReferenceModelEntry {
         pattern: "glm-5.2",
         capabilities: caps(false, false, true, 200_000),
         pricing: pricing(1.40, 4.40, 0.00, 0.26),

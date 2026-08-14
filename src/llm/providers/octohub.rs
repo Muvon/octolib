@@ -534,17 +534,17 @@ fn messages_to_input(messages: &[Message], previous_id: Option<&str>) -> Vec<ser
         messages
             .iter()
             .skip(start)
-            .filter_map(input_item_for_message)
+            .flat_map(input_items_for_message)
             .collect()
     } else {
         // Initial or locally-compacted request: send the local transcript, not
         // just user turns. This is required after compression because the
         // synthetic assistant summary is the context replacement.
-        messages.iter().filter_map(input_item_for_message).collect()
+        messages.iter().flat_map(input_items_for_message).collect()
     }
 }
 
-fn input_item_for_message(msg: &Message) -> Option<serde_json::Value> {
+fn input_items_for_message(msg: &Message) -> Vec<serde_json::Value> {
     match msg.role.as_str() {
         "tool" => {
             let call_id = msg.tool_call_id.clone().unwrap_or_default();
@@ -560,30 +560,47 @@ fn input_item_for_message(msg: &Message) -> Option<serde_json::Value> {
                 item["cache_control"] =
                     shared::ephemeral_cache_control_with_ttl(msg.cache_ttl.as_deref());
             }
-            Some(item)
+            vec![item]
         }
-        "user" => Some(user_message_value(msg)),
-        "assistant" if !msg.content.is_empty() => {
-            // Plain string unless cached; when cached, use the typed-parts shape so
-            // the cache_control marker rides along (server reads it via is_cached()).
-            let content = if msg.cached {
-                let mut block = serde_json::json!([{
-                    "type": "input_text",
-                    "text": msg.content,
-                }]);
-                block[0]["cache_control"] =
-                    shared::ephemeral_cache_control_with_ttl(msg.cache_ttl.as_deref());
-                block
-            } else {
-                serde_json::json!(msg.content)
-            };
-            Some(serde_json::json!({
-                "type": "message",
-                "role": "assistant",
-                "content": content
-            }))
+        "user" => vec![user_message_value(msg)],
+        "assistant" => {
+            let mut items = Vec::new();
+
+            if !msg.content.is_empty() {
+                // Plain string unless cached; when cached, use the typed-parts shape so
+                // the cache_control marker rides along (server reads it via is_cached()).
+                let content = if msg.cached {
+                    let mut block = serde_json::json!([{
+                        "type": "input_text",
+                        "text": msg.content,
+                    }]);
+                    block[0]["cache_control"] =
+                        shared::ephemeral_cache_control_with_ttl(msg.cache_ttl.as_deref());
+                    block
+                } else {
+                    serde_json::json!(msg.content)
+                };
+                items.push(serde_json::json!({
+                    "type": "message",
+                    "role": "assistant",
+                    "content": content
+                }));
+            }
+
+            // Without previous_completion_id the server has no stored assistant
+            // turn, so replay each function call before its function_call_output.
+            for call in shared::parse_generic_tool_calls_lossy(msg.tool_calls.as_ref(), "octohub") {
+                items.push(serde_json::json!({
+                    "type": "function_call",
+                    "call_id": call.id,
+                    "name": call.name,
+                    "arguments": shared::arguments_to_json_string(&call.arguments),
+                }));
+            }
+
+            items
         }
-        _ => None,
+        _ => Vec::new(),
     }
 }
 
@@ -853,6 +870,33 @@ mod tests {
         assert_eq!(input[0]["type"], "function_call_output");
         assert_eq!(input[0]["call_id"], "call_xyz");
         assert_eq!(input[0]["output"], "72°F sunny");
+    }
+
+    #[test]
+    fn test_messages_to_input_rebased_tool_call_and_result() {
+        let mut assistant_msg = Message::assistant("");
+        assistant_msg.tool_calls = Some(serde_json::json!([{
+            "id": "call_xyz",
+            "name": "get_weather",
+            "arguments": {"location": "NYC"}
+        }]));
+        let messages = vec![
+            Message::user("What is the weather?"),
+            assistant_msg,
+            Message::tool("72°F sunny", "call_xyz", "get_weather"),
+        ];
+
+        let input = messages_to_input(&messages, None);
+        assert_eq!(input.len(), 3);
+        assert_eq!(input[0]["type"], "message");
+        assert_eq!(input[0]["role"], "user");
+        assert_eq!(input[1]["type"], "function_call");
+        assert_eq!(input[1]["call_id"], "call_xyz");
+        assert_eq!(input[1]["name"], "get_weather");
+        assert_eq!(input[1]["arguments"], r#"{"location":"NYC"}"#);
+        assert_eq!(input[2]["type"], "function_call_output");
+        assert_eq!(input[2]["call_id"], "call_xyz");
+        assert_eq!(input[2]["output"], "72°F sunny");
     }
 
     /// Regression: after a multi-turn cancel that leaves a tool_result without

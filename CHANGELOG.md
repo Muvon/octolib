@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.32.0] - 2026-08-15
+
+### 📋 Release Summary
+
+This release expands provider capabilities with support for the GLM-5.3 model, Google sampling, and dynamic peak/off-peak pricing for DeepSeek (5753fbf5, 5eb45932, f47f6da2). Additionally, tool call handling has been improved for better compatibility across assistant messages and the Zai provider (86db46fc, c2b659ff).
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: implement peak and off-peak pricing for DeepSeek `5753fbf5`
+- **llm**: add sampling support for Google providers `5eb45932`
+- **llm**: add support for GLM-5.3 model `f47f6da2`
+
+### 🔧 Improvements & Optimizations
+
+- **llm**: simplify pricing table test assertions `59b8ef0b`
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: allow assistant messages to contain tool calls `86db46fc`
+- **llm**: ensure tool call IDs are sent to Zai provider `c2b659ff`
+
 ## [0.31.1] - 2026-08-13
 
 ### 📋 Release Summary

@@ -746,17 +746,12 @@ mod tests {
         let midnight = 1_786_924_800_u64;
         for hour in 0..24u64 {
             let table = pricing_table_at(at(midnight + hour * 3_600));
-            let expected_peak = is_peak_hour(hour);
-            assert_eq!(
-                table.as_ptr(),
-                if expected_peak {
-                    PRICING_PEAK.as_ptr()
-                } else {
-                    PRICING_OFF_PEAK.as_ptr()
-                },
-                "hour {} misclassified",
-                hour
-            );
+            let expected = if is_peak_hour(hour) {
+                PRICING_PEAK
+            } else {
+                PRICING_OFF_PEAK
+            };
+            assert_eq!(table, expected, "hour {} misclassified", hour);
         }
     }
 

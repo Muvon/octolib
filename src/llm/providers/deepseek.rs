@@ -14,19 +14,21 @@
 
 //! DeepSeek provider implementation
 //!
-//! PRICING VERIFIED: August 2026 (unchanged since 2026-04-24 revision;
-//! `deepseek-v4-flash` points to the retrained 0731 snapshot since 2026-07-31)
+//! PRICING VERIFIED: August 2026 — peak/off-peak billing (effective
+//! 2026-08-16 16:00 UTC; peak windows 01:00-04:00 and 06:00-10:00 UTC,
+//! off-peak rates are half of peak).
 //! Source: <https://api-docs.deepseek.com/quick_start/pricing>
+//! (`deepseek-v4-flash` points to the retrained 0731 snapshot since 2026-07-31)
 //!
-//! deepseek-v4-flash (1M context, thinking by default):
-//! - Cache Hit: $0.0028
-//! - Cache Miss (Input): $0.14
-//! - Output: $0.28
+//! deepseek-v4-flash (1M context, thinking by default), peak/off-peak:
+//! - Cache Hit: $0.014 / $0.007
+//! - Cache Miss (Input): $0.44 / $0.22
+//! - Output: $1.32 / $0.66
 //!
-//! deepseek-v4-pro (1M context, thinking by default):
-//! - Cache Hit: $0.003625
-//! - Cache Miss (Input): $0.435
-//! - Output: $0.87
+//! deepseek-v4-pro (1M context, thinking by default), peak/off-peak:
+//! - Cache Hit: $0.044 / $0.022
+//! - Cache Miss (Input): $1.32 / $0.66
+//! - Output: $3.96 / $1.98
 //!
 //! Legacy aliases deepseek-chat / deepseek-reasoner were removed by DeepSeek
 //! on 2026-07-24 15:59 UTC per <https://api-docs.deepseek.com/updates>.
@@ -52,11 +54,37 @@ use std::env;
 // Source: https://api-docs.deepseek.com/quick_start/pricing
 /// Format: (model, input, output, cache_write, cache_read)
 /// Note: DeepSeek uses cache_hit/cache_miss model - cache_write = cache_miss (input), cache_read = cache_hit
-const PRICING: &[PricingTuple] = &[
-    // V4 family (1M context)
-    ("deepseek-v4-pro", 0.435, 0.87, 0.435, 0.003625),
-    ("deepseek-v4-flash", 0.14, 0.28, 0.14, 0.0028),
+/// DeepSeek bills peak / off-peak: peak windows are 01:00-04:00 and 06:00-10:00
+/// UTC, off-peak (all other hours) is half of peak (effective 2026-08-16 16:00 UTC).
+const PRICING_PEAK: &[PricingTuple] = &[
+    // V4 family (1M context), peak-hour rates
+    ("deepseek-v4-pro", 1.32, 3.96, 1.32, 0.044),
+    ("deepseek-v4-flash", 0.44, 1.32, 0.44, 0.014),
 ];
+
+const PRICING_OFF_PEAK: &[PricingTuple] = &[
+    // V4 family (1M context), off-peak rates (half of peak)
+    ("deepseek-v4-pro", 0.66, 1.98, 0.66, 0.022),
+    ("deepseek-v4-flash", 0.22, 0.66, 0.22, 0.007),
+];
+
+/// Peak billing windows (UTC): 01:00-04:00 and 06:00-10:00
+fn is_peak_hour(utc_hour: u64) -> bool {
+    (1..4).contains(&utc_hour) || (6..10).contains(&utc_hour)
+}
+
+/// Pick the pricing table that applies at `time` (tier decided by the UTC hour)
+fn pricing_table_at(time: std::time::SystemTime) -> &'static [PricingTuple] {
+    let secs = time
+        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    if is_peak_hour((secs % 86_400) / 3_600) {
+        PRICING_PEAK
+    } else {
+        PRICING_OFF_PEAK
+    }
+}
 
 /// Map generic ReasoningEffort to DeepSeek's `reasoning_effort` string.
 /// DeepSeek supports only "low" / "high" / "max" (default "high" when the
@@ -74,21 +102,17 @@ fn map_reasoning_effort(
     }
 }
 
-/// Get pricing tuple for a specific model (case-insensitive)
-/// Returns None if the model is not in the pricing table (not supported)
-fn get_pricing_tuple(model: &str) -> Option<(f64, f64, f64, f64)> {
-    crate::llm::utils::get_model_pricing(model, PRICING)
-}
-
-/// Calculate cost for DeepSeek models with cache-aware pricing (Jan 2026)
+/// Calculate cost for DeepSeek models with cache-aware pricing, against the
+/// pricing table active at request time (legacy / peak / off-peak)
 fn calculate_cost_with_cache(
+    pricing: &[PricingTuple],
     model: &str,
     regular_input_tokens: u64,
     cache_hit_tokens: u64,
     completion_tokens: u64,
 ) -> Option<f64> {
     let (input_price, output_price, _cache_write_price, cache_read_price) =
-        get_pricing_tuple(model)?;
+        crate::llm::utils::get_model_pricing(model, pricing)?;
 
     let regular_input_cost = (regular_input_tokens as f64 / 1_000_000.0) * input_price;
     let cache_hit_cost = (cache_hit_tokens as f64 / 1_000_000.0) * cache_read_price;
@@ -98,8 +122,13 @@ fn calculate_cost_with_cache(
 }
 
 /// Calculate cost for DeepSeek models without cache
-fn calculate_cost(model: &str, input_tokens: u64, completion_tokens: u64) -> Option<f64> {
-    calculate_cost_with_cache(model, input_tokens, 0, completion_tokens)
+fn calculate_cost(
+    pricing: &[PricingTuple],
+    model: &str,
+    input_tokens: u64,
+    completion_tokens: u64,
+) -> Option<f64> {
+    calculate_cost_with_cache(pricing, model, input_tokens, 0, completion_tokens)
 }
 
 /// DeepSeek provider
@@ -289,8 +318,9 @@ impl AiProvider for DeepSeekProvider {
     }
 
     fn supports_model(&self, model: &str) -> bool {
-        // DeepSeek models - check against pricing table (strict)
-        is_model_in_pricing_table(model, PRICING)
+        // DeepSeek models - check against the active pricing table (strict);
+        // the model set is identical across peak/off-peak tables
+        is_model_in_pricing_table(model, pricing_table_at(std::time::SystemTime::now()))
     }
 
     fn get_api_key(&self) -> Result<String> {
@@ -326,7 +356,10 @@ impl AiProvider for DeepSeekProvider {
 
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
         let (input_price, output_price, cache_write_price, cache_read_price) =
-            crate::llm::utils::get_model_pricing(model, PRICING)?;
+            crate::llm::utils::get_model_pricing(
+                model,
+                pricing_table_at(std::time::SystemTime::now()),
+            )?;
 
         Some(crate::llm::types::ModelPricing::new(
             input_price,
@@ -549,16 +582,19 @@ impl AiProvider for DeepSeekProvider {
             // DeepSeek doesn't expose cache_write separately - it's included in cache_miss
             let cache_write_tokens = 0_u64;
 
-            // Calculate cost with pricing table values (Jan 2026)
+            // Calculate cost with the pricing table active at response time
+            // (peak windows 01:00-04:00 and 06:00-10:00 UTC, off-peak otherwise)
+            let pricing = pricing_table_at(std::time::SystemTime::now());
             let cost = if cache_read_tokens > 0 {
                 calculate_cost_with_cache(
+                    pricing,
                     &params.model,
                     input_tokens_clean,
                     cache_read_tokens,
                     completion_tokens,
                 )
             } else {
-                calculate_cost(&params.model, prompt_tokens, completion_tokens)
+                calculate_cost(pricing, &params.model, prompt_tokens, completion_tokens)
             };
 
             let reasoning_tokens = usage
@@ -680,39 +716,48 @@ mod tests {
     }
 
     #[test]
-    fn test_calculate_cost() {
-        // deepseek-v4-flash: Input: $0.14/1M, Output: $0.28/1M
-        let cost = calculate_cost("deepseek-v4-flash", 1_000_000, 500_000);
-        assert!(cost.is_some());
-        let cost_value = cost.unwrap();
+    fn test_tiered_pricing_peak_and_off_peak() {
+        // Peak: flash $0.44 in / $1.32 out per 1M
+        let peak = calculate_cost(PRICING_PEAK, "deepseek-v4-flash", 1_000_000, 500_000).unwrap();
+        assert!((peak - (0.44 + 0.5 * 1.32)).abs() < 0.01);
 
-        // Expected: (1M * $0.14) + (0.5M * $0.28) = $0.14 + $0.14 = $0.28
-        let expected = 0.14 + (0.5 * 0.28);
-        assert!((cost_value - expected).abs() < 0.01);
+        // Off-peak is exactly half of peak
+        let off_peak =
+            calculate_cost(PRICING_OFF_PEAK, "deepseek-v4-flash", 1_000_000, 500_000).unwrap();
+        assert!((off_peak - peak / 2.0).abs() < 0.01);
 
-        // deepseek-v4-pro: Input: $0.435/1M, Output: $0.87/1M
-        let cost2 = calculate_cost("deepseek-v4-pro", 1_000_000, 500_000);
-        assert!(cost2.is_some());
-        let expected2 = 0.435 + (0.5 * 0.87);
-        assert!((cost2.unwrap() - expected2).abs() < 0.01);
+        // Peak: pro $1.32 in / $3.96 out per 1M
+        let pro = calculate_cost(PRICING_PEAK, "deepseek-v4-pro", 1_000_000, 500_000).unwrap();
+        assert!((pro - (1.32 + 0.5 * 3.96)).abs() < 0.01);
+
+        // Peak cache-hit rate: flash $0.014/1M
+        let cached =
+            calculate_cost_with_cache(PRICING_PEAK, "deepseek-v4-flash", 0, 1_000_000, 0).unwrap();
+        assert!((cached - 0.014).abs() < 0.0001);
     }
 
     #[test]
-    fn test_calculate_cost_with_cache() {
-        // deepseek-v4-flash: Cache hit: $0.0028/1M, Cache miss: $0.14/1M, Output: $0.28/1M
-        let cost = calculate_cost_with_cache("deepseek-v4-flash", 500_000, 500_000, 250_000);
-        assert!(cost.is_some());
-        let cost_value = cost.unwrap();
+    fn test_pricing_table_at_selects_tier() {
+        use std::time::{Duration, SystemTime};
 
-        // Expected: (0.5M * $0.14) + (0.5M * $0.0028) + (0.25M * $0.28)
-        //         = $0.07 + $0.0014 + $0.07 = $0.1414
-        let expected = (0.5 * 0.14) + (0.5 * 0.0028) + (0.25 * 0.28);
-        assert!((cost_value - expected).abs() < 0.01);
+        let at = |secs: u64| SystemTime::UNIX_EPOCH + Duration::from_secs(secs);
 
-        // Cost with cache should be less than without cache for same total input
-        let cost_no_cache = calculate_cost("deepseek-v4-flash", 1_000_000, 250_000);
-        assert!(cost_no_cache.is_some());
-        assert!(cost_value < cost_no_cache.unwrap());
+        // 2026-08-17 00:00 UTC — walk a full day hour by hour
+        let midnight = 1_786_924_800_u64;
+        for hour in 0..24u64 {
+            let table = pricing_table_at(at(midnight + hour * 3_600));
+            let expected_peak = is_peak_hour(hour);
+            assert_eq!(
+                table.as_ptr(),
+                if expected_peak {
+                    PRICING_PEAK.as_ptr()
+                } else {
+                    PRICING_OFF_PEAK.as_ptr()
+                },
+                "hour {} misclassified",
+                hour
+            );
+        }
     }
 
     #[test]

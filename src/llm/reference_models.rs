@@ -94,6 +94,11 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(5.00, 30.00, 6.25, 0.50),
     },
     ReferenceModelEntry {
+        pattern: "gpt-5.6-cyber",
+        capabilities: caps(true, false, true, 1_050_000),
+        pricing: pricing(12.50, 75.00, 15.625, 1.25),
+    },
+    ReferenceModelEntry {
         pattern: "gpt-4o-mini-realtime-preview",
         capabilities: caps(false, false, true, 128_000),
         pricing: pricing(0.60, 2.40, 0.60, 0.30),
@@ -111,27 +116,27 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     ReferenceModelEntry {
         pattern: "minimax-m2.7-highspeed",
         capabilities: caps(false, false, false, 1_000_000),
-        pricing: pricing(0.60, 2.40, 0.75, 0.06),
+        pricing: pricing(0.60, 2.40, 0.375, 0.06),
     },
     ReferenceModelEntry {
         pattern: "minimax-m2.5-highspeed",
         capabilities: caps(false, false, false, 1_000_000),
-        pricing: pricing(0.60, 2.40, 0.75, 0.03),
+        pricing: pricing(0.60, 2.40, 0.375, 0.03),
     },
     ReferenceModelEntry {
         pattern: "minimax-m2.5-lightning",
         capabilities: caps(false, false, false, 1_000_000),
-        pricing: pricing(0.60, 2.40, 0.75, 0.03),
+        pricing: pricing(0.60, 2.40, 0.375, 0.03),
     },
     ReferenceModelEntry {
         pattern: "minimax-m2.1-lightning",
         capabilities: caps(false, false, false, 1_000_000),
-        pricing: pricing(0.30, 2.40, 0.30, 0.03),
+        pricing: pricing(0.60, 2.40, 0.375, 0.03),
     },
     ReferenceModelEntry {
         pattern: "kimi-k2.6-code-preview",
         capabilities: caps(false, false, true, 256_000),
-        pricing: pricing(0.60, 2.50, 0.60, 0.15),
+        pricing: pricing(0.95, 4.00, 0.95, 0.16),
     },
     ReferenceModelEntry {
         pattern: "kimi-k2-thinking-turbo",
@@ -176,7 +181,7 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     ReferenceModelEntry {
         pattern: "minimax-m3-highspeed",
         capabilities: caps(true, true, false, 1_000_000),
-        pricing: pricing(0.60, 2.40, 0.75, 0.06),
+        pricing: pricing(0.30, 1.20, 0.0, 0.06),
     },
     ReferenceModelEntry {
         pattern: "bytedance-seed-code",
@@ -350,6 +355,16 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pattern: "gpt-realtime-1.5",
         capabilities: caps(false, false, true, 32_000),
         pricing: pricing(4.00, 16.00, 4.00, 0.40),
+    },
+    ReferenceModelEntry {
+        pattern: "gpt-realtime-2.1-mini",
+        capabilities: caps(false, false, true, 32_000),
+        pricing: pricing(0.60, 2.40, 0.60, 0.06),
+    },
+    ReferenceModelEntry {
+        pattern: "gpt-realtime-2.1",
+        capabilities: caps(false, false, true, 32_000),
+        pricing: pricing(4.00, 24.00, 4.00, 0.40),
     },
     ReferenceModelEntry {
         pattern: "o3-deep-research",
@@ -637,6 +652,11 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(2.00, 6.00, 2.00, 0.30),
     },
     ReferenceModelEntry {
+        pattern: "grok-4.6",
+        capabilities: caps(true, false, true, 500_000),
+        pricing: pricing(2.00, 6.00, 2.00, 0.50),
+    },
+    ReferenceModelEntry {
         pattern: "grok-4.3",
         capabilities: caps(true, false, true, 1_000_000),
         pricing: pricing(1.25, 2.50, 1.25, 0.20),
@@ -750,7 +770,7 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     ReferenceModelEntry {
         pattern: "qwen-3.7-max",
         capabilities: caps(false, false, true, 262_144),
-        pricing: pricing(1.25, 3.75, 1.25, 0.13),
+        pricing: pricing(2.50, 7.50, 2.50, 0.25),
     },
     ReferenceModelEntry {
         pattern: "qwen-2.5-72b",
@@ -1021,12 +1041,12 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     ReferenceModelEntry {
         pattern: "minimax-m3",
         capabilities: caps(true, true, false, 1_000_000),
-        pricing: pricing(0.60, 2.40, 0.75, 0.06),
+        pricing: pricing(0.30, 1.20, 0.0, 0.06),
     },
     ReferenceModelEntry {
         pattern: "minimax-m2",
         capabilities: caps(false, false, false, 1_000_000),
-        pricing: pricing(0.255, 1.00, 0.255, 0.0255),
+        pricing: pricing(0.30, 1.20, 0.375, 0.03),
     },
     ReferenceModelEntry {
         pattern: "gpt-5-mini",
@@ -1081,13 +1101,13 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     ReferenceModelEntry {
         pattern: "kimi-k2.6",
         capabilities: caps(false, false, true, 256_000),
-        pricing: pricing(0.60, 2.50, 0.60, 0.15),
+        pricing: pricing(0.95, 4.00, 0.95, 0.16),
     },
     ReferenceModelEntry {
         // Alias twin of kimi-k2.6 (see kimi-2.7-code above).
         pattern: "kimi-2.6",
         capabilities: caps(false, false, true, 256_000),
-        pricing: pricing(0.60, 2.50, 0.60, 0.15),
+        pricing: pricing(0.95, 4.00, 0.95, 0.16),
     },
     ReferenceModelEntry {
         pattern: "kimi-k2.5",

@@ -35,10 +35,10 @@ use std::env;
 /// Format: (model, input, output, cache_write, cache_read)
 const PRICING: &[PricingTuple] = &[
     // MiniMax M3 (latest generation, natively multimodal — image + video input)
-    // Standard rate; a temporary launch promo halves these to 0.30/1.20.
+    // Standard rate; a permanent 50% off applies to ≤512K input tokens (0.30/1.20).
     // Cache writes are free (no cache-write column in official pricing).
-    ("MiniMax-M3-highspeed", 0.60, 2.40, 0.0, 0.06),
-    ("MiniMax-M3", 0.60, 2.40, 0.0, 0.06),
+    ("MiniMax-M3-highspeed", 0.30, 1.20, 0.0, 0.06),
+    ("MiniMax-M3", 0.30, 1.20, 0.0, 0.06),
     // MiniMax M2.7
     ("MiniMax-M2.7-highspeed", 0.60, 2.40, 0.375, 0.06),
     ("MiniMax-M2.7", 0.30, 1.20, 0.375, 0.06),
@@ -54,6 +54,15 @@ const PRICING: &[PricingTuple] = &[
     ("MiniMax-M2", 0.30, 1.20, 0.375, 0.03),
 ];
 
+/// MiniMax M3: the permanent 50% discount applies only to ≤512K input tokens.
+/// Above 512K, the standard (2x) rate applies to input, output, and cache read.
+const M3_DISCOUNT_MAX_INPUT: u64 = 512_000;
+
+fn is_m3_model(model: &str) -> bool {
+    let m = normalize_model_name(model);
+    m == "minimax-m3" || m == "minimax-m3-highspeed"
+}
+
 /// Token usage breakdown for cache-aware pricing
 struct CacheTokenUsage {
     regular_input_tokens: u64,
@@ -68,8 +77,22 @@ struct CacheTokenUsage {
 /// - regular_input_tokens: charged at normal price
 /// - output_tokens: charged at normal price
 fn calculate_cost_with_cache(model: &str, usage: CacheTokenUsage) -> Option<f64> {
-    let (input_price, output_price, cache_write_price, cache_read_price) =
+    let (mut input_price, mut output_price, cache_write_price, mut cache_read_price) =
         get_model_pricing(model, PRICING)?;
+
+    // MiniMax M3: the 50% discount applies only to ≤512K input tokens.
+    // Above that, the standard (2x) rate applies to input, output, and cache read.
+    if is_m3_model(model) {
+        let total_input = usage
+            .regular_input_tokens
+            .saturating_add(usage.cache_creation_tokens)
+            .saturating_add(usage.cache_read_tokens);
+        if total_input > M3_DISCOUNT_MAX_INPUT {
+            input_price *= 2.0;
+            output_price *= 2.0;
+            cache_read_price *= 2.0;
+        }
+    }
 
     // Regular input tokens at normal price
     let regular_input_cost = (usage.regular_input_tokens as f64 / 1_000_000.0) * input_price;
@@ -750,13 +773,17 @@ mod tests {
 
     #[test]
     fn test_cost_calculation() {
-        // Test MiniMax-M3: $0.60 input, $2.40 output (standard rate)
+        // Test MiniMax-M3: $0.30 input, $1.20 output (permanent 50% off ≤512K)
+        let cost = calculate_minimax_cost("MiniMax-M3", 500_000, 1_000_000, 0, 0);
+        assert!((cost.unwrap() - 1.35).abs() < 1e-9); // 0.15 (0.30 × 0.5M) + 1.20
+
+        // Test MiniMax-M3 above 512K: standard rate $0.60 input, $2.40 output
         let cost = calculate_minimax_cost("MiniMax-M3", 1_000_000, 1_000_000, 0, 0);
         assert_eq!(cost, Some(3.00)); // 0.60 + 2.40
 
-        // Test MiniMax-M3-highspeed: same standard rate
-        let cost = calculate_minimax_cost("MiniMax-M3-highspeed", 1_000_000, 1_000_000, 0, 0);
-        assert_eq!(cost, Some(3.00)); // 0.60 + 2.40
+        // Test MiniMax-M3-highspeed: same rate
+        let cost = calculate_minimax_cost("MiniMax-M3-highspeed", 500_000, 1_000_000, 0, 0);
+        assert!((cost.unwrap() - 1.35).abs() < 1e-9); // 0.15 (0.30 × 0.5M) + 1.20
 
         // Test MiniMax-M2.5: $0.30 input, $1.20 output (Feb 2026)
         let cost = calculate_minimax_cost("MiniMax-M2.5", 1_000_000, 1_000_000, 0, 0);

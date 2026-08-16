@@ -48,12 +48,14 @@ const PRICING: &[PricingTuple] = &[
     ("grok-4.20-0309-non-reasoning", 1.25, 2.50, 1.25, 0.20),
     ("grok-4.20-0309-reasoning", 1.25, 2.50, 1.25, 0.20),
     ("grok-build-0.1", 1.00, 2.00, 1.00, 0.20),
+    ("grok-4.6", 2.00, 6.00, 2.00, 0.50),
     ("grok-4.5", 2.00, 6.00, 2.00, 0.30),
     ("grok-4.3", 1.25, 2.50, 1.25, 0.20),
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ModelFamily {
+    Grok46,
     Grok45,
     Build,
     Grok43,
@@ -63,6 +65,7 @@ enum ModelFamily {
 fn model_family(model: &str) -> Option<ModelFamily> {
     let model = model.to_ascii_lowercase();
     match model.as_str() {
+        "grok-4.6" | "grok-4.6-latest" => Some(ModelFamily::Grok46),
         "grok-4.5" | "grok-4.5-latest" | "grok-build-latest" => Some(ModelFamily::Grok45),
         "grok-build-0.1" | "grok-code-fast" | "grok-code-fast-1" | "grok-code-fast-1-0825" => {
             Some(ModelFamily::Build)
@@ -114,6 +117,7 @@ fn model_family(model: &str) -> Option<ModelFamily> {
 
 fn canonical_model(model: &str) -> Option<&'static str> {
     match model_family(model)? {
+        ModelFamily::Grok46 => Some("grok-4.6"),
         ModelFamily::Grok45 => Some("grok-4.5"),
         ModelFamily::Build => Some("grok-build-0.1"),
         ModelFamily::Grok43 => Some("grok-4.3"),
@@ -156,7 +160,9 @@ fn reasoning_effort(model: &str, effort: Option<ReasoningEffort>) -> Option<&'st
     let is_multi_agent = normalized.contains("multi-agent");
     let is_configurable_single_agent = matches!(
         normalized.as_str(),
-        "grok-4.5"
+        "grok-4.6"
+            | "grok-4.6-latest"
+            | "grok-4.5"
             | "grok-4.5-latest"
             | "grok-build-latest"
             | "grok-4.3"
@@ -164,17 +170,19 @@ fn reasoning_effort(model: &str, effort: Option<ReasoningEffort>) -> Option<&'st
             | "grok-latest"
     );
     match (family, is_multi_agent, effort) {
-        (ModelFamily::Grok45 | ModelFamily::Grok43, _, ReasoningEffort::Low)
+        (
+            ModelFamily::Grok46 | ModelFamily::Grok45 | ModelFamily::Grok43,
+            _,
+            ReasoningEffort::Low,
+        ) if is_configurable_single_agent => Some("low"),
+        (
+            ModelFamily::Grok46 | ModelFamily::Grok45 | ModelFamily::Grok43,
+            _,
+            ReasoningEffort::Medium,
+        ) if is_configurable_single_agent => Some("medium"),
+        (ModelFamily::Grok46 | ModelFamily::Grok45 | ModelFamily::Grok43, _, _)
             if is_configurable_single_agent =>
         {
-            Some("low")
-        }
-        (ModelFamily::Grok45 | ModelFamily::Grok43, _, ReasoningEffort::Medium)
-            if is_configurable_single_agent =>
-        {
-            Some("medium")
-        }
-        (ModelFamily::Grok45 | ModelFamily::Grok43, _, _) if is_configurable_single_agent => {
             Some("high")
         }
         (ModelFamily::Grok420, true, ReasoningEffort::Low) => Some("low"),
@@ -674,7 +682,7 @@ impl AiProvider for XaiProvider {
 
     fn get_max_input_tokens(&self, model: &str) -> usize {
         match model_family(model) {
-            Some(ModelFamily::Grok45) => 500_000,
+            Some(ModelFamily::Grok46 | ModelFamily::Grok45) => 500_000,
             Some(ModelFamily::Build) => 256_000,
             Some(ModelFamily::Grok43 | ModelFamily::Grok420) => 1_000_000,
             None => 0,

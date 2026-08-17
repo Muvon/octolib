@@ -122,6 +122,7 @@ fn calculate_cost_with_cache(
 }
 
 /// Calculate cost for DeepSeek models without cache
+#[cfg(test)]
 fn calculate_cost(
     pricing: &[PricingTuple],
     model: &str,
@@ -129,6 +130,38 @@ fn calculate_cost(
     completion_tokens: u64,
 ) -> Option<f64> {
     calculate_cost_with_cache(pricing, model, input_tokens, 0, completion_tokens)
+}
+
+/// Split a usage report into (cache-miss, cache-hit) prompt tokens.
+///
+/// DeepSeek reports the split in TWO shapes and does not always send both:
+///   * native: `prompt_cache_hit_tokens` + `prompt_cache_miss_tokens`
+///   * OpenAI-compatible: `prompt_tokens_details.cached_tokens`, which has NO
+///     miss counterpart at all
+///
+/// Every one of those fields is `#[serde(default)]`, so reading the miss count
+/// directly yields 0 whenever only the OpenAI-compatible shape arrives — which
+/// billed the entire uncached prompt as FREE and reported `input_tokens` as 0.
+/// `prompt_tokens` is always present and authoritative, so the miss count is
+/// derived from it whenever the explicit field is absent. The subtraction
+/// saturates: a provider inconsistency must never underflow u64 into a
+/// catastrophic charge.
+fn split_prompt_tokens(usage: &DeepSeekUsage) -> (u64, u64) {
+    let hit = if usage.prompt_cache_hit_tokens > 0 {
+        usage.prompt_cache_hit_tokens
+    } else {
+        usage
+            .prompt_tokens_details
+            .as_ref()
+            .map(|d| d.cached_tokens)
+            .unwrap_or(0)
+    };
+    let miss = if usage.prompt_cache_miss_tokens > 0 {
+        usage.prompt_cache_miss_tokens
+    } else {
+        usage.prompt_tokens.saturating_sub(hit)
+    };
+    (miss, hit)
 }
 
 /// DeepSeek provider
@@ -553,49 +586,29 @@ impl AiProvider for DeepSeekProvider {
 
         // Calculate cost with the provider pricing table
         let token_usage = if let Some(usage) = deepseek_response.usage {
-            let prompt_tokens = usage.prompt_tokens;
             let completion_tokens = usage.completion_tokens;
             let total_tokens = usage.total_tokens;
 
-            // DeepSeek reports:
-            // - prompt_cache_hit_tokens: tokens read from cache (cache READ)
-            // - prompt_cache_miss_tokens: fresh input tokens (includes regular + cache WRITE)
-            // DeepSeek doesn't separate regular input from cache write in their API
-            let cache_read_tokens = usage.prompt_cache_hit_tokens;
-            let cache_miss_tokens = usage.prompt_cache_miss_tokens;
-
-            // Also check prompt_tokens_details.cached_tokens as alternative
-            let cache_read_tokens = if cache_read_tokens == 0 {
-                usage
-                    .prompt_tokens_details
-                    .as_ref()
-                    .map(|d| d.cached_tokens)
-                    .unwrap_or(0)
-            } else {
-                cache_read_tokens
-            };
-
-            // For CLEAN input_tokens, we use cache_miss_tokens
-            // (DeepSeek charges these at the "cache miss" rate which includes write cost)
-            let input_tokens_clean = cache_miss_tokens;
+            // Cache misses are billed at the input ("cache miss") rate, hits at the
+            // much cheaper cache-read rate. {@see split_prompt_tokens} for why the
+            // miss count is derived rather than read straight off the response.
+            let (input_tokens_clean, cache_read_tokens) = split_prompt_tokens(&usage);
 
             // DeepSeek doesn't expose cache_write separately - it's included in cache_miss
             let cache_write_tokens = 0_u64;
 
-            // Calculate cost with the pricing table active at response time
-            // (peak windows 01:00-04:00 and 06:00-10:00 UTC, off-peak otherwise)
+            // ONE path for both the cached and uncached case: with zero hits this is
+            // exactly the no-cache calculation, so the two can never drift apart.
+            // Tier is picked from the pricing table active now (peak windows
+            // 01:00-04:00 and 06:00-10:00 UTC, off-peak — half price — otherwise).
             let pricing = pricing_table_at(std::time::SystemTime::now());
-            let cost = if cache_read_tokens > 0 {
-                calculate_cost_with_cache(
-                    pricing,
-                    &params.model,
-                    input_tokens_clean,
-                    cache_read_tokens,
-                    completion_tokens,
-                )
-            } else {
-                calculate_cost(pricing, &params.model, prompt_tokens, completion_tokens)
-            };
+            let cost = calculate_cost_with_cache(
+                pricing,
+                &params.model,
+                input_tokens_clean,
+                cache_read_tokens,
+                completion_tokens,
+            );
 
             let reasoning_tokens = usage
                 .completion_tokens_details
@@ -753,6 +766,48 @@ mod tests {
             };
             assert_eq!(table, expected, "hour {} misclassified", hour);
         }
+    }
+
+    /// Deserializes real payload shapes on purpose: the bug this guards lived in
+    /// the `#[serde(default)]` fields, so constructing the struct by hand would
+    /// step right over it.
+    #[test]
+    fn test_split_prompt_tokens_handles_both_usage_shapes() {
+        let parse = |v: serde_json::Value| -> DeepSeekUsage { serde_json::from_value(v).unwrap() };
+
+        // Native shape — hit and miss both reported.
+        let native = parse(serde_json::json!({
+            "prompt_tokens": 1000, "completion_tokens": 10, "total_tokens": 1010,
+            "prompt_cache_hit_tokens": 400, "prompt_cache_miss_tokens": 600
+        }));
+        assert_eq!(split_prompt_tokens(&native), (600, 400));
+
+        // OpenAI-compatible shape — cached_tokens only, NO miss field anywhere.
+        // Reading the miss field directly yielded 0 here, so the whole uncached
+        // prompt was billed free and reported as 0 input tokens.
+        let compat = parse(serde_json::json!({
+            "prompt_tokens": 1000, "completion_tokens": 10, "total_tokens": 1010,
+            "prompt_tokens_details": {"cached_tokens": 400}
+        }));
+        assert_eq!(
+            split_prompt_tokens(&compat),
+            (600, 400),
+            "uncached prompt tokens must not bill as free"
+        );
+
+        // No cache information at all — every prompt token is a miss.
+        let plain = parse(serde_json::json!({
+            "prompt_tokens": 1000, "completion_tokens": 10, "total_tokens": 1010
+        }));
+        assert_eq!(split_prompt_tokens(&plain), (1000, 0));
+
+        // Inconsistent provider data must saturate, never underflow into a
+        // near-u64::MAX token count and a catastrophic charge.
+        let bogus = parse(serde_json::json!({
+            "prompt_tokens": 100, "completion_tokens": 1, "total_tokens": 101,
+            "prompt_tokens_details": {"cached_tokens": 500}
+        }));
+        assert_eq!(split_prompt_tokens(&bogus), (0, 500));
     }
 
     #[test]

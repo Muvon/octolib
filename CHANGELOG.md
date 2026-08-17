@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.32.1] - 2026-08-17
+
+### 📋 Release Summary
+
+This release expands the available model library and updates pricing data for better cost tracking (0a250402). Additionally, a fix was implemented to ensure accurate prompt token billing for DeepSeek models (aa92441a).
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: add new models and update pricing `0a250402`
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: resolve DeepSeek prompt token billing error `aa92441a`
+
 ## [0.32.0] - 2026-08-15
 
 ### 📋 Release Summary

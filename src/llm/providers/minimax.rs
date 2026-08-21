@@ -696,13 +696,23 @@ async fn execute_minimax_request(
         cache_read_tokens as u32,
     );
 
+    // MiniMax bills thinking inside output_tokens and exposes no reasoning field,
+    // so the estimate is carved out of output rather than reported alongside it.
+    let (output_tokens, reasoning_tokens) =
+        TokenUsage::split_output(minimax_response.usage.output_tokens, reasoning_tokens);
+
     let usage = TokenUsage {
         input_tokens: input_tokens_clean,          // CLEAN input (no cache)
         cache_read_tokens,                         // Tokens read from cache
         cache_write_tokens: cache_creation_tokens, // Tokens written to cache
-        output_tokens: minimax_response.usage.output_tokens,
+        output_tokens,
         reasoning_tokens, // Estimated from thinking content
-        total_tokens: minimax_response.usage.input_tokens + minimax_response.usage.output_tokens,
+        // input_tokens is already cache-free, so cache reads and writes are their
+        // own terms in the total.
+        total_tokens: input_tokens_clean
+            + cache_read_tokens
+            + cache_creation_tokens
+            + minimax_response.usage.output_tokens,
         cost,
         request_time_ms: Some(request_time_ms),
     };

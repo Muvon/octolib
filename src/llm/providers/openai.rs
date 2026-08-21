@@ -1056,13 +1056,16 @@ async fn execute_openai_request(
         .saturating_sub(cache_read_tokens)
         .saturating_sub(cache_write_tokens);
 
+    let (output_tokens, reasoning_tokens) =
+        TokenUsage::split_output(api_response.usage.output_tokens, reasoning_tokens);
+
     let usage = TokenUsage {
         input_tokens: input_tokens_clean, // CLEAN input (no cache)
         cache_read_tokens,                // Tokens read from cache
         cache_write_tokens,
-        output_tokens: api_response.usage.output_tokens,
+        output_tokens,
         reasoning_tokens,
-        total_tokens: api_response.usage.total_tokens + reasoning_tokens,
+        total_tokens: api_response.usage.total_tokens,
         cost,
         request_time_ms: Some(request_time_ms),
     };

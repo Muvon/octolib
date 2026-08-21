@@ -412,6 +412,8 @@ fn normalize_usage(model: &str, usage: XaiUsage, request_time_ms: u64) -> TokenU
             usage.output_tokens,
         )
     });
+    let (output_tokens, reasoning_tokens) =
+        TokenUsage::split_output(usage.output_tokens, reasoning_tokens);
     let total_tokens = if usage.total_tokens > 0 {
         usage.total_tokens
     } else {
@@ -422,7 +424,7 @@ fn normalize_usage(model: &str, usage: XaiUsage, request_time_ms: u64) -> TokenU
         input_tokens: clean_input_tokens,
         cache_read_tokens,
         cache_write_tokens: 0,
-        output_tokens: usage.output_tokens,
+        output_tokens,
         reasoning_tokens,
         total_tokens,
         cost,
@@ -817,7 +819,7 @@ mod tests {
     }
 
     #[test]
-    fn usage_keeps_reasoning_inside_output_total_without_double_counting() {
+    fn usage_splits_reasoning_out_of_output_without_double_counting() {
         let usage: XaiUsage = serde_json::from_value(json!({
             "input_tokens": 120,
             "output_tokens": 30,
@@ -830,9 +832,19 @@ mod tests {
         let usage = normalize_usage("grok-4.5", usage, 9);
         assert_eq!(usage.input_tokens, 100);
         assert_eq!(usage.cache_read_tokens, 20);
-        assert_eq!(usage.output_tokens, 30);
+        // xAI bills reasoning inside output_tokens; reported apart from it.
+        assert_eq!(usage.output_tokens, 18);
         assert_eq!(usage.reasoning_tokens, 12);
         assert_eq!(usage.total_tokens, 150);
+        assert_eq!(
+            usage.input_tokens
+                + usage.cache_read_tokens
+                + usage.cache_write_tokens
+                + usage.output_tokens
+                + usage.reasoning_tokens,
+            usage.total_tokens
+        );
+        // Cost is billed on the raw output counter, reasoning included.
         assert_eq!(usage.cost, Some(0.0037756));
         assert_eq!(usage.request_time_ms, Some(9));
     }

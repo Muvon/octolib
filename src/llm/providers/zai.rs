@@ -392,13 +392,26 @@ impl AiProvider for ZaiProvider {
 }
 
 /// Convert generic conversation messages to Z.ai's OpenAI-compatible wire format.
+///
+/// Reasoning replay follows the same policy as `openai_compat`: it is
+/// per-request context the provider re-renders and bills on every call, so only
+/// the trailing assistant message — the chain the model is continuing — carries
+/// it. Sending it on every historical message re-pays for the whole thinking
+/// history each round, which compounds with session length: measured at 1.01M
+/// replayed tokens over a single 158-round session.
 fn convert_messages(messages: &[crate::llm::types::Message]) -> Vec<ZaiMessage> {
+    let last_assistant = messages.iter().rposition(|m| m.role == "assistant");
     messages
         .iter()
-        .map(|msg| ZaiMessage {
+        .enumerate()
+        .map(|(idx, msg)| ZaiMessage {
             role: msg.role.clone(),
             content: msg.content.clone(),
-            reasoning_content: msg.thinking.as_ref().map(|t| t.content.clone()),
+            reasoning_content: msg
+                .thinking
+                .as_ref()
+                .filter(|_| Some(idx) == last_assistant)
+                .map(|t| t.content.clone()),
             tool_calls: msg.tool_calls.as_ref().map(convert_tool_calls),
             // Tool results must reference the matching assistant tool call. Without
             // this field Z.ai cannot associate the returned content with the call.
@@ -597,6 +610,8 @@ async fn execute_zai_request(
     // Cost needs regular (non-cached) input split from cache reads.
     let regular_input_tokens = input_tokens_raw.saturating_sub(cache_read_tokens);
 
+    // Cost is billed on the provider's raw completion counter; the split below
+    // only affects how the counter is reported to consumers.
     let cost = calculate_cost(
         zai_response.model.as_str(),
         regular_input_tokens,
@@ -604,13 +619,16 @@ async fn execute_zai_request(
         completion_tokens,
     );
 
+    let (output_tokens, reasoning_tokens) =
+        TokenUsage::split_output(completion_tokens, reasoning_tokens);
+
     let token_usage = TokenUsage {
         // CLEAN input tokens - excludes cached reads (as per TokenUsage contract)
         input_tokens: regular_input_tokens,
         cache_read_tokens,  // Tokens read from cache
         cache_write_tokens, // Z.ai doesn't expose this (0)
-        output_tokens: completion_tokens,
-        reasoning_tokens, // Extracted from thinking block content
+        output_tokens,
+        reasoning_tokens, // Estimated from the thinking block, which z.ai bills inside completion_tokens
         total_tokens: usage.map(|u| u.total_tokens).unwrap_or(0),
         cost,
         request_time_ms: Some(request_time_ms),
@@ -864,6 +882,33 @@ mod tests {
         // total => 0.302
         let cost = calculate_cost("glm-4.7", 100_000, 200_000, 100_000).unwrap();
         assert!((cost - 0.302).abs() < 0.0001);
+    }
+
+    #[test]
+    fn only_the_trailing_assistant_replays_reasoning() {
+        use crate::llm::types::{Message, ThinkingBlock};
+        let think = |c: &str| ThinkingBlock {
+            content: c.to_string(),
+            tokens: 0,
+        };
+        let mut older = Message::assistant("older");
+        older.thinking = Some(think("old reasoning"));
+        let mut newer = Message::assistant("newer");
+        newer.thinking = Some(think("current reasoning"));
+
+        let out = serde_json::to_value(convert_messages(&[
+            Message::user("go"),
+            older,
+            Message::user("again"),
+            newer,
+        ]))
+        .unwrap();
+
+        // Historical thinking is dropped — resending it re-pays for the whole
+        // reasoning history on every round.
+        assert!(out[1]["reasoning_content"].is_null());
+        // The chain the model is continuing keeps its reasoning.
+        assert_eq!(out[3]["reasoning_content"], "current reasoning");
     }
 
     #[test]

@@ -409,9 +409,11 @@ impl AiProvider for OctoHubProvider {
             input_tokens: input_tokens_clean,
             cache_read_tokens,
             cache_write_tokens,
+            // Already split by the upstream provider, same forwarding convention
+            // as input_tokens above — splitting again here would double-subtract.
             output_tokens: usage.output_tokens,
             reasoning_tokens,
-            total_tokens: usage.total_tokens + reasoning_tokens,
+            total_tokens: usage.total_tokens,
             cost: usage.cost,
             request_time_ms: Some(usage.request_time_ms.unwrap_or(request_time_ms)),
         };

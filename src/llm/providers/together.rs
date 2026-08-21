@@ -584,20 +584,27 @@ async fn execute_together_request(
         .unwrap_or(0);
     let input_tokens = prompt_tokens.saturating_sub(cache_read_tokens);
 
+    // Priced on the raw completion counter; the split below only changes how it
+    // is reported. Together exposes no reasoning field, so it is estimated from
+    // the emitted thinking text — text Together billed inside completion_tokens.
+    let cost = request_body
+        .get("model")
+        .and_then(|m| m.as_str())
+        .and_then(crate::llm::reference_models::get_reference_pricing)
+        .map(|pricing| pricing.calculate_cost(input_tokens, 0, cache_read_tokens, output_tokens));
+    let (visible_output_tokens, reasoning_tokens) = TokenUsage::split_output(
+        output_tokens,
+        thinking.as_ref().map(|t| t.tokens).unwrap_or(0),
+    );
+
     let usage = TokenUsage {
         input_tokens,
-        output_tokens,
+        output_tokens: visible_output_tokens,
         cache_write_tokens: 0,
         cache_read_tokens,
-        reasoning_tokens: thinking.as_ref().map(|t| t.tokens).unwrap_or(0),
+        reasoning_tokens,
         total_tokens,
-        cost: request_body
-            .get("model")
-            .and_then(|m| m.as_str())
-            .and_then(crate::llm::reference_models::get_reference_pricing)
-            .map(|pricing| {
-                pricing.calculate_cost(input_tokens, 0, cache_read_tokens, output_tokens)
-            }),
+        cost,
         request_time_ms: Some(request_time_ms),
     };
 

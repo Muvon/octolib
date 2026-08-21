@@ -451,7 +451,12 @@ impl ThinkingBlock {
 /// - `reasoning_tokens`: Tokens used for thinking/reasoning (separate from output, DeepSeek R1, Claude thinking, etc.)
 ///
 /// # Total Calculation
-/// `total_tokens` should equal: input_tokens + cache_read_tokens + cache_write_tokens + output_tokens
+/// `total_tokens` equals: input_tokens + cache_read_tokens + cache_write_tokens
+/// + output_tokens + reasoning_tokens
+///
+/// Reasoning is its own term because `output_tokens` excludes it — see
+/// [`TokenUsage::split_output`]. Providers must split before constructing, or
+/// every consumer that sums the parts bills thinking twice.
 ///
 /// # Provider-Specific Notes
 /// - **Anthropic**: Reports cache_read and cache_creation (write) separately; input_tokens includes everything
@@ -477,10 +482,11 @@ pub struct TokenUsage {
     pub output_tokens: u64,
 
     /// Tokens used for thinking/reasoning (DeepSeek R1, Claude thinking, etc.)
-    /// These are separate from output_tokens
+    /// These are separate from output_tokens — construct via
+    /// [`TokenUsage::split_output`], never straight from the API counter.
     pub reasoning_tokens: u64,
 
-    /// Total tokens as reported by provider (should equal input + cache_read + cache_write + output)
+    /// Total tokens as reported by provider (should equal input + cache_read + cache_write + output + reasoning)
     pub total_tokens: u64,
 
     /// Pre-calculated total cost in USD (provider handles cache pricing)
@@ -490,6 +496,70 @@ pub struct TokenUsage {
     /// Time spent on this API request in milliseconds
     #[serde(default)]
     pub request_time_ms: Option<u64>,
+}
+
+impl TokenUsage {
+    /// Split a provider's completion counter into visible output and reasoning.
+    ///
+    /// Every OpenAI-shaped API counts thinking INSIDE its completion counter and
+    /// reports the reasoning slice as a detail of that same number
+    /// (`completion_tokens_details.reasoning_tokens`, `output_tokens_details`);
+    /// Anthropic-shaped APIs do the same with `output_tokens`. Providers that
+    /// expose no reasoning field at all (z.ai, Together, MiniMax) estimate it
+    /// from the emitted thinking text, which the provider also billed inside the
+    /// completion counter. Either way the two overlap, while `reasoning_tokens`
+    /// is documented as separate, so a consumer summing the parts pays for
+    /// thinking twice. Subtract once here instead of in every provider.
+    ///
+    /// Reasoning is clamped to the completion counter: an estimate can exceed
+    /// the tokens it was cut from, and reporting more reasoning than the
+    /// provider generated would recreate the overcount this exists to remove.
+    ///
+    /// Returns `(visible_output, reasoning)`.
+    pub fn split_output(completion_tokens: u64, reasoning_tokens: u64) -> (u64, u64) {
+        let reasoning = reasoning_tokens.min(completion_tokens);
+        (completion_tokens - reasoning, reasoning)
+    }
+}
+
+#[cfg(test)]
+mod token_usage_split_tests {
+    use super::TokenUsage;
+
+    #[test]
+    fn reasoning_is_not_billed_twice() {
+        // A z.ai-shaped response: prompt 1000 (200 cached), completion 500 of
+        // which 300 was thinking; the provider's own total is 1500.
+        let (output_tokens, reasoning_tokens) = TokenUsage::split_output(500, 300);
+        let usage = TokenUsage {
+            input_tokens: 800,
+            cache_read_tokens: 200,
+            cache_write_tokens: 0,
+            output_tokens,
+            reasoning_tokens,
+            total_tokens: 1500,
+            cost: None,
+            request_time_ms: None,
+        };
+        assert_eq!(usage.output_tokens, 200);
+        // The parts a consumer sums must reproduce the provider's own total.
+        assert_eq!(
+            usage.input_tokens
+                + usage.cache_read_tokens
+                + usage.cache_write_tokens
+                + usage.output_tokens
+                + usage.reasoning_tokens,
+            usage.total_tokens
+        );
+    }
+
+    #[test]
+    fn estimated_reasoning_over_completion_clamps_both_sides() {
+        // Estimated reasoning can exceed the completion count it was cut from.
+        // Clamping only the output would leave the parts summing above the
+        // provider's total again.
+        assert_eq!(TokenUsage::split_output(120, 400), (0, 120));
+    }
 }
 
 /// Common exchange record for logging across all providers

@@ -663,6 +663,8 @@ async fn execute_request(
         || reasoning_tokens > 0
         || cost.is_some()
     {
+        let (output_tokens, reasoning_tokens) =
+            TokenUsage::split_output(output_tokens, reasoning_tokens);
         Some(TokenUsage {
             input_tokens: input_tokens.saturating_sub(cache_read_tokens),
             cache_read_tokens,

@@ -831,6 +831,9 @@ impl AiProvider for MoonshotProvider {
                 .map(|d| d.reasoning_tokens)
                 .unwrap_or(0);
 
+            let (output_tokens, reasoning_tokens) =
+                TokenUsage::split_output(usage.completion_tokens, reasoning_tokens);
+
             let input_tokens_clean = usage.prompt_tokens.saturating_sub(cache_read_tokens);
 
             let cost = if cache_read_tokens > 0 {
@@ -848,7 +851,7 @@ impl AiProvider for MoonshotProvider {
                 input_tokens: input_tokens_clean,
                 cache_read_tokens,
                 cache_write_tokens: 0,
-                output_tokens: usage.completion_tokens,
+                output_tokens,
                 reasoning_tokens,
                 total_tokens: usage.total_tokens,
                 cost,

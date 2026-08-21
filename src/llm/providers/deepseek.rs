@@ -615,12 +615,14 @@ impl AiProvider for DeepSeekProvider {
                 .as_ref()
                 .map(|details| details.reasoning_tokens)
                 .unwrap_or(0);
+            let (output_tokens, reasoning_tokens) =
+                TokenUsage::split_output(completion_tokens, reasoning_tokens);
 
             Some(TokenUsage {
                 input_tokens: input_tokens_clean, // CLEAN input (cache miss tokens)
                 cache_read_tokens,                // Tokens read from cache
                 cache_write_tokens,               // DeepSeek doesn't expose this (0)
-                output_tokens: completion_tokens,
+                output_tokens,
                 reasoning_tokens,
                 total_tokens,
                 cost,

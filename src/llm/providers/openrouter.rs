@@ -771,6 +771,8 @@ async fn execute_openrouter_request(
         .total_tokens
         .unwrap_or(input_tokens_raw.saturating_add(output_tokens));
     let input_tokens_clean = input_tokens_raw.saturating_sub(cache_read_tokens);
+    let (output_tokens, reasoning_tokens) =
+        TokenUsage::split_output(output_tokens, reasoning_tokens);
 
     // Octolib semantic: input_tokens excludes cache reads
     let usage = TokenUsage {

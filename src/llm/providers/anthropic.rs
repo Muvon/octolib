@@ -1025,15 +1025,24 @@ async fn execute_anthropic_request(
         cache_read_tokens as u32,
     );
 
+    // Anthropic bills thinking inside output_tokens and exposes no reasoning
+    // field, so reasoning is estimated from the emitted thinking text and must be
+    // carved out of output rather than added on top of it.
+    let (output_tokens, reasoning_tokens) =
+        TokenUsage::split_output(anthropic_response.usage.output_tokens, reasoning_tokens);
+
     let usage = TokenUsage {
         input_tokens: input_tokens_clean,          // CLEAN input (no cache)
         cache_read_tokens,                         // Tokens read from cache
         cache_write_tokens: cache_creation_tokens, // Tokens written to cache
-        output_tokens: anthropic_response.usage.output_tokens,
+        output_tokens,
         reasoning_tokens,
-        total_tokens: anthropic_response.usage.input_tokens
-            + anthropic_response.usage.output_tokens
-            + reasoning_tokens,
+        // input_tokens is already cache-free, so cache reads and writes are their
+        // own terms in the total.
+        total_tokens: input_tokens_clean
+            + cache_read_tokens
+            + cache_creation_tokens
+            + anthropic_response.usage.output_tokens,
         cost,
         request_time_ms: Some(request_time_ms),
     };

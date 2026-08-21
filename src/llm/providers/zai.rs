@@ -393,25 +393,20 @@ impl AiProvider for ZaiProvider {
 
 /// Convert generic conversation messages to Z.ai's OpenAI-compatible wire format.
 ///
-/// Reasoning replay follows the same policy as `openai_compat`: it is
-/// per-request context the provider re-renders and bills on every call, so only
-/// the trailing assistant message — the chain the model is continuing — carries
-/// it. Sending it on every historical message re-pays for the whole thinking
-/// history each round, which compounds with session length: measured at 1.01M
-/// replayed tokens over a single 158-round session.
+/// Historical `reasoning_content` is sent back deliberately. Z.ai documents it as
+/// required — "you must return the complete, unmodified reasoning_content back to
+/// the API" — and Preserved Thinking, which retains reasoning from previous
+/// assistant turns, is on by default for the coding-plan endpoint. Dropping it to
+/// save context breaks the reasoning chain and the model re-derives: measured on
+/// rust/tokio, thinking rose 44k -> 114k tokens and the sequence went from 31.8
+/// to 56.6 minutes for the same 5/5 result.
 fn convert_messages(messages: &[crate::llm::types::Message]) -> Vec<ZaiMessage> {
-    let last_assistant = messages.iter().rposition(|m| m.role == "assistant");
     messages
         .iter()
-        .enumerate()
-        .map(|(idx, msg)| ZaiMessage {
+        .map(|msg| ZaiMessage {
             role: msg.role.clone(),
             content: msg.content.clone(),
-            reasoning_content: msg
-                .thinking
-                .as_ref()
-                .filter(|_| Some(idx) == last_assistant)
-                .map(|t| t.content.clone()),
+            reasoning_content: msg.thinking.as_ref().map(|t| t.content.clone()),
             tool_calls: msg.tool_calls.as_ref().map(convert_tool_calls),
             // Tool results must reference the matching assistant tool call. Without
             // this field Z.ai cannot associate the returned content with the call.
@@ -885,7 +880,7 @@ mod tests {
     }
 
     #[test]
-    fn only_the_trailing_assistant_replays_reasoning() {
+    fn historical_reasoning_is_preserved_for_zai() {
         use crate::llm::types::{Message, ThinkingBlock};
         let think = |c: &str| ThinkingBlock {
             content: c.to_string(),
@@ -904,10 +899,9 @@ mod tests {
         ]))
         .unwrap();
 
-        // Historical thinking is dropped — resending it re-pays for the whole
-        // reasoning history on every round.
-        assert!(out[1]["reasoning_content"].is_null());
-        // The chain the model is continuing keeps its reasoning.
+        // Z.ai requires the complete unmodified reasoning history back: dropping
+        // it to save context breaks the chain and the model re-derives.
+        assert_eq!(out[1]["reasoning_content"], "old reasoning");
         assert_eq!(out[3]["reasoning_content"], "current reasoning");
     }
 

@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.33.0] - 2026-08-21
+
+### 📋 Release Summary
+
+This release expands model availability by adding new LLM and embedding options, including support for voyage-code-4 (37c9f571, 76a9b799). General improvements include updated dependencies and refined documentation for better clarity (2b05bedf, b6d4d651).
+
+
+### ✨ New Features & Enhancements
+
+- **models**: add new embedding and LLM models `37c9f571`
+- **embedding**: add voyage-code-4 support `76a9b799`
+
+### 🔧 Improvements & Optimizations
+
+- **embedding**: fix whitespace in pricing table `b6d4d651`
+
+### 🔄 Other Changes
+
+1 maintenance, dependency, and tooling update not listed individually.
+
 ## [0.32.1] - 2026-08-17
 
 ### 📋 Release Summary

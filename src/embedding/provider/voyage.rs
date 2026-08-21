@@ -43,6 +43,7 @@ impl VoyageProviderImpl {
             "voyage-finance-2",
             "voyage-law-2",
             "voyage-2",
+            "voyage-context-4",
             "voyage-context-3",
             "voyage-multimodal-3.5",
         ];
@@ -77,6 +78,8 @@ impl VoyageProviderImpl {
             "voyage-finance-2" => 1024,
             "voyage-law-2" => 1024,
             "voyage-2" => 1024,
+            // Matryoshka: 256/512/1024/2048, 1024 is the API default.
+            "voyage-context-4" => 1024,
             "voyage-context-3" => 1024,
             "voyage-multimodal-3.5" => 1024,
             _ => unreachable!("Invalid Voyage model '{}' passed to get_model_dimension - this is a bug as model should be validated in new()", model),
@@ -118,6 +121,7 @@ impl EmbeddingProvider for VoyageProviderImpl {
                 | "voyage-finance-2"
                 | "voyage-law-2"
                 | "voyage-2"
+                | "voyage-context-4"
                 | "voyage-context-3"
                 | "voyage-multimodal-3.5"
         )

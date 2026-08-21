@@ -59,6 +59,7 @@ const SUPPORTED_MODELS: &[&str] = &[
     "gpt-oss-120b",
     "llama-3.1-8b",
     // Preview models
+    "gemma-4-31b",
     "qwen-3-235b-a22b-instruct-2507",
     "zai-glm-4.7",
 ];
@@ -68,6 +69,7 @@ const SUPPORTED_MODELS: &[&str] = &[
 ///
 /// Source: https://www.cerebras.ai/pricing (checked Mar 31, 2026)
 const PRICING: &[PricingTuple] = &[
+    ("gemma-4-31b", 0.99, 1.49, 0.99, 0.99),
     ("zai-glm-4.7", 2.25, 2.75, 2.25, 2.25),
     ("qwen-3-235b-a22b-instruct-2507", 0.60, 1.20, 0.60, 0.60),
     ("gpt-oss-120b", 0.35, 0.75, 0.35, 0.35),

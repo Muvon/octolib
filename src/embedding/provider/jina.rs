@@ -31,6 +31,10 @@ impl JinaProviderImpl {
     pub fn new(model: &str) -> Result<Self> {
         // Validate model first - fail fast if unsupported
         let supported_models = [
+            "jina-embeddings-v5-text-small",
+            "jina-embeddings-v5-text-nano",
+            "jina-embeddings-v5-omni-small",
+            "jina-embeddings-v5-omni-nano",
             "jina-embeddings-v4",
             "jina-clip-v2",
             "jina-embeddings-v3",
@@ -65,6 +69,11 @@ impl JinaProviderImpl {
 
     fn get_model_dimension(model: &str) -> usize {
         match model {
+            // v5: Matryoshka-truncatable down to 32d, these are the API defaults.
+            "jina-embeddings-v5-text-small" => 1024,
+            "jina-embeddings-v5-text-nano" => 768,
+            "jina-embeddings-v5-omni-small" => 1024,
+            "jina-embeddings-v5-omni-nano" => 768,
             "jina-embeddings-v4" => 2048,
             "jina-clip-v2" => 1024,
             "jina-embeddings-v3" => 1024,
@@ -78,8 +87,9 @@ impl JinaProviderImpl {
             "jina-colbert-v2" => 128,
             "jina-colbert-v2-96" => 96,
             "jina-colbert-v2-64" => 64,
-            "jina-code-embeddings-0.5b" => 1024,
-            "jina-code-embeddings-1.5b" => 1024,
+            // Qwen2 hidden sizes: 0.5B -> 896, 1.5B -> 1536 (api.jina.ai/v1/models).
+            "jina-code-embeddings-0.5b" => 896,
+            "jina-code-embeddings-1.5b" => 1536,
             _ => unreachable!("Invalid Jina model '{}' passed to get_model_dimension - this is a bug as model should be validated in new()", model),
         }
     }
@@ -112,7 +122,11 @@ impl EmbeddingProvider for JinaProviderImpl {
         // REAL validation - only support actual Jina models
         matches!(
             self.model_name.as_str(),
-            "jina-embeddings-v4"
+            "jina-embeddings-v5-text-small"
+                | "jina-embeddings-v5-text-nano"
+                | "jina-embeddings-v5-omni-small"
+                | "jina-embeddings-v5-omni-nano"
+                | "jina-embeddings-v4"
                 | "jina-clip-v2"
                 | "jina-embeddings-v3"
                 | "jina-clip-v1"
@@ -257,19 +271,23 @@ mod tests {
             JinaProviderImpl::new("jina-code-embeddings-0.5b")
                 .unwrap()
                 .get_dimension(),
-            1024
+            896
         );
         assert_eq!(
             JinaProviderImpl::new("jina-code-embeddings-1.5b")
                 .unwrap()
                 .get_dimension(),
-            1024
+            1536
         );
     }
 
     #[test]
     fn test_jina_model_validation() {
         let models = [
+            "jina-embeddings-v5-text-small",
+            "jina-embeddings-v5-text-nano",
+            "jina-embeddings-v5-omni-small",
+            "jina-embeddings-v5-omni-nano",
             "jina-embeddings-v4",
             "jina-embeddings-v3",
             "jina-clip-v2",

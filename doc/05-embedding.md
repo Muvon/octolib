@@ -6,9 +6,9 @@ Octolib provides a unified interface for generating embeddings across multiple p
 
 | Provider | Models | Features | API Key Required |
 |----------|--------|----------|------------------|
-| **Jina** | jina-embeddings-v4 (2048d), jina-embeddings-v3 (1024d), jina-clip-v2 (1024d), jina-clip-v1 (768d), jina-colbert-v2 (128d/96d/64d), jina-code-embeddings-0.5b/1.5b (1024d), jina-embeddings-v2-base-es/de/zh/en/code (768d), jina-embeddings-v2-small-en (512d) | High-quality embeddings, multimodal, late-interaction, code-specialized | ✅ JINA_API_KEY |
-| **Voyage** | voyage-4-large/4/4-lite (1024d, MRL), voyage-3.5/3.5-lite (1024d), voyage-3-large (1024d), voyage-code-4 (1024d, MRL), voyage-code-3 (1024d), voyage-code-2 (1536d), voyage-finance-2/law-2 (1024d), voyage-2 (1024d), voyage-context-3 (1024d), voyage-multimodal-3.5 (1024d) | Specialized models, MRL support, contextualized chunks | ✅ VOYAGE_API_KEY |
-| **Google** | gemini-embedding-001 (3072d), text-embedding-005 (768d), text-multilingual-embedding-002 (768d) | Google AI embeddings, multilingual | ✅ GOOGLE_API_KEY |
+| **Jina** | jina-embeddings-v5-text-small/omni-small (1024d), jina-embeddings-v5-text-nano/omni-nano (768d), jina-embeddings-v4 (2048d), jina-embeddings-v3 (1024d), jina-clip-v2 (1024d), jina-clip-v1 (768d), jina-colbert-v2 (128d/96d/64d), jina-code-embeddings-0.5b (896d)/1.5b (1536d), jina-embeddings-v2-base-es/de/zh/en/code (768d), jina-embeddings-v2-small-en (512d) | High-quality embeddings, multimodal, late-interaction, code-specialized | ✅ JINA_API_KEY |
+| **Voyage** | voyage-4-large/4/4-lite (1024d, MRL), voyage-3.5/3.5-lite (1024d), voyage-3-large (1024d), voyage-code-4 (1024d, MRL), voyage-code-3 (1024d), voyage-code-2 (1536d), voyage-finance-2/law-2 (1024d), voyage-2 (1024d), voyage-context-4/context-3 (1024d), voyage-multimodal-3.5 (1024d) | Specialized models, MRL support, contextualized chunks | ✅ VOYAGE_API_KEY |
+| **Google** | gemini-embedding-2 (3072d), gemini-embedding-001 (3072d), text-embedding-005 (768d), text-multilingual-embedding-002 (768d) | Google AI embeddings, multilingual | ✅ GOOGLE_API_KEY |
 | **OpenAI** | text-embedding-3-small (1536d), text-embedding-3-large (3072d), text-embedding-ada-002 (1536d) | OpenAI embeddings, reliable | ✅ OPENAI_API_KEY |
 | **OpenRouter** | Dynamic model discovery from API | OpenRouter proxy models | ✅ OPENROUTER_API_KEY |
 | **Together AI** | intfloat/multilingual-e5-large-instruct (1024d) | Together proxy models | ✅ TOGETHER_API_KEY |
@@ -20,12 +20,13 @@ Octolib provides a unified interface for generating embeddings across multiple p
 ### 📝 Model Notes
 
 **Jina AI:**
+- `jina-embeddings-v5-*`: 1024d (small) / 768d (nano), `text` and multimodal `omni` variants, Matryoshka-truncatable
 - `jina-embeddings-v4`: 2048d, multimodal (text+images), 32K context
 - `jina-embeddings-v3`: 1024d, multilingual, 8K context
 - `jina-clip-v2`: 1024d, multimodal (text+images)
 - `jina-clip-v1`: 768d, multimodal (text+images)
 - `jina-colbert-v2`: Late-interaction retrieval (128d/96d/64d variants)
-- `jina-code-embeddings-0.5b/1.5b`: Code-specialized, 1024d, 32K context
+- `jina-code-embeddings-0.5b/1.5b`: Code-specialized, 896d/1536d, 32K context
 - `jina-embeddings-v2-base-*`: 768d multilingual/code variants (es, de, zh, en, code)
 - `jina-embeddings-v2-small-en`: 512d, English-only
 
@@ -36,7 +37,8 @@ Octolib provides a unified interface for generating embeddings across multiple p
 - `voyage-code-4`: 1024d default (MRL 256/512/1024/2048), 32k context, code-specialized — the default code model
 - `voyage-code-3`: 1024d, code-specialized (previous generation)
 - `voyage-code-2`: 1536d, code-specialized (legacy)
-- `voyage-context-3`: Contextualized chunk embeddings with document-level awareness
+- `voyage-context-4`: Contextualized chunk embeddings with document-level awareness (current generation)
+- `voyage-context-3`: Contextualized chunk embeddings (previous generation)
 - `voyage-multimodal-3.5`: Multimodal support (text/images/video)
 - `voyage-finance-2/law-2`: Domain-specialized (1024d)
 - All v4 models share the same embedding space (interoperable)
@@ -166,7 +168,7 @@ let batches = split_texts_into_token_limited_batches(texts, 16, 100_000);
    - Use `jina-code-embeddings` for code search and retrieval
    - Use `voyage-4-large` for best retrieval quality
    - Use `voyage-4-lite` for optimized latency/cost
-   - Use `voyage-context-3` for document-aware chunk embeddings
+   - Use `voyage-context-4` for document-aware chunk embeddings
    - Use `voyage-code-4` for code-related tasks
 
 3. **Use Batch Processing** for multiple texts to improve performance

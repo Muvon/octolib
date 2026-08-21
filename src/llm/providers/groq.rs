@@ -65,6 +65,9 @@ const PRICING: &[PricingTuple] = &[
     // GPT-OSS — cached input pricing available
     ("openai/gpt-oss-120b", 0.15, 0.60, 0.15, 0.075),
     ("openai/gpt-oss-20b", 0.075, 0.30, 0.075, 0.0375),
+    ("openai/gpt-oss-safeguard-20b", 0.075, 0.30, 0.075, 0.0375),
+    // Qwen3.6 (preview) — replacement for the retired qwen3-32b / llama-4-scout
+    ("qwen/qwen3.6-27b", 0.60, 3.00, 0.60, 0.60),
     // Llama
     ("llama-3.3-70b-versatile", 0.59, 0.79, 0.59, 0.59),
     ("llama-3.1-8b-instant", 0.05, 0.08, 0.05, 0.05),

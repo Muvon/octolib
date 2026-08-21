@@ -96,6 +96,7 @@ pub const EMBEDDING_PRICING: &[EmbeddingPricingTuple] = &[
     ("jina-code-embeddings-1.5b", 0.02),    // estimate
     ("jina-code-embeddings-0.5b", 0.02),    // estimate
     // ── Google (estimate — verify before launch) ──
+    ("gemini-embedding-2", 0.20), // text tokens only; image/audio/video are billed higher
     ("gemini-embedding-001", 0.15), // estimate
     ("text-embedding-005", 0.10),   // estimate
     // ── Together (verified: together.ai model page, 2026-07; flat serverless rate) ──

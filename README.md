@@ -23,6 +23,7 @@ Octolib is a comprehensive, self-sufficient AI provider library that provides a 
 - **⚙️ Configuration Migration**: Reusable, comment-preserving TOML upgrades with locking, versioned backups, and atomic writes
 - **🎯 Embedding Support**: Multi-provider embedding generation with Jina, Voyage, Google, OpenAI, Together, OctoHub, Local (Ollama, llama.cpp, LM Studio, vLLM), FastEmbed, and HuggingFace
 - **🔄 Reranking**: Document relevance scoring with cross-encoder models (Voyage AI, Cohere, Jina AI, Mixedbread, Local (llama.cpp, vLLM, TEI), HuggingFace)
+- **🎬 Media Generation**: Typed image, asynchronous video, speech, and transcription APIs for OpenRouter and Replicate, with durable jobs and dimensional cost reporting
 
 ## 📦 Quick Installation
 
@@ -55,6 +56,39 @@ async fn example() -> anyhow::Result<()> {
     Ok(())
 }
 ```
+
+### Media generation
+
+Media delivery is separate from chat input attachments. The high-level helpers accept the same `provider:model` addressing used elsewhere and wait for asynchronous jobs when necessary:
+
+```rust
+use octolib::{generate_image, ImageGenerationRequest};
+
+async fn image_example() -> octolib::MediaResult<()> {
+    // Requires OPENROUTER_API_KEY.
+    let request = ImageGenerationRequest::new("A red panda astronaut, studio lighting");
+    let result = generate_image(
+        "openrouter:openai/gpt-image-1",
+        request,
+    ).await?;
+
+    // OpenRouter reports authoritative request cost in the response.
+    let cost_usd = result
+        .usage
+        .as_ref()
+        .and_then(|usage| usage.provider_reported_cost);
+    println!("{} image(s), cost: {:?}", result.artifacts.len(), cost_usd);
+    Ok(())
+}
+```
+
+Only OpenRouter and Replicate are currently wired. OpenRouter supports dedicated image, asynchronous video, text-to-speech, and speech-to-text endpoints. Replicate exposes the same four Octolib task traits through its prediction lifecycle; arbitrary model fields live under `provider_options["replicate"].input`, with optional `field_map` mappings for portable fields.
+
+Low-level `submit_*`, `poll_*`, and `cancel_*` methods are public. Persist the credential-free `JobHandle` to resume work after a restart. A local `wait_timeout` returns `MediaError::WaitTimeout { handle }` and does not cancel the remote job. Generated URLs are never downloaded automatically; call `download_artifact` with an explicit byte limit. That helper accepts HTTPS only, rejects embedded credentials and literal local/private addresses, validates MIME type, and does not follow redirects; applications can impose a stricter DNS/network policy.
+
+Only idempotent schema and polling queries are retried. Generation POSTs are deliberately not replayed after an ambiguous transport failure because doing so can create duplicate paid work.
+
+Cost semantics are strict: `provider_reported_cost` is used only when the upstream returns a dollar amount. Replicate normally reports compute time rather than dollars, so its cost remains unknown unless a verified `CostEstimate` is supplied; that result is stored separately as `estimated_cost`, never disguised as provider-reported cost. See [multimodal.md](multimodal.md) and the `media_openrouter` / `media_replicate` examples for the full contract.
 
 ### 📋 Structured Output
 
@@ -465,6 +499,7 @@ if let Some(usage) = &response.exchange.usage {
 - **[Tool Calling](doc/07-tool-calling.md)** - Cross-provider tool calling
 - **[Thinking/Reasoning](doc/08-thinking.md)** - Reasoning model support
 - **[Configuration Migration](doc/09-configuration-migration.md)** - Versioned TOML upgrades and safe file persistence
+- **[Media and Multimodal Providers](multimodal.md)** - Architecture, OpenRouter/Replicate contracts, durable jobs, artifacts, and cost semantics
 
 ## 🌐 Supported Providers
 

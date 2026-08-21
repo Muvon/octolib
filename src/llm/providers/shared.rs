@@ -95,7 +95,7 @@ fn build_http_client() -> reqwest::Client {
 /// `reqwest::Client` is internally `Arc`-based, so cloning is cheap and
 /// always points to the current client (even after `refresh_http_client()`
 /// swaps the global).
-pub(super) fn http_client() -> reqwest::Client {
+pub(crate) fn http_client() -> reqwest::Client {
     // load_full() clones the Arc (cheap atomic increment),
     // then dereference and clone the Client (cheap — Client is Arc internally)
     (*HTTP_CLIENT.load_full()).clone()

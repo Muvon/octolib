@@ -39,6 +39,7 @@ impl VoyageProviderImpl {
             "voyage-3-large",
             "voyage-code-2",
             "voyage-code-3",
+            "voyage-code-4",
             "voyage-finance-2",
             "voyage-law-2",
             "voyage-2",
@@ -71,6 +72,8 @@ impl VoyageProviderImpl {
             "voyage-3-large" => 1024,
             "voyage-code-2" => 1536,
             "voyage-code-3" => 1024,
+            // Matryoshka: 256/512/1024/2048, 1024 is the API default (docs.voyageai.com).
+            "voyage-code-4" => 1024,
             "voyage-finance-2" => 1024,
             "voyage-law-2" => 1024,
             "voyage-2" => 1024,
@@ -111,6 +114,7 @@ impl EmbeddingProvider for VoyageProviderImpl {
                 | "voyage-3-large"
                 | "voyage-code-2"
                 | "voyage-code-3"
+                | "voyage-code-4"
                 | "voyage-finance-2"
                 | "voyage-law-2"
                 | "voyage-2"
@@ -269,6 +273,7 @@ mod tests {
             "voyage-3.5-lite",
             "voyage-3-large",
             "voyage-code-3",
+            "voyage-code-4",
             "voyage-context-3",
             "voyage-multimodal-3.5",
         ];

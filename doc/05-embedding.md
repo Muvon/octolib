@@ -7,7 +7,7 @@ Octolib provides a unified interface for generating embeddings across multiple p
 | Provider | Models | Features | API Key Required |
 |----------|--------|----------|------------------|
 | **Jina** | jina-embeddings-v4 (2048d), jina-embeddings-v3 (1024d), jina-clip-v2 (1024d), jina-clip-v1 (768d), jina-colbert-v2 (128d/96d/64d), jina-code-embeddings-0.5b/1.5b (1024d), jina-embeddings-v2-base-es/de/zh/en/code (768d), jina-embeddings-v2-small-en (512d) | High-quality embeddings, multimodal, late-interaction, code-specialized | ✅ JINA_API_KEY |
-| **Voyage** | voyage-4-large/4/4-lite (1024d, MRL), voyage-3.5/3.5-lite (1024d), voyage-3-large (1024d), voyage-code-3 (1024d), voyage-code-2 (1536d), voyage-finance-2/law-2 (1024d), voyage-2 (1024d), voyage-context-3 (1024d), voyage-multimodal-3.5 (1024d) | Specialized models, MRL support, contextualized chunks | ✅ VOYAGE_API_KEY |
+| **Voyage** | voyage-4-large/4/4-lite (1024d, MRL), voyage-3.5/3.5-lite (1024d), voyage-3-large (1024d), voyage-code-4 (1024d, MRL), voyage-code-3 (1024d), voyage-code-2 (1536d), voyage-finance-2/law-2 (1024d), voyage-2 (1024d), voyage-context-3 (1024d), voyage-multimodal-3.5 (1024d) | Specialized models, MRL support, contextualized chunks | ✅ VOYAGE_API_KEY |
 | **Google** | gemini-embedding-001 (3072d), text-embedding-005 (768d), text-multilingual-embedding-002 (768d) | Google AI embeddings, multilingual | ✅ GOOGLE_API_KEY |
 | **OpenAI** | text-embedding-3-small (1536d), text-embedding-3-large (3072d), text-embedding-ada-002 (1536d) | OpenAI embeddings, reliable | ✅ OPENAI_API_KEY |
 | **OpenRouter** | Dynamic model discovery from API | OpenRouter proxy models | ✅ OPENROUTER_API_KEY |
@@ -33,7 +33,8 @@ Octolib provides a unified interface for generating embeddings across multiple p
 - `voyage-4-large/4/4-lite`: Latest v4 series with MRL (Matryoshka Representation Learning) - supports dimension truncation to 2048/1024/512/256
 - `voyage-3.5/3.5-lite`: v3.5 series (1024d)
 - `voyage-3-large`: 1024d, high quality
-- `voyage-code-3`: 1024d, code-specialized
+- `voyage-code-4`: 1024d default (MRL 256/512/1024/2048), 32k context, code-specialized — the default code model
+- `voyage-code-3`: 1024d, code-specialized (previous generation)
 - `voyage-code-2`: 1536d, code-specialized (legacy)
 - `voyage-context-3`: Contextualized chunk embeddings with document-level awareness
 - `voyage-multimodal-3.5`: Multimodal support (text/images/video)
@@ -166,7 +167,7 @@ let batches = split_texts_into_token_limited_batches(texts, 16, 100_000);
    - Use `voyage-4-large` for best retrieval quality
    - Use `voyage-4-lite` for optimized latency/cost
    - Use `voyage-context-3` for document-aware chunk embeddings
-   - Use `voyage-code-3` for code-related tasks
+   - Use `voyage-code-4` for code-related tasks
 
 3. **Use Batch Processing** for multiple texts to improve performance
 

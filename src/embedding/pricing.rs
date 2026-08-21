@@ -72,6 +72,7 @@ pub const EMBEDDING_PRICING: &[EmbeddingPricingTuple] = &[
     ("voyage-3-large", 0.18),
     ("voyage-3.5", 0.06),
     ("voyage-3.5-lite", 0.02),
+    ("voyage-code-4", 0.12), // verified: blog.voyageai.com 2026-08-13
     ("voyage-code-3", 0.18),
     ("voyage-code-2", 0.12),
     ("voyage-context-4", 0.12), // verified: blog.voyageai.com 2026-06-29

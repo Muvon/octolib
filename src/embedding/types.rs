@@ -109,7 +109,7 @@ impl Default for EmbeddingConfig {
         #[cfg(not(feature = "fastembed"))]
         {
             Self {
-                code_model: "voyage:voyage-code-3".to_string(),
+                code_model: "voyage:voyage-code-4".to_string(),
                 text_model: "voyage:voyage-3.5-lite".to_string(),
             }
         }

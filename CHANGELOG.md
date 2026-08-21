@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.33.1] - 2026-08-21
+
+### 📋 Release Summary
+
+This release improves the Zai provider by ensuring historical reasoning is preserved during interactions (0d449792). Additionally, updates to token accounting ensure more accurate billing and usage tracking for reasoning models (87e5ef32).
+
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: preserve historical reasoning for Zai provider `0d449792`
+- **llm**: correct reasoning token accounting and billing `87e5ef32`
+
 ## [0.33.0] - 2026-08-21
 
 ### 📋 Release Summary

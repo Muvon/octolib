@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.34.2] - 2026-08-22
+
+### 📋 Release Summary
+
+This release improves cost tracking accuracy through centralized billable token logic (95fa6fe5). Additionally, tool schema handling has been refined to ensure better compatibility and reliability during model interactions (8620e5e0).
+
+
+### 🔧 Improvements & Optimizations
+
+- **llm**: centralize billable output token logic `95fa6fe5`
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: normalize tool schemas to scalar types `8620e5e0`
+
 ## [0.34.1] - 2026-08-22
 
 ### 📋 Release Summary

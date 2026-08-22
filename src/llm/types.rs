@@ -520,11 +520,22 @@ impl TokenUsage {
         let reasoning = reasoning_tokens.min(completion_tokens);
         (completion_tokens - reasoning, reasoning)
     }
+
+    /// The output counter a provider bills — the inverse of [`Self::split_output`].
+    ///
+    /// Thinking is charged at the output rate, so pricing must run on the
+    /// completion counter the API reported, not on the visible remainder left
+    /// after the split. Pass this to any cost calculation instead of
+    /// `output_tokens`; a reasoning-heavy call is otherwise billed at a
+    /// fraction of its real cost.
+    pub fn billable_output_tokens(&self) -> u64 {
+        self.output_tokens + self.reasoning_tokens
+    }
 }
 
 #[cfg(test)]
 mod token_usage_split_tests {
-    use super::TokenUsage;
+    use super::{ModelPricing, TokenUsage};
 
     #[test]
     fn reasoning_is_not_billed_twice() {
@@ -551,6 +562,46 @@ mod token_usage_split_tests {
                 + usage.reasoning_tokens,
             usage.total_tokens
         );
+    }
+
+    #[test]
+    fn cost_bills_reasoning_at_the_output_rate() {
+        // A real DashScope qwen3.6-flash response: prompt 22, completion 502 of
+        // which 485 was thinking. Alibaba charges all 502 at the output rate,
+        // so pricing must run on the billable counter, not the 17 left visible.
+        let (output_tokens, reasoning_tokens) = TokenUsage::split_output(502, 485);
+        let usage = TokenUsage {
+            input_tokens: 22,
+            cache_read_tokens: 0,
+            cache_write_tokens: 0,
+            output_tokens,
+            reasoning_tokens,
+            total_tokens: 524,
+            cost: None,
+            request_time_ms: None,
+        };
+        assert_eq!(usage.output_tokens, 17);
+        assert_eq!(usage.billable_output_tokens(), 502);
+
+        let pricing = ModelPricing::new(0.25, 1.50, 0.25, 0.025);
+        let billed = pricing.calculate_cost(
+            usage.input_tokens,
+            usage.cache_write_tokens,
+            usage.cache_read_tokens,
+            usage.billable_output_tokens(),
+        );
+        let expected = 22.0 / 1_000_000.0 * 0.25 + 502.0 / 1_000_000.0 * 1.50;
+        assert!((billed - expected).abs() < 1e-12);
+
+        // Pricing the visible remainder instead is the regression this guards:
+        // a thinking-heavy call would cost a fraction of what the provider charged.
+        let visible_only = pricing.calculate_cost(
+            usage.input_tokens,
+            usage.cache_write_tokens,
+            usage.cache_read_tokens,
+            usage.output_tokens,
+        );
+        assert!(billed > visible_only * 10.0);
     }
 
     #[test]

@@ -158,9 +158,7 @@ impl AiProvider for GoogleStudioProvider {
                     usage.input_tokens,
                     usage.cache_write_tokens,
                     usage.cache_read_tokens,
-                    // Reasoning is billed at the output rate but reported apart
-                    // from output_tokens, so add it back for pricing.
-                    usage.output_tokens + usage.reasoning_tokens,
+                    usage.billable_output_tokens(),
                 );
             }
         }

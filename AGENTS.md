@@ -151,6 +151,8 @@ const PRICING: &[PricingTuple] = &[
 
 `input_tokens` = clean input only (never includes cache tokens). Separate fields: `cache_write_tokens`, `cache_read_tokens`, `output_tokens`, `reasoning_tokens`, `cost: Option<f64>`.
 
+`output_tokens` excludes reasoning — build both via `TokenUsage::split_output(completion_tokens, reasoning_tokens)`, never straight from the API counter. Providers bill thinking at the output rate, so **cost must use `usage.billable_output_tokens()`** (output + reasoning), not `output_tokens`. Providers that compute cost before constructing `TokenUsage` (Anthropic, xAI, MiniMax, z.ai, Moonshot, Together) pass the raw completion counter, which is the same number.
+
 ### Reasoning Effort
 
 `ReasoningEffort` enum (`Low`, `Medium`, `High`, `XHigh`, `Max`) — provider-agnostic. Set via `ChatCompletionParams::with_reasoning_effort(effort)`. `None` (default) = provider default behavior.
@@ -246,7 +248,7 @@ Files still showing `Copyright 2025` (`src/errors.rs`, `src/storage.rs`, `src/ll
 1. Create `src/llm/providers/newprovider.rs` — copy `nvidia.rs` or `ollama.rs` as template
 2. `supports_model()` → `!model.is_empty()`
 3. `get_model_pricing()` → `reference_pricing::get_reference_pricing(model)` (or omit — trait default does this)
-4. In `chat_completion()`: call `openai_compat_chat_completion(OpenAiCompatConfig { provider_name: "newprovider", usage_fallback_cost: None, use_response_cost: true }, api_key, api_url, params).await?`, then if `response.exchange.usage.cost.is_none()` fill it via `calculate_reference_cost(&params.model, input_tokens, output_tokens)`
+4. In `chat_completion()`: call `openai_compat_chat_completion(OpenAiCompatConfig { provider_name: "newprovider", usage_fallback_cost: None, use_response_cost: true }, api_key, api_url, params).await?`, then if `response.exchange.usage.cost.is_none()` fill it via `calculate_reference_cost(&params.model, usage.input_tokens, usage.cache_read_tokens, usage.billable_output_tokens())` — see the `nvidia.rs` cost block
 5. Add missing model families to `reference_pricing.rs` and `reference_capabilities.rs` if needed
 6. Register in `providers/mod.rs`, `factory.rs`, `lib.rs`; add example
 
@@ -270,6 +272,7 @@ Files still showing `Copyright 2025` (`src/errors.rs`, `src/storage.rs`, `src/ll
 - **Model name matching uses `sanitize_model_name` + `normalize_model_name`** before substring matching in reference tables. `qwen2.5:7b` becomes `qwen-2-5-7b`. Patterns in reference tables must match the sanitized form.
 - **Reference table order is critical** — first match wins. Put `"gpt-5.1-codex-mini"` before `"gpt-5.1-codex"` before `"gpt-5"`.
 - **`input_tokens` in `TokenUsage` is always clean** — never add cache tokens to it. Cache tokens go in dedicated fields.
+- **`output_tokens` in `TokenUsage` never includes reasoning** — it is the visible remainder after `split_output`. Cost is billed on `billable_output_tokens()`; passing `output_tokens` to a pricing call under-charges thinking-heavy models by an order of magnitude.
 - **CLI provider model format** is `backend/model` (slash, not colon) — `cli:codex/gpt-5.2-codex`. No tool calls, no structured output, prompt-only.
 - **OpenAI uses the Responses API** (`/v1/responses`), not `/v1/chat/completions`. The `openai_compat` layer uses `/v1/chat/completions`.
 - **`fastembed` and `huggingface` are default features** — code gated on them must use `#[cfg(feature = "...")]`.

@@ -136,6 +136,69 @@ pub fn calculate_cost_from_pricing_table(
     Some(regular_input_cost + cache_write_cost + cache_read_cost + output_cost)
 }
 
+/// Normalize a tool-parameter JSON schema to scalar `"type"` keywords.
+///
+/// Collapses `"type": [T, "null"]` to `T` and `anyOf: [X, {"type": "null"}]`
+/// to `X`, merging the surviving branch into the parent so field-level keys
+/// (description) win.
+///
+/// Serving stacks build their tool-call grammar from `"type"` and some read it
+/// as a plain string: given the array form they fall through to the string
+/// branch and constrain the model to emit that argument as text — `"0.6"`
+/// instead of `0.6`, `"[\"a\"]"` instead of `["a"]` — which MCP servers then
+/// reject while deserializing. Measured on Alibaba Model Studio's Qwen path and
+/// on CoreWeave (via OpenRouter); the same Qwen weights on Parasail, Chutes and
+/// DeepInfra, and glm-5.2 / deepseek-v4-pro on Alibaba's own endpoint, are
+/// unaffected. Because the defect is per serving stack — not per provider, and
+/// not visible from the model id when a gateway routes the request — this runs
+/// for every provider.
+///
+/// Lossless for tool calling: optionality is carried by `required`, and no
+/// provider sends tool definitions in strict mode (where the null branch would
+/// be the idiom for an optional property).
+pub fn normalize_tool_schema(schema: &mut serde_json::Value) {
+    match schema {
+        serde_json::Value::Object(obj) => {
+            for nested in obj.values_mut() {
+                normalize_tool_schema(nested);
+            }
+
+            let collapsed_type =
+                obj.get_mut("type")
+                    .and_then(|t| t.as_array_mut())
+                    .and_then(|types| {
+                        types.retain(|t| t.as_str() != Some("null"));
+                        (types.len() == 1).then(|| types[0].clone())
+                    });
+            if let Some(single) = collapsed_type {
+                obj.insert("type".to_string(), single);
+            }
+
+            for key in ["anyOf", "oneOf"] {
+                let only = obj
+                    .get_mut(key)
+                    .and_then(|v| v.as_array_mut())
+                    .and_then(|variants| {
+                        variants.retain(|v| v.get("type").and_then(|t| t.as_str()) != Some("null"));
+                        (variants.len() == 1).then(|| variants[0].clone())
+                    });
+                if let Some(serde_json::Value::Object(only)) = only {
+                    obj.remove(key);
+                    for (k, v) in only {
+                        obj.entry(k).or_insert(v);
+                    }
+                }
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items.iter_mut() {
+                normalize_tool_schema(item);
+            }
+        }
+        _ => {}
+    }
+}
+
 /// Normalize a JSON schema for OpenAI strict structured output.
 ///
 /// OpenAI's strict mode requires `additionalProperties: false` on every
@@ -358,5 +421,57 @@ mod tests {
         });
         let normalized = normalize_strict_schema(&schema, crate::llm::types::ResponseMode::Auto);
         assert_eq!(normalized, schema);
+    }
+
+    #[test]
+    fn test_normalize_tool_schema_collapses_nullable_types() {
+        // Shape schemars emits for Option<f32> / Option<Vec<String>> /
+        // Option<enum> — what octobrain advertises for `memorize`.
+        let mut schema = serde_json::json!({
+            "type": "object",
+            "required": ["title"],
+            "properties": {
+                "title": {"type": "string"},
+                "importance": {"type": ["number", "null"], "format": "float"},
+                "tags": {"type": ["array", "null"], "items": {"type": "string"}},
+                "memory_type": {
+                    "anyOf": [
+                        {"type": "string", "enum": ["code", "decision"]},
+                        {"type": "null"}
+                    ],
+                    "description": "Memory category"
+                }
+            }
+        });
+
+        crate::llm::utils::normalize_tool_schema(&mut schema);
+
+        let props = &schema["properties"];
+        assert_eq!(props["importance"]["type"], "number");
+        assert_eq!(props["importance"]["format"], "float");
+        assert_eq!(props["tags"]["type"], "array");
+        assert_eq!(props["tags"]["items"]["type"], "string");
+        // anyOf collapses into the parent, field description preserved
+        assert!(props["memory_type"].get("anyOf").is_none());
+        assert_eq!(props["memory_type"]["type"], "string");
+        assert_eq!(props["memory_type"]["enum"][1], "decision");
+        assert_eq!(props["memory_type"]["description"], "Memory category");
+        assert_eq!(schema["type"], "object");
+        assert_eq!(props["title"]["type"], "string");
+    }
+
+    #[test]
+    fn test_normalize_tool_schema_keeps_real_unions() {
+        // A genuine multi-branch union has nothing to collapse to and is left
+        // as authored (octobrain's `remember.query`: string or array).
+        let mut schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "query": {"anyOf": [{"type": "string"}, {"type": "array"}]}
+            }
+        });
+        let before = schema.clone();
+        crate::llm::utils::normalize_tool_schema(&mut schema);
+        assert_eq!(schema, before);
     }
 }

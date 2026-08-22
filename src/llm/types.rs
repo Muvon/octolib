@@ -1048,7 +1048,15 @@ impl ChatCompletionParams {
     }
 
     /// Set available tools
-    pub fn with_tools(mut self, tools: Vec<FunctionDefinition>) -> Self {
+    /// Set the tool definitions for this request.
+    ///
+    /// Parameter schemas are normalized to scalar `"type"` keywords first — see
+    /// [`crate::llm::utils::normalize_tool_schema`] for why every provider
+    /// needs this.
+    pub fn with_tools(mut self, mut tools: Vec<FunctionDefinition>) -> Self {
+        for tool in tools.iter_mut() {
+            crate::llm::utils::normalize_tool_schema(&mut tool.parameters);
+        }
         self.tools = Some(tools);
         self
     }

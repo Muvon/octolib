@@ -166,7 +166,9 @@ impl AiProvider for GroqProvider {
                         usage.input_tokens,
                         usage.cache_write_tokens,
                         usage.cache_read_tokens,
-                        usage.output_tokens,
+                        // Reasoning is billed at the output rate but reported apart
+                        // from output_tokens, so add it back for pricing.
+                        usage.output_tokens + usage.reasoning_tokens,
                     ));
                 }
             }

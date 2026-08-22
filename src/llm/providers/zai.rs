@@ -528,6 +528,37 @@ async fn execute_zai_request(
     let request_time_ms = start_time.elapsed().as_millis() as u64;
 
     if !response.status.is_success() {
+        // Z.ai reports payload rejections (1213/1214) without saying which
+        // message is at fault, and the body is unusable for diagnosis. Log the
+        // role sequence and which optional fields each message carries — no
+        // content, so nothing sensitive is written — so a rejection can be
+        // reproduced from the log instead of re-run under instrumentation.
+        let shape: Vec<String> = request
+            .messages
+            .iter()
+            .map(|m| {
+                let mut f = String::from(m.role.as_str());
+                if m.content.is_empty() {
+                    f.push_str("+empty");
+                }
+                if m.reasoning_content.is_some() {
+                    f.push_str("+reasoning");
+                }
+                if m.tool_calls.is_some() {
+                    f.push_str("+tool_calls");
+                }
+                if m.tool_call_id.is_some() {
+                    f.push_str("+tool_call_id");
+                }
+                f
+            })
+            .collect();
+        tracing::error!(
+            status = %response.status,
+            messages = request.messages.len(),
+            shape = %shape.join(" | "),
+            "Z.ai rejected the request; message shape logged for diagnosis"
+        );
         return Err(anyhow::anyhow!(
             "Z.ai API error {}: {}",
             response.status,

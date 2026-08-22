@@ -148,6 +148,21 @@ mod tests {
         assert_eq!(caps.max_input_tokens, 1_000_000);
         let caps = get_reference_capabilities("deepseek-v4-flash").unwrap();
         assert_eq!(caps.max_input_tokens, 1_000_000);
+        assert!(!caps.vision);
+    }
+
+    #[test]
+    fn test_deepseek_v4_flash_vision_exp() {
+        // Must win over the plain `deepseek-v4-flash` entry (specificity ordering)
+        for model in [
+            "deepseek-v4-flash-vision-exp",
+            "deepseek/deepseek-v4-flash-vision-exp",
+        ] {
+            let caps = get_reference_capabilities(model).unwrap();
+            assert!(caps.vision, "{model}");
+            assert!(!caps.video);
+            assert_eq!(caps.max_input_tokens, 1_000_000);
+        }
     }
 
     #[test]

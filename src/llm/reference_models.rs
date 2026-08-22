@@ -244,6 +244,13 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(2.00, 2.00, 2.00, 2.00),
     },
     ReferenceModelEntry {
+        pattern: "deepseek-v4-flash-vision-exp",
+        capabilities: caps(true, false, true, 1_000_000),
+        // Experimental multimodal route (2026-08-21): text-identical to
+        // v4-flash and billed at the same peak baseline.
+        pricing: pricing(0.44, 1.32, 0.44, 0.014),
+    },
+    ReferenceModelEntry {
         pattern: "deepseek-v4-flash",
         capabilities: caps(false, false, true, 1_000_000),
         // 2026-08-16 peak/off-peak revision (matches providers/deepseek.rs):

@@ -30,6 +30,11 @@
 //! - Cache Miss (Input): $1.32 / $0.66
 //! - Output: $3.96 / $1.98
 //!
+//! deepseek-v4-flash-vision-exp (experimental multimodal, released 2026-08-21)
+//! matches v4-flash on text and bills at v4-flash rates; images are tokenized
+//! at up to 384 tokens each
+//! (<https://api-docs.deepseek.com/news/news260821/>).
+//!
 //! Legacy aliases deepseek-chat / deepseek-reasoner were removed by DeepSeek
 //! on 2026-07-24 15:59 UTC per <https://api-docs.deepseek.com/updates>.
 //!
@@ -44,7 +49,7 @@ use crate::llm::traits::AiProvider;
 use crate::llm::types::{
     ChatCompletionParams, ProviderExchange, ProviderResponse, SamplingSupport, TokenUsage,
 };
-use crate::llm::utils::{is_model_in_pricing_table, PricingTuple};
+use crate::llm::utils::{contains_ignore_ascii_case, is_model_in_pricing_table, PricingTuple};
 use anyhow::Result;
 
 use serde::{Deserialize, Serialize};
@@ -56,6 +61,8 @@ use std::env;
 /// Note: DeepSeek uses cache_hit/cache_miss model - cache_write = cache_miss (input), cache_read = cache_hit
 /// DeepSeek bills peak / off-peak: peak windows are 01:00-04:00 and 06:00-10:00
 /// UTC, off-peak (all other hours) is half of peak (effective 2026-08-16 16:00 UTC).
+/// `deepseek-v4-flash-vision-exp` resolves to the `deepseek-v4-flash` row by
+/// substring match and bills at those rates, as DeepSeek documents.
 const PRICING_PEAK: &[PricingTuple] = &[
     // V4 family (1M context), peak-hour rates
     ("deepseek-v4-pro", 1.32, 3.96, 1.32, 0.044),
@@ -200,8 +207,10 @@ struct DeepSeekRequest {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct DeepSeekMessage {
     role: String,
+    /// Plain string for text turns, OpenAI-style content parts when the turn
+    /// carries images (vision route only).
     #[serde(skip_serializing_if = "Option::is_none")]
-    content: Option<String>,
+    content: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -328,13 +337,28 @@ fn convert_messages(messages: &[crate::llm::types::Message]) -> Vec<DeepSeekMess
                 None
             };
 
+            let images = msg.images.as_deref().unwrap_or_default();
+            let content = if !images.is_empty() {
+                let mut parts = vec![serde_json::json!({"type": "text", "text": msg.content})];
+                parts.extend(images.iter().map(|image| {
+                    let url = match &image.data {
+                        crate::llm::types::ImageData::Base64(data) => {
+                            format!("data:{};base64,{}", image.media_type, data)
+                        }
+                        crate::llm::types::ImageData::Url(u) => u.clone(),
+                    };
+                    serde_json::json!({"type": "image_url", "image_url": {"url": url}})
+                }));
+                Some(serde_json::json!(parts))
+            } else if msg.content.is_empty() && tool_calls.is_some() {
+                None
+            } else {
+                Some(serde_json::json!(msg.content))
+            };
+
             DeepSeekMessage {
                 role: msg.role.clone(),
-                content: if msg.content.is_empty() && tool_calls.is_some() {
-                    None
-                } else {
-                    Some(msg.content.clone())
-                },
+                content,
                 reasoning_content,
                 tool_calls,
                 tool_call_id: msg.tool_call_id.clone(),
@@ -370,8 +394,9 @@ impl AiProvider for DeepSeekProvider {
         true // DeepSeek supports caching
     }
 
-    fn supports_vision(&self, _model: &str) -> bool {
-        false // DeepSeek doesn't support vision yet
+    fn supports_vision(&self, model: &str) -> bool {
+        // Only the experimental V4-Flash-Vision route accepts image input
+        contains_ignore_ascii_case(model, "vision")
     }
 
     fn supports_structured_output(&self, _model: &str) -> bool {
@@ -546,7 +571,13 @@ impl AiProvider for DeepSeekProvider {
             .next()
             .ok_or_else(|| anyhow::anyhow!("No choices in DeepSeek response"))?;
 
-        let content = choice.message.content.unwrap_or_default();
+        let content = choice
+            .message
+            .content
+            .as_ref()
+            .and_then(|c| c.as_str())
+            .unwrap_or_default()
+            .to_string();
 
         // Extract tool calls from response
         let tool_calls: Option<Vec<crate::llm::types::ToolCall>> =
@@ -686,6 +717,42 @@ mod tests {
     }
 
     #[test]
+    fn test_vision_route() {
+        use crate::llm::types::{ImageAttachment, ImageData, Message, SourceType};
+
+        let provider = DeepSeekProvider::new();
+        assert!(provider.supports_model("deepseek-v4-flash-vision-exp"));
+        assert!(provider.supports_vision("deepseek-v4-flash-vision-exp"));
+        assert!(!provider.supports_vision("deepseek-v4-flash"));
+        assert!(!provider.supports_vision("deepseek-v4-pro"));
+
+        // Vision route bills at v4-flash rates
+        assert_eq!(
+            calculate_cost(PRICING_PEAK, "deepseek-v4-flash-vision-exp", 1_000_000, 0),
+            calculate_cost(PRICING_PEAK, "deepseek-v4-flash", 1_000_000, 0)
+        );
+
+        let msg = Message::user("what is this?").with_images(vec![ImageAttachment {
+            data: ImageData::Base64("QUJD".to_string()),
+            media_type: "image/png".to_string(),
+            source_type: SourceType::Clipboard,
+            dimensions: None,
+            size_bytes: None,
+        }]);
+        let content = convert_messages(std::slice::from_ref(&msg))[0]
+            .content
+            .clone()
+            .unwrap();
+        assert_eq!(content[0]["text"], "what is this?");
+        assert_eq!(content[1]["type"], "image_url");
+        assert_eq!(content[1]["image_url"]["url"], "data:image/png;base64,QUJD");
+
+        // Text-only turns keep the plain string shape
+        let plain = convert_messages(&[Message::user("hi")])[0].content.clone();
+        assert_eq!(plain, Some(serde_json::json!("hi")));
+    }
+
+    #[test]
     fn test_supports_model_case_insensitive() {
         let provider = DeepSeekProvider::new();
         assert!(provider.supports_model("DEEPSEEK-V4-FLASH"));
@@ -817,7 +884,7 @@ mod tests {
         // Test with reasoning_content present
         let message_with_thinking = DeepSeekMessage {
             role: "assistant".to_string(),
-            content: Some("The answer is 9.11".to_string()),
+            content: Some(serde_json::json!("The answer is 9.11")),
             reasoning_content: Some("Let me compare 9.11 and 9.8. Converting to same decimal places: 9.11 vs 9.80. Clearly 9.80 > 9.11.".to_string()),
             tool_calls: None,
             tool_call_id: None,
@@ -836,7 +903,7 @@ mod tests {
         // Test without reasoning_content
         let message_without_thinking = DeepSeekMessage {
             role: "assistant".to_string(),
-            content: Some("Hello".to_string()),
+            content: Some(serde_json::json!("Hello")),
             reasoning_content: None,
             tool_calls: None,
             tool_call_id: None,
@@ -848,7 +915,7 @@ mod tests {
         // Test with empty reasoning_content
         let message_empty_thinking = DeepSeekMessage {
             role: "assistant".to_string(),
-            content: Some("Hello".to_string()),
+            content: Some(serde_json::json!("Hello")),
             reasoning_content: Some("".to_string()),
             tool_calls: None,
             tool_call_id: None,

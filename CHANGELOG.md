@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.34.1] - 2026-08-22
+
+### 📋 Release Summary
+
+This release improves cost tracking accuracy by ensuring reasoning tokens are included in LLM expenditure calculations (a91dce47).
+
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: include reasoning tokens in cost calculation `a91dce47`
+
 ## [0.34.0] - 2026-08-22
 
 ### 📋 Release Summary

@@ -82,6 +82,41 @@ pub(super) const PRICING: &[PricingTuple] = &[
     ("gemini-2.0-flash", 0.15, 0.60, 0.10, 0.025),
 ];
 
+/// Gemini Pro models bill a long-context tier above this many input tokens:
+/// 2x input and cache rates, 1.5x output, applied to the whole request. Flash
+/// and Flash-Lite rates are flat at every context length.
+/// Source: <https://ai.google.dev/gemini-api/docs/pricing> (verified Aug 22, 2026)
+const LONG_CONTEXT_THRESHOLD: u64 = 200_000;
+
+/// Cost for a Gemini request, applying the >200K long-context tier for Pro models.
+pub(super) fn calculate_usage_cost(
+    model: &str,
+    regular_input_tokens: u64,
+    cache_write_tokens: u64,
+    cache_read_tokens: u64,
+    output_tokens: u64,
+) -> Option<f64> {
+    let (mut input, mut output, mut cache_write, mut cache_read) =
+        get_model_pricing(model, PRICING)?;
+
+    let total_input_tokens = regular_input_tokens
+        .saturating_add(cache_write_tokens)
+        .saturating_add(cache_read_tokens);
+    if normalize_model_name(model).contains("-pro") && total_input_tokens > LONG_CONTEXT_THRESHOLD {
+        input *= 2.0;
+        cache_write *= 2.0;
+        cache_read *= 2.0;
+        output *= 1.5;
+    }
+
+    Some(
+        (regular_input_tokens as f64 / 1_000_000.0) * input
+            + (cache_write_tokens as f64 / 1_000_000.0) * cache_write
+            + (cache_read_tokens as f64 / 1_000_000.0) * cache_read
+            + (output_tokens as f64 / 1_000_000.0) * output,
+    )
+}
+
 const GOOGLE_VERTEX_CREDENTIAL_FILE_ENV: &str = "GOOGLE_VERTEX_CREDENTIAL_FILE";
 const GOOGLE_APPLICATION_CREDENTIALS_ENV: &str = "GOOGLE_APPLICATION_CREDENTIALS";
 const GOOGLE_VERTEX_PROJECT_ID_ENV: &str = "GOOGLE_VERTEX_PROJECT_ID";

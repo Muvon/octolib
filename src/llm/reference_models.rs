@@ -91,7 +91,7 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     ReferenceModelEntry {
         pattern: "gpt-5.6-sol",
         capabilities: caps(true, false, true, 1_050_000),
-        pricing: pricing(5.00, 30.00, 6.25, 0.50),
+        pricing: pricing(4.00, 20.00, 5.00, 0.40),
     },
     ReferenceModelEntry {
         pattern: "gpt-5.6-cyber",
@@ -157,6 +157,11 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pattern: "gemini-3.1-flash-lite",
         capabilities: caps(true, true, true, 1_048_576),
         pricing: pricing(0.25, 1.50, 0.25, 0.025),
+    },
+    ReferenceModelEntry {
+        pattern: "gemini-3.1-flash",
+        capabilities: caps(true, true, true, 1_048_576),
+        pricing: pricing(0.50, 3.00, 0.50, 0.05),
     },
     ReferenceModelEntry {
         pattern: "gemini-2.5-flash-lite",
@@ -319,6 +324,22 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(0.40, 2.00, 0.40, 0.10),
     },
     ReferenceModelEntry {
+        pattern: "gemini-3.7-flash",
+        capabilities: caps(true, true, true, 1_048_576),
+        // Introductory pricing through Dec 31, 2026 (matches providers/google_vertex.rs)
+        pricing: pricing(0.75, 3.75, 0.75, 0.075),
+    },
+    ReferenceModelEntry {
+        pattern: "gemini-3.6-flash",
+        capabilities: caps(true, true, true, 1_048_576),
+        pricing: pricing(0.75, 3.75, 0.75, 0.075),
+    },
+    ReferenceModelEntry {
+        pattern: "gemini-3.5-flash-lite",
+        capabilities: caps(true, true, true, 1_048_576),
+        pricing: pricing(0.30, 2.50, 0.30, 0.03),
+    },
+    ReferenceModelEntry {
         pattern: "gemini-3.5-flash",
         capabilities: caps(true, true, true, 1_048_576),
         pricing: pricing(1.50, 9.00, 1.50, 0.15),
@@ -457,13 +478,13 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "claude-opus-4-8",
-        capabilities: None,
+        capabilities: caps(true, false, false, 1_000_000),
         pricing: pricing(5.00, 25.00, 6.25, 0.50),
     },
     ReferenceModelEntry {
         pattern: "claude-sonnet-5",
-        capabilities: None,
-        pricing: pricing(3.00, 15.00, 3.75, 0.30),
+        capabilities: caps(true, false, false, 1_000_000),
+        pricing: pricing(2.00, 10.00, 2.50, 0.20),
     },
     ReferenceModelEntry {
         pattern: "seed-1-6-flash",
@@ -1258,7 +1279,7 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         // OpenAI routes the bare alias to gpt-5.6-sol.
         pattern: "gpt-5.6",
         capabilities: caps(true, false, true, 1_050_000),
-        pricing: pricing(5.00, 30.00, 6.25, 0.50),
+        pricing: pricing(4.00, 20.00, 5.00, 0.40),
     },
     ReferenceModelEntry {
         pattern: "gpt-5.4",
@@ -1482,6 +1503,47 @@ mod tests {
             right.cache_write_price_per_1m
         );
         assert_eq!(left.cache_read_price_per_1m, right.cache_read_price_per_1m);
+    }
+
+    /// The reference table is the pricing fallback for aggregator routes
+    /// (OpenCode Zen, Ollama, NVIDIA, local). Drift from the first-party
+    /// provider tables silently misbills those routes, so they must agree.
+    #[test]
+    fn reference_pricing_matches_first_party_provider_tables() {
+        use crate::llm::providers::{AnthropicProvider, GoogleVertexProvider};
+        use crate::llm::traits::AiProvider;
+
+        let anthropic = AnthropicProvider::new();
+        for model in [
+            "claude-fable-5",
+            "claude-opus-5",
+            "claude-sonnet-5",
+            "claude-opus-4-8",
+            "claude-haiku-4-5",
+        ] {
+            assert_same_pricing(
+                get_reference_pricing(model).unwrap(),
+                anthropic.get_model_pricing(model).unwrap(),
+            );
+        }
+
+        let google = GoogleVertexProvider::new();
+        for model in [
+            "gemini-3.7-flash",
+            "gemini-3.6-flash",
+            "gemini-3.5-flash",
+            "gemini-3.5-flash-lite",
+            "gemini-3.1-pro",
+            "gemini-3.1-flash",
+            "gemini-3.1-flash-lite",
+            "gemini-3-pro",
+            "gemini-3-flash",
+        ] {
+            assert_same_pricing(
+                get_reference_pricing(model).unwrap(),
+                google.get_model_pricing(model).unwrap(),
+            );
+        }
     }
 
     #[test]

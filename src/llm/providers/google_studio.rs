@@ -27,7 +27,7 @@
 //! chat_completion() call. The list is cached for the lifetime of the process.
 
 use crate::llm::providers::google_vertex::{
-    fetch_available_models, gemini_max_input_tokens, gemini_sampling_support,
+    calculate_usage_cost, fetch_available_models, gemini_max_input_tokens, gemini_sampling_support,
     get_cached_input_limit, is_model_cached, CachedModel, PRICING,
 };
 use crate::llm::providers::openai_compat::{
@@ -35,9 +35,7 @@ use crate::llm::providers::openai_compat::{
 };
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderResponse, SamplingSupport};
-use crate::llm::utils::{
-    calculate_cost_from_pricing_table, get_model_pricing, normalize_model_name,
-};
+use crate::llm::utils::{get_model_pricing, normalize_model_name};
 use anyhow::Result;
 use std::env;
 use tokio::sync::OnceCell;
@@ -155,9 +153,8 @@ impl AiProvider for GoogleStudioProvider {
         // Gemini's OpenAI-compat endpoint doesn't report cost — fill from the pricing table
         if let Some(ref mut usage) = response.exchange.usage {
             if usage.cost.is_none() {
-                usage.cost = calculate_cost_from_pricing_table(
+                usage.cost = calculate_usage_cost(
                     &model,
-                    PRICING,
                     usage.input_tokens,
                     usage.cache_write_tokens,
                     usage.cache_read_tokens,
@@ -244,15 +241,30 @@ mod tests {
     #[test]
     fn test_cost_calculation() {
         // 1M input + 0.5M output on gemini-2.5-flash: $0.30 + 0.5 * $2.50 = $1.55
-        let cost = calculate_cost_from_pricing_table(
-            "gemini-2.5-flash",
-            PRICING,
-            1_000_000,
-            0,
-            0,
-            500_000,
-        )
-        .unwrap();
+        let cost = calculate_usage_cost("gemini-2.5-flash", 1_000_000, 0, 0, 500_000).unwrap();
         assert!((cost - 1.55).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_pro_long_context_tier() {
+        // At or below 200K input, Pro bills the standard tier:
+        // 0.2M * $1.25 + 0.1M * $10.00 = $1.25
+        let short = calculate_usage_cost("gemini-2.5-pro", 200_000, 0, 0, 100_000).unwrap();
+        assert!((short - 1.25).abs() < 1e-9);
+
+        // Above 200K total input: 2x input/cache, 1.5x output.
+        // 0.200001M * $2.50 + 0.1M * $15.00 = $2.0000025
+        let long = calculate_usage_cost("gemini-2.5-pro", 200_001, 0, 0, 100_000).unwrap();
+        assert!((long - 2.0000025).abs() < 1e-9);
+
+        // Cache writes and reads count toward the threshold and get the 2x rate.
+        // 0.15M * $4.00 + 0.05M * $4.00 + 0.05M * $0.40 + 0.01M * $18.00 = $1.00
+        let cached =
+            calculate_usage_cost("gemini-3.1-pro", 150_000, 50_000, 50_000, 10_000).unwrap();
+        assert!((cached - 1.0).abs() < 1e-9);
+
+        // Flash has no long-context tier: 0.5M * $0.75 + 0.01M * $3.75 = $0.4125
+        let flash = calculate_usage_cost("gemini-3.7-flash", 500_000, 0, 0, 10_000).unwrap();
+        assert!((flash - 0.4125).abs() < 1e-9);
     }
 }

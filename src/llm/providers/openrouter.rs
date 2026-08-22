@@ -167,7 +167,19 @@ impl AiProvider for OpenRouterProvider {
         if normalized.starts_with("anthropic/") || normalized.contains("claude") {
             // Delegate to Anthropic provider pricing
             let anthropic = crate::llm::providers::AnthropicProvider::new();
-            return anthropic.get_model_pricing(model);
+            let pricing = anthropic.get_model_pricing(model)?;
+            // Fast mode is a request option on the Claude API, but OpenRouter
+            // sells it as a separate `-fast` route. It doubles every rate:
+            // <https://platform.claude.com/docs/en/about-claude/pricing#fast-mode-pricing>
+            if normalized.ends_with("-fast") {
+                return Some(crate::llm::types::ModelPricing::new(
+                    pricing.input_price_per_1m * 2.0,
+                    pricing.output_price_per_1m * 2.0,
+                    pricing.cache_write_price_per_1m * 2.0,
+                    pricing.cache_read_price_per_1m * 2.0,
+                ));
+            }
+            return Some(pricing);
         }
 
         // OpenAI models (gpt)
@@ -875,6 +887,27 @@ mod tests {
         // Test uppercase
         assert!(provider.supports_caching("ANTHROPIC/CLAUDE-3.5-SONNET"));
         assert!(provider.supports_caching("CLAUDE-3-HAIKU"));
+    }
+
+    #[test]
+    fn test_anthropic_fast_route_doubles_pricing() {
+        let provider = OpenRouterProvider::new();
+        let base = provider
+            .get_model_pricing("anthropic/claude-opus-5")
+            .unwrap();
+        let fast = provider
+            .get_model_pricing("anthropic/claude-opus-5-fast")
+            .unwrap();
+        assert_eq!(fast.input_price_per_1m, base.input_price_per_1m * 2.0);
+        assert_eq!(fast.output_price_per_1m, base.output_price_per_1m * 2.0);
+        assert_eq!(
+            fast.cache_write_price_per_1m,
+            base.cache_write_price_per_1m * 2.0
+        );
+        assert_eq!(
+            fast.cache_read_price_per_1m,
+            base.cache_read_price_per_1m * 2.0
+        );
     }
 
     #[test]

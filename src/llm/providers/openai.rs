@@ -30,17 +30,18 @@ use serde::Deserialize;
 use std::env;
 
 /// OpenAI pricing constants (per 1M tokens in USD)
-/// Source: https://developers.openai.com/api/docs/pricing (verified Jul 31, 2026)
+/// Source: https://developers.openai.com/api/docs/pricing (verified Aug 22, 2026)
 /// Format: (model, input, output, cache_write, cache_read)
 /// Note: For models without caching, cache_write = input and cache_read = input
 const PRICING: &[PricingTuple] = &[
     // GPT-5.6 family. The gpt-5.6 alias routes to gpt-5.6-sol.
     // Cache writes cost 1.25x uncached input; cache reads cost 0.1x.
-    ("gpt-5.6-sol", 5.00, 30.00, 6.25, 0.50),
+    // Sol is on promotional pricing at least through Nov 21, 2026.
+    ("gpt-5.6-sol", 4.00, 20.00, 5.00, 0.40),
     ("gpt-5.6-terra", 2.00, 12.00, 2.50, 0.20),
     ("gpt-5.6-luna", 0.20, 1.20, 0.25, 0.02),
     ("gpt-5.6-cyber", 12.50, 75.00, 15.625, 1.25),
-    ("gpt-5.6", 5.00, 30.00, 6.25, 0.50),
+    ("gpt-5.6", 4.00, 20.00, 5.00, 0.40),
     // GPT-5.5 family
     ("gpt-5.5-pro", 30.00, 180.00, 30.00, 30.00),
     ("gpt-5.5", 5.00, 30.00, 5.00, 0.50),
@@ -1815,8 +1816,8 @@ mod tests {
     fn test_gpt_5_6_pricing_and_alias() {
         let provider = OpenAiProvider::new();
         let cases = [
-            ("gpt-5.6", 5.00, 30.00, 6.25, 0.50),
-            ("gpt-5.6-sol", 5.00, 30.00, 6.25, 0.50),
+            ("gpt-5.6", 4.00, 20.00, 5.00, 0.40),
+            ("gpt-5.6-sol", 4.00, 20.00, 5.00, 0.40),
             ("gpt-5.6-terra", 2.00, 12.00, 2.50, 0.20),
             ("gpt-5.6-luna", 0.20, 1.20, 0.25, 0.02),
         ];

@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.34.0] - 2026-08-22
+
+### 📋 Release Summary
+
+This release introduces support for DeepSeek vision models and updates model pricing and reference data for improved cost tracking (2dd1d593, e49654ae). Additionally, internal test cases were updated to ensure continued stability of unified property merging (3a7181).
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: update model pricing and reference data `e49654ae`
+- **llm**: add DeepSeek vision support `2dd1d593`
+
+### 🔧 Improvements & Optimizations
+
+- **llm**: update unified properties merge test case `3a8a7181`
+
 ## [0.33.1] - 2026-08-21
 
 ### 📋 Release Summary

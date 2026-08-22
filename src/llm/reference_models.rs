@@ -1583,18 +1583,19 @@ mod tests {
 
     #[test]
     fn unified_properties_merge_independent_best_matches() {
-        let props = get_reference_model_properties("claude-opus-4-8").unwrap();
-        assert_eq!(props.pricing_pattern, Some("claude-opus-4-8"));
-        assert_eq!(props.capability_pattern, Some("claude-opus-4"));
+        // Capabilities come from the specific variant, pricing from the family entry.
+        let props = get_reference_model_properties("phi-4-multimodal").unwrap();
+        assert_eq!(props.capability_pattern, Some("phi-4-multimodal"));
+        assert_eq!(props.pricing_pattern, Some("phi-4"));
         assert_eq!(
             props.capabilities.unwrap().max_input_tokens,
-            get_reference_capabilities("claude-opus-4-8")
+            get_reference_capabilities("phi-4-multimodal")
                 .unwrap()
                 .max_input_tokens
         );
         assert_eq!(
             props.pricing.unwrap().input_price_per_1m,
-            get_reference_pricing("claude-opus-4-8")
+            get_reference_pricing("phi-4-multimodal")
                 .unwrap()
                 .input_price_per_1m
         );

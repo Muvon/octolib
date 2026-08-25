@@ -585,6 +585,16 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(0.15, 0.60, 0.15, 0.015),
     },
     ReferenceModelEntry {
+        // Structured output verified against the live openrouter route
+        // (2026-08-23): the catalogue advertises structured_outputs=false for
+        // this model, but a strict json_schema request is honoured. The probe,
+        // not the catalogue flag, decides — an entry missing here falls back to
+        // "enforces", which would be right by luck rather than by measurement.
+        pattern: "qwen-3.7-flash",
+        capabilities: caps(true, true, true, 1_000_000),
+        pricing: pricing(0.03, 0.13, 0.03, 0.003),
+    },
+    ReferenceModelEntry {
         pattern: "qwen-3.6-flash",
         capabilities: caps(true, true, true, 1_000_000),
         pricing: pricing(0.25, 1.50, 0.25, 0.025),
@@ -1487,6 +1497,24 @@ pub fn proxy_route_enforces_response_schema(model: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The verifier route the completion gate runs on. The openrouter catalogue
+    /// advertises structured_outputs=false for this model while the live route
+    /// honours a strict json_schema, so the entry is measured rather than
+    /// inherited — and an entry that never matches would silently fall back to
+    /// the optimistic "unknown models enforce" default.
+    #[test]
+    fn qwen_3_7_flash_resolves_for_the_openrouter_route() {
+        let caps = get_reference_capabilities("qwen/qwen3.7-flash")
+            .expect("qwen3.7-flash must resolve to a reference entry");
+        assert!(caps.structured_output);
+        assert_eq!(caps.max_input_tokens, 1_000_000);
+        assert!(proxy_route_enforces_response_schema("qwen/qwen3.7-flash"));
+        let pricing = get_reference_pricing("qwen/qwen3.7-flash")
+            .expect("qwen3.7-flash must resolve to reference pricing");
+        assert_eq!(pricing.input_price_per_1m, 0.03);
+        assert_eq!(pricing.output_price_per_1m, 0.13);
+    }
 
     fn assert_same_capabilities(left: ModelCapabilities, right: ModelCapabilities) {
         assert_eq!(left.vision, right.vision);

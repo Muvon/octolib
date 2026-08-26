@@ -60,7 +60,7 @@ use std::env;
 /// Format: (model, input, output, cache_write, cache_read)
 /// Note: DeepSeek uses cache_hit/cache_miss model - cache_write = cache_miss (input), cache_read = cache_hit
 /// DeepSeek bills peak / off-peak: peak windows are 01:00-04:00 and 06:00-10:00
-/// UTC, off-peak (all other hours) is half of peak (effective 2026-08-16 16:00 UTC).
+/// UTC Monday-Friday; off-peak is half of peak (effective 2026-08-16 16:00 UTC).
 /// `deepseek-v4-flash-vision-exp` resolves to the `deepseek-v4-flash` row by
 /// substring match and bills at those rates, as DeepSeek documents.
 const PRICING_PEAK: &[PricingTuple] = &[
@@ -75,9 +75,11 @@ const PRICING_OFF_PEAK: &[PricingTuple] = &[
     ("deepseek-v4-flash", 0.22, 0.66, 0.22, 0.007),
 ];
 
-/// Peak billing windows (UTC): 01:00-04:00 and 06:00-10:00
-fn is_peak_hour(utc_hour: u64) -> bool {
-    (1..4).contains(&utc_hour) || (6..10).contains(&utc_hour)
+/// Peak billing windows: Monday-Friday, 01:00-04:00 and 06:00-10:00 UTC.
+fn is_peak_window(days_since_epoch: u64, utc_hour: u64) -> bool {
+    // 1970-01-01 was Thursday. Map Monday..Sunday to 0..6.
+    let weekday = (days_since_epoch + 3) % 7;
+    weekday < 5 && ((1..4).contains(&utc_hour) || (6..10).contains(&utc_hour))
 }
 
 /// Pick the pricing table that applies at `time` (tier decided by the UTC hour)
@@ -86,7 +88,7 @@ fn pricing_table_at(time: std::time::SystemTime) -> &'static [PricingTuple] {
         .duration_since(std::time::SystemTime::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    if is_peak_hour((secs % 86_400) / 3_600) {
+    if is_peak_window(secs / 86_400, (secs % 86_400) / 3_600) {
         PRICING_PEAK
     } else {
         PRICING_OFF_PEAK
@@ -824,16 +826,28 @@ mod tests {
 
         let at = |secs: u64| SystemTime::UNIX_EPOCH + Duration::from_secs(secs);
 
-        // 2026-08-17 00:00 UTC — walk a full day hour by hour
-        let midnight = 1_786_924_800_u64;
+        // Monday 2026-08-17 00:00 UTC — walk a full weekday hour by hour.
+        let monday_midnight = 1_786_924_800_u64;
         for hour in 0..24u64 {
-            let table = pricing_table_at(at(midnight + hour * 3_600));
-            let expected = if is_peak_hour(hour) {
+            let table = pricing_table_at(at(monday_midnight + hour * 3_600));
+            let expected = if is_peak_window(monday_midnight / 86_400, hour) {
                 PRICING_PEAK
             } else {
                 PRICING_OFF_PEAK
             };
             assert_eq!(table, expected, "hour {} misclassified", hour);
+        }
+
+        // Saturday 2026-08-22 is off-peak for the entire day, including hours
+        // that would be peak on weekdays.
+        let saturday_midnight = monday_midnight + 5 * 86_400;
+        for hour in 0..24u64 {
+            assert_eq!(
+                pricing_table_at(at(saturday_midnight + hour * 3_600)),
+                PRICING_OFF_PEAK,
+                "Saturday hour {} must be off-peak",
+                hour
+            );
         }
     }
 

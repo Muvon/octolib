@@ -95,7 +95,7 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "gpt-5.6-cyber",
-        capabilities: caps(true, false, true, 1_050_000),
+        capabilities: caps(true, false, true, 400_000),
         pricing: pricing(12.50, 75.00, 15.625, 1.25),
     },
     ReferenceModelEntry {
@@ -600,6 +600,12 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(0.25, 1.50, 0.25, 0.025),
     },
     ReferenceModelEntry {
+        // Groq preview route: image/text input, JSON object mode, 131K context.
+        pattern: "qwen-3.6-27b",
+        capabilities: caps(true, false, true, 131_072),
+        pricing: None,
+    },
+    ReferenceModelEntry {
         pattern: "qwen-3.5-flash",
         capabilities: caps(true, true, true, 1_000_000),
         pricing: pricing(0.10, 0.40, 0.10, 0.01),
@@ -1013,7 +1019,7 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "gpt-5.5-pro",
-        capabilities: caps(false, false, true, 1_000_000),
+        capabilities: caps(true, false, true, 1_050_000),
         pricing: pricing(30.00, 180.00, 30.00, 30.00),
     },
     ReferenceModelEntry {
@@ -1218,11 +1224,15 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: None,
     },
     ReferenceModelEntry {
-        // GLM-5.3 (Aug 14, 2026) — same base as GLM-5.2, post-training update.
-        // Official 5.3 pricing not yet published; mirrors GLM-5.2 rates.
-        // Must stay above the bare "glm-5" entry (substring match, first wins).
+        // Native image/video input and 1M context. Must precede glm-5.3.
+        pattern: "glm-5.3-flash",
+        capabilities: caps(true, true, true, 1_000_000),
+        pricing: pricing(0.15, 0.50, 0.00, 0.03),
+    },
+    ReferenceModelEntry {
+        // GLM-5.3 is text-only with a 1M context window.
         pattern: "glm-5.3",
-        capabilities: caps(false, false, true, 200_000),
+        capabilities: caps(false, false, true, 1_000_000),
         pricing: pricing(1.40, 4.40, 0.00, 0.26),
     },
     ReferenceModelEntry {
@@ -1282,7 +1292,7 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "gpt-5.5",
-        capabilities: caps(false, false, true, 1_000_000),
+        capabilities: caps(true, false, true, 1_050_000),
         pricing: pricing(5.00, 30.00, 5.00, 0.50),
     },
     ReferenceModelEntry {

@@ -32,7 +32,7 @@ use crate::llm::providers::openai_compat::{
 };
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderResponse};
-use crate::llm::utils::PricingTuple;
+use crate::llm::utils::{normalize_model_name, PricingTuple};
 use anyhow::Result;
 use std::env;
 
@@ -79,6 +79,40 @@ const PRICING: &[PricingTuple] = &[
     ("glm-4-7-251222", 0.60, 2.20, 0.60, 0.11),
     ("gpt-oss-120b-250805", 0.10, 0.50, 0.10, 0.00),
 ];
+
+const SEED_2_LONG_CONTEXT_THRESHOLD: u64 = 128_000;
+
+/// Calculate BytePlus usage cost, including the documented 2x Seed 2.0 tier
+/// when the prompt exceeds 128K tokens.
+fn calculate_usage_cost(
+    model: &str,
+    input_tokens: u64,
+    cache_write_tokens: u64,
+    cache_read_tokens: u64,
+    output_tokens: u64,
+) -> Option<f64> {
+    let (mut input, mut output, mut cache_write, mut cache_read) =
+        crate::llm::utils::get_model_pricing(model, PRICING)?;
+    let total_input_tokens = input_tokens
+        .saturating_add(cache_write_tokens)
+        .saturating_add(cache_read_tokens);
+    let normalized = normalize_model_name(model);
+    if (normalized.contains("seed-2-0") || normalized.contains("seed-2.0"))
+        && total_input_tokens > SEED_2_LONG_CONTEXT_THRESHOLD
+    {
+        input *= 2.0;
+        output *= 2.0;
+        cache_write *= 2.0;
+        cache_read *= 2.0;
+    }
+
+    Some(
+        (input_tokens as f64 / 1_000_000.0) * input
+            + (cache_write_tokens as f64 / 1_000_000.0) * cache_write
+            + (cache_read_tokens as f64 / 1_000_000.0) * cache_read
+            + (output_tokens as f64 / 1_000_000.0) * output,
+    )
+}
 
 #[async_trait::async_trait]
 impl AiProvider for BytePlusProvider {
@@ -147,14 +181,13 @@ impl AiProvider for BytePlusProvider {
         // Derive cost from pricing if not returned in the response
         if let Some(ref mut usage) = response.exchange.usage {
             if usage.cost.is_none() {
-                if let Some(pricing) = self.get_model_pricing(&model) {
-                    usage.cost = Some(pricing.calculate_cost(
-                        usage.input_tokens,
-                        usage.cache_write_tokens,
-                        usage.cache_read_tokens,
-                        usage.billable_output_tokens(),
-                    ));
-                }
+                usage.cost = calculate_usage_cost(
+                    &model,
+                    usage.input_tokens,
+                    usage.cache_write_tokens,
+                    usage.cache_read_tokens,
+                    usage.billable_output_tokens(),
+                );
             }
         }
 
@@ -241,5 +274,15 @@ mod tests {
         let expected_cached = 0.25 + 0.5 * 0.10 + 0.5 * 3.00; // $1.80
         assert!((cost_cached - expected_cached).abs() < 0.001);
         assert!(cost_cached < cost);
+
+        // Seed 2.0 prompts above 128K use the documented 2x tier.
+        let long = calculate_usage_cost("seed-2-0-pro-260328", 128_001, 0, 0, 100_000).unwrap();
+        let expected_long = 128_001.0 / 1_000_000.0 * 1.00 + 0.1 * 6.00;
+        assert!((long - expected_long).abs() < 0.001);
+
+        // Exactly 128K remains in the base tier.
+        let boundary = calculate_usage_cost("seed-2-0-pro-260328", 128_000, 0, 0, 100_000).unwrap();
+        let expected_boundary = 0.128 * 0.50 + 0.1 * 3.00;
+        assert!((boundary - expected_boundary).abs() < 0.001);
     }
 }

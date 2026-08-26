@@ -34,7 +34,7 @@ use crate::llm::providers::openai_compat::{
 };
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderResponse};
-use crate::llm::utils::PricingTuple;
+use crate::llm::utils::{normalize_model_name, PricingTuple};
 use anyhow::Result;
 use std::env;
 
@@ -64,26 +64,59 @@ const ALIBABA_API_URL: &str =
 // Format: (model, input, output, cache_write, cache_read)
 // Context caching is implicit: writes bill at the input rate, hits at cache_read.
 // Tiered models are priced at the 0-256K tier; longer contexts bill up to 4x more.
-// cache_read follows Alibaba's 10%-of-input context-cache rate where the price
-// page lists no explicit cache-hit column.
+// Except for qwen3.8-max's separately published $0.25 rate and DeepSeek V4 Pro,
+// implicit cache hits cost 20% of uncached input.
 const PRICING: &[PricingTuple] = &[
-    ("qwen3.8-max", 2.00, 6.00, 2.00, 0.20),
-    ("qwen3.7-max", 2.50, 7.50, 2.50, 0.25),
-    ("qwen3.7-plus", 0.40, 1.60, 0.40, 0.04),
-    ("qwen3.6-plus", 0.50, 3.00, 0.50, 0.05),
-    ("qwen3.6-flash", 0.25, 1.50, 0.25, 0.025),
-    ("qwen3.5-flash", 0.10, 0.40, 0.10, 0.01),
-    ("qwen3-coder-plus", 1.00, 5.00, 1.00, 0.10),
-    ("qwen3-coder-flash", 0.30, 1.50, 0.30, 0.03),
-    ("qwen3-vl-plus", 0.20, 1.60, 0.20, 0.02),
-    ("qwen-max", 1.60, 6.40, 1.60, 0.16),
-    ("qwen-plus", 0.40, 1.20, 0.40, 0.04),
-    ("qwen-turbo", 0.05, 0.20, 0.05, 0.005),
+    ("qwen3.8-max", 2.00, 6.00, 2.00, 0.25),
+    ("qwen3.7-max", 2.50, 7.50, 2.50, 0.50),
+    ("qwen3.7-plus", 0.40, 1.60, 0.40, 0.08),
+    ("qwen3.6-plus", 0.50, 3.00, 0.50, 0.10),
+    ("qwen3.6-flash", 0.25, 1.50, 0.25, 0.05),
+    ("qwen3.5-flash", 0.10, 0.40, 0.10, 0.02),
+    ("qwen3-coder-plus", 1.00, 5.00, 1.00, 0.20),
+    ("qwen3-coder-flash", 0.30, 1.50, 0.30, 0.06),
+    ("qwen3-vl-plus", 0.20, 1.60, 0.20, 0.04),
+    ("qwen-max", 1.60, 6.40, 1.60, 0.32),
+    ("qwen-plus", 0.40, 1.20, 0.40, 0.08),
+    ("qwen-turbo", 0.05, 0.20, 0.05, 0.01),
     // Third-party models resold by Model Studio at Alibaba's own rates
     ("deepseek-v4-pro", 2.40, 4.80, 2.40, 0.24),
-    ("deepseek-v4-flash", 0.20, 0.40, 0.20, 0.02),
-    ("glm-5.2", 1.40, 4.40, 1.40, 0.14),
+    ("deepseek-v4-flash", 0.20, 0.40, 0.20, 0.04),
+    ("glm-5.2", 1.40, 4.40, 1.40, 0.28),
 ];
+
+const QWEN_PLUS_LONG_CONTEXT_THRESHOLD: u64 = 256_000;
+
+fn calculate_local_usage_cost(
+    model: &str,
+    input_tokens: u64,
+    cache_write_tokens: u64,
+    cache_read_tokens: u64,
+    output_tokens: u64,
+) -> Option<f64> {
+    let (mut input, mut output, mut cache_write, mut cache_read) =
+        crate::llm::utils::get_model_pricing(model, PRICING)?;
+    let total_input_tokens = input_tokens
+        .saturating_add(cache_write_tokens)
+        .saturating_add(cache_read_tokens);
+
+    if normalize_model_name(model).contains("qwen3.7-plus")
+        && total_input_tokens > QWEN_PLUS_LONG_CONTEXT_THRESHOLD
+    {
+        // International list-price tier for prompts in (256K, 1M].
+        input = 1.20;
+        output = 4.80;
+        cache_write = 1.20;
+        cache_read = 0.24;
+    }
+
+    Some(
+        (input_tokens as f64 / 1_000_000.0) * input
+            + (cache_write_tokens as f64 / 1_000_000.0) * cache_write
+            + (cache_read_tokens as f64 / 1_000_000.0) * cache_read
+            + (output_tokens as f64 / 1_000_000.0) * output,
+    )
+}
 
 #[async_trait::async_trait]
 impl AiProvider for AlibabaProvider {
@@ -151,14 +184,23 @@ impl AiProvider for AlibabaProvider {
 
         if let Some(ref mut usage) = response.exchange.usage {
             if usage.cost.is_none() {
-                if let Some(pricing) = self.get_model_pricing(&model) {
-                    usage.cost = Some(pricing.calculate_cost(
-                        usage.input_tokens,
-                        usage.cache_write_tokens,
-                        usage.cache_read_tokens,
-                        usage.billable_output_tokens(),
-                    ));
-                }
+                usage.cost = calculate_local_usage_cost(
+                    &model,
+                    usage.input_tokens,
+                    usage.cache_write_tokens,
+                    usage.cache_read_tokens,
+                    usage.billable_output_tokens(),
+                )
+                .or_else(|| {
+                    self.get_model_pricing(&model).map(|pricing| {
+                        pricing.calculate_cost(
+                            usage.input_tokens,
+                            usage.cache_write_tokens,
+                            usage.cache_read_tokens,
+                            usage.billable_output_tokens(),
+                        )
+                    })
+                });
             }
         }
 
@@ -204,7 +246,7 @@ mod tests {
         let p = provider.get_model_pricing("qwen3.8-max").unwrap();
         assert_eq!(p.input_price_per_1m, 2.00);
         assert_eq!(p.output_price_per_1m, 6.00);
-        assert_eq!(p.cache_read_price_per_1m, 0.20);
+        assert_eq!(p.cache_read_price_per_1m, 0.25);
 
         // Alibaba list price, not the discounted third-party reference price
         let p = provider.get_model_pricing("qwen3.7-max").unwrap();
@@ -213,7 +255,7 @@ mod tests {
 
         let p = provider.get_model_pricing("qwen3.6-flash").unwrap();
         assert_eq!(p.input_price_per_1m, 0.25);
-        assert_eq!(p.cache_read_price_per_1m, 0.025);
+        assert_eq!(p.cache_read_price_per_1m, 0.05);
 
         // Dated aliases must resolve to their family
         let p = provider
@@ -248,5 +290,15 @@ mod tests {
         // Cache hits must be cheaper than fresh input
         let cost_cached = pricing.calculate_cost(500_000, 0, 500_000, 500_000);
         assert!(cost_cached < cost);
+
+        let long = calculate_local_usage_cost("qwen3.7-plus", 256_001, 0, 0, 100_000)
+            .unwrap();
+        let expected_long = 256_001.0 / 1_000_000.0 * 1.20 + 0.1 * 4.80;
+        assert!((long - expected_long).abs() < 0.001);
+
+        let boundary =
+            calculate_local_usage_cost("qwen3.7-plus", 256_000, 0, 0, 100_000).unwrap();
+        let expected_boundary = 0.256 * 0.40 + 0.1 * 1.60;
+        assert!((boundary - expected_boundary).abs() < 0.001);
     }
 }

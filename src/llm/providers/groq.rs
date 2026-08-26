@@ -204,6 +204,11 @@ mod tests {
         assert!(!provider.supports_caching("llama-3.3-70b-versatile"));
         assert!(!provider.supports_caching("llama-3.1-8b-instant"));
         assert!(!provider.supports_caching("qwen/qwen3-32b"));
+        assert!(provider.supports_vision("qwen/qwen3.6-27b"));
+        assert_eq!(
+            provider.get_max_input_tokens("qwen/qwen3.6-27b"),
+            131_072
+        );
     }
 
     #[test]
@@ -244,6 +249,10 @@ mod tests {
         let p = provider.get_model_pricing("qwen/qwen3-32b").unwrap();
         assert_eq!(p.input_price_per_1m, 0.29);
         assert_eq!(p.output_price_per_1m, 0.59);
+
+        let p = provider.get_model_pricing("qwen/qwen3.6-27b").unwrap();
+        assert_eq!(p.input_price_per_1m, 0.60);
+        assert_eq!(p.output_price_per_1m, 3.00);
     }
 
     #[test]

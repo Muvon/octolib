@@ -122,9 +122,10 @@ fn get_usage_pricing(model: &str, input_tokens: u64) -> Option<(f64, f64, f64, f
     let (mut input, mut output, mut cache_write, mut cache_read) =
         get_model_pricing(model, PRICING)?;
 
-    if normalize_model_name(model).starts_with("gpt-5.6")
-        && input_tokens > GPT_5_6_LONG_CONTEXT_THRESHOLD
-    {
+    let normalized = normalize_model_name(model);
+    let tiered_long_context = normalized.starts_with("gpt-5.6")
+        || (normalized.starts_with("gpt-5.5") && !normalized.starts_with("gpt-5.5-pro"));
+    if tiered_long_context && input_tokens > GPT_5_6_LONG_CONTEXT_THRESHOLD {
         input *= 2.0;
         output *= 1.5;
         cache_write *= 2.0;
@@ -463,13 +464,17 @@ impl AiProvider for OpenAiProvider {
         // These are the actual context windows - API handles output limits
         let normalized = normalize_model_name(model);
 
-        // GPT-5.6 family: 1.05M context window (922K max input + 128K max output)
+        // GPT-5.6 Cyber is a separately provisioned 400K-context model.
+        if normalized.starts_with("gpt-5.6-cyber") {
+            return 400_000;
+        }
+        // General GPT-5.6 family: 1.05M context window.
         if normalized.starts_with("gpt-5.6") {
             return 1_050_000;
         }
-        // GPT-5.5 family: 1M context window
+        // GPT-5.5 family: 1.05M context window.
         if normalized.starts_with("gpt-5.5") {
-            return 1_000_000;
+            return 1_050_000;
         }
         // GPT-5.3 Instant: 128K context window
         if normalized.starts_with("gpt-5.3-instant") {
@@ -1216,8 +1221,9 @@ mod tests {
         assert_eq!(provider.get_max_input_tokens("gpt-5.6-luna"), 1_050_000);
 
         // GPT-5.5 models should have 1M context window
-        assert_eq!(provider.get_max_input_tokens("gpt-5.5"), 1_000_000);
-        assert_eq!(provider.get_max_input_tokens("gpt-5.5-pro"), 1_000_000);
+        assert_eq!(provider.get_max_input_tokens("gpt-5.5"), 1_050_000);
+        assert_eq!(provider.get_max_input_tokens("gpt-5.5-pro"), 1_050_000);
+        assert_eq!(provider.get_max_input_tokens("gpt-5.6-cyber"), 400_000);
 
         // GPT-5 models should have 400K context window
         assert_eq!(provider.get_max_input_tokens("gpt-5"), 400_000);

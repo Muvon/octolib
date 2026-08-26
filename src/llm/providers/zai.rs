@@ -282,6 +282,10 @@ impl AiProvider for ZaiProvider {
             || normalized.contains("glm-ocr")
     }
 
+    fn supports_video(&self, model: &str) -> bool {
+        normalize_model_name(model).contains("glm-5.3-flash")
+    }
+
     fn supports_structured_output(&self, _model: &str) -> bool {
         // Z.ai supports JSON mode (`response_format.type = "json_object"`) which
         // guarantees valid JSON but NOT conformance to a supplied schema.
@@ -312,13 +316,10 @@ impl AiProvider for ZaiProvider {
     fn get_max_input_tokens(&self, model: &str) -> usize {
         // Z.ai model context window limits (case-insensitive)
         let model_lower = normalize_model_name(model);
-        if model_lower.contains("glm-5.3-flash") {
-            1_048_576 // 1M context window for GLM-5.3-Flash
-        } else if model_lower.contains("glm-5.3")
-            || model_lower.contains("glm-5.2")
-            || model_lower.contains("glm-5.1")
-        {
-            200_000 // 200K context window for GLM-5.1/5.2/5.3
+        if model_lower.contains("glm-5.3") {
+            1_000_000 // 1M context window for GLM-5.3 and GLM-5.3-Flash
+        } else if model_lower.contains("glm-5.2") || model_lower.contains("glm-5.1") {
+            200_000 // 200K context window for GLM-5.1/5.2
         } else if model_lower.contains("glm-5") {
             128_000 // 128K context window for GLM-5
         } else if model_lower.contains("glm-4.7") {
@@ -981,10 +982,11 @@ mod tests {
         assert!(provider.supports_vision("glm-4.6v-flash"));
         assert!(provider.supports_vision("glm-4.5v"));
         assert!(provider.supports_vision("glm-ocr"));
-        // GLM-5.3-Flash: natively multimodal with 1M context (GLM-5.3 itself is text-only, 200K)
+        // GLM-5.3-Flash: native image/video input; both 5.3 variants have 1M context.
         assert!(provider.supports_vision("glm-5.3-flash"));
-        assert_eq!(provider.get_max_input_tokens("glm-5.3-flash"), 1_048_576);
-        assert_eq!(provider.get_max_input_tokens("glm-5.3"), 200_000);
+        assert!(provider.supports_video("glm-5.3-flash"));
+        assert_eq!(provider.get_max_input_tokens("glm-5.3-flash"), 1_000_000);
+        assert_eq!(provider.get_max_input_tokens("glm-5.3"), 1_000_000);
         // Non-vision models
         assert!(!provider.supports_vision("glm-5.1"));
         assert!(!provider.supports_vision("glm-5-turbo"));

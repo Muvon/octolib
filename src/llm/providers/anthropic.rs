@@ -31,7 +31,7 @@ use std::env;
 
 /// Anthropic pricing constants (per 1M tokens in USD)
 /// Model IDs sourced from Anthropic model docs / models API.
-/// Prices sourced from Anthropic pricing docs (verified Jul 25, 2026).
+/// Prices sourced from Anthropic pricing docs (verified Aug 26, 2026).
 /// Format: (model, input, output, cache_write, cache_read)
 const PRICING: &[PricingTuple] = &[
     // Mythos-class (Fable 5): $10/$50, cache write 1.25x, cache read 0.1x
@@ -44,9 +44,9 @@ const PRICING: &[PricingTuple] = &[
     ("claude-opus-4-8", 5.00, 25.00, 6.25, 0.50),
     // Claude 4.7
     ("claude-opus-4-7", 5.00, 25.00, 6.25, 0.50),
-    // Claude Sonnet 5: introductory pricing $2/$10 in effect through 2026-08-31,
-    // after which standard pricing of $3/$15 takes effect. Cache write is the
-    // 5m rate (1.25x input); the 1h tier is $4.00 and isn't representable here.
+    // Claude Sonnet 5: $2/$10 introductory pricing was made permanent Aug 10, 2026.
+    // Cache write is the 5m rate (1.25x input); the 1h tier is $4.00 and isn't
+    // representable here.
     ("claude-sonnet-5", 2.00, 10.00, 2.50, 0.20),
     // Claude 4.6
     ("claude-sonnet-4-6-20260217", 3.00, 15.00, 3.75, 0.30),
@@ -308,11 +308,12 @@ impl AiProvider for AnthropicProvider {
     }
 
     fn supports_vision(&self, model: &str) -> bool {
-        // Claude 3+, Opus 5, and Mythos-class models support vision (case-insensitive)
+        // All current Claude models support image input.
         let model_lower = normalize_model_name(model);
         model_lower.contains("claude-3")
             || model_lower.contains("claude-4")
             || model_lower.contains("claude-opus-5")
+            || model_lower.contains("claude-sonnet-5")
             || model_lower.contains("claude-fable-5")
             || model_lower.contains("claude-mythos-5")
     }
@@ -323,10 +324,13 @@ impl AiProvider for AnthropicProvider {
         if model_lower.contains("claude-opus-5")
             || model_lower.contains("claude-fable-5")
             || model_lower.contains("claude-mythos-5")
+            || model_lower.contains("claude-sonnet-5")
             || model_lower.contains("claude-opus-4-8")
             || model_lower.contains("claude-opus-4-7")
+            || model_lower.contains("claude-opus-4-6")
+            || model_lower.contains("claude-sonnet-4-6")
         {
-            // Claude Opus 5, Fable 5, Mythos 5, and Opus 4.8 / 4.7 have 1M context
+            // Claude 4.6 and later models have 1M context at standard pricing.
             1_000_000
         } else if model_lower.contains("claude-opus-4")
             || model_lower.contains("claude-sonnet-4")

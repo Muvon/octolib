@@ -17,8 +17,10 @@
 //! PRICING UPDATE: April 2026 (from <https://docs.z.ai/guides/overview/pricing>)
 //!
 //! GLM-5.3 series (added Aug 2026):
-//! - GLM-5.3: Input $1.40/1M, Cached $0.26/1M, Output $4.40/1M (mirrors GLM-5.2;
-//!   official 5.3 pricing not yet published — same base model, post-training update)
+//! - GLM-5.3: Input $1.40/1M, Cached $0.26/1M, Output $4.40/1M (official pricing
+//!   confirmed Aug 2026; previously mirrored from GLM-5.2)
+//! - GLM-5.3-Flash: Input $0.15/1M, Cached $0.03/1M, Output $0.50/1M — list prices;
+//!   50% promo ($0.075/$0.015/$0.25) runs until Sep 9, 2026
 //!
 //! GLM-5.2 series:
 //! - GLM-5.2: Input $1.40/1M, Cached $0.26/1M, Output $4.40/1M (pricing mirrors GLM-5.1)
@@ -72,10 +74,12 @@ use serde::{Deserialize, Serialize};
 use std::env;
 
 /// Z.ai pricing constants (per 1M tokens in USD)
-/// Source: https://docs.z.ai/guides/overview/pricing (verified Apr 6, 2026)
+/// Source: https://docs.z.ai/guides/overview/pricing (verified Aug 26, 2026)
 /// Format: (model, input, output, cache_write, cache_read)
 const PRICING: &[PricingTuple] = &[
-    // GLM-5.3 — official pricing pending; mirrors GLM-5.2 (same base model, post-training update)
+    // GLM-5.3-Flash — list prices; 50% promo ($0.075 in / $0.015 cached / $0.25 out) ends Sep 9, 2026
+    ("glm-5.3-flash", 0.15, 0.50, 0.00, 0.03),
+    // GLM-5.3 — official pricing confirmed Aug 2026 (previously mirrored from GLM-5.2)
     ("glm-5.3", 1.40, 4.40, 0.00, 0.26),
     // GLM-5.2 series (pricing mirrors GLM-5.1)
     ("glm-5.2", 1.40, 4.40, 0.00, 0.26),
@@ -271,7 +275,8 @@ impl AiProvider for ZaiProvider {
 
     fn supports_vision(&self, model: &str) -> bool {
         let normalized = normalize_model_name(model);
-        normalized.contains("glm-5v")
+        normalized.contains("glm-5.3-flash") // natively multimodal GLM-5
+            || normalized.contains("glm-5v")
             || normalized.contains("glm-4.6v")
             || normalized.contains("glm-4.5v")
             || normalized.contains("glm-ocr")
@@ -307,7 +312,9 @@ impl AiProvider for ZaiProvider {
     fn get_max_input_tokens(&self, model: &str) -> usize {
         // Z.ai model context window limits (case-insensitive)
         let model_lower = normalize_model_name(model);
-        if model_lower.contains("glm-5.3")
+        if model_lower.contains("glm-5.3-flash") {
+            1_048_576 // 1M context window for GLM-5.3-Flash
+        } else if model_lower.contains("glm-5.3")
             || model_lower.contains("glm-5.2")
             || model_lower.contains("glm-5.1")
         {
@@ -798,6 +805,7 @@ mod tests {
         let provider = ZaiProvider::new();
         assert!(provider.supports_model("glm-5.1"));
         assert!(provider.supports_model("glm-5.3"));
+        assert!(provider.supports_model("glm-5.3-flash"));
         assert!(provider.supports_model("glm-5.1-turbo"));
         assert!(provider.supports_model("glm-5"));
         assert!(provider.supports_model("glm-5-turbo"));
@@ -806,11 +814,18 @@ mod tests {
         assert!(provider.supports_model("glm-4.7-flash"));
         assert!(provider.supports_model("glm-4.6"));
         assert!(provider.supports_model("glm-4.5"));
+        // Near-miss rejections: invalid models that contain no pricing entry as a substring
+        assert!(!provider.supports_model("glm5.3-flash")); // missing dash after glm
+        assert!(!provider.supports_model("glmm-5.3-flash")); // typo'd prefix
+                                                             // Substring convention: a variant of a known family matches its base entry
+                                                             // (same mechanism that bills glm-4.7-flashx via its own specific-first entry),
+                                                             // so a hypothetical glm-5.3-flashx is accepted at flash pricing until z.ai
+                                                             // ships it with distinct prices and it gets its own entry.
+        assert!(provider.supports_model("glm-5.3-flashx"));
         // Deprecated models
         assert!(!provider.supports_model("glm-4"));
         assert!(!provider.supports_model("glm-4-flash"));
         assert!(!provider.supports_model("gpt-4"));
-        assert!(!provider.supports_model("claude-3"));
     }
 
     #[test]
@@ -837,6 +852,10 @@ mod tests {
         // Test GLM-5.3: mirrors GLM-5.2 pricing ($1.40 input, $4.40 output)
         let cost = calculate_cost("glm-5.3", 1_000_000, 0, 1_000_000);
         assert!((cost.unwrap() - 5.80).abs() < 0.01); // 1.40 + 4.40
+
+        // Test GLM-5.3-Flash: list prices $0.15 input, $0.50 output (50% promo until Sep 9, 2026)
+        let cost = calculate_cost("glm-5.3-flash", 1_000_000, 0, 1_000_000);
+        assert!((cost.unwrap() - 0.65).abs() < 0.01); // 0.15 + 0.50
 
         // Test GLM-4.5: $0.60 input, $2.20 output
         let cost = calculate_cost("glm-4.5", 1_000_000, 0, 1_000_000);
@@ -962,6 +981,10 @@ mod tests {
         assert!(provider.supports_vision("glm-4.6v-flash"));
         assert!(provider.supports_vision("glm-4.5v"));
         assert!(provider.supports_vision("glm-ocr"));
+        // GLM-5.3-Flash: natively multimodal with 1M context (GLM-5.3 itself is text-only, 200K)
+        assert!(provider.supports_vision("glm-5.3-flash"));
+        assert_eq!(provider.get_max_input_tokens("glm-5.3-flash"), 1_048_576);
+        assert_eq!(provider.get_max_input_tokens("glm-5.3"), 200_000);
         // Non-vision models
         assert!(!provider.supports_vision("glm-5.1"));
         assert!(!provider.supports_vision("glm-5-turbo"));

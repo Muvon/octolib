@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.34.3] - 2026-08-26
+
+### 📋 Release Summary
+
+This release introduces support for Together AI serverless pricing, GLM-5.3-Flash via Zai, and the qwen-3.7-flash reference model (862c9736, 0da4e0cc, bbdaaa8f). Provider pricing and capabilities have also been updated for improved accuracy (c34e6d6e, f63d7efa).
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: implement Together AI serverless pricing `862c9736`
+- **llm**: add GLM-5.3-Flash support for Zai provider `0da4e0cc`
+- **llm**: add qwen-3.7-flash reference model `bbdaaa8f`
+
+### 🔧 Improvements & Optimizations
+
+- **llm**: update provider pricing and capabilities `c34e6d6e`
+- **llm**: update provider pricing and capabilities `f63d7efa`
+
 ## [0.34.2] - 2026-08-22
 
 ### 📋 Release Summary

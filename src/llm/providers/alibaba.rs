@@ -68,8 +68,14 @@ const ALIBABA_API_URL: &str =
 // implicit cache hits cost 20% of uncached input.
 const PRICING: &[PricingTuple] = &[
     ("qwen3.8-max", 2.00, 6.00, 2.00, 0.25),
-    ("qwen3.7-max", 2.50, 7.50, 2.50, 0.50),
-    ("qwen3.7-plus", 0.40, 1.60, 0.40, 0.08),
+    // Dated Qwen 3.7 snapshots retain list price; moving aliases have current promos.
+    ("qwen3.7-max-2026-06-08", 2.50, 7.50, 2.50, 0.50),
+    ("qwen3.7-max-2026-05-20", 2.50, 7.50, 2.50, 0.50),
+    ("qwen3.7-max-2026-05-17", 2.50, 7.50, 2.50, 0.50),
+    ("qwen3.7-max-preview", 2.50, 7.50, 2.50, 0.50),
+    ("qwen3.7-max", 1.25, 3.75, 1.25, 0.25),
+    ("qwen3.7-plus-2026-05-26", 0.40, 1.60, 0.40, 0.08),
+    ("qwen3.7-plus", 0.32, 1.28, 0.32, 0.064),
     ("qwen3.6-plus", 0.50, 3.00, 0.50, 0.10),
     ("qwen3.6-flash", 0.25, 1.50, 0.25, 0.05),
     ("qwen3.5-flash", 0.10, 0.40, 0.10, 0.02),
@@ -103,11 +109,19 @@ fn calculate_local_usage_cost(
     if normalize_model_name(model).contains("qwen3.7-plus")
         && total_input_tokens > QWEN_PLUS_LONG_CONTEXT_THRESHOLD
     {
-        // International list-price tier for prompts in (256K, 1M].
-        input = 1.20;
-        output = 4.80;
-        cache_write = 1.20;
-        cache_read = 0.24;
+        if normalize_model_name(model).contains("qwen3.7-plus-2026-05-26") {
+            // Dated snapshot list-price tier for prompts in (256K, 1M].
+            input = 1.20;
+            output = 4.80;
+            cache_write = 1.20;
+            cache_read = 0.24;
+        } else {
+            // Moving alias: current 20%-off tier for prompts in (256K, 1M].
+            input = 0.96;
+            output = 3.84;
+            cache_write = 0.96;
+            cache_read = 0.192;
+        }
     }
 
     Some(
@@ -184,20 +198,24 @@ impl AiProvider for AlibabaProvider {
 
         if let Some(ref mut usage) = response.exchange.usage {
             if usage.cost.is_none() {
+                let input_tokens = usage.input_tokens;
+                let cache_write_tokens = usage.cache_write_tokens;
+                let cache_read_tokens = usage.cache_read_tokens;
+                let output_tokens = usage.billable_output_tokens();
                 usage.cost = calculate_local_usage_cost(
                     &model,
-                    usage.input_tokens,
-                    usage.cache_write_tokens,
-                    usage.cache_read_tokens,
-                    usage.billable_output_tokens(),
+                    input_tokens,
+                    cache_write_tokens,
+                    cache_read_tokens,
+                    output_tokens,
                 )
                 .or_else(|| {
                     self.get_model_pricing(&model).map(|pricing| {
                         pricing.calculate_cost(
-                            usage.input_tokens,
-                            usage.cache_write_tokens,
-                            usage.cache_read_tokens,
-                            usage.billable_output_tokens(),
+                            input_tokens,
+                            cache_write_tokens,
+                            cache_read_tokens,
+                            output_tokens,
                         )
                     })
                 });
@@ -248,8 +266,15 @@ mod tests {
         assert_eq!(p.output_price_per_1m, 6.00);
         assert_eq!(p.cache_read_price_per_1m, 0.25);
 
-        // Alibaba list price, not the discounted third-party reference price
+        // Moving alias currently has a 50% promotion.
         let p = provider.get_model_pricing("qwen3.7-max").unwrap();
+        assert_eq!(p.input_price_per_1m, 1.25);
+        assert_eq!(p.output_price_per_1m, 3.75);
+
+        // Dated snapshots retain list price.
+        let p = provider
+            .get_model_pricing("qwen3.7-max-2026-06-08")
+            .unwrap();
         assert_eq!(p.input_price_per_1m, 2.50);
         assert_eq!(p.output_price_per_1m, 7.50);
 
@@ -272,7 +297,6 @@ mod tests {
     #[test]
     fn test_pricing_falls_back_to_reference() {
         let provider = AlibabaProvider::new();
-        // Not in the local table, resolved from reference pricing
         let p = provider.get_model_pricing("qwen3-max-2026-01-25").unwrap();
         assert!(p.input_price_per_1m > 0.0);
     }
@@ -291,14 +315,17 @@ mod tests {
         let cost_cached = pricing.calculate_cost(500_000, 0, 500_000, 500_000);
         assert!(cost_cached < cost);
 
-        let long = calculate_local_usage_cost("qwen3.7-plus", 256_001, 0, 0, 100_000)
-            .unwrap();
-        let expected_long = 256_001.0 / 1_000_000.0 * 1.20 + 0.1 * 4.80;
+        let long = calculate_local_usage_cost("qwen3.7-plus", 256_001, 0, 0, 100_000).unwrap();
+        let expected_long = 256_001.0 / 1_000_000.0 * 0.96 + 0.1 * 3.84;
         assert!((long - expected_long).abs() < 0.001);
 
-        let boundary =
-            calculate_local_usage_cost("qwen3.7-plus", 256_000, 0, 0, 100_000).unwrap();
-        let expected_boundary = 0.256 * 0.40 + 0.1 * 1.60;
+        let boundary = calculate_local_usage_cost("qwen3.7-plus", 256_000, 0, 0, 100_000).unwrap();
+        let expected_boundary = 0.256 * 0.32 + 0.1 * 1.28;
         assert!((boundary - expected_boundary).abs() < 0.001);
+
+        let snapshot_long =
+            calculate_local_usage_cost("qwen3.7-plus-2026-05-26", 256_001, 0, 0, 100_000).unwrap();
+        let expected_snapshot = 256_001.0 / 1_000_000.0 * 1.20 + 0.1 * 4.80;
+        assert!((snapshot_long - expected_snapshot).abs() < 0.001);
     }
 }

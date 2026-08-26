@@ -24,9 +24,8 @@
 //! `gpt-5.5`, `kimi-k2.7-code`. Catalogues change over time, so any non-empty
 //! model ID is accepted and validated by the API itself.
 //!
-//! Neither reports per-token cost in usage (Go is subscription-billed; Zen
-//! returns a top-level `cost` string not part of the OpenAI usage shape), so
-//! cost estimates fall back to reference pricing for known models.
+//! Go is subscription-billed. Zen returns the actual request cost as a top-level
+//! `cost` value rather than inside the OpenAI usage object.
 //!
 //! Tool calls work on both (verified live). Structured output: Go honors
 //! json_schema `response_format` through the router (verified); on Zen it is
@@ -107,17 +106,32 @@ async fn opencode_chat_completion(
     )
     .await?;
 
-    // Derive cost from reference pricing if not returned in the response
+    let reported_cost = if provider_name == "opencode-zen" {
+        response.exchange.response.get("cost").and_then(|value| {
+            value
+                .as_f64()
+                .or_else(|| value.as_str().and_then(|text| text.parse::<f64>().ok()))
+        })
+    } else {
+        None
+    };
+
     if let Some(ref mut usage) = response.exchange.usage {
         if usage.cost.is_none() {
-            if let Some(pricing) = crate::llm::reference_models::get_reference_pricing(&model) {
-                usage.cost = Some(pricing.calculate_cost(
-                    usage.input_tokens,
-                    usage.cache_write_tokens,
-                    usage.cache_read_tokens,
-                    usage.billable_output_tokens(),
-                ));
-            }
+            let input_tokens = usage.input_tokens;
+            let cache_write_tokens = usage.cache_write_tokens;
+            let cache_read_tokens = usage.cache_read_tokens;
+            let output_tokens = usage.billable_output_tokens();
+            usage.cost = reported_cost.or_else(|| {
+                crate::llm::reference_models::get_reference_pricing(&model).map(|pricing| {
+                    pricing.calculate_cost(
+                        input_tokens,
+                        cache_write_tokens,
+                        cache_read_tokens,
+                        output_tokens,
+                    )
+                })
+            });
         }
     }
 

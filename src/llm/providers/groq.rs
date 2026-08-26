@@ -137,7 +137,6 @@ impl AiProvider for GroqProvider {
                 cache_read,
             ));
         }
-        // Fall back to reference pricing for other open-weight models
         crate::llm::reference_models::get_reference_pricing(model)
     }
 
@@ -205,10 +204,7 @@ mod tests {
         assert!(!provider.supports_caching("llama-3.1-8b-instant"));
         assert!(!provider.supports_caching("qwen/qwen3-32b"));
         assert!(provider.supports_vision("qwen/qwen3.6-27b"));
-        assert_eq!(
-            provider.get_max_input_tokens("qwen/qwen3.6-27b"),
-            131_072
-        );
+        assert_eq!(provider.get_max_input_tokens("qwen/qwen3.6-27b"), 131_072);
     }
 
     #[test]
@@ -269,7 +265,6 @@ mod tests {
     #[test]
     fn test_pricing_falls_back_to_reference() {
         let provider = GroqProvider::new();
-        // gpt-oss-120b without the "openai/" prefix is only in reference pricing
         assert!(!is_model_in_pricing_table("gpt-oss-120b", PRICING));
         let p = provider.get_model_pricing("gpt-oss-120b").unwrap();
         assert!(p.input_price_per_1m > 0.0);

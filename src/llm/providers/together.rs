@@ -38,6 +38,7 @@ const TOGETHER_API_URL: &str = "https://api.together.xyz/v1/chat/completions";
 /// Format: (model pattern, input, output, cache write, cached input).
 /// Models without a listed cache discount use the normal input rate.
 const PRICING: &[PricingTuple] = &[
+    ("thinkingmachines/Inkling-Small", 0.50, 1.20, 0.50, 0.50),
     ("Qwen/Qwen3.8-2.4T-A95B", 2.50, 6.25, 2.50, 0.50),
     ("Qwen/Qwen3.7-Max", 1.25, 3.75, 1.25, 1.25),
     ("Qwen/Qwen3.7-Plus", 0.32, 1.28, 0.32, 0.32),
@@ -46,20 +47,8 @@ const PRICING: &[PricingTuple] = &[
     ("moonshotai/Kimi-K3", 3.00, 15.00, 3.00, 0.30),
     ("moonshotai/Kimi-K2.7-Code", 0.95, 4.00, 0.95, 0.19),
     ("zai-org/GLM-5.2", 1.40, 4.40, 1.40, 0.26),
-    (
-        "deepseek-ai/DeepSeek-V4-Pro-0813",
-        1.32,
-        3.96,
-        1.32,
-        0.13,
-    ),
-    (
-        "deepseek-ai/DeepSeek-V4-Flash-0731",
-        0.14,
-        0.28,
-        0.14,
-        0.03,
-    ),
+    ("deepseek-ai/DeepSeek-V4-Pro-0813", 1.32, 3.96, 1.32, 0.13),
+    ("deepseek-ai/DeepSeek-V4-Flash-0731", 0.14, 0.28, 0.14, 0.03),
     ("deepseek-ai/DeepSeek-V4-Pro", 1.74, 3.48, 1.74, 0.20),
     ("google/gemma-4-31B-it", 0.39, 0.97, 0.39, 0.39),
     ("thinkingmachines/Inkling", 1.00, 4.05, 1.00, 0.17),
@@ -73,6 +62,34 @@ fn together_model_pricing(model: &str) -> Option<crate::llm::types::ModelPricing
         cache_write,
         cache_read,
     ))
+}
+
+fn together_model_context(model: &str) -> Option<usize> {
+    let normalized = model.to_ascii_lowercase();
+    if normalized.contains("thinkingmachines/inkling-small")
+        || normalized.contains("thinkingmachines/inkling")
+        || normalized.contains("minimaxai/minimax-m3")
+    {
+        Some(524_288)
+    } else if normalized.contains("moonshotai/kimi-k3")
+        || normalized.contains("deepseek-ai/deepseek-v4-pro-0813")
+    {
+        Some(1_048_576)
+    } else if normalized.contains("moonshotai/kimi-k2.7-code")
+        || normalized.contains("google/gemma-4-31b-it")
+    {
+        Some(262_144)
+    } else if normalized.contains("qwen/qwen3.7-plus")
+        || normalized.contains("qwen/qwen3.6-plus")
+        || normalized.contains("zai-org/glm-5.2")
+        || normalized.contains("deepseek-ai/deepseek-v4-flash-0731")
+    {
+        Some(1_000_000)
+    } else if normalized.contains("deepseek-ai/deepseek-v4-pro") {
+        Some(512_000)
+    } else {
+        None
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -125,7 +142,13 @@ impl AiProvider for TogetherProvider {
             .or_else(|| crate::llm::reference_models::get_reference_pricing(model))
     }
 
-    // get_max_input_tokens resolved via reference capabilities (trait default)
+    fn get_max_input_tokens(&self, model: &str) -> usize {
+        together_model_context(model).unwrap_or_else(|| {
+            crate::llm::reference_models::get_reference_capabilities(model)
+                .map(|caps| caps.max_input_tokens)
+                .unwrap_or(262_144)
+        })
+    }
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
         let api_key = self.get_api_key()?;
@@ -765,12 +788,18 @@ mod tests {
         assert_eq!(deepseek.input_price_per_1m, 0.14);
         assert_eq!(deepseek.cache_read_price_per_1m, 0.03);
         assert_eq!(deepseek.output_price_per_1m, 0.28);
+        assert_eq!(
+            provider.get_max_input_tokens("deepseek-ai/DeepSeek-V4-Flash-0731"),
+            1_000_000
+        );
 
-        let gemma = provider
-            .get_model_pricing("google/gemma-4-31B-it")
-            .unwrap();
+        let gemma = provider.get_model_pricing("google/gemma-4-31B-it").unwrap();
         assert_eq!(gemma.input_price_per_1m, 0.39);
         assert_eq!(gemma.output_price_per_1m, 0.97);
+        assert_eq!(
+            provider.get_max_input_tokens("google/gemma-4-31B-it"),
+            262_144
+        );
     }
 
     #[test]

@@ -114,9 +114,9 @@ const PRICING: &[PricingTuple] = &[
     ("gpt-3.5-turbo", 0.50, 1.50, 0.50, 0.50),
 ];
 
-/// GPT-5.6 requests above this many input tokens use the long-context tier for
-/// the entire request: 2x input/cache rates and 1.5x output rates.
-const GPT_5_6_LONG_CONTEXT_THRESHOLD: u64 = 272_000;
+/// Tiered GPT-5 requests above this many input tokens use long-context pricing
+/// for the entire request: 2x input/cache rates and 1.5x output rates.
+const GPT_5_LONG_CONTEXT_THRESHOLD: u64 = 272_000;
 
 fn get_usage_pricing(model: &str, input_tokens: u64) -> Option<(f64, f64, f64, f64)> {
     let (mut input, mut output, mut cache_write, mut cache_read) =
@@ -125,7 +125,7 @@ fn get_usage_pricing(model: &str, input_tokens: u64) -> Option<(f64, f64, f64, f
     let normalized = normalize_model_name(model);
     let tiered_long_context = normalized.starts_with("gpt-5.6")
         || (normalized.starts_with("gpt-5.5") && !normalized.starts_with("gpt-5.5-pro"));
-    if tiered_long_context && input_tokens > GPT_5_6_LONG_CONTEXT_THRESHOLD {
+    if tiered_long_context && input_tokens > GPT_5_LONG_CONTEXT_THRESHOLD {
         input *= 2.0;
         output *= 1.5;
         cache_write *= 2.0;
@@ -1220,7 +1220,7 @@ mod tests {
         assert_eq!(provider.get_max_input_tokens("gpt-5.6-terra"), 1_050_000);
         assert_eq!(provider.get_max_input_tokens("gpt-5.6-luna"), 1_050_000);
 
-        // GPT-5.5 models should have 1M context window
+        // GPT-5.5 models have a 1.05M context window.
         assert_eq!(provider.get_max_input_tokens("gpt-5.5"), 1_050_000);
         assert_eq!(provider.get_max_input_tokens("gpt-5.5-pro"), 1_050_000);
         assert_eq!(provider.get_max_input_tokens("gpt-5.6-cyber"), 400_000);

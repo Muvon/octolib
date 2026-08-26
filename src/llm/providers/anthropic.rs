@@ -308,12 +308,17 @@ impl AiProvider for AnthropicProvider {
     }
 
     fn supports_vision(&self, model: &str) -> bool {
-        // All current Claude models support image input.
+        // Capability checks intentionally accept family shorthand and common
+        // aliases even when they are not exact pricing-table model IDs.
         let model_lower = normalize_model_name(model);
         model_lower.contains("claude-3")
             || model_lower.contains("claude-4")
+            || model_lower.contains("claude-opus-4")
+            || model_lower.contains("claude-sonnet-4")
+            || model_lower.contains("claude-haiku-4")
             || model_lower.contains("claude-opus-5")
             || model_lower.contains("claude-sonnet-5")
+            || model_lower.contains("claude-haiku-5")
             || model_lower.contains("claude-fable-5")
             || model_lower.contains("claude-mythos-5")
     }
@@ -1170,6 +1175,11 @@ mod tests {
     #[test]
     fn test_supports_vision_case_insensitive() {
         let provider = AnthropicProvider::new();
+
+        assert!(provider.supports_vision("claude-sonnet-5"));
+        assert!(provider.supports_vision("claude-opus-4-6"));
+        assert!(provider.supports_vision("claude-sonnet-4-6"));
+        assert!(provider.supports_vision("claude-haiku-4-5"));
 
         // Test lowercase
         assert!(provider.supports_vision("claude-3-haiku"));

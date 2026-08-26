@@ -172,13 +172,13 @@ mod tests {
             get_reference_capabilities("gpt-5.5-pro")
                 .unwrap()
                 .max_input_tokens,
-            1_000_000
+            1_050_000
         );
         assert_eq!(
             get_reference_capabilities("gpt-5.5")
                 .unwrap()
                 .max_input_tokens,
-            1_000_000
+            1_050_000
         );
         assert_eq!(
             get_reference_capabilities("gpt-5.4")
@@ -318,7 +318,7 @@ mod tests {
             get_reference_capabilities("glm-5.3")
                 .unwrap()
                 .max_input_tokens,
-            200_000
+            1_000_000
         );
     }
 

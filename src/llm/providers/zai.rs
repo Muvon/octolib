@@ -65,8 +65,7 @@ use crate::llm::types::{
     ThinkingBlock, TokenUsage, ToolCall,
 };
 use crate::llm::utils::{
-    calculate_cost_from_pricing_table, get_model_pricing, is_model_in_pricing_table,
-    normalize_model_name, PricingTuple,
+    get_model_pricing, is_model_in_pricing_table, normalize_model_name, PricingTuple,
 };
 use anyhow::Result;
 use async_trait::async_trait;
@@ -112,6 +111,40 @@ const PRICING: &[PricingTuple] = &[
     ("glm-4-32b-0414-128k", 0.10, 0.10, 0.00, 0.00),
 ];
 
+/// GLM-5.3-Flash promotion ends at 2026-09-10 00:00 UTC+8
+/// (2026-09-09 16:00 UTC).
+const GLM_5_3_FLASH_PROMO_END_UNIX_SECS: u64 = 1_788_969_600;
+
+fn effective_pricing_at(model: &str, time: std::time::SystemTime) -> Option<(f64, f64, f64, f64)> {
+    let pricing = get_model_pricing(model, PRICING)?;
+    let secs = time
+        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0);
+    if normalize_model_name(model).contains("glm-5.3-flash")
+        && secs < GLM_5_3_FLASH_PROMO_END_UNIX_SECS
+    {
+        Some((0.075, 0.25, 0.00, 0.015))
+    } else {
+        Some(pricing)
+    }
+}
+
+fn calculate_cost_at(
+    model: &str,
+    regular_input_tokens: u64,
+    cache_read_tokens: u64,
+    completion_tokens: u64,
+    time: std::time::SystemTime,
+) -> Option<f64> {
+    let (input, output, _cache_write, cache_read) = effective_pricing_at(model, time)?;
+    Some(
+        (regular_input_tokens as f64 / 1_000_000.0) * input
+            + (cache_read_tokens as f64 / 1_000_000.0) * cache_read
+            + (completion_tokens as f64 / 1_000_000.0) * output,
+    )
+}
+
 /// Calculate cost for Z.ai models (case-insensitive)
 fn calculate_cost(
     model: &str,
@@ -119,13 +152,12 @@ fn calculate_cost(
     cache_read_tokens: u64,
     completion_tokens: u64,
 ) -> Option<f64> {
-    calculate_cost_from_pricing_table(
+    calculate_cost_at(
         model,
-        PRICING,
         regular_input_tokens,
-        0,
         cache_read_tokens,
         completion_tokens,
+        std::time::SystemTime::now(),
     )
 }
 
@@ -303,7 +335,7 @@ impl AiProvider for ZaiProvider {
 
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
         let (input_price, output_price, cache_write_price, cache_read_price) =
-            get_model_pricing(model, PRICING)?;
+            effective_pricing_at(model, std::time::SystemTime::now())?;
 
         Some(crate::llm::types::ModelPricing::new(
             input_price,
@@ -816,12 +848,12 @@ mod tests {
         assert!(provider.supports_model("glm-4.6"));
         assert!(provider.supports_model("glm-4.5"));
         // Near-miss rejections: invalid models that contain no pricing entry as a substring
-        assert!(!provider.supports_model("glm5.3-flash")); // missing dash after glm
-        assert!(!provider.supports_model("glmm-5.3-flash")); // typo'd prefix
-                                                             // Substring convention: a variant of a known family matches its base entry
-                                                             // (same mechanism that bills glm-4.7-flashx via its own specific-first entry),
-                                                             // so a hypothetical glm-5.3-flashx is accepted at flash pricing until z.ai
-                                                             // ships it with distinct prices and it gets its own entry.
+        assert!(!provider.supports_model("glm5.3-flash"));
+        assert!(!provider.supports_model("glmm-5.3-flash"));
+        // Substring convention: a variant of a known family matches its base entry
+        // (same mechanism that bills glm-4.7-flashx via its own specific-first entry),
+        // so a hypothetical glm-5.3-flashx is accepted at flash pricing until z.ai
+        // ships it with distinct prices and it gets its own entry.
         assert!(provider.supports_model("glm-5.3-flashx"));
         // Deprecated models
         assert!(!provider.supports_model("glm-4"));
@@ -854,10 +886,6 @@ mod tests {
         let cost = calculate_cost("glm-5.3", 1_000_000, 0, 1_000_000);
         assert!((cost.unwrap() - 5.80).abs() < 0.01); // 1.40 + 4.40
 
-        // Test GLM-5.3-Flash: list prices $0.15 input, $0.50 output (50% promo until Sep 9, 2026)
-        let cost = calculate_cost("glm-5.3-flash", 1_000_000, 0, 1_000_000);
-        assert!((cost.unwrap() - 0.65).abs() < 0.01); // 0.15 + 0.50
-
         // Test GLM-4.5: $0.60 input, $2.20 output
         let cost = calculate_cost("glm-4.5", 1_000_000, 0, 1_000_000);
         assert!((cost.unwrap() - 2.80).abs() < 0.01); // 0.60 + 2.20
@@ -869,6 +897,21 @@ mod tests {
         // Test GLM-4.7-flash: free model
         let cost = calculate_cost("glm-4.7-flash", 1_000_000, 0, 1_000_000);
         assert_eq!(cost.unwrap(), 0.0);
+    }
+
+    #[test]
+    fn glm_5_3_flash_promo_switches_to_list_price_at_documented_cutoff() {
+        use std::time::{Duration, SystemTime};
+
+        let before =
+            SystemTime::UNIX_EPOCH + Duration::from_secs(GLM_5_3_FLASH_PROMO_END_UNIX_SECS - 1);
+        let promo = calculate_cost_at("glm-5.3-flash", 1_000_000, 0, 1_000_000, before).unwrap();
+        assert!((promo - 0.325).abs() < 0.0001);
+
+        let cutoff =
+            SystemTime::UNIX_EPOCH + Duration::from_secs(GLM_5_3_FLASH_PROMO_END_UNIX_SECS);
+        let list = calculate_cost_at("glm-5.3-flash", 1_000_000, 0, 1_000_000, cutoff).unwrap();
+        assert!((list - 0.65).abs() < 0.0001);
     }
 
     #[test]

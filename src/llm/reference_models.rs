@@ -79,6 +79,28 @@ const fn pricing(
 /// substring matching resolves aliases such as `gpt-4o-mini` before `gpt-4o`.
 const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     ReferenceModelEntry {
+        pattern: "nemotron-3.5-lightning-30b-a3b",
+        capabilities: caps(false, false, false, 1_000_000),
+        pricing: pricing(0.05, 0.20, 0.05, 0.01),
+    },
+    ReferenceModelEntry {
+        pattern: "nemotron-3-ultra-550b-a55b",
+        capabilities: caps(false, false, false, 1_000_000),
+        pricing: pricing(0.60, 2.40, 0.60, 0.12),
+    },
+    ReferenceModelEntry {
+        // Fireworks' Qwen 3.8 serverless path is text-only with 262K context.
+        pattern: "qwen3p8-2p4t-a95b",
+        capabilities: caps(false, false, true, 262_144),
+        pricing: pricing(2.00, 6.00, 2.00, 0.25),
+    },
+    ReferenceModelEntry {
+        // Fireworks' licensed Qwen 3.7 Plus route accepts text and images.
+        pattern: "qwen3p7-plus",
+        capabilities: caps(true, false, true, 262_144),
+        pricing: pricing(0.40, 1.60, 0.40, 0.08),
+    },
+    ReferenceModelEntry {
         pattern: "gpt-5.6-terra",
         capabilities: caps(true, false, true, 1_050_000),
         pricing: pricing(2.00, 12.00, 2.50, 0.20),
@@ -603,7 +625,7 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         // Groq preview route: image/text input, JSON object mode, 131K context.
         pattern: "qwen-3.6-27b",
         capabilities: caps(true, false, true, 131_072),
-        pricing: None,
+        pricing: pricing(0.60, 3.00, 0.60, 0.60),
     },
     ReferenceModelEntry {
         pattern: "qwen-3.5-flash",

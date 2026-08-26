@@ -32,7 +32,7 @@ use crate::llm::providers::openai_compat::{
 };
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderResponse};
-use crate::llm::utils::normalize_model_name;
+use crate::llm::utils::{get_model_pricing, normalize_model_name, PricingTuple};
 use anyhow::Result;
 use std::env;
 
@@ -81,6 +81,50 @@ const CLOUDFLARE_API_TOKEN_ENV: &str = "CLOUDFLARE_API_TOKEN";
 const CLOUDFLARE_ACCOUNT_ID_ENV: &str = "CLOUDFLARE_ACCOUNT_ID";
 const CLOUDFLARE_API_URL_ENV: &str = "CLOUDFLARE_API_URL";
 
+/// Cloudflare Workers AI prices per 1M tokens, verified Aug 26, 2026.
+/// Format: (model ID, input, output, cache write, cached input).
+const PRICING: &[PricingTuple] = &[
+    (
+        "@cf/deepseek-ai/deepseek-v4-flash-0731",
+        0.440,
+        1.320,
+        0.440,
+        0.014,
+    ),
+    (
+        "@cf/deepseek-ai/deepseek-v4-pro-0813",
+        1.320,
+        3.960,
+        1.320,
+        0.044,
+    ),
+    ("@cf/qwen/qwen3.8-27b", 0.450, 3.200, 0.450, 0.450),
+    ("@cf/zai-org/glm-5.2", 1.400, 4.400, 1.400, 0.260),
+    ("@cf/zai-org/glm-4.7-flash", 0.060, 0.400, 0.060, 0.060),
+    (
+        "@cf/nvidia/nemotron-3-120b-a12b",
+        0.500,
+        1.500,
+        0.500,
+        0.500,
+    ),
+    ("@cf/moonshotai/kimi-k2.7-code", 0.950, 4.000, 0.950, 0.190),
+    ("@cf/moonshotai/kimi-k2.6", 0.950, 4.000, 0.950, 0.160),
+    ("@cf/openai/gpt-oss-120b", 0.350, 0.750, 0.350, 0.350),
+    ("@cf/openai/gpt-oss-20b", 0.200, 0.300, 0.200, 0.200),
+    ("@cf/google/gemma-4-26b-a4b-it", 0.100, 0.300, 0.100, 0.100),
+];
+
+fn cloudflare_model_pricing(model: &str) -> Option<crate::llm::types::ModelPricing> {
+    let (input, output, cache_write, cache_read) = get_model_pricing(model, PRICING)?;
+    Some(crate::llm::types::ModelPricing::new(
+        input,
+        output,
+        cache_write,
+        cache_read,
+    ))
+}
+
 fn default_cloudflare_api_url(account_id: &str) -> String {
     format!(
         "https://api.cloudflare.com/client/v4/accounts/{}/ai/v1/chat/completions",
@@ -105,8 +149,10 @@ impl AiProvider for CloudflareWorkersAiProvider {
         Ok(api_token) // Return API token as the "API key"
     }
 
-    fn supports_caching(&self, _model: &str) -> bool {
-        false
+    fn supports_caching(&self, model: &str) -> bool {
+        cloudflare_model_pricing(model)
+            .map(|pricing| pricing.cache_read_price_per_1m < pricing.input_price_per_1m)
+            .unwrap_or(false)
     }
 
     fn supports_vision(&self, model: &str) -> bool {
@@ -130,8 +176,8 @@ impl AiProvider for CloudflareWorkersAiProvider {
     }
 
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
-        // Try reference pricing based on underlying model
-        crate::llm::reference_models::get_reference_pricing(model)
+        cloudflare_model_pricing(model)
+            .or_else(|| crate::llm::reference_models::get_reference_pricing(model))
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {
@@ -149,7 +195,8 @@ impl AiProvider for CloudflareWorkersAiProvider {
             &default_cloudflare_api_url(&account_id),
         );
 
-        openai_compat_chat_completion(
+        let model = params.model.clone();
+        let mut response = openai_compat_chat_completion(
             OpenAiCompatConfig {
                 provider_name: "cloudflare",
                 usage_fallback_cost: None,
@@ -159,7 +206,22 @@ impl AiProvider for CloudflareWorkersAiProvider {
             api_url,
             params,
         )
-        .await
+        .await?;
+
+        if let Some(ref mut usage) = response.exchange.usage {
+            if usage.cost.is_none() {
+                if let Some(pricing) = self.get_model_pricing(&model) {
+                    usage.cost = Some(pricing.calculate_cost(
+                        usage.input_tokens,
+                        usage.cache_write_tokens,
+                        usage.cache_read_tokens,
+                        usage.billable_output_tokens(),
+                    ));
+                }
+            }
+        }
+
+        Ok(response)
     }
 }
 
@@ -192,5 +254,23 @@ mod tests {
         // Test mixed case
         assert!(provider.supports_model("Llama-3.1-70B-Instruct"));
         assert!(provider.supports_model("GEMMA-2-27B-IT"));
+    }
+
+    #[test]
+    fn current_workers_ai_models_use_cloudflare_prices() {
+        let provider = CloudflareWorkersAiProvider::new();
+
+        let deepseek = provider
+            .get_model_pricing("@cf/deepseek-ai/deepseek-v4-flash-0731")
+            .unwrap();
+        assert_eq!(deepseek.input_price_per_1m, 0.440);
+        assert_eq!(deepseek.cache_read_price_per_1m, 0.014);
+        assert_eq!(deepseek.output_price_per_1m, 1.320);
+        assert!(provider.supports_caching("@cf/deepseek-ai/deepseek-v4-flash-0731"));
+
+        let qwen = provider.get_model_pricing("@cf/qwen/qwen3.8-27b").unwrap();
+        assert_eq!(qwen.input_price_per_1m, 0.450);
+        assert_eq!(qwen.output_price_per_1m, 3.200);
+        assert!(!provider.supports_caching("@cf/qwen/qwen3.8-27b"));
     }
 }

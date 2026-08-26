@@ -21,10 +21,8 @@
 //! open-weight models (Qwen, Llama, Mistral, DeepSeek, RWKV, QRWKV) using
 //! HuggingFace-style namespaced model IDs (e.g. `Qwen/Qwen2.5-7B-Instruct`).
 //!
-//! Pricing is **subscription-based** ($10–$200/month) with concurrency limits
-//! rather than per-token billing, so no provider-specific pricing table is
-//! defined. Cost estimates fall back to reference pricing for well-known
-//! open-weight models when available.
+//! Feather Chat is subscription-based. Feather Developer uses prepaid credits
+//! and charges successful requests from published per-model token rates.
 //!
 //! Source: <https://featherless.ai/docs/api-overview-and-common-options>
 //!
@@ -37,6 +35,7 @@ use crate::llm::providers::openai_compat::{
 };
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderResponse};
+use crate::llm::utils::{get_model_pricing, PricingTuple};
 use anyhow::Result;
 use std::env;
 
@@ -60,6 +59,32 @@ const FEATHERLESS_API_KEY_ENV: &str = "FEATHERLESS_API_KEY";
 const FEATHERLESS_API_URL_ENV: &str = "FEATHERLESS_API_URL";
 const FEATHERLESS_API_URL: &str = "https://api.featherless.ai/v1/chat/completions";
 
+/// Feather Developer request prices per 1M tokens, verified Aug 26, 2026.
+/// Format: (model ID pattern, input, output, cache write, cached input).
+const PRICING: &[PricingTuple] = &[
+    ("deepseek-ai/DeepSeek-V4-Flash-0731", 0.14, 0.28, 0.14, 0.03),
+    ("deepseek-ai/DeepSeek-V4-Flash", 0.14, 0.28, 0.14, 0.03),
+    ("deepseek-ai/DeepSeek-V4-Pro", 1.60, 3.20, 1.60, 0.20),
+    ("deepseek-ai/DeepSeek-V3.2", 0.2995, 0.45, 0.2995, 0.06),
+    ("zai-org/GLM-5.2", 0.75, 2.40, 0.75, 0.15),
+    ("moonshotai/Kimi-K3", 2.00, 10.00, 2.00, 0.30),
+    ("MiniMaxAI/MiniMax-M3", 0.55, 2.20, 0.55, 0.06),
+    ("google/gemma-4-31B", 0.12, 0.36, 0.12, 0.10),
+    ("google/gemma-4-26B", 0.07, 0.34, 0.07, 0.05),
+    ("openai/gpt-oss-120b", 0.10, 0.55, 0.10, 0.02),
+    ("openai/gpt-oss-20b", 0.04, 0.15, 0.04, 0.04),
+];
+
+fn featherless_model_pricing(model: &str) -> Option<crate::llm::types::ModelPricing> {
+    let (input, output, cache_write, cache_read) = get_model_pricing(model, PRICING)?;
+    Some(crate::llm::types::ModelPricing::new(
+        input,
+        output,
+        cache_write,
+        cache_read,
+    ))
+}
+
 #[async_trait::async_trait]
 impl AiProvider for FeatherlessProvider {
     fn name(&self) -> &str {
@@ -79,8 +104,10 @@ impl AiProvider for FeatherlessProvider {
         })
     }
 
-    fn supports_caching(&self, _model: &str) -> bool {
-        false
+    fn supports_caching(&self, model: &str) -> bool {
+        featherless_model_pricing(model)
+            .map(|pricing| pricing.cache_read_price_per_1m < pricing.input_price_per_1m)
+            .unwrap_or(false)
     }
 
     fn supports_structured_output(&self, _model: &str) -> bool {
@@ -92,10 +119,8 @@ impl AiProvider for FeatherlessProvider {
     }
 
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
-        // Featherless uses subscription billing — no per-token pricing.
-        // Fall back to reference pricing so cost estimates exist for popular
-        // open-weight models served by the platform.
-        crate::llm::reference_models::get_reference_pricing(model)
+        featherless_model_pricing(model)
+            .or_else(|| crate::llm::reference_models::get_reference_pricing(model))
     }
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
@@ -115,7 +140,7 @@ impl AiProvider for FeatherlessProvider {
         )
         .await?;
 
-        // Derive cost from reference pricing if not returned in the response
+        // Derive cost from Feather Developer pricing, with reference fallback.
         if let Some(ref mut usage) = response.exchange.usage {
             if usage.cost.is_none() {
                 if let Some(pricing) = self.get_model_pricing(&model) {
@@ -154,16 +179,26 @@ mod tests {
         assert!(provider.supports_structured_output("any-model"));
         assert!(!provider.supports_caching("Qwen/Qwen2.5-7B-Instruct"));
         assert!(!provider.supports_caching("any-model"));
+        assert!(provider.supports_caching("deepseek-ai/DeepSeek-V4-Flash-0731"));
     }
 
     #[test]
-    fn test_pricing_reference_fallback() {
+    fn test_current_developer_pricing() {
         let provider = FeatherlessProvider::new();
-        // Reference pricing should resolve for well-known open-weight models
-        let pricing = provider.get_model_pricing("meta-llama/Llama-3.1-8B-Instruct");
-        assert!(pricing.is_some());
-        let p = pricing.unwrap();
-        assert!(p.input_price_per_1m >= 0.0);
-        assert!(p.output_price_per_1m >= 0.0);
+        let pricing = provider
+            .get_model_pricing("deepseek-ai/DeepSeek-V4-Flash-0731")
+            .unwrap();
+        assert_eq!(pricing.input_price_per_1m, 0.14);
+        assert_eq!(pricing.cache_read_price_per_1m, 0.03);
+        assert_eq!(pricing.output_price_per_1m, 0.28);
+
+        let kimi = provider.get_model_pricing("moonshotai/Kimi-K3").unwrap();
+        assert_eq!(kimi.input_price_per_1m, 2.00);
+        assert_eq!(kimi.output_price_per_1m, 10.00);
+
+        // Unlisted model classes retain the shared reference estimate.
+        assert!(provider
+            .get_model_pricing("meta-llama/Llama-3.1-8B-Instruct")
+            .is_some());
     }
 }

@@ -157,7 +157,6 @@ impl AiProvider for BytePlusProvider {
                 cache_read,
             ));
         }
-        // Fall back to reference pricing for third-party models
         crate::llm::reference_models::get_reference_pricing(model)
     }
 
@@ -181,13 +180,27 @@ impl AiProvider for BytePlusProvider {
         // Derive cost from pricing if not returned in the response
         if let Some(ref mut usage) = response.exchange.usage {
             if usage.cost.is_none() {
+                let input_tokens = usage.input_tokens;
+                let cache_write_tokens = usage.cache_write_tokens;
+                let cache_read_tokens = usage.cache_read_tokens;
+                let output_tokens = usage.billable_output_tokens();
                 usage.cost = calculate_usage_cost(
                     &model,
-                    usage.input_tokens,
-                    usage.cache_write_tokens,
-                    usage.cache_read_tokens,
-                    usage.billable_output_tokens(),
-                );
+                    input_tokens,
+                    cache_write_tokens,
+                    cache_read_tokens,
+                    output_tokens,
+                )
+                .or_else(|| {
+                    self.get_model_pricing(&model).map(|pricing| {
+                        pricing.calculate_cost(
+                            input_tokens,
+                            cache_write_tokens,
+                            cache_read_tokens,
+                            output_tokens,
+                        )
+                    })
+                });
             }
         }
 
@@ -254,7 +267,6 @@ mod tests {
     #[test]
     fn test_pricing_falls_back_to_reference() {
         let provider = BytePlusProvider::new();
-        // GLM-5.1 is not in local PRICING but is in reference_pricing
         let p = provider.get_model_pricing("glm-5.1").unwrap();
         assert!(p.input_price_per_1m > 0.0);
     }

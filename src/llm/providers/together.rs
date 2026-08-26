@@ -26,12 +26,54 @@ use crate::llm::types::{
     ChatCompletionParams, Message, ProviderExchange, ProviderResponse, SamplingSupport,
     ThinkingBlock, TokenUsage, ToolCall,
 };
+use crate::llm::utils::{get_model_pricing, PricingTuple};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::env;
 
 const TOGETHER_API_KEY_ENV: &str = "TOGETHER_API_KEY";
 const TOGETHER_API_URL: &str = "https://api.together.xyz/v1/chat/completions";
+
+/// Together serverless prices per 1M tokens, verified Aug 26, 2026.
+/// Format: (model pattern, input, output, cache write, cached input).
+/// Models without a listed cache discount use the normal input rate.
+const PRICING: &[PricingTuple] = &[
+    ("Qwen/Qwen3.8-2.4T-A95B", 2.50, 6.25, 2.50, 0.50),
+    ("Qwen/Qwen3.7-Max", 1.25, 3.75, 1.25, 1.25),
+    ("Qwen/Qwen3.7-Plus", 0.32, 1.28, 0.32, 0.32),
+    ("Qwen/Qwen3.6-Plus", 0.50, 3.00, 0.50, 0.50),
+    ("MiniMaxAI/MiniMax-M3", 0.30, 1.20, 0.30, 0.06),
+    ("moonshotai/Kimi-K3", 3.00, 15.00, 3.00, 0.30),
+    ("moonshotai/Kimi-K2.7-Code", 0.95, 4.00, 0.95, 0.19),
+    ("zai-org/GLM-5.2", 1.40, 4.40, 1.40, 0.26),
+    (
+        "deepseek-ai/DeepSeek-V4-Pro-0813",
+        1.32,
+        3.96,
+        1.32,
+        0.13,
+    ),
+    (
+        "deepseek-ai/DeepSeek-V4-Flash-0731",
+        0.14,
+        0.28,
+        0.14,
+        0.03,
+    ),
+    ("deepseek-ai/DeepSeek-V4-Pro", 1.74, 3.48, 1.74, 0.20),
+    ("google/gemma-4-31B-it", 0.39, 0.97, 0.39, 0.39),
+    ("thinkingmachines/Inkling", 1.00, 4.05, 1.00, 0.17),
+];
+
+fn together_model_pricing(model: &str) -> Option<crate::llm::types::ModelPricing> {
+    let (input, output, cache_write, cache_read) = get_model_pricing(model, PRICING)?;
+    Some(crate::llm::types::ModelPricing::new(
+        input,
+        output,
+        cache_write,
+        cache_read,
+    ))
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct TogetherProvider;
@@ -79,8 +121,8 @@ impl AiProvider for TogetherProvider {
     }
 
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
-        // Try reference pricing for cost estimation based on the underlying model
-        crate::llm::reference_models::get_reference_pricing(model)
+        together_model_pricing(model)
+            .or_else(|| crate::llm::reference_models::get_reference_pricing(model))
     }
 
     // get_max_input_tokens resolved via reference capabilities (trait default)
@@ -590,7 +632,10 @@ async fn execute_together_request(
     let cost = request_body
         .get("model")
         .and_then(|m| m.as_str())
-        .and_then(crate::llm::reference_models::get_reference_pricing)
+        .and_then(|model| {
+            together_model_pricing(model)
+                .or_else(|| crate::llm::reference_models::get_reference_pricing(model))
+        })
         .map(|pricing| pricing.calculate_cost(input_tokens, 0, cache_read_tokens, output_tokens));
     let (visible_output_tokens, reasoning_tokens) = TokenUsage::split_output(
         output_tokens,
@@ -701,6 +746,31 @@ mod tests {
         assert!(provider.supports_model("moonshotai/Kimi-K2.5"));
         assert!(provider.supports_model("any-model-name"));
         assert!(!provider.supports_model(""));
+    }
+
+    #[test]
+    fn current_serverless_pricing_uses_together_rates() {
+        let provider = TogetherProvider::new();
+
+        let qwen = provider
+            .get_model_pricing("Qwen/Qwen3.8-2.4T-A95B")
+            .unwrap();
+        assert_eq!(qwen.input_price_per_1m, 2.50);
+        assert_eq!(qwen.cache_read_price_per_1m, 0.50);
+        assert_eq!(qwen.output_price_per_1m, 6.25);
+
+        let deepseek = provider
+            .get_model_pricing("deepseek-ai/DeepSeek-V4-Flash-0731")
+            .unwrap();
+        assert_eq!(deepseek.input_price_per_1m, 0.14);
+        assert_eq!(deepseek.cache_read_price_per_1m, 0.03);
+        assert_eq!(deepseek.output_price_per_1m, 0.28);
+
+        let gemma = provider
+            .get_model_pricing("google/gemma-4-31B-it")
+            .unwrap();
+        assert_eq!(gemma.input_price_per_1m, 0.39);
+        assert_eq!(gemma.output_price_per_1m, 0.97);
     }
 
     #[test]

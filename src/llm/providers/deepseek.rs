@@ -15,8 +15,8 @@
 //! DeepSeek provider implementation
 //!
 //! PRICING VERIFIED: August 2026 — peak/off-peak billing (effective
-//! 2026-08-16 16:00 UTC; peak windows 01:00-04:00 and 06:00-10:00 UTC,
-//! off-peak rates are half of peak).
+//! 2026-08-16 16:00 UTC; peak windows 01:00-04:00 and 06:00-10:00 UTC
+//! Monday-Friday, off-peak rates are half of peak).
 //! Source: <https://api-docs.deepseek.com/quick_start/pricing>
 //! (`deepseek-v4-flash` points to the retrained 0731 snapshot since 2026-07-31)
 //!
@@ -82,7 +82,7 @@ fn is_peak_window(days_since_epoch: u64, utc_hour: u64) -> bool {
     weekday < 5 && ((1..4).contains(&utc_hour) || (6..10).contains(&utc_hour))
 }
 
-/// Pick the pricing table that applies at `time` (tier decided by the UTC hour)
+/// Pick the pricing table that applies at `time` (tier decided by UTC weekday and hour)
 fn pricing_table_at(time: std::time::SystemTime) -> &'static [PricingTuple] {
     let secs = time
         .duration_since(std::time::SystemTime::UNIX_EPOCH)
@@ -633,7 +633,7 @@ impl AiProvider for DeepSeekProvider {
             // ONE path for both the cached and uncached case: with zero hits this is
             // exactly the no-cache calculation, so the two can never drift apart.
             // Tier is picked from the pricing table active now (peak windows
-            // 01:00-04:00 and 06:00-10:00 UTC, off-peak — half price — otherwise).
+            // 01:00-04:00 and 06:00-10:00 UTC Monday-Friday, off-peak — half price — otherwise).
             let pricing = pricing_table_at(std::time::SystemTime::now());
             let cost = calculate_cost_with_cache(
                 pricing,

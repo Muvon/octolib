@@ -44,7 +44,8 @@ use crate::llm::providers::openai_compat::{
     chat_completion_with_sampling as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
 };
 use crate::llm::traits::AiProvider;
-use crate::llm::types::{ChatCompletionParams, ProviderResponse, SamplingSupport};
+use crate::llm::types::{ChatCompletionParams, ProviderResponse, ReasoningEffort, SamplingSupport};
+use crate::llm::utils::contains_ignore_ascii_case;
 use anyhow::Result;
 use std::env;
 
@@ -85,13 +86,45 @@ fn sampling_support(model: &str) -> SamplingSupport {
     }
 }
 
+/// Kimi reasoning-effort rules for the opencode routers.
+///
+/// The router forwards `reasoning_effort` verbatim to Moonshot, which accepts
+/// the field only on `kimi-k3` and only as `"low"` / `"high"` / `"max"`
+/// (verified live: Go returns 400 `Kimi request field reasoning_effort must
+/// be one of: low, high, max` on any other value). Other Kimi models don't
+/// support the field at all. Mirror the native moonshot provider's
+/// `k3_reasoning_effort`: floor intermediate levels to the nearest supported
+/// lower effort, drop the field elsewhere.
+/// Source: platform.kimi.ai/docs/guide/use-kimi-k2-thinking-model
+fn adjust_reasoning_effort(
+    model: &str,
+    effort: Option<ReasoningEffort>,
+) -> Option<ReasoningEffort> {
+    if !model.to_ascii_lowercase().starts_with("kimi") {
+        return effort;
+    }
+    if !contains_ignore_ascii_case(model, "kimi-k3") {
+        return None;
+    }
+    match effort {
+        Some(ReasoningEffort::Low) | Some(ReasoningEffort::Medium) => Some(ReasoningEffort::Low),
+        Some(ReasoningEffort::High) | Some(ReasoningEffort::XHigh) => Some(ReasoningEffort::High),
+        Some(ReasoningEffort::Max) => Some(ReasoningEffort::Max),
+        None => None,
+    }
+}
+
 async fn opencode_chat_completion(
     provider_name: &'static str,
     api_key: String,
     api_url: String,
-    params: ChatCompletionParams,
+    mut params: ChatCompletionParams,
 ) -> Result<ProviderResponse> {
     let model = params.model.clone();
+
+    // Kimi models reject unsupported reasoning_effort values — normalize
+    // before the generic openai_compat passthrough serializes the field.
+    params.reasoning_effort = adjust_reasoning_effort(&model, params.reasoning_effort);
 
     let mut response = openai_compat_chat_completion(
         OpenAiCompatConfig {
@@ -259,6 +292,58 @@ mod tests {
         assert_eq!(sampling_support("glm-5.2"), SamplingSupport::ALL);
         assert_eq!(sampling_support("minimax-m3"), SamplingSupport::ALL);
         assert_eq!(sampling_support("deepseek-v4-pro"), SamplingSupport::ALL);
+    }
+
+    #[test]
+    fn test_adjust_reasoning_effort_kimi_rules() {
+        // K3: five levels floored onto Moonshot's low/high/max tiers
+        assert_eq!(
+            adjust_reasoning_effort("kimi-k3", Some(ReasoningEffort::Low)),
+            Some(ReasoningEffort::Low)
+        );
+        assert_eq!(
+            adjust_reasoning_effort("kimi-k3", Some(ReasoningEffort::Medium)),
+            Some(ReasoningEffort::Low)
+        );
+        assert_eq!(
+            adjust_reasoning_effort("kimi-k3", Some(ReasoningEffort::High)),
+            Some(ReasoningEffort::High)
+        );
+        assert_eq!(
+            adjust_reasoning_effort("kimi-k3", Some(ReasoningEffort::XHigh)),
+            Some(ReasoningEffort::High)
+        );
+        assert_eq!(
+            adjust_reasoning_effort("kimi-k3", Some(ReasoningEffort::Max)),
+            Some(ReasoningEffort::Max)
+        );
+        // Unset stays unset — K3 applies its own default ("max")
+        assert_eq!(adjust_reasoning_effort("kimi-k3", None), None);
+
+        // Other Kimi models don't support the field at all
+        assert_eq!(
+            adjust_reasoning_effort("kimi-k2.7-code", Some(ReasoningEffort::High)),
+            None
+        );
+        assert_eq!(
+            adjust_reasoning_effort("kimi-k2.6", Some(ReasoningEffort::Max)),
+            None
+        );
+        assert_eq!(
+            adjust_reasoning_effort("Kimi-K2.5", Some(ReasoningEffort::Low)),
+            None
+        );
+
+        // Non-Kimi families pass through untouched
+        assert_eq!(
+            adjust_reasoning_effort("gpt-5.5", Some(ReasoningEffort::Medium)),
+            Some(ReasoningEffort::Medium)
+        );
+        assert_eq!(
+            adjust_reasoning_effort("glm-5.2", Some(ReasoningEffort::Max)),
+            Some(ReasoningEffort::Max)
+        );
+        assert_eq!(adjust_reasoning_effort("claude-opus-5", None), None);
     }
 
     #[test]

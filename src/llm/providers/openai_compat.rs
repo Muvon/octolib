@@ -39,6 +39,7 @@ pub(crate) fn get_api_url(env_name: &str, default_url: &str) -> String {
 
 fn reasoning_effort_value(
     provider_name: &str,
+    model: &str,
     effort: crate::llm::types::ReasoningEffort,
 ) -> &'static str {
     match effort {
@@ -47,6 +48,15 @@ fn reasoning_effort_value(
         crate::llm::types::ReasoningEffort::High => "high",
         crate::llm::types::ReasoningEffort::XHigh => "high",
         crate::llm::types::ReasoningEffort::Max if provider_name.eq_ignore_ascii_case("ollama") => {
+            "max"
+        }
+        // OpenCode routers forward the field verbatim to Moonshot, whose K3
+        // top tier is "max" — keep it instead of the generic "high" downgrade.
+        // Intermediate levels are floored by opencode::adjust_reasoning_effort.
+        crate::llm::types::ReasoningEffort::Max
+            if provider_name.starts_with("opencode")
+                && crate::llm::utils::contains_ignore_ascii_case(model, "kimi-k3") =>
+        {
             "max"
         }
         crate::llm::types::ReasoningEffort::Max => "high",
@@ -101,7 +111,7 @@ pub(crate) async fn chat_completion_with_sampling(
     // `reasoning_effort` parameter with values: "low" | "medium" | "high".
     // Providers that don't recognize it will ignore it.
     if let Some(effort) = params.reasoning_effort {
-        let s = reasoning_effort_value(config.provider_name, effort);
+        let s = reasoning_effort_value(config.provider_name, &params.model, effort);
         request_body["reasoning_effort"] = serde_json::json!(s);
     }
 
@@ -886,11 +896,45 @@ mod tests {
     #[test]
     fn test_ollama_max_reasoning_effort_is_not_downgraded() {
         assert_eq!(
-            reasoning_effort_value("ollama", crate::llm::types::ReasoningEffort::Max),
+            reasoning_effort_value("ollama", "qwen3", crate::llm::types::ReasoningEffort::Max),
             "max"
         );
         assert_eq!(
-            reasoning_effort_value("nvidia", crate::llm::types::ReasoningEffort::Max),
+            reasoning_effort_value(
+                "nvidia",
+                "nemotron",
+                crate::llm::types::ReasoningEffort::Max
+            ),
+            "high"
+        );
+    }
+
+    #[test]
+    fn test_opencode_kimi_k3_max_reasoning_effort_is_kept() {
+        // OpenCode forwards verbatim to Moonshot: kimi-k3's top tier is "max"
+        assert_eq!(
+            reasoning_effort_value(
+                "opencode-go",
+                "kimi-k3",
+                crate::llm::types::ReasoningEffort::Max
+            ),
+            "max"
+        );
+        assert_eq!(
+            reasoning_effort_value(
+                "opencode-zen",
+                "kimi-k3",
+                crate::llm::types::ReasoningEffort::Max
+            ),
+            "max"
+        );
+        // Non-Kimi models through OpenCode keep the generic downgrade
+        assert_eq!(
+            reasoning_effort_value(
+                "opencode-go",
+                "gpt-5.5",
+                crate::llm::types::ReasoningEffort::Max
+            ),
             "high"
         );
     }

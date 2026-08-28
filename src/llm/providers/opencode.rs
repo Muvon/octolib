@@ -44,7 +44,9 @@ use crate::llm::providers::openai_compat::{
     chat_completion_with_sampling as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
 };
 use crate::llm::traits::AiProvider;
-use crate::llm::types::{ChatCompletionParams, ProviderResponse, ReasoningEffort, SamplingSupport};
+use crate::llm::types::{
+    ChatCompletionParams, ProviderResponse, ReasoningEffort, SamplingSupport, TokenUsage,
+};
 use crate::llm::utils::contains_ignore_ascii_case;
 use anyhow::Result;
 use std::env;
@@ -114,6 +116,36 @@ fn adjust_reasoning_effort(
     }
 }
 
+/// Resolve a cloud-equivalent request cost for an OpenCode response.
+///
+/// Go is subscription-backed and currently returns zero in the OpenAI-shaped
+/// usage cost fields. Zero is not a usable per-request price for a known paid
+/// model, so fall back to the reference table in that case. Zen's top-level
+/// `cost` remains authoritative because it is the actual pay-as-you-go charge.
+fn resolve_opencode_cost(
+    provider_name: &str,
+    model: &str,
+    zen_reported_cost: Option<f64>,
+    usage: &TokenUsage,
+) -> Option<f64> {
+    let response_cost = if provider_name == "opencode-zen" {
+        zen_reported_cost.or(usage.cost)
+    } else {
+        usage.cost.filter(|cost| cost.is_finite() && *cost > 0.0)
+    };
+
+    response_cost.or_else(|| {
+        crate::llm::reference_models::get_reference_pricing(model).map(|pricing| {
+            pricing.calculate_cost(
+                usage.input_tokens,
+                usage.cache_write_tokens,
+                usage.cache_read_tokens,
+                usage.billable_output_tokens(),
+            )
+        })
+    })
+}
+
 async fn opencode_chat_completion(
     provider_name: &'static str,
     api_key: String,
@@ -150,22 +182,7 @@ async fn opencode_chat_completion(
     };
 
     if let Some(ref mut usage) = response.exchange.usage {
-        if usage.cost.is_none() {
-            let input_tokens = usage.input_tokens;
-            let cache_write_tokens = usage.cache_write_tokens;
-            let cache_read_tokens = usage.cache_read_tokens;
-            let output_tokens = usage.billable_output_tokens();
-            usage.cost = reported_cost.or_else(|| {
-                crate::llm::reference_models::get_reference_pricing(&model).map(|pricing| {
-                    pricing.calculate_cost(
-                        input_tokens,
-                        cache_write_tokens,
-                        cache_read_tokens,
-                        output_tokens,
-                    )
-                })
-            });
-        }
+        usage.cost = resolve_opencode_cost(provider_name, &model, reported_cost, usage);
     }
 
     Ok(response)
@@ -344,6 +361,49 @@ mod tests {
             Some(ReasoningEffort::Max)
         );
         assert_eq!(adjust_reasoning_effort("claude-opus-5", None), None);
+    }
+
+    #[test]
+    fn test_go_zero_response_cost_falls_back_to_reference_pricing() {
+        let usage = TokenUsage {
+            input_tokens: 1_000,
+            cache_read_tokens: 500,
+            cache_write_tokens: 0,
+            output_tokens: 100,
+            reasoning_tokens: 50,
+            total_tokens: 1_650,
+            cost: Some(0.0),
+            request_time_ms: None,
+        };
+
+        let cost = resolve_opencode_cost("opencode-go", "kimi-k3", None, &usage).unwrap();
+        let expected =
+            1_000.0 / 1_000_000.0 * 3.00 + 500.0 / 1_000_000.0 * 0.30 + 150.0 / 1_000_000.0 * 15.00;
+        assert!((cost - expected).abs() < 1e-12);
+        assert!(cost > 0.0);
+    }
+
+    #[test]
+    fn test_opencode_reported_cost_precedence() {
+        let usage = TokenUsage {
+            input_tokens: 1_000,
+            cache_read_tokens: 0,
+            cache_write_tokens: 0,
+            output_tokens: 100,
+            reasoning_tokens: 0,
+            total_tokens: 1_100,
+            cost: Some(0.25),
+            request_time_ms: None,
+        };
+
+        assert_eq!(
+            resolve_opencode_cost("opencode-go", "kimi-k3", None, &usage),
+            Some(0.25)
+        );
+        assert_eq!(
+            resolve_opencode_cost("opencode-zen", "kimi-k3", Some(0.125), &usage),
+            Some(0.125)
+        );
     }
 
     #[test]

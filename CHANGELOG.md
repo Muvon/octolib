@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.34.4] - 2026-08-28
+
+### 📋 Release Summary
+
+Improved OpenCode handling for Kimi models by filtering empty assistant messages, normalizing reasoning effort values, and correcting zero-cost usage fallbacks (14830b68, 64da3959, 98c10196). Clarified DeepSeek peak pricing window information for more accurate cost tracking (7cd0d261).
+
+
+### 🔧 Improvements & Optimizations
+
+- **llm**: clarify deepseek peak pricing window `7cd0d261`
+
+### 🐛 Bug Fixes & Stability
+
+- **opencode**: filter empty Kimi assistant messages `14830b68`
+- **opencode**: resolve zero-cost usage fallback `64da3959`
+- **opencode**: normalize Kimi reasoning effort values `98c10196`
+
 ## [0.34.3] - 2026-08-26
 
 ### 📋 Release Summary

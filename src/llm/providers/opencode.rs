@@ -45,7 +45,7 @@ use crate::llm::providers::openai_compat::{
 };
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-    ChatCompletionParams, ProviderResponse, ReasoningEffort, SamplingSupport, TokenUsage,
+    ChatCompletionParams, Message, ProviderResponse, ReasoningEffort, SamplingSupport, TokenUsage,
 };
 use crate::llm::utils::contains_ignore_ascii_case;
 use anyhow::Result;
@@ -146,6 +146,40 @@ fn resolve_opencode_cost(
     })
 }
 
+/// Remove replay-only placeholders that Kimi rejects as invalid messages.
+///
+/// Some clients persist an empty final assistant record after a tool round.
+/// It carries no conversation state, but OpenCode forwards it to Kimi, which
+/// rejects the entire request. Keep every assistant message that carries text,
+/// tool calls, media, or thinking; only a structurally empty placeholder is
+/// omitted.
+fn remove_empty_kimi_assistant_messages(model: &str, messages: &mut Vec<Message>) {
+    if !model.to_ascii_lowercase().starts_with("kimi") {
+        return;
+    }
+
+    messages.retain(|message| {
+        let empty_tool_calls = message
+            .tool_calls
+            .as_ref()
+            .is_none_or(|calls| calls.as_array().is_some_and(Vec::is_empty));
+        let empty_images = message.images.as_ref().is_none_or(Vec::is_empty);
+        let empty_videos = message.videos.as_ref().is_none_or(Vec::is_empty);
+        let empty_thinking = message
+            .thinking
+            .as_ref()
+            .is_none_or(|thinking| thinking.content.trim().is_empty());
+        let structurally_empty = message.role == "assistant"
+            && message.content.trim().is_empty()
+            && empty_tool_calls
+            && empty_images
+            && empty_videos
+            && empty_thinking;
+
+        !structurally_empty
+    });
+}
+
 async fn opencode_chat_completion(
     provider_name: &'static str,
     api_key: String,
@@ -157,6 +191,7 @@ async fn opencode_chat_completion(
     // Kimi models reject unsupported reasoning_effort values — normalize
     // before the generic openai_compat passthrough serializes the field.
     params.reasoning_effort = adjust_reasoning_effort(&model, params.reasoning_effort);
+    remove_empty_kimi_assistant_messages(&model, &mut params.messages);
 
     let mut response = openai_compat_chat_completion(
         OpenAiCompatConfig {
@@ -404,6 +439,50 @@ mod tests {
             resolve_opencode_cost("opencode-zen", "kimi-k3", Some(0.125), &usage),
             Some(0.125)
         );
+    }
+
+    #[test]
+    fn test_empty_kimi_assistant_placeholders_are_removed() {
+        let mut messages = vec![
+            Message::tool("Memory stored", "memorize_9", "memorize"),
+            Message::assistant(""),
+            Message::user("proceed"),
+        ];
+
+        remove_empty_kimi_assistant_messages("kimi-k3", &mut messages);
+
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].role, "tool");
+        assert_eq!(messages[1].role, "user");
+    }
+
+    #[test]
+    fn test_kimi_assistant_state_is_never_removed() {
+        let mut tool_call = Message::assistant("");
+        tool_call.tool_calls = Some(serde_json::json!([{
+            "id": "memorize_9",
+            "name": "memorize",
+            "arguments": {}
+        }]));
+        let mut thinking = Message::assistant("");
+        thinking.thinking = Some(crate::llm::types::ThinkingBlock {
+            content: "reasoning".to_string(),
+            tokens: 1,
+        });
+        let mut messages = vec![Message::assistant("answer"), tool_call, thinking];
+
+        remove_empty_kimi_assistant_messages("kimi-k3", &mut messages);
+
+        assert_eq!(messages.len(), 3);
+    }
+
+    #[test]
+    fn test_empty_non_kimi_assistant_is_untouched() {
+        let mut messages = vec![Message::assistant("")];
+
+        remove_empty_kimi_assistant_messages("gpt-5.5", &mut messages);
+
+        assert_eq!(messages.len(), 1);
     }
 
     #[test]

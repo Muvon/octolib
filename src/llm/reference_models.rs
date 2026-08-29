@@ -89,6 +89,20 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(0.60, 2.40, 0.60, 0.12),
     },
     ReferenceModelEntry {
+        // Meta Muse Spark 1.2 (Aug 2026): closed flagship on the Meta Model API
+        // and OpenRouter; text/image/video/audio input, 1M context.
+        pattern: "muse-spark-1.2",
+        capabilities: caps(true, true, false, 1_048_576),
+        pricing: pricing(1.25, 4.25, 1.25, 0.15),
+    },
+    ReferenceModelEntry {
+        // Meta Muse Glimmer 30B (Aug 2026): open-weight agentic model hosted on
+        // Together and OpenRouter; text+image input, 128K context.
+        pattern: "muse-glimmer",
+        capabilities: caps(true, false, false, 131_072),
+        pricing: pricing(0.30, 1.10, 0.30, 0.04),
+    },
+    ReferenceModelEntry {
         // Fireworks' Qwen 3.8 serverless path is text-only with 262K context.
         pattern: "qwen3p8-2p4t-a95b",
         capabilities: caps(false, false, true, 262_144),
@@ -808,6 +822,21 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(0.40, 2.40, 0.40, 0.04),
     },
     ReferenceModelEntry {
+        // Seed 2.1 Turbo (Aug 2026): multimodal, 262K context; no cache rates
+        // published, so cache columns mirror the input price.
+        pattern: "seed-2-1-turbo",
+        capabilities: caps(true, false, true, 262_144),
+        pricing: pricing(0.50, 2.50, 0.50, 0.50),
+    },
+    ReferenceModelEntry {
+        // Seed 2.1 Pro: ByteDance publishes no USD card — ¥6/¥30/¥1.2 cache-hit
+        // converted at ~7.1 CNY/USD. Context unpublished; 256K carried from
+        // Seed 2.0 Pro by trackers.
+        pattern: "seed-2-1-pro",
+        capabilities: caps(true, false, true, 256_000),
+        pricing: pricing(0.85, 4.15, 0.85, 0.17),
+    },
+    ReferenceModelEntry {
         pattern: "seed-2-0-pro",
         capabilities: caps(false, false, true, 256_000),
         pricing: pricing(0.50, 3.00, 0.50, 0.10),
@@ -826,6 +855,13 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pattern: "llama-3.1-8b",
         capabilities: caps(false, false, true, 131_072),
         pricing: pricing(0.10, 0.10, 0.10, 0.10),
+    },
+    ReferenceModelEntry {
+        // Qwen3.8-27B (Aug 2026 open weights): dense vision-language, 262K
+        // native context (Groq serves 131K). Baseline from OpenRouter.
+        pattern: "qwen-3.8-27b",
+        capabilities: caps(true, true, true, 262_144),
+        pricing: pricing(0.35, 2.75, 0.35, 0.35),
     },
     ReferenceModelEntry {
         pattern: "qwen-3.8-max",
@@ -1700,5 +1736,37 @@ mod tests {
                 assert_same_pricing(props.pricing.unwrap(), expected);
             }
         }
+    }
+    #[test]
+    fn august_2026_additions_resolve() {
+        // Seed 2.1 family (ByteDance, Aug 2026)
+        let p = get_reference_pricing("seed-2-1-turbo").unwrap();
+        assert_eq!(p.input_price_per_1m, 0.50);
+        assert_eq!(p.output_price_per_1m, 2.50);
+        let caps = get_reference_capabilities("seed-2-1-turbo").unwrap();
+        assert!(caps.vision);
+        assert_eq!(caps.max_input_tokens, 262_144);
+
+        let p = get_reference_pricing("seed-2-1-pro").unwrap();
+        assert_eq!(p.input_price_per_1m, 0.85);
+        assert_eq!(p.cache_read_price_per_1m, 0.17);
+
+        // Qwen3.8-27B open weights (Aug 2026)
+        let p = get_reference_pricing("Qwen/Qwen3.8-27B").unwrap();
+        assert_eq!(p.input_price_per_1m, 0.35);
+        assert_eq!(p.output_price_per_1m, 2.75);
+        let caps = get_reference_capabilities("qwen/qwen3.8-27b").unwrap();
+        assert!(caps.vision);
+        assert!(caps.video);
+        assert_eq!(caps.max_input_tokens, 262_144);
+
+        // Meta Muse family (Aug 2026)
+        let p = get_reference_pricing("meta/muse-spark-1.2").unwrap();
+        assert_eq!(p.input_price_per_1m, 1.25);
+        assert_eq!(p.cache_read_price_per_1m, 0.15);
+        let p = get_reference_pricing("meta-models/Muse-Glimmer-30B").unwrap();
+        assert_eq!(p.input_price_per_1m, 0.30);
+        assert_eq!(p.output_price_per_1m, 1.10);
+        assert!(!proxy_route_enforces_response_schema("meta/muse-spark-1.2"));
     }
 }

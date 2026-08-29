@@ -68,6 +68,8 @@ const PRICING: &[PricingTuple] = &[
     ("openai/gpt-oss-safeguard-20b", 0.075, 0.30, 0.075, 0.0375),
     // Qwen3.6 (preview) — replacement for the retired qwen3-32b / llama-4-scout
     ("qwen/qwen3.6-27b", 0.60, 3.00, 0.60, 0.60),
+    // Qwen3.8-27B (Aug 2026) — multimodal; no cached-input discount published
+    ("qwen/qwen3.8-27b", 0.80, 4.00, 0.80, 0.80),
     // Llama
     ("llama-3.3-70b-versatile", 0.59, 0.79, 0.59, 0.59),
     ("llama-3.1-8b-instant", 0.05, 0.08, 0.05, 0.05),
@@ -249,6 +251,12 @@ mod tests {
         let p = provider.get_model_pricing("qwen/qwen3.6-27b").unwrap();
         assert_eq!(p.input_price_per_1m, 0.60);
         assert_eq!(p.output_price_per_1m, 3.00);
+
+        let p = provider.get_model_pricing("qwen/qwen3.8-27b").unwrap();
+        assert_eq!(p.input_price_per_1m, 0.80);
+        assert_eq!(p.output_price_per_1m, 4.00);
+        assert!(!provider.supports_caching("qwen/qwen3.8-27b"));
+        assert!(provider.supports_vision("qwen/qwen3.8-27b"));
     }
 
     #[test]

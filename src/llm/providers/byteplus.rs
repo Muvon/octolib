@@ -61,6 +61,8 @@ const BYTEPLUS_API_URL: &str = "https://ark.ap-southeast.bytepluses.com/api/v3/c
 // Format: (model, input, output, cache_write, cache_read)
 // cache_write = input price, cache_read = cache-hit price
 const PRICING: &[PricingTuple] = &[
+    // Seed 2.1 family (Aug 2026) — Turbo only; Pro has no published USD rates
+    ("seed-2-1-turbo", 0.50, 2.50, 0.50, 0.50),
     // Seed 2.0 family (256K context)
     ("seed-2-0-pro", 0.50, 3.00, 0.50, 0.10),
     ("seed-2-0-code-preview", 0.50, 3.00, 0.50, 0.10),
@@ -243,6 +245,10 @@ mod tests {
         let p = provider.get_model_pricing("seed-2-0-mini-260215").unwrap();
         assert_eq!(p.input_price_per_1m, 0.10);
         assert_eq!(p.output_price_per_1m, 0.40);
+
+        let p = provider.get_model_pricing("seed-2-1-turbo-260812").unwrap();
+        assert_eq!(p.input_price_per_1m, 0.50);
+        assert_eq!(p.output_price_per_1m, 2.50);
 
         let p = provider.get_model_pricing("seed-1-6-flash-250715").unwrap();
         assert_eq!(p.input_price_per_1m, 0.075);

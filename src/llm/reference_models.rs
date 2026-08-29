@@ -857,6 +857,14 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(0.10, 0.10, 0.10, 0.10),
     },
     ReferenceModelEntry {
+        // Qwen3.8-Flash (Aug 2026): multimodal MoE (125B total / 6B active),
+        // 1M context, structured output honoured on the OpenRouter route.
+        // Baseline = Model Studio list price; implicit cache hits 20% of input.
+        pattern: "qwen-3.8-flash",
+        capabilities: caps(true, true, true, 1_000_000),
+        pricing: pricing(0.113, 0.382, 0.113, 0.0226),
+    },
+    ReferenceModelEntry {
         // Qwen3.8-27B (Aug 2026 open weights): dense vision-language, 262K
         // native context (Groq serves 131K). Baseline from OpenRouter.
         pattern: "qwen-3.8-27b",
@@ -1750,6 +1758,16 @@ mod tests {
         let p = get_reference_pricing("seed-2-1-pro").unwrap();
         assert_eq!(p.input_price_per_1m, 0.85);
         assert_eq!(p.cache_read_price_per_1m, 0.17);
+
+        // Qwen3.8-Flash production API (Aug 2026)
+        let p = get_reference_pricing("qwen3.8-flash").unwrap();
+        assert_eq!(p.input_price_per_1m, 0.113);
+        assert_eq!(p.output_price_per_1m, 0.382);
+        assert_eq!(p.cache_read_price_per_1m, 0.0226);
+        let caps = get_reference_capabilities("qwen3.8-flash").unwrap();
+        assert!(caps.vision);
+        assert!(caps.structured_output);
+        assert_eq!(caps.max_input_tokens, 1_000_000);
 
         // Qwen3.8-27B open weights (Aug 2026)
         let p = get_reference_pricing("Qwen/Qwen3.8-27B").unwrap();

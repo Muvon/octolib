@@ -71,6 +71,7 @@ const ALIBABA_API_URL: &str =
 // implicit cache hits cost 20% of uncached input.
 const PRICING: &[PricingTuple] = &[
     ("qwen3.8-max", 2.00, 6.00, 2.00, 0.25),
+    ("qwen3.8-flash", 0.113, 0.382, 0.113, 0.0226),
     // Dated Qwen 3.7 snapshots retain list price; moving aliases have current promos.
     ("qwen3.7-max-2026-06-08", 2.50, 7.50, 2.50, 0.50),
     ("qwen3.7-max-2026-05-20", 2.50, 7.50, 2.50, 0.50),
@@ -385,6 +386,16 @@ mod tests {
         let provider = AlibabaProvider::new();
         let p = provider.get_model_pricing("qwen3-max-2026-01-25").unwrap();
         assert!(p.input_price_per_1m > 0.0);
+    }
+
+    #[test]
+    fn test_qwen3_8_flash_pricing() {
+        let provider = AlibabaProvider::new();
+        let p = provider.get_model_pricing("qwen3.8-flash").unwrap();
+        assert_eq!(p.input_price_per_1m, 0.113);
+        assert_eq!(p.output_price_per_1m, 0.382);
+        assert_eq!(p.cache_write_price_per_1m, 0.113);
+        assert_eq!(p.cache_read_price_per_1m, 0.0226);
     }
 
     #[test]

@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.34.7] - 2026-08-29
+
+### 📋 Release Summary
+
+This release adds pricing support for the Qwen3.8 Flash model, enabling more accurate cost tracking when using the model (34211ac2).
+
+
+### ✨ New Features & Enhancements
+
+- **models**: support Qwen3.8 Flash pricing `34211ac2`
+
 ## [0.34.6] - 2026-08-29
 
 ### 📋 Release Summary

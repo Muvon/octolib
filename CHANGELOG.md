@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.34.6] - 2026-08-29
+
+### 📋 Release Summary
+
+This release adds structured output support for Alibaba providers, including a fallback for improved compatibility (f24ae763).
+
+
+### ✨ New Features & Enhancements
+
+- **alibaba**: support structured output fallback `f24ae763`
+
 ## [0.34.5] - 2026-08-29
 
 ### 📋 Release Summary

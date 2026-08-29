@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.34.5] - 2026-08-29
+
+### 📋 Release Summary
+
+Expanded model pricing coverage to support more accurate cost tracking (c92bef61). Updated documentation with Fireworks provider and vision support guidance (b20e8fae).
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: extend model pricing coverage `c92bef61`
+
+### 📚 Documentation & Examples
+
+- **readme**: document Fireworks and vision support `b20e8fae`
+
 ## [0.34.4] - 2026-08-28
 
 ### 📋 Release Summary

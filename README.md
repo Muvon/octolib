@@ -10,12 +10,12 @@
 Octolib is a comprehensive, self-sufficient AI provider library that provides a unified, type-safe interface for interacting with multiple AI services. It offers intelligent model selection, robust error handling, and advanced features like cross-provider tool calling and vision support.
 
 ## ✨ Key Features
-- **🔌 Multi-Provider Support**: OpenAI, Anthropic, xAI, OpenRouter, Cerebras, NVIDIA NIM, Groq, BytePlus, Alibaba Model Studio, Ollama, Together, Featherless, Hetzner, OpenCode Zen/Go, Google Vertex, Google Studio, Amazon, Cloudflare, DeepSeek, MiniMax, Moonshot AI (Kimi), Z.ai, OctoHub, Local, CLI proxies
+- **🔌 Multi-Provider Support**: OpenAI, Anthropic, xAI, OpenRouter, Cerebras, NVIDIA NIM, Groq, BytePlus, Alibaba Model Studio, Ollama, Together, Featherless, Fireworks, Hetzner, OpenCode Zen/Go, Google Vertex, Google Studio, Amazon, Cloudflare, DeepSeek, MiniMax, Moonshot AI (Kimi), Z.ai, OctoHub, Local, CLI proxies
 - **🛡️ Unified Interface**: Consistent API across different providers
 - **🔍 Intelligent Model Validation**: Strict `provider:model` format parsing with case-insensitive model support
 - **📋 Structured Output**: JSON and JSON Schema support for OpenAI, xAI, OpenRouter, DeepSeek, Together, and Z.ai
 - **💰 Cost Tracking**: Automatic token usage and cost calculation
-- **🖼️ Vision Support**: Image and video attachment handling for compatible models (Moonshot Kimi K2.5)
+- **🖼️ Vision Support**: Image and video attachment handling for vision-capable models
 - **🧰 Tool Calling**: Cross-provider tool call standardization
 - **🧩 CLI Provider**: Use `cli:<backend>/<model>` (e.g. `cli:codex/gpt-5.2-codex`). Proxy-only: tools/MCP are not used or controllable.
 - **⏱️ Retry Management**: Configurable exponential backoff
@@ -26,10 +26,17 @@ Octolib is a comprehensive, self-sufficient AI provider library that provides a 
 
 ## 📦 Quick Installation
 
-```bash
-# Add to Cargo.toml
+[![Crates.io](https://img.shields.io/crates/v/octolib.svg)](https://crates.io/crates/octolib)
+
+```toml
+# From crates.io (recommended) — use the latest version from the badge above
+octolib = "<latest>"
+
+# Or latest from git
 octolib = { git = "https://github.com/muvon/octolib" }
 ```
+
+Local embedding/reranking (`fastembed`, `huggingface`) is enabled by default. Hardware acceleration is opt-in via features: `metal`, `cuda`, `cudnn`, `mkl`, `accelerate`.
 
 ## 🚀 Quick Start
 
@@ -104,10 +111,10 @@ async fn structured_example() -> anyhow::Result<()> {
 Use local CLIs as a lightweight proxy. This mode is prompt-only; tool calling/MCP integration is not used or controllable.
 
 ```rust
-let (provider, model) = ProviderFactory::get_provider_for_model(\"cli:codex/gpt-5.2-codex\")?;
-// or: \"cli:claude/claude-sonnet-4-5\"
-// or: \"cli:gemini/gemini-2.5-pro\"
-// or: \"cli:cursor/auto\"
+let (provider, model) = ProviderFactory::get_provider_for_model("cli:codex/gpt-5.2-codex")?;
+// or: "cli:claude/claude-sonnet-4-5"
+// or: "cli:gemini/gemini-2.5-pro"
+// or: "cli:cursor/auto"
 ```
 
 Set a backend-specific command if it is not on PATH:
@@ -237,7 +244,7 @@ async fn tool_calling_example() -> anyhow::Result<()> {
 ```
 
 **Tool Calling Features:**
-- ✅ Cross-provider support (OpenAI, Anthropic, Google Vertex, Google Studio, Amazon, OpenRouter)
+- ✅ Cross-provider support (OpenAI, Anthropic, xAI, Google Vertex, Google Studio, Amazon, OpenRouter, MiniMax, Moonshot, Z.ai, Alibaba, Hetzner, OpenCode, OctoHub, and other OpenAI-compatible providers)
 - ✅ Automatic parameter validation via JSON Schema
 - ✅ Multi-turn conversations with tool results
 - ✅ Parallel tool execution support
@@ -378,7 +385,8 @@ The library automatically detects OAuth credentials and prefers them over API ke
 | **Google Studio** | ✅ JSON + Schema | ✅ Yes | ✅ Yes | ✅ Yes |
 | **Amazon Bedrock** | ❌ No | ✅ Yes | ✅ Yes | ❌ No |
 | **OctoHub** | Per-model | Per-model | ✅ Yes | ✅ Yes |
-| **Together** | Per-model | Per-model | ✅ Yes | ❌ No |
+| **Together** | Per-model | Per-model | ✅ Yes | ✅ Yes (auto) |
+| **Fireworks** | ✅ JSON + Schema | Per-model | ✅ Yes | ✅ Yes (auto) |
 | **Cloudflare** | ❌ No | ❌ No | ❌ No | ❌ No |
 | **Local** | Per-model | Per-model | Per-model | ❌ No |
 | **Ollama** | Per-model | Per-model | Per-model | ❌ No |
@@ -397,7 +405,7 @@ Octolib provides first-class support for models that produce thinking/reasoning 
 use octolib::{ProviderFactory, ChatCompletionParams, Message, ThinkingBlock};
 
 async fn thinking_example() -> anyhow::Result<()> {
-    // MiniMax and OpenAI o-series models support thinking
+    // Thinking-capable models: MiniMax, OpenAI o-series, Moonshot (kimi-k2-thinking*), Z.ai, xAI
     let (provider, model) = ProviderFactory::get_provider_for_model("minimax:MiniMax-M2")?;
 
     let messages = vec![

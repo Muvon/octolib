@@ -166,12 +166,22 @@ pub(crate) fn validate_response(
     }
     match validate_candidate(&response, schema)? {
         Some(value) => Ok(finalize(response, value)),
-        None => Err(StructuredOutputError::ValidationFailed {
-            reason: format!(
-                "provider '{provider}' returned invalid or unparseable final structured output"
-            ),
+        None => {
+            tracing::warn!(
+                provider = provider,
+                finish_reason = ?response.finish_reason,
+                thinking_len = response.thinking.as_ref().map(|t| t.content.len()).unwrap_or(0),
+                content_len = response.content.len(),
+                content_head = %response.content.chars().take(400).collect::<String>(),
+                "RAW-FAIL: schema validation failed, final output captured"
+            );
+            Err(StructuredOutputError::ValidationFailed {
+                reason: format!(
+                    "provider '{provider}' returned invalid or unparseable final structured output"
+                ),
+            }
+            .into())
         }
-        .into()),
     }
 }
 

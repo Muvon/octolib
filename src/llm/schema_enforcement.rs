@@ -28,7 +28,8 @@ use crate::errors::StructuredOutputError;
 use crate::llm::providers::shared::parse_structured_output_from_text;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-    ChatCompletionParams, FunctionDefinition, Message, OutputFormat, ProviderResponse, ToolChoice,
+    ChatCompletionParams, FunctionDefinition, Message, OutputFormat, ProviderResponse, TokenUsage,
+    ToolChoice,
 };
 use anyhow::Result;
 
@@ -37,6 +38,57 @@ const SYNTHETIC_TOOL_NAME: &str = "emit_structured_response";
 // if real-world schemas need more rounds — not worth a config knob nobody has
 // asked for yet.
 const MAX_ATTEMPTS: u32 = 3;
+
+#[derive(Default)]
+struct UsageAccumulator {
+    usage: Option<TokenUsage>,
+    complete: bool,
+}
+
+impl UsageAccumulator {
+    fn new() -> Self {
+        Self {
+            usage: None,
+            complete: true,
+        }
+    }
+
+    fn add(&mut self, response: &ProviderResponse) {
+        let Some(next) = response.exchange.usage.as_ref() else {
+            self.complete = false;
+            return;
+        };
+        let Some(total) = self.usage.as_mut() else {
+            self.usage = Some(next.clone());
+            return;
+        };
+
+        total.input_tokens = total.input_tokens.saturating_add(next.input_tokens);
+        total.cache_read_tokens = total
+            .cache_read_tokens
+            .saturating_add(next.cache_read_tokens);
+        total.cache_write_tokens = total
+            .cache_write_tokens
+            .saturating_add(next.cache_write_tokens);
+        total.output_tokens = total.output_tokens.saturating_add(next.output_tokens);
+        total.reasoning_tokens = total.reasoning_tokens.saturating_add(next.reasoning_tokens);
+        total.total_tokens = total.total_tokens.saturating_add(next.total_tokens);
+        total.cost = match (total.cost, next.cost) {
+            (Some(left), Some(right)) => Some(left + right),
+            _ => None,
+        };
+        total.request_time_ms = match (total.request_time_ms, next.request_time_ms) {
+            (Some(left), Some(right)) => Some(left.saturating_add(right)),
+            _ => None,
+        };
+    }
+
+    fn apply(self, response: &mut ProviderResponse) {
+        // TokenUsage has no partial/completeness marker. Returning None is more
+        // honest than exposing totals that omit an upstream attempt.
+        response.exchange.usage = self.complete.then_some(self.usage).flatten();
+    }
+}
 
 /// Run a chat completion, forcing the response to conform to a requested JSON
 /// schema even when `provider` doesn't natively guarantee it.
@@ -79,10 +131,14 @@ pub async fn chat_completion_enforced(
         return validate_response(response, &schema, provider.name());
     }
 
+    let mut usage = UsageAccumulator::new();
     if provider.enforces_response_schema(&params.model) {
         let response = provider.chat_completion(params.clone()).await?;
+        usage.add(&response);
         if let Some(value) = validate_candidate(&response, &schema)? {
-            return Ok(finalize(response, value));
+            let mut response = finalize(response, value);
+            usage.apply(&mut response);
+            return Ok(response);
         }
         tracing::warn!(
             model = %params.model,
@@ -91,7 +147,7 @@ pub async fn chat_completion_enforced(
         );
     }
 
-    force_schema(provider, params, schema).await
+    force_schema(provider, params, schema, usage).await
 }
 
 pub(crate) fn validate_response(
@@ -123,6 +179,7 @@ async fn force_schema(
     provider: &dyn AiProvider,
     mut params: ChatCompletionParams,
     schema: serde_json::Value,
+    mut usage: UsageAccumulator,
 ) -> Result<ProviderResponse> {
     params.tools = Some(vec![FunctionDefinition {
         name: SYNTHETIC_TOOL_NAME.to_string(),
@@ -146,6 +203,7 @@ async fn force_schema(
         } else {
             provider.chat_completion(params.clone()).await?
         };
+        usage.add(&response);
         let Some(value) = extract_candidate(&response) else {
             if attempt == MAX_ATTEMPTS {
                 return Err(StructuredOutputError::ParsingFailed {
@@ -163,7 +221,11 @@ async fn force_schema(
         };
 
         match validator.validate(&value) {
-            Ok(()) => return Ok(finalize(response, value)),
+            Ok(()) => {
+                let mut response = finalize(response, value);
+                usage.apply(&mut response);
+                return Ok(response);
+            }
             Err(err) if attempt < MAX_ATTEMPTS => {
                 params.messages.push(Message::user(&format!(
                     "Your arguments `{value}` do not match the schema: {err}. Call the function again with corrected arguments."
@@ -316,6 +378,26 @@ mod tests {
         }
     }
 
+    fn with_usage(
+        mut response: ProviderResponse,
+        input_tokens: u64,
+        output_tokens: u64,
+        cost: f64,
+        request_time_ms: u64,
+    ) -> ProviderResponse {
+        response.exchange.usage = Some(TokenUsage {
+            input_tokens,
+            cache_read_tokens: 0,
+            cache_write_tokens: 0,
+            output_tokens,
+            reasoning_tokens: 0,
+            total_tokens: input_tokens + output_tokens,
+            cost: Some(cost),
+            request_time_ms: Some(request_time_ms),
+        });
+        response
+    }
+
     fn schema() -> serde_json::Value {
         serde_json::json!({
             "type": "object",
@@ -357,6 +439,32 @@ mod tests {
             Some(serde_json::json!({"answer": 4}))
         );
         assert_eq!(response.content, r#"{"answer":4}"#);
+    }
+
+    #[tokio::test]
+    async fn successful_fallback_aggregates_all_attempt_usage() {
+        let provider = ScriptedProvider::new(
+            vec![
+                with_usage(response_with_content("not json"), 10, 5, 0.10, 100),
+                with_usage(
+                    response_with_tool_call(SYNTHETIC_TOOL_NAME, serde_json::json!({"answer": 4})),
+                    20,
+                    7,
+                    0.20,
+                    200,
+                ),
+            ],
+            true,
+        );
+        let response = chat_completion_enforced(&provider, params_with_schema("model"))
+            .await
+            .unwrap();
+        let usage = response.exchange.usage.unwrap();
+        assert_eq!(usage.input_tokens, 30);
+        assert_eq!(usage.output_tokens, 12);
+        assert_eq!(usage.total_tokens, 42);
+        assert_eq!(usage.request_time_ms, Some(300));
+        assert!((usage.cost.unwrap() - 0.30).abs() < f64::EPSILON);
     }
 
     #[tokio::test]

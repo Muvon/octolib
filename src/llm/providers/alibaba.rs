@@ -56,6 +56,85 @@ impl AlibabaProvider {
     pub fn new() -> Self {
         Self
     }
+
+    async fn chat_completion_once(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
+        let api_key = self.get_api_key()?;
+        let api_url = get_api_url(ALIBABA_API_URL_ENV, ALIBABA_API_URL);
+        let model = params.model.clone();
+
+        // Selected Qwen families get native strict JSON Schema. Alibaba-hosted
+        // models without that capability use JSON Object mode with the schema
+        // in the prompt. Both paths are validated locally before returning.
+        let (params, requested_schema) = prepare_schema_request(params);
+        let mut response = openai_compat_chat_completion(
+            OpenAiCompatConfig {
+                provider_name: "alibaba",
+                usage_fallback_cost: None,
+                use_response_cost: false,
+            },
+            api_key,
+            api_url,
+            params,
+        )
+        .await?;
+
+        if let Some(ref mut usage) = response.exchange.usage {
+            if usage.cost.is_none() {
+                let input_tokens = usage.input_tokens;
+                let cache_write_tokens = usage.cache_write_tokens;
+                let cache_read_tokens = usage.cache_read_tokens;
+                let output_tokens = usage.billable_output_tokens();
+                usage.cost = calculate_local_usage_cost(
+                    &model,
+                    input_tokens,
+                    cache_write_tokens,
+                    cache_read_tokens,
+                    output_tokens,
+                )
+                .or_else(|| {
+                    self.get_model_pricing(&model).map(|pricing| {
+                        pricing.calculate_cost(
+                            input_tokens,
+                            cache_write_tokens,
+                            cache_read_tokens,
+                            output_tokens,
+                        )
+                    })
+                });
+            }
+        }
+
+        if let Some(schema) = requested_schema {
+            enforce_schema_on_response(&mut response, &schema)?;
+        }
+
+        Ok(response)
+    }
+}
+
+struct AlibabaTransport<'a>(&'a AlibabaProvider);
+
+#[async_trait::async_trait]
+impl AiProvider for AlibabaTransport<'_> {
+    fn name(&self) -> &str {
+        "alibaba"
+    }
+
+    fn supports_model(&self, model: &str) -> bool {
+        self.0.supports_model(model)
+    }
+
+    fn get_api_key(&self) -> Result<String> {
+        self.0.get_api_key()
+    }
+
+    fn enforces_response_schema(&self, model: &str) -> bool {
+        natively_enforces_response_schema(model)
+    }
+
+    async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
+        self.0.chat_completion_once(params).await
+    }
 }
 
 const ALIBABA_API_KEY_ENV: &str = "ALIBABA_API_KEY";
@@ -188,57 +267,8 @@ impl AiProvider for AlibabaProvider {
     }
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-        let api_key = self.get_api_key()?;
-        let api_url = get_api_url(ALIBABA_API_URL_ENV, ALIBABA_API_URL);
-        let model = params.model.clone();
-
-        // Selected Qwen families get native strict JSON Schema. Alibaba-hosted
-        // models without that capability use JSON Object mode with the schema
-        // in the prompt. Both paths are validated locally before returning.
-        let (params, requested_schema) = prepare_schema_request(params);
-        let mut response = openai_compat_chat_completion(
-            OpenAiCompatConfig {
-                provider_name: "alibaba",
-                usage_fallback_cost: None,
-                use_response_cost: false,
-            },
-            api_key,
-            api_url,
-            params,
-        )
-        .await?;
-
-        if let Some(ref mut usage) = response.exchange.usage {
-            if usage.cost.is_none() {
-                let input_tokens = usage.input_tokens;
-                let cache_write_tokens = usage.cache_write_tokens;
-                let cache_read_tokens = usage.cache_read_tokens;
-                let output_tokens = usage.billable_output_tokens();
-                usage.cost = calculate_local_usage_cost(
-                    &model,
-                    input_tokens,
-                    cache_write_tokens,
-                    cache_read_tokens,
-                    output_tokens,
-                )
-                .or_else(|| {
-                    self.get_model_pricing(&model).map(|pricing| {
-                        pricing.calculate_cost(
-                            input_tokens,
-                            cache_write_tokens,
-                            cache_read_tokens,
-                            output_tokens,
-                        )
-                    })
-                });
-            }
-        }
-
-        if let Some(schema) = requested_schema {
-            enforce_schema_on_response(&mut response, &schema)?;
-        }
-
-        Ok(response)
+        crate::llm::schema_enforcement::chat_completion_enforced(&AlibabaTransport(self), params)
+            .await
     }
 }
 

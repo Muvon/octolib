@@ -43,6 +43,63 @@ impl OllamaProvider {
     pub fn new() -> Self {
         Self
     }
+
+    async fn chat_completion_once(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
+        let api_key = self.get_api_key()?;
+        let api_url = get_api_url(OLLAMA_API_URL_ENV, OLLAMA_API_URL);
+        let model = params.model.clone();
+
+        let mut response = openai_compat_chat_completion(
+            OpenAiCompatConfig {
+                provider_name: "ollama",
+                usage_fallback_cost: None,
+                use_response_cost: true,
+            },
+            api_key,
+            api_url,
+            params,
+        )
+        .await?;
+
+        // Fill cost from reference pricing if the API didn't return one
+        if let Some(ref mut usage) = response.exchange.usage {
+            if usage.cost.is_none() {
+                usage.cost = crate::llm::reference_models::calculate_reference_cost(
+                    &model,
+                    usage.input_tokens,
+                    usage.cache_read_tokens,
+                    usage.billable_output_tokens(),
+                );
+            }
+        }
+
+        Ok(response)
+    }
+}
+
+struct OllamaTransport<'a>(&'a OllamaProvider);
+
+#[async_trait::async_trait]
+impl AiProvider for OllamaTransport<'_> {
+    fn name(&self) -> &str {
+        "ollama"
+    }
+
+    fn supports_model(&self, model: &str) -> bool {
+        self.0.supports_model(model)
+    }
+
+    fn get_api_key(&self) -> Result<String> {
+        self.0.get_api_key()
+    }
+
+    fn enforces_response_schema(&self, _model: &str) -> bool {
+        false
+    }
+
+    async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
+        self.0.chat_completion_once(params).await
+    }
 }
 
 const OLLAMA_API_KEY_ENV: &str = "OLLAMA_API_KEY";
@@ -87,35 +144,8 @@ impl AiProvider for OllamaProvider {
     }
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-        let api_key = self.get_api_key()?;
-        let api_url = get_api_url(OLLAMA_API_URL_ENV, OLLAMA_API_URL);
-        let model = params.model.clone();
-
-        let mut response = openai_compat_chat_completion(
-            OpenAiCompatConfig {
-                provider_name: "ollama",
-                usage_fallback_cost: None,
-                use_response_cost: true,
-            },
-            api_key,
-            api_url,
-            params,
-        )
-        .await?;
-
-        // Fill cost from reference pricing if the API didn't return one
-        if let Some(ref mut usage) = response.exchange.usage {
-            if usage.cost.is_none() {
-                usage.cost = crate::llm::reference_models::calculate_reference_cost(
-                    &model,
-                    usage.input_tokens,
-                    usage.cache_read_tokens,
-                    usage.billable_output_tokens(),
-                );
-            }
-        }
-
-        Ok(response)
+        crate::llm::schema_enforcement::chat_completion_enforced(&OllamaTransport(self), params)
+            .await
     }
 }
 

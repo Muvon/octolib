@@ -19,7 +19,7 @@ use serde_json::{json, Value};
 
 use super::super::types::InputType;
 use super::super::EmbeddingUsage;
-use super::{EmbeddingProvider, HTTP_CLIENT};
+use super::{http_client, EmbeddingProvider};
 
 /// Voyage provider implementation for trait
 pub struct VoyageProviderImpl {
@@ -171,7 +171,7 @@ impl VoyageProvider {
             request_body["input_type"] = json!(input_type_str);
         }
 
-        let response = HTTP_CLIENT
+        let response = http_client()
             .post("https://api.voyageai.com/v1/embeddings")
             .header("Authorization", format!("Bearer {}", voyage_api_key))
             .header("Content-Type", "application/json")

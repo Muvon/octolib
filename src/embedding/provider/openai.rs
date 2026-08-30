@@ -19,7 +19,7 @@ use serde_json::{json, Value};
 
 use super::super::types::InputType;
 use super::super::EmbeddingUsage;
-use super::{EmbeddingProvider, HTTP_CLIENT};
+use super::{http_client, EmbeddingProvider};
 
 /// OpenAI provider implementation for trait
 pub struct OpenAIProviderImpl {
@@ -131,7 +131,7 @@ impl OpenAIProvider {
             "encoding_format": "float"
         });
 
-        let response = HTTP_CLIENT
+        let response = http_client()
             .post("https://api.openai.com/v1/embeddings")
             .header("Authorization", format!("Bearer {}", openai_api_key))
             .header("Content-Type", "application/json")

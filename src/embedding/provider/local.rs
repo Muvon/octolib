@@ -29,7 +29,7 @@ use std::sync::{LazyLock, RwLock};
 
 use super::super::types::InputType;
 use super::super::EmbeddingUsage;
-use super::{EmbeddingProvider, HTTP_CLIENT};
+use super::{http_client, EmbeddingProvider};
 
 const LOCAL_EMBED_API_KEY_ENV: &str = "LOCAL_EMBED_API_KEY";
 const LOCAL_EMBED_API_URL_ENV: &str = "LOCAL_EMBED_API_URL";
@@ -158,7 +158,7 @@ impl EmbeddingProvider for LocalEmbeddingProvider {
             "input": processed_texts,
         });
 
-        let mut req = HTTP_CLIENT
+        let mut req = http_client()
             .post(&url)
             .header("Content-Type", "application/json");
 

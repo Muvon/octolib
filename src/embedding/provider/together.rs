@@ -21,7 +21,7 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use std::env;
 
-use super::{EmbeddingProvider, HTTP_CLIENT};
+use super::{http_client, EmbeddingProvider};
 use crate::embedding::types::InputType;
 use crate::embedding::EmbeddingUsage;
 
@@ -107,7 +107,7 @@ impl TogetherProvider {
             )
         })?;
 
-        let response = HTTP_CLIENT
+        let response = http_client()
             .post(TOGETHER_EMBEDDING_URL)
             .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")
@@ -151,7 +151,7 @@ impl TogetherProvider {
             )
         })?;
 
-        let response = HTTP_CLIENT
+        let response = http_client()
             .post(TOGETHER_EMBEDDING_URL)
             .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")

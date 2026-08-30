@@ -19,7 +19,7 @@ use serde_json::{json, Value};
 
 use super::super::types::InputType;
 use super::super::EmbeddingUsage;
-use super::{EmbeddingProvider, HTTP_CLIENT};
+use super::{http_client, EmbeddingProvider};
 
 /// Jina provider implementation for trait
 pub struct JinaProviderImpl {
@@ -173,7 +173,7 @@ impl JinaProvider {
         let jina_api_key =
             std::env::var("JINA_API_KEY").context("JINA_API_KEY environment variable not set")?;
 
-        let response = HTTP_CLIENT
+        let response = http_client()
             .post("https://api.jina.ai/v1/embeddings")
             .header("Authorization", format!("Bearer {}", jina_api_key))
             .json(&json!({

@@ -26,7 +26,7 @@ use serde_json::{json, Value};
 
 use super::super::types::InputType;
 use super::super::EmbeddingUsage;
-use super::{EmbeddingProvider, HTTP_CLIENT};
+use super::{http_client, EmbeddingProvider};
 
 const OCTOHUB_API_KEY_ENV: &str = "OCTOHUB_API_KEY";
 const OCTOHUB_API_URL_ENV: &str = "OCTOHUB_API_URL";
@@ -65,7 +65,7 @@ impl OctoHubEmbeddingProvider {
             "input": input,
         });
 
-        let mut req = HTTP_CLIENT
+        let mut req = http_client()
             .post(&url)
             .header("Content-Type", "application/json");
 

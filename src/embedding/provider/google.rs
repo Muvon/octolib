@@ -34,7 +34,7 @@ use serde_json::{json, Value};
 
 use super::super::types::InputType;
 use super::super::EmbeddingUsage;
-use super::{EmbeddingProvider, HTTP_CLIENT};
+use super::{http_client, EmbeddingProvider};
 
 /// Google provider implementation for trait
 pub struct GoogleProviderImpl {
@@ -141,7 +141,7 @@ impl GoogleProvider {
         let mut all_embeddings = Vec::new();
 
         for text in texts {
-            let response = HTTP_CLIENT
+            let response = http_client()
 				.post(format!("https://generativelanguage.googleapis.com/v1beta/models/{}:embedContent?key={}", model, google_api_key))
 				.header("Content-Type", "application/json")
 				.json(&json!({

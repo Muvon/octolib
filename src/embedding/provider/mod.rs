@@ -18,6 +18,7 @@
 //! Each provider can be optionally compiled based on cargo features.
 
 use anyhow::Result;
+use arc_swap::ArcSwap;
 use reqwest::Client;
 use std::sync::LazyLock;
 use std::time::Duration;
@@ -25,8 +26,13 @@ use std::time::Duration;
 use super::pricing::EmbeddingUsage;
 use super::types::{EmbeddingProviderType, InputType};
 
-// Shared HTTP client with connection pooling for optimal performance
-static HTTP_CLIENT: LazyLock<Client> = LazyLock::new(|| {
+// Shared HTTP client with connection pooling. It is swappable because Tokio
+// tests create independent runtimes; a pooled connection must not retain the
+// dispatcher of a runtime that has already been dropped.
+static HTTP_CLIENT: LazyLock<ArcSwap<Client>> =
+    LazyLock::new(|| ArcSwap::from_pointee(build_http_client()));
+
+fn build_http_client() -> Client {
     Client::builder()
         .pool_max_idle_per_host(10)
         .pool_idle_timeout(Duration::from_secs(30))
@@ -34,7 +40,16 @@ static HTTP_CLIENT: LazyLock<Client> = LazyLock::new(|| {
         .connect_timeout(Duration::from_secs(10))
         .build()
         .expect("Failed to create HTTP client")
-});
+}
+
+fn http_client() -> Client {
+    (*HTTP_CLIENT.load_full()).clone()
+}
+
+#[cfg(test)]
+fn refresh_http_client() {
+    HTTP_CLIENT.store(std::sync::Arc::new(build_http_client()));
+}
 
 // Feature-specific provider modules
 #[cfg(feature = "fastembed")]

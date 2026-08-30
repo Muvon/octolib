@@ -170,39 +170,5 @@ impl EmbeddingProvider for OctoHubEmbeddingProvider {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_provider_creation() {
-        assert!(OctoHubEmbeddingProvider::new("voyage-3.5").is_ok());
-        assert!(OctoHubEmbeddingProvider::new("any-model").is_ok());
-        assert!(OctoHubEmbeddingProvider::new("").is_err());
-    }
-
-    #[test]
-    fn test_api_url_default() {
-        // Clear env to test default
-        std::env::remove_var(OCTOHUB_API_URL_ENV);
-        assert_eq!(
-            OctoHubEmbeddingProvider::api_url(),
-            "https://hub.octomind.run/v1/embeddings"
-        );
-    }
-
-    #[test]
-    fn test_parse_single() {
-        let response = json!([0.1, 0.2, 0.3]);
-        let result = OctoHubEmbeddingProvider::parse_single(&response).unwrap();
-        assert_eq!(result, vec![0.1_f32, 0.2, 0.3]);
-    }
-
-    #[test]
-    fn test_parse_batch() {
-        let response = json!([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]);
-        let result = OctoHubEmbeddingProvider::parse_batch(&response).unwrap();
-        assert_eq!(result.len(), 2);
-        assert_eq!(result[0], vec![0.1_f32, 0.2, 0.3]);
-        assert_eq!(result[1], vec![0.4_f32, 0.5, 0.6]);
-    }
-}
+#[path = "octohub_tests.rs"]
+mod tests;

@@ -162,47 +162,5 @@ impl AiProvider for AmazonBedrockProvider {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_supports_model() {
-        let provider = AmazonBedrockProvider::new();
-
-        // Amazon Bedrock accepts any non-empty model identifier
-        assert!(provider.supports_model("anthropic.claude-3-haiku-20240307-v1:0"));
-        assert!(provider.supports_model("anthropic.claude-3-5-sonnet-20241022-v2:0"));
-        assert!(provider.supports_model("meta.llama3-2-90b-instruct-v1:0"));
-        assert!(provider.supports_model("amazon.titan-embed-text-v2:0"));
-        assert!(provider.supports_model("gpt-4"));
-        assert!(provider.supports_model("deepseek-chat"));
-        assert!(!provider.supports_model(""));
-    }
-
-    #[test]
-    fn test_supports_model_case_insensitive() {
-        let provider = AmazonBedrockProvider::new();
-
-        // Test uppercase
-        assert!(provider.supports_model("ANTHROPIC.CLAUDE-3-HAIKU-20240307-V1:0"));
-        assert!(provider.supports_model("META.LLAMA3-2-90B-INSTRUCT-V1:0"));
-        // Test mixed case
-        assert!(provider.supports_model("Anthropic.Claude-3-Haiku"));
-        assert!(provider.supports_model("AMAZON.TITAN-EMBED-TEXT-V2:0"));
-    }
-
-    #[test]
-    fn test_supports_vision_case_insensitive() {
-        let provider = AmazonBedrockProvider::new();
-
-        // Test lowercase
-        assert!(provider.supports_vision("claude-3-haiku"));
-        assert!(provider.supports_vision("claude-3-sonnet"));
-
-        // Test uppercase
-        assert!(provider.supports_vision("CLAUDE-3-HAIKU"));
-        assert!(provider.supports_vision("CLAUDE-3-SONNET"));
-        // Test mixed case
-        assert!(provider.supports_vision("Anthropic.Claude-3-Haiku"));
-    }
-}
+#[path = "amazon_tests.rs"]
+mod tests;

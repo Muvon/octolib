@@ -175,42 +175,5 @@ impl AiProvider for CerebrasProvider {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_supports_model() {
-        let provider = CerebrasProvider::new();
-        assert!(provider.supports_model("gpt-oss-120b"));
-        assert!(provider.supports_model("llama-3.1-8b"));
-        assert!(provider.supports_model("QWEN-3-235B-A22B-INSTRUCT-2507"));
-        assert!(provider.supports_model("zai-glm-4.7"));
-        assert!(!provider.supports_model(""));
-        assert!(!provider.supports_model("random-model"));
-    }
-
-    #[test]
-    fn test_default_capabilities() {
-        let provider = CerebrasProvider::new();
-        assert_eq!(provider.name(), "cerebras");
-        assert!(!provider.supports_caching("any-model"));
-        assert!(!provider.supports_vision("llama-3.1-8b"));
-        assert!(provider.supports_structured_output("any-model"));
-        assert_eq!(provider.get_max_input_tokens("llama-3.1-8b"), 131_072);
-    }
-
-    #[test]
-    fn test_pricing_support_partial() {
-        let provider = CerebrasProvider::new();
-        assert!(provider.get_model_pricing("llama-3.1-8b").is_some());
-        assert!(provider.get_model_pricing("gpt-oss-120b").is_some());
-        assert!(provider.get_model_pricing("zai-glm-4.7").is_some());
-        assert!(provider
-            .get_model_pricing("qwen-3-235b-a22b-instruct-2507")
-            .is_some());
-        assert!(crate::llm::utils::is_model_in_pricing_table(
-            "LLAMA-3.1-8B",
-            PRICING
-        ));
-    }
-}
+#[path = "cerebras_tests.rs"]
+mod tests;

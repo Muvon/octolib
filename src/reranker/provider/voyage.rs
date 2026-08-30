@@ -156,36 +156,5 @@ impl VoyageProvider {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_voyage_provider_creation() {
-        // Test valid models
-        assert!(VoyageProviderImpl::new("rerank-2.5").is_ok());
-        assert!(VoyageProviderImpl::new("rerank-2.5-lite").is_ok());
-        assert!(VoyageProviderImpl::new("rerank-2").is_ok());
-        assert!(VoyageProviderImpl::new("rerank-2-lite").is_ok());
-        assert!(VoyageProviderImpl::new("rerank-1").is_ok());
-        assert!(VoyageProviderImpl::new("rerank-lite-1").is_ok());
-
-        // Test invalid model
-        assert!(VoyageProviderImpl::new("invalid-model").is_err());
-    }
-
-    #[test]
-    fn test_voyage_model_validation() {
-        let models = [
-            "rerank-2.5",
-            "rerank-2.5-lite",
-            "rerank-2",
-            "rerank-2-lite",
-            "rerank-1",
-            "rerank-lite-1",
-        ];
-        for model in models {
-            let provider = VoyageProviderImpl::new(model).unwrap();
-            assert!(provider.is_model_supported());
-        }
-    }
-}
+#[path = "voyage_tests.rs"]
+mod tests;

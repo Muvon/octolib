@@ -18,10 +18,11 @@
 //! Supports Jina, Voyage, Google, OpenAI, FastEmbed, and HuggingFace providers.
 
 pub mod constants;
-#[cfg(test)]
-mod mod_test;
 pub mod pricing;
 pub mod provider;
+#[cfg(test)]
+#[path = "mod_tests.rs"]
+mod tests;
 pub mod types;
 
 use anyhow::Result;

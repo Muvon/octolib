@@ -61,6 +61,10 @@ src/
 examples/                           → One file per feature — use as integration test templates
 ```
 
+Sibling `*_tests.rs` files contain unit tests for each source module. Production
+files declare them with `#[cfg(test)]`, `#[path = "<name>_tests.rs"]`, and
+`mod tests;`; `mod.rs` uses `mod_tests.rs`.
+
 ## Where to Look
 
 | Task | Start here |
@@ -81,6 +85,25 @@ examples/                           → One file per feature — use as integrat
 | Model format parsing | `src/llm/factory.rs` → `ProviderFactory::parse_model()` |
 | Public API surface | `src/lib.rs` re-exports |
 | Model name normalization | `src/llm/utils.rs` → `normalize_model_name`, `sanitize_model_name` |
+| Add or update unit tests | Sibling `<module>_tests.rs`; never put test bodies inline in production files |
+
+## Test Layout
+
+- Unit-test bodies must live in sibling files suffixed `_tests.rs`.
+- For `foo.rs`, use `foo_tests.rs` and declare it at the end of `foo.rs`:
+  ```rust
+  #[cfg(test)]
+  #[path = "foo_tests.rs"]
+  mod tests;
+  ```
+- For directory modules (`mod.rs`), use `mod_tests.rs` with the same declaration pattern.
+- If one source file needs multiple test modules, use descriptive names such as
+  `types_token_usage_split_tests.rs`; preserve the original module name in the declaration.
+- Keep `use super::*;` in the sibling module when tests need private implementation details.
+- `tests/` is reserved for cross-crate integration tests that use only the public API.
+- Test-only support helpers may remain `#[cfg(test)]` in a production module only when sibling
+  test modules need parent-level access; actual `#[test]`/`#[tokio::test]` functions never remain inline.
+- Every extracted or new `.rs` test file uses the standard 2026 copyright header.
 
 ## How Things Work
 
@@ -93,9 +116,11 @@ examples/                           → One file per feature — use as integrat
 - `get_model_pricing()` reads from the local `PRICING` table via `get_model_pricing()` from `utils.rs`
 - `supports_model()` uses `is_model_in_pricing_table()` — strict, unknown models rejected
 
-**Proxy / OpenAI-compatible** (NVIDIA, Cerebras, Together, Ollama, Local, Cloudflare, OpenRouter, OctoHub, Featherless, Hetzner, OpenCode Zen/Go, Google Vertex, Google Studio):
-- Delegates to `openai_compat_chat_completion(OpenAiCompatConfig { provider_name, usage_fallback_cost, use_response_cost }, api_key, api_url, params)`
+**Proxy / OpenAI-compatible** (NVIDIA, Cerebras, Ollama, Local, Cloudflare, Featherless, Hetzner, OpenCode Zen/Go, Google Vertex, Google Studio, plus provider-owned adapters such as Alibaba/Amazon/BytePlus/Groq):
+- Delegates to `openai_compat_chat_completion(OpenAiCompatConfig { provider_name, usage_fallback_cost, use_response_cost, enforces_response_schema, supports_required_tool_choice }, api_key, api_url, params)`
 - `OpenAiCompatConfig.use_response_cost = true` → use cost from API response if present; `usage_fallback_cost` → fixed fallback cost (rarely used)
+- `enforces_response_schema` describes upstream constrained decoding; all responses are still validated locally.
+- `supports_required_tool_choice` is true only with provider evidence; otherwise schema repair uses auto tool choice plus prompt guidance.
 - `supports_model()` returns `!model.is_empty()` — accepts anything
 - `get_model_pricing()` → `reference_pricing::get_reference_pricing(model)` (trait default already does this; explicit override is optional)
 - After the call: if `usage.cost.is_none()`, fill it via `reference_pricing::calculate_reference_cost(&model, input_tokens, output_tokens)`
@@ -110,11 +135,16 @@ fn supports_model(&self, model: &str) -> bool
 fn get_api_key(&self) -> Result<String>
 async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse>
 
+// Default accepts Auto and rejects stronger policies; override only when supported:
+async fn chat_completion_with_tool_choice(&self, params: ChatCompletionParams, choice: ToolChoice) -> Result<ProviderResponse>
+
 // Override for native providers (defaults use reference tables):
 fn supports_caching(&self, model: &str) -> bool          // default: false
 fn supports_vision(&self, model: &str) -> bool            // default: reference_capabilities lookup
 fn supports_video(&self, model: &str) -> bool             // default: reference_capabilities lookup
 fn supports_structured_output(&self, model: &str) -> bool // default: reference_capabilities lookup
+fn enforces_response_schema(&self, model: &str) -> bool   // default: supports_structured_output
+fn supports_required_tool_choice(&self, model: &str) -> bool // default: false
 fn get_max_input_tokens(&self, model: &str) -> usize      // default: reference_capabilities lookup (8192 fallback)
 fn get_model_pricing(&self, model: &str) -> Option<ModelPricing> // default: reference_pricing lookup
 fn supported_sampling_params(&self, model: &str) -> SamplingSupport // default: ALL
@@ -228,7 +258,7 @@ Every `.rs` file must start with:
 // Licensed under the Apache License, Version 2.0 (the "License");
 // ...
 ```
-Files still showing `Copyright 2025` (`src/errors.rs`, `src/storage.rs`, `src/llm/strategies.rs`, `src/llm/config.rs`, `src/embedding/constants.rs`, `src/embedding/mod_test.rs`, `examples/structured_output.rs`, `examples/test_structured_output.rs`) must be updated when touched.
+Files still showing `Copyright 2025` (`src/storage.rs`, `src/embedding/constants.rs`, `examples/structured_output.rs`, `examples/test_structured_output.rs`) must be updated when touched.
 
 ## Adding a New LLM Provider
 

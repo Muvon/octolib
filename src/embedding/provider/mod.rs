@@ -46,11 +46,6 @@ fn http_client() -> Client {
     (*HTTP_CLIENT.load_full()).clone()
 }
 
-#[cfg(test)]
-fn refresh_http_client() {
-    HTTP_CLIENT.store(std::sync::Arc::new(build_http_client()));
-}
-
 // Feature-specific provider modules
 #[cfg(feature = "fastembed")]
 pub mod fastembed;
@@ -142,4 +137,5 @@ pub async fn create_embedding_provider_from_parts(
 }
 
 #[cfg(test)]
-mod mod_test;
+#[path = "mod_tests.rs"]
+mod tests;

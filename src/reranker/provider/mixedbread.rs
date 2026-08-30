@@ -139,31 +139,5 @@ impl RerankProvider for MixedbreadProvider {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_mixedbread_provider_creation() {
-        assert!(MixedbreadProvider::new("mxbai-rerank-large-v2").is_ok());
-        assert!(MixedbreadProvider::new("mxbai-rerank-base-v2").is_ok());
-        assert!(MixedbreadProvider::new("mxbai-rerank-large-v1").is_ok());
-        assert!(MixedbreadProvider::new("mxbai-rerank-base-v1").is_ok());
-        assert!(MixedbreadProvider::new("mxbai-rerank-xsmall-v1").is_ok());
-        assert!(MixedbreadProvider::new("invalid-model").is_err());
-    }
-
-    #[test]
-    fn test_mixedbread_model_validation() {
-        let models = [
-            "mxbai-rerank-large-v2",
-            "mxbai-rerank-base-v2",
-            "mxbai-rerank-large-v1",
-            "mxbai-rerank-base-v1",
-            "mxbai-rerank-xsmall-v1",
-        ];
-        for model in models {
-            let provider = MixedbreadProvider::new(model).unwrap();
-            assert!(provider.is_model_supported());
-        }
-    }
-}
+#[path = "mixedbread_tests.rs"]
+mod tests;

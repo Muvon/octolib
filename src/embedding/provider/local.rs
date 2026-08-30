@@ -210,21 +210,5 @@ impl EmbeddingProvider for LocalEmbeddingProvider {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_empty_model_rejected() {
-        // Rejected before any network probe, so this is safe offline.
-        assert!(LocalEmbeddingProvider::new("").await.is_err());
-    }
-
-    #[test]
-    fn test_api_url_default() {
-        std::env::remove_var(LOCAL_EMBED_API_URL_ENV);
-        assert_eq!(
-            LocalEmbeddingProvider::api_url(),
-            "http://localhost:11434/v1/embeddings"
-        );
-    }
-}
+#[path = "local_tests.rs"]
+mod tests;

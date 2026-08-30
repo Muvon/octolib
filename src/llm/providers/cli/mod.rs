@@ -599,39 +599,5 @@ async fn execute_command(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_split_cli_model() {
-        let (backend, model) = split_cli_model("codex/gpt-5.2-codex").unwrap();
-        assert_eq!(backend, "codex");
-        assert_eq!(model, "gpt-5.2-codex");
-    }
-
-    #[test]
-    fn test_messages_to_prompt() {
-        let provider =
-            CliProvider::new_for_model("codex/gpt-5.2-codex").unwrap_or_else(|_| CliProvider {
-                backend: CliBackend::from_name("codex"),
-                command: PathBuf::from("codex"),
-                extra_args: Vec::new(),
-                model_flag: "-m".to_string(),
-                prompt_flag: "-p".to_string(),
-                reasoning_effort: "high".to_string(),
-                skip_git_check: false,
-            });
-
-        let messages = vec![
-            Message::system("You are helpful."),
-            Message::user("Hello"),
-            Message::assistant("Hi"),
-        ];
-
-        let prompt = provider.messages_to_prompt(&messages);
-        assert!(prompt.starts_with("You are helpful."));
-        assert!(prompt.contains("Human: Hello"));
-        assert!(prompt.contains("Assistant: Hi"));
-        assert!(prompt.ends_with("Assistant: "));
-    }
-}
+#[path = "mod_tests.rs"]
+mod tests;

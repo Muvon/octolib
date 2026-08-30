@@ -114,47 +114,5 @@ impl AiProvider for LocalProvider {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_supports_model() {
-        let provider = LocalProvider::new();
-
-        assert!(provider.supports_model("llama3.2"));
-        assert!(provider.supports_model("mistral-7b"));
-        assert!(provider.supports_model("gpt4all-j"));
-        assert!(provider.supports_model("any-model-name"));
-        assert!(!provider.supports_model(""));
-    }
-
-    #[test]
-    fn test_get_api_key_optional() {
-        let provider = LocalProvider::new();
-        let result = provider.get_api_key();
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_default_capabilities() {
-        let provider = LocalProvider::new();
-        assert_eq!(provider.name(), "local");
-        assert!(!provider.supports_caching("any-model"));
-    }
-
-    #[test]
-    fn test_capabilities_model_specific() {
-        let provider = LocalProvider::new();
-        // Vision models
-        assert!(provider.supports_vision("llava:latest"));
-        assert!(provider.supports_vision("gemma-3-27b"));
-        // Text-only models
-        assert!(!provider.supports_vision("llama-3.1-8b"));
-        // Structured output
-        assert!(provider.supports_structured_output("llama-3.1-8b"));
-        assert!(!provider.supports_structured_output("mistral-7b"));
-        // Context windows
-        assert_eq!(provider.get_max_input_tokens("llama-3.1-8b"), 131_072);
-        assert_eq!(provider.get_max_input_tokens("mistral-7b"), 32_768);
-    }
-}
+#[path = "local_tests.rs"]
+mod tests;

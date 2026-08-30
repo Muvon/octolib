@@ -228,51 +228,5 @@ impl AiProvider for CloudflareWorkersAiProvider {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_supports_model() {
-        let provider = CloudflareWorkersAiProvider::new();
-
-        // Cloudflare Workers AI accepts any non-empty model identifier
-        assert!(provider.supports_model("llama-3.1-70b-instruct"));
-        assert!(provider.supports_model("@cf/meta/llama-3.1-70b-instruct"));
-        assert!(provider.supports_model("@hf/meta/llama-3.1-8b-instruct"));
-        assert!(provider.supports_model("mistral-7b-instruct-v0.1"));
-        assert!(provider.supports_model("gemma-2-27b-it"));
-        assert!(provider.supports_model("gpt-4"));
-        assert!(provider.supports_model("claude-3"));
-        assert!(!provider.supports_model(""));
-    }
-
-    #[test]
-    fn test_supports_model_case_insensitive() {
-        let provider = CloudflareWorkersAiProvider::new();
-
-        // Test uppercase
-        assert!(provider.supports_model("LLAMA-3.1-70B-INSTRUCT"));
-        assert!(provider.supports_model("MISTRAL-7B-INSTRUCT-V0.1"));
-        // Test mixed case
-        assert!(provider.supports_model("Llama-3.1-70B-Instruct"));
-        assert!(provider.supports_model("GEMMA-2-27B-IT"));
-    }
-
-    #[test]
-    fn current_workers_ai_models_use_cloudflare_prices() {
-        let provider = CloudflareWorkersAiProvider::new();
-
-        let deepseek = provider
-            .get_model_pricing("@cf/deepseek-ai/deepseek-v4-flash-0731")
-            .unwrap();
-        assert_eq!(deepseek.input_price_per_1m, 0.440);
-        assert_eq!(deepseek.cache_read_price_per_1m, 0.014);
-        assert_eq!(deepseek.output_price_per_1m, 1.320);
-        assert!(provider.supports_caching("@cf/deepseek-ai/deepseek-v4-flash-0731"));
-
-        let qwen = provider.get_model_pricing("@cf/qwen/qwen3.8-27b").unwrap();
-        assert_eq!(qwen.input_price_per_1m, 0.450);
-        assert_eq!(qwen.output_price_per_1m, 3.200);
-        assert!(!provider.supports_caching("@cf/qwen/qwen3.8-27b"));
-    }
-}
+#[path = "cloudflare_tests.rs"]
+mod tests;

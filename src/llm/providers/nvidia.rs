@@ -126,25 +126,5 @@ impl AiProvider for NvidiaProvider {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_supports_model() {
-        let provider = NvidiaProvider::new();
-        assert!(provider.supports_model("nvidia/llama-3.1-nemotron-ultra-253b-v1"));
-        assert!(provider.supports_model("deepseek-ai/deepseek-v3.2"));
-        assert!(provider.supports_model("minimaxai/minimax-m2.1"));
-        assert!(provider.supports_model("meta/llama-3.1-405b-instruct"));
-        assert!(provider.supports_model("any-model"));
-        assert!(!provider.supports_model(""));
-    }
-
-    #[test]
-    fn test_default_capabilities() {
-        let provider = NvidiaProvider::new();
-        assert_eq!(provider.name(), "nvidia");
-        assert!(!provider.supports_caching("any-model"));
-        assert!(provider.supports_structured_output("any-model"));
-    }
-}
+#[path = "nvidia_tests.rs"]
+mod tests;

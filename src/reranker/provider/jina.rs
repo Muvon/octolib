@@ -135,30 +135,5 @@ impl RerankProvider for JinaProvider {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_jina_provider_creation() {
-        assert!(JinaProvider::new("jina-reranker-v3").is_ok());
-        assert!(JinaProvider::new("jina-reranker-m0").is_ok());
-        assert!(JinaProvider::new("jina-reranker-v2-base-multilingual").is_ok());
-        assert!(JinaProvider::new("jina-colbert-v2").is_ok());
-        assert!(JinaProvider::new("jina-reranker-v1-base-en").is_err());
-        assert!(JinaProvider::new("invalid-model").is_err());
-    }
-
-    #[test]
-    fn test_jina_model_validation() {
-        let models = [
-            "jina-reranker-v3",
-            "jina-reranker-m0",
-            "jina-reranker-v2-base-multilingual",
-            "jina-colbert-v2",
-        ];
-        for model in models {
-            let provider = JinaProvider::new(model).unwrap();
-            assert!(provider.is_model_supported());
-        }
-    }
-}
+#[path = "jina_tests.rs"]
+mod tests;

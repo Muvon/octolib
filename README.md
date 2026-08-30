@@ -4,6 +4,7 @@
 **© 2026 Muvon Un Limited (Hong Kong)** | [Website](https://muvon.io) | [Product Page](https://octolib.muvon.io)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org)
+[![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmuvon%2Foctolib%2Fbadges%2Fcoverage.json&style=flat-square)](https://github.com/muvon/octolib/actions/workflows/ci.yml)
 
 ## 🚀 Overview
 

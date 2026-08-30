@@ -97,8 +97,8 @@ fn pricing_table_at(time: std::time::SystemTime) -> &'static [PricingTuple] {
 
 /// Map generic ReasoningEffort to DeepSeek's `reasoning_effort` string.
 /// DeepSeek supports only "low" / "high" / "max" (default "high" when the
-/// field is omitted, thinking enabled by default), so intermediate levels
-/// floor to the nearest supported lower effort.
+/// field is omitted, thinking enabled by default). Intermediate internal levels
+/// floor to the nearest supported tier so the adapter never increases effort.
 fn map_reasoning_effort(
     effort: Option<crate::llm::types::ReasoningEffort>,
 ) -> Option<&'static str> {
@@ -180,8 +180,6 @@ struct DeepSeekRequest {
     model: String,
     messages: Vec<DeepSeekMessage>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    temperature: Option<f32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stream: Option<bool>,
@@ -190,9 +188,14 @@ struct DeepSeekRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<DeepSeekTool>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_choice: Option<serde_json::Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_effort: Option<&'static str>,
+    thinking: DeepSeekThinking,
+}
+
+#[derive(Serialize, Debug, Clone)]
+struct DeepSeekThinking {
+    #[serde(rename = "type")]
+    thinking_type: &'static str,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -292,12 +295,14 @@ struct DeepSeekToolFunction {
 
 /// Convert generic Messages into DeepSeek's wire format.
 ///
-/// DeepSeek thinking-mode rule (per /guides/thinking_mode): when an assistant turn
-/// produced tool_calls, its reasoning_content MUST be replayed in subsequent
-/// requests — otherwise the API returns 400. For assistant turns without
-/// tool_calls (and for all other roles), reasoning_content is ignored and is
-/// omitted here.
-fn convert_messages(messages: &[crate::llm::types::Message]) -> Vec<DeepSeekMessage> {
+/// DeepSeek thinking-mode rule (per /guides/thinking_mode): whenever the current
+/// request carries tools, every prior assistant turn's complete reasoning_content
+/// MUST be replayed, including turns that did not call a tool. Without tools the
+/// API ignores historical reasoning, so it is omitted.
+fn convert_messages(
+    messages: &[crate::llm::types::Message],
+    has_tools: bool,
+) -> Vec<DeepSeekMessage> {
     messages
         .iter()
         .map(|msg| {
@@ -319,10 +324,7 @@ fn convert_messages(messages: &[crate::llm::types::Message]) -> Vec<DeepSeekMess
                     })
             });
 
-            let reasoning_content = if msg.role == "assistant" && tool_calls.is_some() {
-                // Only replay actual thinking content — omit field entirely if no thinking was present.
-                // DeepSeek requires reasoning_content when replaying tool-call turns that had thinking,
-                // but unlike Moonshot it does NOT require an empty string when there was none.
+            let reasoning_content = if has_tools && msg.role == "assistant" {
                 msg.thinking.as_ref().map(|t| t.content.clone())
             } else {
                 None
@@ -341,8 +343,6 @@ fn convert_messages(messages: &[crate::llm::types::Message]) -> Vec<DeepSeekMess
                     serde_json::json!({"type": "image_url", "image_url": {"url": url}})
                 }));
                 Some(serde_json::json!(parts))
-            } else if msg.content.is_empty() && tool_calls.is_some() {
-                None
             } else {
                 Some(serde_json::json!(msg.content))
             };
@@ -357,6 +357,44 @@ fn convert_messages(messages: &[crate::llm::types::Message]) -> Vec<DeepSeekMess
             }
         })
         .collect()
+}
+
+fn build_request(params: &ChatCompletionParams) -> DeepSeekRequest {
+    let has_tools = params.tools.as_ref().is_some_and(|tools| !tools.is_empty());
+    let messages = convert_messages(&params.messages, has_tools);
+    let response_format = params.response_format.as_ref().map(|_| {
+        // Preserve the existing native-wire behavior: DeepSeek exposes JSON
+        // Object mode here, not JSON Schema.
+        serde_json::json!({"type": "json_object"})
+    });
+    let tools = params.tools.as_ref().and_then(|tools| {
+        (!tools.is_empty()).then(|| {
+            tools
+                .iter()
+                .map(|tool| DeepSeekTool {
+                    tool_type: "function".to_string(),
+                    function: DeepSeekToolFunction {
+                        name: tool.name.clone(),
+                        description: tool.description.clone(),
+                        parameters: tool.parameters.clone(),
+                    },
+                })
+                .collect()
+        })
+    });
+
+    DeepSeekRequest {
+        model: params.model.clone(),
+        messages,
+        max_tokens: Some(params.max_tokens),
+        stream: Some(false),
+        response_format,
+        tools,
+        reasoning_effort: map_reasoning_effort(params.reasoning_effort),
+        thinking: DeepSeekThinking {
+            thinking_type: "enabled",
+        },
+    }
 }
 
 #[async_trait::async_trait]
@@ -423,66 +461,14 @@ impl AiProvider for DeepSeekProvider {
     }
 
     fn supported_sampling_params(&self, _model: &str) -> SamplingSupport {
-        // DeepSeek API only supports temperature (no top_p, no top_k).
-        SamplingSupport {
-            temperature: true,
-            top_p: false,
-            top_k: false,
-        }
+        // All active native routes are V4 thinking models. DeepSeek documents
+        // sampling controls as unsupported in thinking mode (accepted but ignored).
+        SamplingSupport::NONE
     }
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
         let api_key = self.get_api_key()?;
-
-        let messages = convert_messages(&params.messages);
-
-        let mut request = DeepSeekRequest {
-            model: params.model.clone(),
-            messages,
-            temperature: self.effective_sampling_params(&params).temperature,
-            max_tokens: Some(params.max_tokens),
-            stream: Some(false), // We don't support streaming in octolib yet
-            response_format: None,
-            tools: None,
-            tool_choice: None,
-            reasoning_effort: map_reasoning_effort(params.reasoning_effort),
-        };
-
-        // Add structured output format if specified
-        if let Some(response_format) = &params.response_format {
-            match &response_format.format {
-                crate::llm::types::OutputFormat::Json => {
-                    request.response_format = Some(serde_json::json!({
-                        "type": "json_object"
-                    }));
-                }
-                crate::llm::types::OutputFormat::JsonSchema => {
-                    // DeepSeek supports JSON mode but not full JSON schema validation
-                    // Fall back to json_object mode
-                    request.response_format = Some(serde_json::json!({
-                        "type": "json_object"
-                    }));
-                }
-            }
-        }
-
-        // Add tools if specified
-        if let Some(tools) = &params.tools {
-            request.tools = Some(
-                tools
-                    .iter()
-                    .map(|tool| DeepSeekTool {
-                        tool_type: "function".to_string(),
-                        function: DeepSeekToolFunction {
-                            name: tool.name.clone(),
-                            description: tool.description.clone(),
-                            parameters: tool.parameters.clone(),
-                        },
-                    })
-                    .collect(),
-            );
-            request.tool_choice = Some(serde_json::json!("auto"));
-        }
+        let request = build_request(&params);
 
         let start_time = std::time::Instant::now();
         let request_timeout = params.request_timeout;

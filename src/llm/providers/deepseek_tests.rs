@@ -58,7 +58,7 @@ fn test_vision_route() {
         dimensions: None,
         size_bytes: None,
     }]);
-    let content = convert_messages(std::slice::from_ref(&msg))[0]
+    let content = convert_messages(std::slice::from_ref(&msg), false)[0]
         .content
         .clone()
         .unwrap();
@@ -67,7 +67,9 @@ fn test_vision_route() {
     assert_eq!(content[1]["image_url"]["url"], "data:image/png;base64,QUJD");
 
     // Text-only turns keep the plain string shape
-    let plain = convert_messages(&[Message::user("hi")])[0].content.clone();
+    let plain = convert_messages(&[Message::user("hi")], false)[0]
+        .content
+        .clone();
     assert_eq!(plain, Some(serde_json::json!("hi")));
 }
 
@@ -114,6 +116,48 @@ fn test_map_reasoning_effort() {
     );
     // None = provider default (thinking on, effort "high"); field omitted.
     assert_eq!(map_reasoning_effort(None), None);
+}
+
+#[test]
+fn test_build_request_uses_native_thinking_tool_contract() {
+    use crate::llm::types::{FunctionDefinition, Message, ReasoningEffort, ThinkingBlock};
+
+    let messages = [
+        Message::assistant("previous answer").with_thinking(ThinkingBlock {
+            content: "previous reasoning".to_string(),
+            tokens: 3,
+        }),
+    ];
+    let mut params = ChatCompletionParams::new(&messages, "deepseek-v4-flash", 0.7, 0.9, 40, 1024)
+        .with_reasoning_effort(ReasoningEffort::Medium);
+    params.tools = Some(vec![FunctionDefinition {
+        name: "inspect".to_string(),
+        description: "Inspect state".to_string(),
+        parameters: serde_json::json!({"type": "object"}),
+        cache_control: None,
+    }]);
+
+    let request = serde_json::to_value(build_request(&params)).unwrap();
+    assert_eq!(request["thinking"]["type"], "enabled");
+    assert_eq!(request["reasoning_effort"], "low");
+    assert_eq!(
+        request["messages"][0]["reasoning_content"],
+        "previous reasoning"
+    );
+    assert_eq!(request["messages"][0]["content"], "previous answer");
+    assert_eq!(request["tools"][0]["function"]["name"], "inspect");
+    assert!(request.get("tool_choice").is_none());
+    assert!(request.get("temperature").is_none());
+    assert!(request.get("top_p").is_none());
+}
+
+#[test]
+fn test_thinking_models_do_not_advertise_sampling_controls() {
+    let provider = DeepSeekProvider::new();
+    assert_eq!(
+        provider.supported_sampling_params("deepseek-v4-flash"),
+        SamplingSupport::NONE
+    );
 }
 
 #[test]
@@ -260,7 +304,7 @@ fn test_thinking_block_extraction() {
         .unwrap()
         .is_empty());
 
-    // Test with null content (tool call response)
+    // Response deserialization accepts null content from the provider.
     let message_tool_call = DeepSeekMessage {
         role: "assistant".to_string(),
         content: None,
@@ -312,14 +356,14 @@ fn test_convert_messages_reasoning_content_replay() {
         }),
         id: None,
     };
-    let converted = convert_messages(std::slice::from_ref(&assistant_with_tools));
+    let converted = convert_messages(std::slice::from_ref(&assistant_with_tools), true);
     assert_eq!(converted.len(), 1);
     assert_eq!(
         converted[0].reasoning_content.as_deref(),
         Some("I should list the files first.")
     );
     assert!(converted[0].tool_calls.is_some());
-    assert!(converted[0].content.is_none());
+    assert_eq!(converted[0].content, Some(serde_json::json!("")));
 
     // Assistant turn with tool_calls but no stored thinking → field omitted entirely (None).
     // DeepSeek does not require reasoning_content when there was no thinking; unlike
@@ -328,16 +372,20 @@ fn test_convert_messages_reasoning_content_replay() {
         thinking: None,
         ..assistant_with_tools.clone()
     };
-    let converted = convert_messages(std::slice::from_ref(&assistant_tools_no_thinking));
+    let converted = convert_messages(std::slice::from_ref(&assistant_tools_no_thinking), true);
     assert!(converted[0].reasoning_content.is_none());
 
-    // Assistant turn without tool_calls → reasoning_content omitted (DeepSeek
-    // ignores it on non-tool turns; sending it is harmless but unnecessary).
+    // With tools on the current request, assistant reasoning is replayed even
+    // when that historical assistant turn did not itself call a tool.
     let assistant_plain = Message::assistant("Hello").with_thinking(ThinkingBlock {
         content: "trivial".to_string(),
         tokens: 1,
     });
-    let converted = convert_messages(std::slice::from_ref(&assistant_plain));
+    let converted = convert_messages(std::slice::from_ref(&assistant_plain), true);
+    assert_eq!(converted[0].reasoning_content.as_deref(), Some("trivial"));
+
+    // Without tools, DeepSeek ignores historical reasoning, so omit it.
+    let converted = convert_messages(std::slice::from_ref(&assistant_plain), false);
     assert!(converted[0].reasoning_content.is_none());
 
     // User / tool / system messages → never carry reasoning_content.
@@ -345,20 +393,27 @@ fn test_convert_messages_reasoning_content_replay() {
     let tool_msg = Message::tool("ok", "call_123", "list_files");
     let system_msg = Message::system("be helpful");
     for msg in [user_msg, tool_msg, system_msg] {
-        let converted = convert_messages(std::slice::from_ref(&msg));
+        let converted = convert_messages(std::slice::from_ref(&msg), true);
         assert!(converted[0].reasoning_content.is_none());
     }
 
     // Verify JSON serialization: None is omitted, Some("") is preserved.
-    let json =
-        serde_json::to_value(&convert_messages(std::slice::from_ref(&assistant_with_tools))[0])
-            .unwrap();
+    let json = serde_json::to_value(
+        &convert_messages(std::slice::from_ref(&assistant_with_tools), true)[0],
+    )
+    .unwrap();
     assert_eq!(
         json.get("reasoning_content").and_then(|v| v.as_str()),
         Some("I should list the files first.")
     );
 
     let json_plain =
-        serde_json::to_value(&convert_messages(std::slice::from_ref(&assistant_plain))[0]).unwrap();
-    assert!(json_plain.get("reasoning_content").is_none());
+        serde_json::to_value(&convert_messages(std::slice::from_ref(&assistant_plain), true)[0])
+            .unwrap();
+    assert_eq!(
+        json_plain
+            .get("reasoning_content")
+            .and_then(serde_json::Value::as_str),
+        Some("trivial")
+    );
 }

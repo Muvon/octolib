@@ -29,15 +29,11 @@
 //! - `ALIBABA_API_KEY`: Required API key
 //! - `ALIBABA_API_URL`: Optional endpoint override (Token Plan, China, workspace)
 
-use crate::errors::StructuredOutputError;
 use crate::llm::providers::openai_compat::{
     chat_completion as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
 };
-use crate::llm::providers::shared::parse_structured_output_from_text;
 use crate::llm::traits::AiProvider;
-use crate::llm::types::{
-    ChatCompletionParams, Message, OutputFormat, ProviderResponse, StructuredOutputRequest,
-};
+use crate::llm::types::{ChatCompletionParams, ProviderResponse};
 use crate::llm::utils::{normalize_model_name, PricingTuple};
 use anyhow::Result;
 use std::env;
@@ -55,85 +51,6 @@ impl Default for AlibabaProvider {
 impl AlibabaProvider {
     pub fn new() -> Self {
         Self
-    }
-
-    async fn chat_completion_once(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-        let api_key = self.get_api_key()?;
-        let api_url = get_api_url(ALIBABA_API_URL_ENV, ALIBABA_API_URL);
-        let model = params.model.clone();
-
-        // Selected Qwen families get native strict JSON Schema. Alibaba-hosted
-        // models without that capability use JSON Object mode with the schema
-        // in the prompt. Both paths are validated locally before returning.
-        let (params, requested_schema) = prepare_schema_request(params);
-        let mut response = openai_compat_chat_completion(
-            OpenAiCompatConfig {
-                provider_name: "alibaba",
-                usage_fallback_cost: None,
-                use_response_cost: false,
-            },
-            api_key,
-            api_url,
-            params,
-        )
-        .await?;
-
-        if let Some(ref mut usage) = response.exchange.usage {
-            if usage.cost.is_none() {
-                let input_tokens = usage.input_tokens;
-                let cache_write_tokens = usage.cache_write_tokens;
-                let cache_read_tokens = usage.cache_read_tokens;
-                let output_tokens = usage.billable_output_tokens();
-                usage.cost = calculate_local_usage_cost(
-                    &model,
-                    input_tokens,
-                    cache_write_tokens,
-                    cache_read_tokens,
-                    output_tokens,
-                )
-                .or_else(|| {
-                    self.get_model_pricing(&model).map(|pricing| {
-                        pricing.calculate_cost(
-                            input_tokens,
-                            cache_write_tokens,
-                            cache_read_tokens,
-                            output_tokens,
-                        )
-                    })
-                });
-            }
-        }
-
-        if let Some(schema) = requested_schema {
-            enforce_schema_on_response(&mut response, &schema)?;
-        }
-
-        Ok(response)
-    }
-}
-
-struct AlibabaTransport<'a>(&'a AlibabaProvider);
-
-#[async_trait::async_trait]
-impl AiProvider for AlibabaTransport<'_> {
-    fn name(&self) -> &str {
-        "alibaba"
-    }
-
-    fn supports_model(&self, model: &str) -> bool {
-        self.0.supports_model(model)
-    }
-
-    fn get_api_key(&self) -> Result<String> {
-        self.0.get_api_key()
-    }
-
-    fn enforces_response_schema(&self, model: &str) -> bool {
-        natively_enforces_response_schema(model)
-    }
-
-    async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-        self.0.chat_completion_once(params).await
     }
 }
 
@@ -243,13 +160,13 @@ impl AiProvider for AlibabaProvider {
     // reference capabilities (trait defaults)
 
     /// Alibaba supports native JSON Schema for selected Qwen families. Other
-    /// hosted models use JSON Object mode plus client-side validation.
+    /// hosted models use shared forced-tool enforcement plus local validation.
     fn supports_structured_output(&self, _model: &str) -> bool {
         true
     }
 
     fn enforces_response_schema(&self, model: &str) -> bool {
-        natively_enforces_response_schema(model)
+        self.supports_structured_output(model)
     }
 
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
@@ -267,8 +184,50 @@ impl AiProvider for AlibabaProvider {
     }
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-        crate::llm::schema_enforcement::chat_completion_enforced(&AlibabaTransport(self), params)
-            .await
+        let api_key = self.get_api_key()?;
+        let api_url = get_api_url(ALIBABA_API_URL_ENV, ALIBABA_API_URL);
+        let model = params.model.clone();
+        let mut response = openai_compat_chat_completion(
+            OpenAiCompatConfig {
+                provider_name: "alibaba",
+                usage_fallback_cost: None,
+                use_response_cost: false,
+                enforces_response_schema: natively_enforces_response_schema(&model),
+                supports_required_tool_choice: true,
+            },
+            api_key,
+            api_url,
+            params,
+        )
+        .await?;
+
+        if let Some(ref mut usage) = response.exchange.usage {
+            if usage.cost.is_none() {
+                let input_tokens = usage.input_tokens;
+                let cache_write_tokens = usage.cache_write_tokens;
+                let cache_read_tokens = usage.cache_read_tokens;
+                let output_tokens = usage.billable_output_tokens();
+                usage.cost = calculate_local_usage_cost(
+                    &model,
+                    input_tokens,
+                    cache_write_tokens,
+                    cache_read_tokens,
+                    output_tokens,
+                )
+                .or_else(|| {
+                    self.get_model_pricing(&model).map(|pricing| {
+                        pricing.calculate_cost(
+                            input_tokens,
+                            cache_write_tokens,
+                            cache_read_tokens,
+                            output_tokens,
+                        )
+                    })
+                });
+            }
+        }
+
+        Ok(response)
     }
 }
 
@@ -287,75 +246,6 @@ fn natively_enforces_response_schema(model: &str) -> bool {
     .any(|prefix| model.starts_with(prefix))
 }
 
-/// Prepare a JSON Schema request for Alibaba and retain the schema for local
-/// validation. Native Qwen routes keep `json_schema`; other models are guided
-/// with `json_object` plus a trailing system message.
-fn prepare_schema_request(
-    mut params: ChatCompletionParams,
-) -> (ChatCompletionParams, Option<serde_json::Value>) {
-    let Some(request) = params.response_format.as_ref() else {
-        return (params, None);
-    };
-    if !matches!(request.format, OutputFormat::JsonSchema) {
-        return (params, None);
-    }
-    let Some(schema) = request.schema.clone() else {
-        return (params, None);
-    };
-
-    if natively_enforces_response_schema(&params.model) {
-        return (params, Some(schema));
-    }
-
-    params.response_format = Some(StructuredOutputRequest::json());
-    params.messages.push(Message::system(&format!(
-        "Your next reply must be a single JSON object that conforms exactly to this JSON schema — no prose, no markdown fences, no trailing text:\n{schema}"
-    )));
-    (params, Some(schema))
-}
-
-/// Validate the final response before exposing it as structured output. Schema
-/// requests are fail-closed: invalid, truncated, or non-JSON responses never
-/// escape as successful completions.
-fn enforce_schema_on_response(
-    response: &mut ProviderResponse,
-    schema: &serde_json::Value,
-) -> Result<()> {
-    // Mid-agent-loop replies (tool calls) are not the final answer; the schema
-    // constrains only the closing text response.
-    if response
-        .tool_calls
-        .as_ref()
-        .is_some_and(|calls| !calls.is_empty())
-    {
-        return Ok(());
-    }
-    let Some(value) = response
-        .structured_output
-        .clone()
-        .or_else(|| parse_structured_output_from_text(&response.content))
-    else {
-        return Err(StructuredOutputError::ParsingFailed {
-            reason: format!(
-                "Alibaba returned no parseable JSON (finish_reason={:?})",
-                response.finish_reason
-            ),
-        }
-        .into());
-    };
-    let validator =
-        jsonschema::validator_for(schema).map_err(|err| StructuredOutputError::InvalidSchema {
-            reason: err.to_string(),
-        })?;
-    validator
-        .validate(&value)
-        .map_err(|err| StructuredOutputError::ValidationFailed {
-            reason: format!("Alibaba response does not match requested schema: {err}"),
-        })?;
-    response.content = value.to_string();
-    response.structured_output = Some(value);
-    Ok(())
-}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -470,150 +360,14 @@ mod tests {
         assert!((snapshot_long - expected_snapshot).abs() < 0.001);
     }
 
-    use crate::llm::types::{ProviderExchange, ResponseMode, ToolCall};
-
-    fn schema_request(model: &str, schema: serde_json::Value) -> ChatCompletionParams {
-        let mut params =
-            ChatCompletionParams::new(&[Message::user("analyze")], model, 0.3, 0.7, 20, 1024);
-        params.response_format =
-            Some(StructuredOutputRequest::json_schema(schema).with_strict_mode());
-        params
-    }
-
-    fn test_response(content: &str, tool_calls: Option<Vec<ToolCall>>) -> ProviderResponse {
-        ProviderResponse {
-            content: content.to_string(),
-            thinking: None,
-            exchange: ProviderExchange::new(
-                serde_json::json!({}),
-                serde_json::json!({}),
-                None,
-                "alibaba",
-            ),
-            tool_calls,
-            finish_reason: None,
-            structured_output: None,
-            id: None,
-        }
-    }
-
-    #[test]
-    fn test_prepare_schema_request_downgrades_deepseek() {
-        let schema = serde_json::json!({
-            "type": "object",
-            "properties": {"verdict": {"type": "string"}},
-            "required": ["verdict"]
-        });
-        let (rewritten, requested) =
-            prepare_schema_request(schema_request("deepseek-v4-flash-0731", schema.clone()));
-
-        // Wire format is plain json_object — never json_schema.
-        let wire = rewritten.response_format.expect("json mode on the wire");
-        assert!(matches!(wire.format, OutputFormat::Json));
-        assert!(wire.schema.is_none());
-
-        // Schema rides in a trailing system message that mentions "JSON",
-        // satisfying DashScope's json-in-prompt keyword check.
-        let last = rewritten.messages.last().expect("schema system message");
-        assert_eq!(last.role, "system");
-        assert!(last.content.contains("JSON schema"));
-        assert_eq!(requested.as_ref(), Some(&schema));
-    }
-
-    #[test]
-    fn test_prepare_schema_request_keeps_native_qwen_schema() {
-        let schema = serde_json::json!({
-            "type": "object",
-            "properties": {"verdict": {"type": "string"}},
-            "required": ["verdict"],
-            "additionalProperties": false
-        });
-        let (prepared, requested) =
-            prepare_schema_request(schema_request("qwen3.8-flash", schema.clone()));
-
-        let wire = prepared.response_format.expect("native schema on the wire");
-        assert!(matches!(wire.format, OutputFormat::JsonSchema));
-        assert_eq!(wire.schema.as_ref(), Some(&schema));
-        assert_eq!(prepared.messages.len(), 1);
-        assert_eq!(requested.as_ref(), Some(&schema));
-    }
-
-    #[test]
-    fn test_downgrade_schema_request_passthrough() {
-        // Plain JSON mode: untouched.
-        let mut params =
-            ChatCompletionParams::new(&[Message::user("hi")], "qwen3.8-max", 0.3, 0.7, 20, 1024);
-        params.response_format = Some(StructuredOutputRequest::json());
-        let (rewritten, requested) = prepare_schema_request(params);
-        assert!(matches!(
-            rewritten.response_format.unwrap().format,
-            OutputFormat::Json
-        ));
-        assert_eq!(rewritten.messages.len(), 1);
-        assert!(requested.is_none());
-
-        // JsonSchema without a schema: untouched (nothing to inject).
-        let mut params =
-            ChatCompletionParams::new(&[Message::user("hi")], "qwen3.8-max", 0.3, 0.7, 20, 1024);
-        params.response_format = Some(StructuredOutputRequest {
-            format: OutputFormat::JsonSchema,
-            mode: ResponseMode::Strict,
-            schema: None,
-        });
-        let (rewritten, requested) = prepare_schema_request(params);
-        assert!(matches!(
-            rewritten.response_format.unwrap().format,
-            OutputFormat::JsonSchema
-        ));
-        assert_eq!(rewritten.messages.len(), 1);
-        assert!(requested.is_none());
-    }
-
-    #[test]
-    fn test_enforce_schema_on_response() {
-        let schema = serde_json::json!({
-            "type": "object",
-            "properties": {"verdict": {"type": "string"}},
-            "required": ["verdict"],
-            "additionalProperties": false
-        });
-
-        // Valid JSON matching the schema → attached as structured_output.
-        let mut response = test_response("{\"verdict\":\"dispatched\"}", None);
-        enforce_schema_on_response(&mut response, &schema).unwrap();
-        assert_eq!(
-            response.structured_output,
-            Some(serde_json::json!({"verdict": "dispatched"}))
-        );
-
-        // Schema violation is fail-closed.
-        let mut response = test_response("{\"wrong\": 1}", None);
-        let err = enforce_schema_on_response(&mut response, &schema).unwrap_err();
-        assert!(err.to_string().contains("does not match requested schema"));
-        assert_eq!(response.structured_output, None);
-        assert_eq!(response.content, "{\"wrong\": 1}");
-
-        // Mid-loop tool-call replies are never rewritten.
-        let mut response = test_response(
-            "ignored",
-            Some(vec![ToolCall {
-                id: "c1".to_string(),
-                name: "read".to_string(),
-                arguments: serde_json::json!({}),
-            }]),
-        );
-        enforce_schema_on_response(&mut response, &schema).unwrap();
-        assert_eq!(response.structured_output, None);
-        assert_eq!(response.content, "ignored");
-    }
-
     #[test]
     fn test_native_schema_capability_is_model_specific() {
-        let provider = AlibabaProvider::new();
-        assert!(provider.enforces_response_schema("qwen3.8-flash"));
-        assert!(provider.enforces_response_schema("qwen3.8-flash-2026-08-26"));
-        assert!(provider.enforces_response_schema("qwen3.7-plus"));
-        assert!(!provider.enforces_response_schema("deepseek-v4-flash-0731"));
-        assert!(!provider.enforces_response_schema("qwen3.6-flash"));
+        assert!(natively_enforces_response_schema("qwen3.8-flash"));
+        assert!(natively_enforces_response_schema(
+            "qwen3.8-flash-2026-08-26"
+        ));
+        assert!(natively_enforces_response_schema("qwen3.7-plus"));
+        assert!(!natively_enforces_response_schema("deepseek-v4-flash-0731"));
+        assert!(!natively_enforces_response_schema("qwen3.6-flash"));
     }
 }

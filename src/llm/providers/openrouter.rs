@@ -206,6 +206,10 @@ impl AiProvider for OpenRouterProvider {
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
         let api_key = self.get_api_key()?;
+        let requested_schema = params
+            .response_format
+            .as_ref()
+            .and_then(|format| format.schema.clone());
 
         // Convert messages to OpenRouter format (same as OpenAI)
         let messages = convert_messages(&params.messages)?;
@@ -346,7 +350,11 @@ impl AiProvider for OpenRouterProvider {
         )
         .await?;
 
-        Ok(response)
+        if let Some(schema) = requested_schema {
+            crate::llm::schema_enforcement::validate_response(response, &schema, "openrouter")
+        } else {
+            Ok(response)
+        }
     }
 }
 

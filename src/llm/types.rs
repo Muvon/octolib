@@ -679,6 +679,21 @@ pub struct FunctionDefinition {
     pub cache_control: Option<serde_json::Value>,
 }
 
+/// Provider-agnostic tool selection policy.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum ToolChoice {
+    /// Let the model decide whether to call a tool.
+    Auto,
+    /// Require at least one tool call.
+    Required,
+    /// Prevent tool calls.
+    None,
+    /// Require a specific named function.
+    Function(String),
+}
+
 /// Output format for structured responses
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum OutputFormat {

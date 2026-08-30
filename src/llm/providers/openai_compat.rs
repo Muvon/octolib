@@ -15,9 +15,10 @@
 use super::shared;
 use crate::errors::ProviderError;
 use crate::llm::retry;
+use crate::llm::traits::AiProvider;
 use crate::llm::types::{
     ChatCompletionParams, Message, ProviderExchange, ProviderResponse, SamplingSupport,
-    ThinkingBlock, TokenUsage, ToolCall,
+    ThinkingBlock, TokenUsage, ToolCall, ToolChoice,
 };
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -27,6 +28,8 @@ pub(crate) struct OpenAiCompatConfig {
     pub provider_name: &'static str,
     pub usage_fallback_cost: Option<f64>,
     pub use_response_cost: bool,
+    pub enforces_response_schema: bool,
+    pub supports_required_tool_choice: bool,
 }
 
 pub(crate) fn get_optional_api_key(env_name: &str) -> String {
@@ -63,11 +66,15 @@ fn reasoning_effort_value(
     }
 }
 
-fn tool_choice_value(tools: &[crate::llm::types::FunctionDefinition]) -> &'static str {
-    if crate::llm::schema_enforcement::is_enforcement_tool(tools) {
-        "required"
-    } else {
-        "auto"
+pub(crate) fn openai_tool_choice_value(choice: Option<&ToolChoice>) -> serde_json::Value {
+    match choice {
+        Some(ToolChoice::Required) => serde_json::json!("required"),
+        Some(ToolChoice::None) => serde_json::json!("none"),
+        Some(ToolChoice::Function(name)) => serde_json::json!({
+            "type": "function",
+            "function": {"name": name}
+        }),
+        Some(ToolChoice::Auto) | None => serde_json::json!("auto"),
     }
 }
 
@@ -88,6 +95,84 @@ pub(crate) async fn chat_completion_with_sampling(
     sampling: SamplingSupport,
     api_key: String,
     api_url: String,
+    params: ChatCompletionParams,
+) -> Result<ProviderResponse> {
+    crate::llm::schema_enforcement::chat_completion_enforced(
+        &OpenAiCompatTransport {
+            config,
+            sampling,
+            api_key,
+            api_url,
+        },
+        params,
+    )
+    .await
+}
+
+struct OpenAiCompatTransport {
+    config: OpenAiCompatConfig,
+    sampling: SamplingSupport,
+    api_key: String,
+    api_url: String,
+}
+
+#[async_trait::async_trait]
+impl AiProvider for OpenAiCompatTransport {
+    fn name(&self) -> &str {
+        self.config.provider_name
+    }
+
+    fn supports_model(&self, model: &str) -> bool {
+        !model.is_empty()
+    }
+
+    fn get_api_key(&self) -> Result<String> {
+        Ok(self.api_key.clone())
+    }
+
+    fn enforces_response_schema(&self, _model: &str) -> bool {
+        self.config.enforces_response_schema
+    }
+
+    fn supports_required_tool_choice(&self, _model: &str) -> bool {
+        self.config.supports_required_tool_choice
+    }
+
+    async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
+        chat_completion_raw(
+            self.config,
+            self.sampling,
+            self.api_key.clone(),
+            self.api_url.clone(),
+            None,
+            params,
+        )
+        .await
+    }
+
+    async fn chat_completion_with_tool_choice(
+        &self,
+        params: ChatCompletionParams,
+        tool_choice: ToolChoice,
+    ) -> Result<ProviderResponse> {
+        chat_completion_raw(
+            self.config,
+            self.sampling,
+            self.api_key.clone(),
+            self.api_url.clone(),
+            Some(tool_choice),
+            params,
+        )
+        .await
+    }
+}
+
+async fn chat_completion_raw(
+    config: OpenAiCompatConfig,
+    sampling: SamplingSupport,
+    api_key: String,
+    api_url: String,
+    tool_choice: Option<ToolChoice>,
     params: ChatCompletionParams,
 ) -> Result<ProviderResponse> {
     let messages = convert_messages(&params.messages, config.provider_name, &params.model);
@@ -143,7 +228,7 @@ pub(crate) async fn chat_completion_with_sampling(
                 .collect::<Vec<_>>();
 
             request_body["tools"] = serde_json::json!(openai_tools);
-            request_body["tool_choice"] = serde_json::json!(tool_choice_value(&sorted_tools));
+            request_body["tool_choice"] = openai_tool_choice_value(tool_choice.as_ref());
             // Explicit: ensures proxied backends honor parallel function calling
             // rather than falling back to their own defaults (which may differ).
             request_body["parallel_tool_calls"] = serde_json::json!(true);
@@ -744,22 +829,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn schema_enforcement_tool_is_required() {
-        let enforcement = crate::llm::types::FunctionDefinition {
-            name: "emit_structured_response".to_string(),
-            description: String::new(),
-            parameters: serde_json::json!({"type": "object"}),
-            cache_control: None,
-        };
-        assert_eq!(tool_choice_value(&[enforcement]), "required");
-
-        let client = crate::llm::types::FunctionDefinition {
-            name: "client_tool".to_string(),
-            description: String::new(),
-            parameters: serde_json::json!({"type": "object"}),
-            cache_control: None,
-        };
-        assert_eq!(tool_choice_value(&[client]), "auto");
+    fn tool_choice_is_explicitly_mapped() {
+        assert_eq!(
+            openai_tool_choice_value(Some(&ToolChoice::Required)),
+            serde_json::json!("required")
+        );
+        assert_eq!(
+            openai_tool_choice_value(Some(&ToolChoice::Function("emit".to_string()))),
+            serde_json::json!({"type": "function", "function": {"name": "emit"}})
+        );
+        assert_eq!(openai_tool_choice_value(None), serde_json::json!("auto"));
     }
 
     #[test]

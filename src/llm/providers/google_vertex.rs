@@ -470,6 +470,8 @@ impl AiProvider for GoogleVertexProvider {
                 provider_name: "google-vertex",
                 usage_fallback_cost: None,
                 use_response_cost: true,
+                enforces_response_schema: true,
+                supports_required_tool_choice: false,
             },
             self.supported_sampling_params(&params.model),
             api_key,

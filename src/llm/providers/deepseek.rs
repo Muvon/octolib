@@ -492,6 +492,7 @@ impl AiProvider for DeepSeekProvider {
                     })
                     .collect(),
             );
+            request.tool_choice = Some(serde_json::json!("auto"));
         }
 
         let start_time = std::time::Instant::now();

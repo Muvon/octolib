@@ -198,6 +198,8 @@ async fn opencode_chat_completion(
             provider_name,
             usage_fallback_cost: None,
             use_response_cost: true,
+            enforces_response_schema: true,
+            supports_required_tool_choice: false,
         },
         sampling_support(&model),
         api_key,

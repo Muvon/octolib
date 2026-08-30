@@ -135,6 +135,8 @@ impl AiProvider for HetznerProvider {
                 provider_name: "hetzner",
                 usage_fallback_cost: None,
                 use_response_cost: false,
+                enforces_response_schema: true,
+                supports_required_tool_choice: false,
             },
             api_key,
             api_url,

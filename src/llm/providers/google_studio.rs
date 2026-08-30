@@ -142,6 +142,8 @@ impl AiProvider for GoogleStudioProvider {
                 provider_name: "google-studio",
                 usage_fallback_cost: None,
                 use_response_cost: true,
+                enforces_response_schema: true,
+                supports_required_tool_choice: false,
             },
             self.supported_sampling_params(&model),
             api_key,

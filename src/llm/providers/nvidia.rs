@@ -99,6 +99,8 @@ impl AiProvider for NvidiaProvider {
                 provider_name: "nvidia",
                 usage_fallback_cost: None,
                 use_response_cost: true,
+                enforces_response_schema: true,
+                supports_required_tool_choice: false,
             },
             api_key,
             api_url,

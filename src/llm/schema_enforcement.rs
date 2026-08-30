@@ -28,7 +28,7 @@ use crate::errors::StructuredOutputError;
 use crate::llm::providers::shared::parse_structured_output_from_text;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-    ChatCompletionParams, FunctionDefinition, Message, OutputFormat, ProviderResponse,
+    ChatCompletionParams, FunctionDefinition, Message, OutputFormat, ProviderResponse, ToolChoice,
 };
 use anyhow::Result;
 
@@ -38,19 +38,14 @@ const SYNTHETIC_TOOL_NAME: &str = "emit_structured_response";
 // asked for yet.
 const MAX_ATTEMPTS: u32 = 3;
 
-pub(crate) fn is_enforcement_tool(tools: &[FunctionDefinition]) -> bool {
-    tools.len() == 1 && tools[0].name == SYNTHETIC_TOOL_NAME
-}
-
 /// Run a chat completion, forcing the response to conform to a requested JSON
 /// schema even when `provider` doesn't natively guarantee it.
 ///
-/// Transparent passthrough when no schema was requested or the client already
-/// supplied its own tools (forcing a synthetic tool would shadow them, and a
-/// model mid-agent-loop calling a real tool must not be mistaken for a failed
-/// structured-output attempt). `AiProvider::enforces_response_schema` is treated
-/// as an optimization hint: try the provider's native path first, but validate
-/// the actual response before trusting it.
+/// Transparent passthrough when no schema was requested. Client-supplied tools
+/// remain untouched: tool-call turns pass through, while the final tool-free
+/// response is validated without injecting the synthetic tool. The provider's
+/// native-enforcement declaration is only an optimization hint; actual output
+/// is always validated before it is trusted.
 pub async fn chat_completion_enforced(
     provider: &dyn AiProvider,
     params: ChatCompletionParams,
@@ -61,7 +56,7 @@ pub async fn chat_completion_enforced(
         .map(|f| matches!(f.format, OutputFormat::JsonSchema) && f.schema.is_some())
         .unwrap_or(false);
 
-    if !wants_schema || params.tools.is_some() {
+    if !wants_schema {
         return provider.chat_completion(params).await;
     }
 
@@ -70,6 +65,19 @@ pub async fn chat_completion_enforced(
         .as_ref()
         .and_then(|f| f.schema.clone())
         .expect("checked by wants_schema above");
+
+    let has_client_tools = params.tools.as_ref().is_some_and(|tools| !tools.is_empty());
+    if has_client_tools {
+        let response = provider.chat_completion(params).await?;
+        if response
+            .tool_calls
+            .as_ref()
+            .is_some_and(|calls| !calls.is_empty())
+        {
+            return Ok(response);
+        }
+        return validate_response(response, &schema, provider.name());
+    }
 
     if provider.enforces_response_schema(&params.model) {
         let response = provider.chat_completion(params.clone()).await?;
@@ -84,6 +92,31 @@ pub async fn chat_completion_enforced(
     }
 
     force_schema(provider, params, schema).await
+}
+
+pub(crate) fn validate_response(
+    response: ProviderResponse,
+    schema: &serde_json::Value,
+    provider: &str,
+) -> Result<ProviderResponse> {
+    // A tool call is an intermediate agent turn, not the schema-constrained
+    // final answer. Its text content is normally empty and must pass through.
+    if response
+        .tool_calls
+        .as_ref()
+        .is_some_and(|calls| !calls.is_empty())
+    {
+        return Ok(response);
+    }
+    match validate_candidate(&response, schema)? {
+        Some(value) => Ok(finalize(response, value)),
+        None => Err(StructuredOutputError::ValidationFailed {
+            reason: format!(
+                "provider '{provider}' returned invalid or unparseable final structured output"
+            ),
+        }
+        .into()),
+    }
 }
 
 async fn force_schema(
@@ -106,7 +139,13 @@ async fn force_schema(
         .map_err(|e| anyhow::anyhow!("invalid JSON schema in response_format: {e}"))?;
 
     for attempt in 1..=MAX_ATTEMPTS {
-        let response = provider.chat_completion(params.clone()).await?;
+        let response = if provider.supports_required_tool_choice(&params.model) {
+            provider
+                .chat_completion_with_tool_choice(params.clone(), ToolChoice::Required)
+                .await?
+        } else {
+            provider.chat_completion(params.clone()).await?
+        };
         let Some(value) = extract_candidate(&response) else {
             if attempt == MAX_ATTEMPTS {
                 return Err(StructuredOutputError::ParsingFailed {
@@ -383,22 +422,6 @@ mod tests {
         assert!(err.to_string().contains("without parseable output"));
     }
 
-    #[test]
-    fn identifies_only_the_internal_enforcement_tool() {
-        let internal = FunctionDefinition {
-            name: SYNTHETIC_TOOL_NAME.to_string(),
-            description: String::new(),
-            parameters: schema(),
-            cache_control: None,
-        };
-        assert!(is_enforcement_tool(std::slice::from_ref(&internal)));
-
-        let mut client = internal;
-        client.name = "client_tool".to_string();
-        assert!(!is_enforcement_tool(&[client]));
-        assert!(!is_enforcement_tool(&[]));
-    }
-
     #[tokio::test]
     async fn passthrough_when_client_already_supplies_tools() {
         let provider = ScriptedProvider::new(
@@ -417,5 +440,33 @@ mod tests {
         }]);
         let response = chat_completion_enforced(&provider, params).await.unwrap();
         assert_eq!(response.tool_calls.unwrap()[0].name, "client_tool");
+    }
+
+    #[tokio::test]
+    async fn client_tools_do_not_bypass_final_validation() {
+        let provider = ScriptedProvider::new(vec![response_with_content("not json")], false);
+        let mut params = params_with_schema("model");
+        params.tools = Some(vec![FunctionDefinition {
+            name: "client_tool".to_string(),
+            description: String::new(),
+            parameters: serde_json::json!({}),
+            cache_control: None,
+        }]);
+        let err = chat_completion_enforced(&provider, params)
+            .await
+            .unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("invalid or unparseable final structured output"));
+    }
+
+    #[test]
+    fn response_validation_defers_real_tool_call_turns() {
+        let response = response_with_tool_call("client_tool", serde_json::json!({}));
+        assert!(response.content.is_empty());
+        let validated = validate_response(response, &schema(), "scripted").unwrap();
+        let call = &validated.tool_calls.unwrap()[0];
+        assert_eq!(call.name, "client_tool");
+        assert_eq!(call.arguments, serde_json::json!({}));
     }
 }

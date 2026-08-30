@@ -43,7 +43,7 @@ pub use types::{
     ChatCompletionParams, EffectiveSamplingParams, FunctionDefinition, ImageAttachment, ImageData,
     Message, MessageBuilder, ModelPricing, OutputFormat, ProviderExchange, ProviderResponse,
     ReasoningEffort, ResponseMode, SamplingSupport, SourceType, StructuredOutputRequest,
-    ThinkingBlock, TokenUsage, ToolCall, VideoAttachment, VideoData,
+    ThinkingBlock, TokenUsage, ToolCall, ToolChoice, VideoAttachment, VideoData,
 };
 
 // Re-export all provider implementations

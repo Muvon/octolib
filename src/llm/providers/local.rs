@@ -88,6 +88,8 @@ impl AiProvider for LocalProvider {
                 provider_name: "local",
                 usage_fallback_cost: None,
                 use_response_cost: false,
+                enforces_response_schema: false,
+                supports_required_tool_choice: false,
             },
             api_key,
             api_url,

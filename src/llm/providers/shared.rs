@@ -380,8 +380,19 @@ pub(crate) fn parse_structured_output_from_text(content: &str) -> Option<serde_j
         return None;
     }
 
-    if trimmed.starts_with('{') || trimmed.starts_with('[') {
-        match serde_json::from_str(trimmed) {
+    let candidate = if let Some(fenced) = trimmed.strip_prefix("```") {
+        let newline = fenced.find('\n')?;
+        let language = fenced[..newline].trim();
+        if !language.is_empty() && !language.eq_ignore_ascii_case("json") {
+            return None;
+        }
+        fenced[newline + 1..].strip_suffix("```")?.trim()
+    } else {
+        trimmed
+    };
+
+    if candidate.starts_with('{') || candidate.starts_with('[') {
+        match serde_json::from_str(candidate) {
             Ok(value) => Some(value),
             Err(err) => {
                 tracing::debug!(error = %err, "Failed to parse structured output JSON");
@@ -454,8 +465,19 @@ mod tests {
     fn test_parse_structured_output_from_text() {
         assert!(parse_structured_output_from_text("{\"x\":1}").is_some());
         assert!(parse_structured_output_from_text("[1,2]").is_some());
+        assert_eq!(
+            parse_structured_output_from_text("```json\n{\"x\":1}\n```"),
+            Some(serde_json::json!({"x": 1}))
+        );
+        assert_eq!(
+            parse_structured_output_from_text("```\n[1,2]\n```"),
+            Some(serde_json::json!([1, 2]))
+        );
         assert!(parse_structured_output_from_text("not json").is_none());
         assert!(parse_structured_output_from_text("{not-json").is_none());
+        assert!(parse_structured_output_from_text("before\n```json\n{}\n```").is_none());
+        assert!(parse_structured_output_from_text("```rust\n{}\n```").is_none());
+        assert!(parse_structured_output_from_text("```json\n{}").is_none());
     }
 
     #[test]

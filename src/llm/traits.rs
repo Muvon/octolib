@@ -15,7 +15,7 @@
 //! AI Provider trait definition
 
 use crate::llm::types::{
-    ChatCompletionParams, EffectiveSamplingParams, ProviderResponse, SamplingSupport,
+    ChatCompletionParams, EffectiveSamplingParams, ProviderResponse, SamplingSupport, ToolChoice,
 };
 use anyhow::Result;
 use std::time::Duration;
@@ -51,6 +51,24 @@ pub trait AiProvider: Send + Sync {
     /// Send a chat completion request
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse>;
 
+    /// Send a completion with an explicit tool selection policy.
+    ///
+    /// Providers override this when their wire API supports forced tool choice.
+    /// The default accepts `Auto` and rejects stronger policies explicitly.
+    async fn chat_completion_with_tool_choice(
+        &self,
+        params: ChatCompletionParams,
+        tool_choice: ToolChoice,
+    ) -> Result<ProviderResponse> {
+        match tool_choice {
+            ToolChoice::Auto => self.chat_completion(params).await,
+            _ => Err(anyhow::anyhow!(
+                "Provider '{}' does not support the requested tool choice",
+                self.name()
+            )),
+        }
+    }
+
     /// Get API key for this provider from environment variables
     /// Each provider should implement this to check their specific environment variable
     fn get_api_key(&self) -> Result<String>;
@@ -63,6 +81,13 @@ pub trait AiProvider: Send + Sync {
     /// The `effective_sampling_params()` helper merges this with user-requested values.
     fn supported_sampling_params(&self, _model: &str) -> SamplingSupport {
         SamplingSupport::default()
+    }
+
+    /// Whether this provider can force at least one tool call for the model.
+    /// Used by the schema fallback to distinguish hard tool selection from
+    /// prompt-only guidance.
+    fn supports_required_tool_choice(&self, _model: &str) -> bool {
+        false
     }
 
     /// Compute effective sampling parameters by merging user-requested values

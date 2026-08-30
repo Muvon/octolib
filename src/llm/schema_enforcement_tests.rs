@@ -19,6 +19,7 @@ use std::sync::Mutex;
 
 struct ScriptedProvider {
     responses: Mutex<VecDeque<ProviderResponse>>,
+    requests: Mutex<Vec<ChatCompletionParams>>,
     enforces: bool,
 }
 
@@ -26,8 +27,13 @@ impl ScriptedProvider {
     fn new(responses: Vec<ProviderResponse>, enforces: bool) -> Self {
         Self {
             responses: Mutex::new(responses.into()),
+            requests: Mutex::new(Vec::new()),
             enforces,
         }
+    }
+
+    fn requests(&self) -> Vec<ChatCompletionParams> {
+        self.requests.lock().unwrap().clone()
     }
 }
 
@@ -49,7 +55,8 @@ impl AiProvider for ScriptedProvider {
         self.enforces
     }
 
-    async fn chat_completion(&self, _params: ChatCompletionParams) -> Result<ProviderResponse> {
+    async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
+        self.requests.lock().unwrap().push(params);
         Ok(self
             .responses
             .lock()
@@ -270,8 +277,14 @@ async fn passthrough_when_client_already_supplies_tools() {
 }
 
 #[tokio::test]
-async fn client_tools_do_not_bypass_final_validation() {
-    let provider = ScriptedProvider::new(vec![response_with_content("not json")], false);
+async fn client_tools_invalid_final_falls_back_to_synthetic_schema_tool() {
+    let provider = ScriptedProvider::new(
+        vec![
+            response_with_content("not json"),
+            response_with_tool_call(SYNTHETIC_TOOL_NAME, serde_json::json!({"answer": 4})),
+        ],
+        false,
+    );
     let mut params = params_with_schema("model");
     params.tools = Some(vec![FunctionDefinition {
         name: "client_tool".to_string(),
@@ -279,12 +292,20 @@ async fn client_tools_do_not_bypass_final_validation() {
         parameters: serde_json::json!({}),
         cache_control: None,
     }]);
-    let err = chat_completion_enforced(&provider, params)
-        .await
-        .unwrap_err();
-    assert!(err
-        .to_string()
-        .contains("invalid or unparseable final structured output"));
+    let response = chat_completion_enforced(&provider, params).await.unwrap();
+    assert_eq!(
+        response.structured_output,
+        Some(serde_json::json!({"answer": 4}))
+    );
+
+    let requests = provider.requests();
+    assert_eq!(requests.len(), 2);
+    assert_eq!(requests[0].tools.as_ref().unwrap()[0].name, "client_tool");
+    assert_eq!(
+        requests[1].tools.as_ref().unwrap()[0].name,
+        SYNTHETIC_TOOL_NAME
+    );
+    assert!(requests[1].response_format.is_none());
 }
 
 #[test]

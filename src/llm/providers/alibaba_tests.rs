@@ -30,6 +30,7 @@ fn test_default_capabilities() {
     // Structured output is native for supported Qwen families.
     assert!(provider.supports_structured_output("qwen3.8-max"));
     assert!(provider.enforces_response_schema("qwen3.8-max"));
+    assert!(!provider.enforces_response_schema("deepseek-v4-flash-0731"));
     // qwen3.8-max carries a 1M context window via reference capabilities
     assert_eq!(provider.get_max_input_tokens("qwen3.8-max"), 1_000_000);
     // Verified live: 3.8-max/3.7-plus/3.6-flash take images and video,

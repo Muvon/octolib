@@ -66,7 +66,7 @@ fn test_gemini_thought_signature_round_trip() {
         thinking: None,
         id: None,
     };
-    let converted = convert_messages(std::slice::from_ref(&msg), "local", "test-model");
+    let converted = convert_messages(std::slice::from_ref(&msg), "local", "test-model", false);
     let json = serde_json::to_value(&converted[0]).unwrap();
     assert_eq!(
         json["tool_calls"][0]["extra_content"]["google"]["thought_signature"],
@@ -85,7 +85,12 @@ fn test_gemini_thought_signature_round_trip() {
         tool_calls: Some(plain),
         ..msg
     };
-    let converted = convert_messages(std::slice::from_ref(&msg_plain), "local", "test-model");
+    let converted = convert_messages(
+        std::slice::from_ref(&msg_plain),
+        "local",
+        "test-model",
+        false,
+    );
     let json = serde_json::to_value(&converted[0]).unwrap();
     assert!(json["tool_calls"][0].get("extra_content").is_none());
 }
@@ -128,7 +133,7 @@ fn test_ollama_reasoning_is_stored_and_replayed() {
         id: None,
     };
 
-    let converted = convert_messages(&[history], "ollama", "glm-5.2");
+    let converted = convert_messages(&[history], "ollama", "glm-5.2", true);
     let json = serde_json::to_value(&converted[0]).unwrap();
     assert_eq!(
         json.get("reasoning").and_then(serde_json::Value::as_str),
@@ -157,12 +162,12 @@ fn test_ollama_reasoning_replays_only_on_last_assistant() {
     };
     let messages = [assistant("one"), assistant("two")];
 
-    let converted = convert_messages(&messages, "ollama", "glm-5.2");
+    let converted = convert_messages(&messages, "ollama", "glm-5.2", false);
     assert!(converted[0].reasoning.is_none());
     assert_eq!(converted[1].reasoning.as_deref(), Some("thinking for two"));
 
     // Kimi preserve-thinking models keep reasoning on every assistant turn.
-    let converted = convert_messages(&messages, "ollama", "kimi-k2.7-code");
+    let converted = convert_messages(&messages, "ollama", "kimi-k2.7-code", false);
     assert_eq!(converted[0].reasoning.as_deref(), Some("thinking for one"));
     assert_eq!(converted[1].reasoning.as_deref(), Some("thinking for two"));
 }
@@ -182,6 +187,119 @@ fn test_openai_compat_reasoning_field_variants_are_stored() {
             Some(value.to_string())
         );
     }
+}
+
+#[test]
+fn test_alibaba_deepseek_replays_all_reasoning_when_tools_are_present() {
+    let assistant = |text: &str| {
+        Message::assistant(text).with_thinking(ThinkingBlock {
+            content: format!("thinking for {text}"),
+            tokens: 4,
+        })
+    };
+    let mut assistant_with_tool = assistant("two");
+    assistant_with_tool.tool_calls = Some(
+        serde_json::to_value(vec![crate::llm::tool_calls::GenericToolCall {
+            id: "call_1".to_string(),
+            name: "inspect".to_string(),
+            arguments: serde_json::json!({}),
+            meta: None,
+        }])
+        .unwrap(),
+    );
+    let messages = [assistant("one"), assistant_with_tool];
+
+    let converted = convert_messages(&messages, "alibaba", "deepseek-v4-flash-0731", true);
+    assert_eq!(
+        converted[0].reasoning_content.as_deref(),
+        Some("thinking for one")
+    );
+    assert_eq!(
+        converted[1].reasoning_content.as_deref(),
+        Some("thinking for two")
+    );
+    assert!(converted.iter().all(|message| message.reasoning.is_none()));
+
+    let without_tools = convert_messages(&messages, "alibaba", "deepseek-v4-flash-0731", false);
+    assert!(without_tools
+        .iter()
+        .all(|message| message.reasoning_content.is_none()));
+}
+
+#[test]
+fn test_alibaba_deepseek_uses_json_object_guidance_not_json_schema() {
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {"answer": {"type": "integer"}},
+        "required": ["answer"]
+    });
+    let response_format = crate::llm::types::StructuredOutputRequest::json_schema(schema.clone());
+    let mut request_body = serde_json::json!({
+        "messages": [{"role": "user", "content": "answer"}]
+    });
+
+    apply_response_format(
+        &mut request_body,
+        "alibaba",
+        "deepseek-v4-flash-0731",
+        &response_format,
+    );
+
+    assert_eq!(
+        request_body["response_format"],
+        serde_json::json!({"type": "json_object"})
+    );
+    assert!(request_body["response_format"].get("json_schema").is_none());
+    let guidance = request_body["messages"]
+        .as_array()
+        .and_then(|messages| messages.last())
+        .and_then(|message| message["content"].as_str())
+        .expect("schema guidance message");
+    assert!(guidance.contains("JSON schema"));
+    assert!(guidance.contains(&schema.to_string()));
+}
+
+#[test]
+fn test_alibaba_deepseek_reasoning_effort_preserves_supported_values() {
+    use crate::llm::types::ReasoningEffort;
+
+    // Model Studio accepts the standard values and performs each model's
+    // documented equivalence mapping itself. Preserve caller intent verbatim.
+    assert_eq!(
+        reasoning_effort_value("alibaba", "deepseek-v4-flash", ReasoningEffort::Low),
+        "low"
+    );
+    assert_eq!(
+        reasoning_effort_value("alibaba", "deepseek-v4-flash", ReasoningEffort::Medium),
+        "medium"
+    );
+    assert_eq!(
+        reasoning_effort_value("alibaba", "deepseek-v4-flash", ReasoningEffort::XHigh),
+        "xhigh"
+    );
+    assert_eq!(
+        reasoning_effort_value("alibaba", "deepseek-v4-pro", ReasoningEffort::Max),
+        "max"
+    );
+
+    // Snapshot aliases receive the same accepted values; Model Studio owns any
+    // snapshot-specific equivalence between them.
+    assert_eq!(
+        reasoning_effort_value("alibaba", "deepseek-v4-flash-0731", ReasoningEffort::Low),
+        "low"
+    );
+    assert_eq!(
+        reasoning_effort_value("alibaba", "deepseek-v4-flash-0731", ReasoningEffort::Medium),
+        "medium"
+    );
+    assert_eq!(
+        reasoning_effort_value("alibaba", "deepseek-v4-flash-0731", ReasoningEffort::XHigh),
+        "xhigh"
+    );
+    assert_eq!(
+        reasoning_effort_value("alibaba", "deepseek-v4-flash-0731", ReasoningEffort::Max),
+        "max"
+    );
 }
 
 #[test]

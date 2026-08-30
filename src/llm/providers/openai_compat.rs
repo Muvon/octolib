@@ -45,6 +45,21 @@ fn reasoning_effort_value(
     model: &str,
     effort: crate::llm::types::ReasoningEffort,
 ) -> &'static str {
+    if is_alibaba_deepseek_v4(provider_name, model) {
+        use crate::llm::types::ReasoningEffort;
+
+        // Model Studio accepts the OpenAI-standard five values for DeepSeek V4
+        // and owns the model-specific collapse between them. Preserve the
+        // caller's level verbatim instead of applying the generic high ceiling.
+        return match effort {
+            ReasoningEffort::Low => "low",
+            ReasoningEffort::Medium => "medium",
+            ReasoningEffort::High => "high",
+            ReasoningEffort::XHigh => "xhigh",
+            ReasoningEffort::Max => "max",
+        };
+    }
+
     match effort {
         crate::llm::types::ReasoningEffort::Low => "low",
         crate::llm::types::ReasoningEffort::Medium => "medium",
@@ -64,6 +79,11 @@ fn reasoning_effort_value(
         }
         crate::llm::types::ReasoningEffort::Max => "high",
     }
+}
+
+fn is_alibaba_deepseek_v4(provider_name: &str, model: &str) -> bool {
+    provider_name.eq_ignore_ascii_case("alibaba")
+        && crate::llm::utils::contains_ignore_ascii_case(model, "deepseek-v4")
 }
 
 pub(crate) fn openai_tool_choice_value(choice: Option<&ToolChoice>) -> serde_json::Value {
@@ -175,7 +195,13 @@ async fn chat_completion_raw(
     tool_choice: Option<ToolChoice>,
     params: ChatCompletionParams,
 ) -> Result<ProviderResponse> {
-    let messages = convert_messages(&params.messages, config.provider_name, &params.model);
+    let has_tools = params.tools.as_ref().is_some_and(|tools| !tools.is_empty());
+    let messages = convert_messages(
+        &params.messages,
+        config.provider_name,
+        &params.model,
+        has_tools,
+    );
 
     let mut request_body = serde_json::json!({
         "model": params.model,
@@ -208,6 +234,15 @@ async fn chat_completion_raw(
         request_body["reasoning_effort"] = serde_json::json!(s);
     }
 
+    // DeepSeek V4 is a hybrid-thinking family. An explicit effort means the
+    // caller selected thinking, so preserve that intent on Model Studio rather
+    // than relying only on the moving alias' current default.
+    if params.reasoning_effort.is_some()
+        && is_alibaba_deepseek_v4(config.provider_name, &params.model)
+    {
+        request_body["enable_thinking"] = serde_json::json!(true);
+    }
+
     if let Some(tools) = &params.tools {
         if !tools.is_empty() {
             let mut sorted_tools = tools.clone();
@@ -236,58 +271,88 @@ async fn chat_completion_raw(
     }
 
     if let Some(response_format) = &params.response_format {
-        // Ollama and local servers use a top-level "format" key instead of "response_format".
-        // "format": "json" for json_object mode, "format": <schema> for structured output.
-        let is_ollama_like = config.provider_name.eq_ignore_ascii_case("ollama")
-            || config.provider_name.eq_ignore_ascii_case("local");
-
-        match &response_format.format {
-            crate::llm::types::OutputFormat::Json => {
-                if is_ollama_like {
-                    request_body["format"] = serde_json::json!("json");
-                } else {
-                    request_body["response_format"] = serde_json::json!({
-                        "type": "json_object"
-                    });
-                }
-            }
-            crate::llm::types::OutputFormat::JsonSchema => {
-                if is_ollama_like {
-                    // Ollama accepts the JSON schema directly as the "format" value
-                    if let Some(schema) = &response_format.schema {
-                        request_body["format"] = schema.clone();
-                    } else {
-                        // No schema provided — fall back to plain JSON mode
-                        request_body["format"] = serde_json::json!("json");
-                    }
-                } else if let Some(schema) = &response_format.schema {
-                    // Strict structured outputs need additionalProperties:false on
-                    // every nested object (no-op unless mode is Strict).
-                    let schema =
-                        crate::llm::utils::normalize_strict_schema(schema, response_format.mode);
-
-                    let mut format_obj = serde_json::json!({
-                        "type": "json_schema",
-                        "json_schema": {
-                            "name": "response",
-                            "schema": schema
-                        }
-                    });
-
-                    if matches!(
-                        response_format.mode,
-                        crate::llm::types::ResponseMode::Strict
-                    ) {
-                        format_obj["json_schema"]["strict"] = serde_json::json!(true);
-                    }
-
-                    request_body["response_format"] = format_obj;
-                }
-            }
-        }
+        apply_response_format(
+            &mut request_body,
+            config.provider_name,
+            &params.model,
+            response_format,
+        );
     }
 
     execute_request(config, api_key, api_url, request_body, params).await
+}
+
+fn apply_response_format(
+    request_body: &mut serde_json::Value,
+    provider_name: &str,
+    model: &str,
+    response_format: &crate::llm::types::StructuredOutputRequest,
+) {
+    // Ollama and local servers use a top-level "format" key instead of
+    // "response_format": "json" for object mode, or the schema itself.
+    let is_ollama_like =
+        provider_name.eq_ignore_ascii_case("ollama") || provider_name.eq_ignore_ascii_case("local");
+
+    match &response_format.format {
+        crate::llm::types::OutputFormat::Json => {
+            if is_ollama_like {
+                request_body["format"] = serde_json::json!("json");
+            } else {
+                request_body["response_format"] = serde_json::json!({
+                    "type": "json_object"
+                });
+            }
+        }
+        crate::llm::types::OutputFormat::JsonSchema => {
+            if is_ollama_like {
+                if let Some(schema) = &response_format.schema {
+                    request_body["format"] = schema.clone();
+                } else {
+                    request_body["format"] = serde_json::json!("json");
+                }
+            } else if is_alibaba_deepseek_v4(provider_name, model) {
+                // Model Studio exposes JSON Object, not JSON Schema, for
+                // DeepSeek V4. Keep the requested schema in prompt guidance;
+                // schema_enforcement validates it locally and falls back to the
+                // synthetic schema tool when guidance is ignored.
+                if let Some(schema) = &response_format.schema {
+                    request_body["response_format"] = serde_json::json!({
+                        "type": "json_object"
+                    });
+                    if let Some(messages) = request_body["messages"].as_array_mut() {
+                        messages.push(serde_json::json!({
+                            "role": "system",
+                            "content": format!(
+                                "When you produce the final answer, return one JSON object that conforms exactly to this JSON schema, with no markdown fences or trailing prose:\n{schema}"
+                            )
+                        }));
+                    }
+                }
+            } else if let Some(schema) = &response_format.schema {
+                // Strict structured outputs need additionalProperties:false on
+                // every nested object (no-op unless mode is Strict).
+                let schema =
+                    crate::llm::utils::normalize_strict_schema(schema, response_format.mode);
+
+                let mut format_obj = serde_json::json!({
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "response",
+                        "schema": schema
+                    }
+                });
+
+                if matches!(
+                    response_format.mode,
+                    crate::llm::types::ResponseMode::Strict
+                ) {
+                    format_obj["json_schema"]["strict"] = serde_json::json!(true);
+                }
+
+                request_body["response_format"] = format_obj;
+            }
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -304,6 +369,10 @@ struct OpenAiCompatMessage {
     /// preserve reasoning across turns.
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning: Option<String>,
+    /// Alibaba/DeepSeek's OpenAI-compatible continuation field. DeepSeek tool
+    /// requests require prior assistant reasoning under this exact key.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_content: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -413,6 +482,7 @@ fn convert_messages(
     messages: &[Message],
     provider_name: &str,
     model: &str,
+    has_tools: bool,
 ) -> Vec<OpenAiCompatMessage> {
     let mut result = Vec::new();
 
@@ -426,6 +496,9 @@ fn convert_messages(
             && (Some(idx) == last_assistant
                 || crate::llm::providers::moonshot::preserves_historical_thinking(model))
     };
+    // DeepSeek requires the reasoning_content of all prior assistant turns when
+    // tools are present, including assistant turns that did not call a tool.
+    let replays_reasoning_content = has_tools && is_alibaba_deepseek_v4(provider_name, model);
 
     for (msg_idx, message) in messages.iter().enumerate() {
         match message.role.as_str() {
@@ -436,6 +509,7 @@ fn convert_messages(
                     tool_calls: None,
                     tool_call_id: message.tool_call_id.clone(),
                     reasoning: None,
+                    reasoning_content: None,
                 });
             }
             "assistant" if message.tool_calls.is_some() => {
@@ -478,6 +552,11 @@ fn convert_messages(
                     tool_calls,
                     tool_call_id: None,
                     reasoning: if replays_reasoning(msg_idx) {
+                        message.thinking.as_ref().map(|t| t.content.clone())
+                    } else {
+                        None
+                    },
+                    reasoning_content: if replays_reasoning_content {
                         message.thinking.as_ref().map(|t| t.content.clone())
                     } else {
                         None
@@ -539,6 +618,11 @@ fn convert_messages(
                     tool_calls: None,
                     tool_call_id: None,
                     reasoning: if message.role == "assistant" && replays_reasoning(msg_idx) {
+                        message.thinking.as_ref().map(|t| t.content.clone())
+                    } else {
+                        None
+                    },
+                    reasoning_content: if message.role == "assistant" && replays_reasoning_content {
                         message.thinking.as_ref().map(|t| t.content.clone())
                     } else {
                         None

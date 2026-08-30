@@ -93,11 +93,11 @@ impl UsageAccumulator {
 /// Run a chat completion, forcing the response to conform to a requested JSON
 /// schema even when `provider` doesn't natively guarantee it.
 ///
-/// Transparent passthrough when no schema was requested. Client-supplied tools
-/// remain untouched: tool-call turns pass through, while the final tool-free
-/// response is validated without injecting the synthetic tool. The provider's
-/// native-enforcement declaration is only an optimization hint; actual output
-/// is always validated before it is trusted.
+/// Transparent passthrough when no schema was requested. Client-supplied tool
+/// calls remain untouched. Once that path produces a final tool-free response,
+/// it is validated and, if necessary, retried with only the synthetic schema
+/// tool. The provider's native-enforcement declaration is only an optimization
+/// hint; actual output is always validated before it is trusted.
 pub async fn chat_completion_enforced(
     provider: &dyn AiProvider,
     params: ChatCompletionParams,
@@ -120,7 +120,7 @@ pub async fn chat_completion_enforced(
 
     let has_client_tools = params.tools.as_ref().is_some_and(|tools| !tools.is_empty());
     if has_client_tools {
-        let response = provider.chat_completion(params).await?;
+        let response = provider.chat_completion(params.clone()).await?;
         if response
             .tool_calls
             .as_ref()
@@ -128,7 +128,25 @@ pub async fn chat_completion_enforced(
         {
             return Ok(response);
         }
-        return validate_response(response, &schema, provider.name());
+
+        let mut usage = UsageAccumulator::new();
+        usage.add(&response);
+        if let Some(value) = validate_candidate(&response, &schema)? {
+            let mut response = finalize(response, value);
+            usage.apply(&mut response);
+            return Ok(response);
+        }
+
+        tracing::warn!(
+            model = %params.model,
+            provider = provider.name(),
+            finish_reason = ?response.finish_reason,
+            thinking_len = response.thinking.as_ref().map(|t| t.content.len()).unwrap_or(0),
+            content_len = response.content.len(),
+            content_head = %response.content.chars().take(400).collect::<String>(),
+            "client-tool path returned invalid final structured output; falling back to forced schema path"
+        );
+        return force_schema(provider, params, schema, usage).await;
     }
 
     let mut usage = UsageAccumulator::new();

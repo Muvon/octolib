@@ -166,7 +166,7 @@ impl AiProvider for AlibabaProvider {
     }
 
     fn enforces_response_schema(&self, model: &str) -> bool {
-        self.supports_structured_output(model)
+        natively_enforces_response_schema(model)
     }
 
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
@@ -193,7 +193,10 @@ impl AiProvider for AlibabaProvider {
                 usage_fallback_cost: None,
                 use_response_cost: false,
                 enforces_response_schema: natively_enforces_response_schema(&model),
-                supports_required_tool_choice: true,
+                // Thinking-mode tool calls accept only auto/none. Schema repair
+                // therefore uses auto plus explicit prompt guidance and local
+                // validation instead of an unsupported required policy.
+                supports_required_tool_choice: false,
             },
             api_key,
             api_url,

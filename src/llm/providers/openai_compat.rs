@@ -63,6 +63,14 @@ fn reasoning_effort_value(
     }
 }
 
+fn tool_choice_value(tools: &[crate::llm::types::FunctionDefinition]) -> &'static str {
+    if crate::llm::schema_enforcement::is_enforcement_tool(tools) {
+        "required"
+    } else {
+        "auto"
+    }
+}
+
 pub(crate) async fn chat_completion(
     config: OpenAiCompatConfig,
     api_key: String,
@@ -135,7 +143,7 @@ pub(crate) async fn chat_completion_with_sampling(
                 .collect::<Vec<_>>();
 
             request_body["tools"] = serde_json::json!(openai_tools);
-            request_body["tool_choice"] = serde_json::json!("auto");
+            request_body["tool_choice"] = serde_json::json!(tool_choice_value(&sorted_tools));
             // Explicit: ensures proxied backends honor parallel function calling
             // rather than falling back to their own defaults (which may differ).
             request_body["parallel_tool_calls"] = serde_json::json!(true);
@@ -734,6 +742,25 @@ async fn execute_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn schema_enforcement_tool_is_required() {
+        let enforcement = crate::llm::types::FunctionDefinition {
+            name: "emit_structured_response".to_string(),
+            description: String::new(),
+            parameters: serde_json::json!({"type": "object"}),
+            cache_control: None,
+        };
+        assert_eq!(tool_choice_value(&[enforcement]), "required");
+
+        let client = crate::llm::types::FunctionDefinition {
+            name: "client_tool".to_string(),
+            description: String::new(),
+            parameters: serde_json::json!({"type": "object"}),
+            cache_control: None,
+        };
+        assert_eq!(tool_choice_value(&[client]), "auto");
+    }
 
     #[test]
     fn test_gemini_thought_signature_round_trip() {

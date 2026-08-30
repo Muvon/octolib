@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Best-effort JSON-schema enforcement for providers that don't natively
+//! Fail-closed JSON-schema enforcement for providers that don't natively
 //! guarantee schema-conformant structured output.
 //!
 //! Mirrors the "forced tool call" technique used by Instructor/LangChain for
@@ -24,6 +24,7 @@
 //! grammar-constrained decoding, which requires running the inference engine
 //! itself).
 
+use crate::errors::StructuredOutputError;
 use crate::llm::providers::shared::parse_structured_output_from_text;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
@@ -36,6 +37,10 @@ const SYNTHETIC_TOOL_NAME: &str = "emit_structured_response";
 // if real-world schemas need more rounds — not worth a config knob nobody has
 // asked for yet.
 const MAX_ATTEMPTS: u32 = 3;
+
+pub(crate) fn is_enforcement_tool(tools: &[FunctionDefinition]) -> bool {
+    tools.len() == 1 && tools[0].name == SYNTHETIC_TOOL_NAME
+}
 
 /// Run a chat completion, forcing the response to conform to a requested JSON
 /// schema even when `provider` doesn't natively guarantee it.
@@ -104,11 +109,13 @@ async fn force_schema(
         let response = provider.chat_completion(params.clone()).await?;
         let Some(value) = extract_candidate(&response) else {
             if attempt == MAX_ATTEMPTS {
-                tracing::warn!(
-                    model = %params.model,
-                    "structured-output fallback exhausted retries without a parseable response"
-                );
-                return Ok(response);
+                return Err(StructuredOutputError::ParsingFailed {
+                    reason: format!(
+                        "model '{}' exhausted {MAX_ATTEMPTS} structured-output attempts without parseable output (finish_reason={:?})",
+                        params.model, response.finish_reason
+                    ),
+                }
+                .into());
             }
             params.messages.push(Message::user(
                 "You did not call the function. Call it now with the required JSON arguments.",
@@ -124,12 +131,13 @@ async fn force_schema(
                 )));
             }
             Err(err) => {
-                tracing::warn!(
-                    model = %params.model,
-                    error = %err,
-                    "structured-output fallback exhausted retries without schema-valid output"
-                );
-                return Ok(finalize(response, value));
+                return Err(StructuredOutputError::ValidationFailed {
+                    reason: format!(
+                        "model '{}' exhausted {MAX_ATTEMPTS} structured-output attempts: {err}",
+                        params.model
+                    ),
+                }
+                .into());
             }
         }
     }
@@ -138,7 +146,7 @@ async fn force_schema(
 
 /// Pull the candidate structured-output value out of a response: prefer the
 /// forced tool's arguments, then whatever the provider already parsed, then a
-/// loose best-effort parse of the raw text (the model may have ignored the
+/// loose parse of the raw text (the model may have ignored the
 /// tool and just answered in prose).
 fn extract_candidate(response: &ProviderResponse) -> Option<serde_json::Value> {
     response
@@ -172,7 +180,7 @@ fn validate_candidate(
     })
 }
 
-/// Attach the (possibly best-effort) value as `structured_output`, mirror it
+/// Attach the validated value as `structured_output`, mirror it
 /// into `content` as compact JSON text, and drop the synthetic tool call so it
 /// never leaks to the client as if it were a real tool invocation.
 fn finalize(mut response: ProviderResponse, value: serde_json::Value) -> ProviderResponse {
@@ -351,17 +359,44 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn gives_up_after_max_attempts_but_returns_best_effort() {
+    async fn gives_up_after_max_attempts_with_validation_error() {
         let bad =
             || response_with_tool_call(SYNTHETIC_TOOL_NAME, serde_json::json!({"answer": "nope"}));
         let provider = ScriptedProvider::new(vec![bad(), bad(), bad()], false);
         let params = params_with_schema("model");
-        let response = chat_completion_enforced(&provider, params).await.unwrap();
-        // Best-effort: still surfaces the last (invalid) candidate rather than nothing.
-        assert_eq!(
-            response.structured_output,
-            Some(serde_json::json!({"answer": "nope"}))
-        );
+        let err = chat_completion_enforced(&provider, params)
+            .await
+            .unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("exhausted 3 structured-output attempts"));
+    }
+
+    #[tokio::test]
+    async fn gives_up_after_empty_attempts_with_parsing_error() {
+        let empty = || response_with_content("");
+        let provider = ScriptedProvider::new(vec![empty(), empty(), empty()], false);
+        let params = params_with_schema("model");
+        let err = chat_completion_enforced(&provider, params)
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("without parseable output"));
+    }
+
+    #[test]
+    fn identifies_only_the_internal_enforcement_tool() {
+        let internal = FunctionDefinition {
+            name: SYNTHETIC_TOOL_NAME.to_string(),
+            description: String::new(),
+            parameters: schema(),
+            cache_control: None,
+        };
+        assert!(is_enforcement_tool(std::slice::from_ref(&internal)));
+
+        let mut client = internal;
+        client.name = "client_tool".to_string();
+        assert!(!is_enforcement_tool(&[client]));
+        assert!(!is_enforcement_tool(&[]));
     }
 
     #[tokio::test]

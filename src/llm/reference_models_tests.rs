@@ -227,3 +227,39 @@ fn august_2026_additions_resolve() {
     assert_eq!(p.output_price_per_1m, 1.10);
     assert!(!proxy_route_enforces_response_schema("meta/muse-spark-1.2"));
 }
+
+/// Bedrock's Nova family resolves pricing and capabilities through the
+/// reference table. Before these entries the whole family fell to the
+/// 32_768 context default and unpriced usage, and the provider-level
+/// `contains("nova")` vision shortcut claimed vision for text-only Micro.
+#[test]
+fn nova_family_resolves_pricing_and_capabilities() {
+    // (Bedrock model ID, input, output, cache_read per 1M — us-east-1 rates)
+    for (model, input, output, cache_read) in [
+        ("amazon.nova-2-lite-v1:0", 0.30, 2.50, 0.075),
+        ("amazon.nova-premier-v1:0", 2.50, 12.50, 0.625),
+        ("amazon.nova-pro-v1:0", 0.80, 3.20, 0.20),
+        ("amazon.nova-lite-v1:0", 0.06, 0.24, 0.015),
+        ("amazon.nova-micro-v1:0", 0.035, 0.14, 0.0087),
+    ] {
+        let pricing = get_reference_pricing(model)
+            .unwrap_or_else(|| panic!("{model} must resolve to reference pricing"));
+        assert_eq!(pricing.input_price_per_1m, input);
+        assert_eq!(pricing.output_price_per_1m, output);
+        assert_eq!(pricing.cache_read_price_per_1m, cache_read);
+        // AWS charges nothing for Nova cache writes.
+        assert_eq!(pricing.cache_write_price_per_1m, 0.0);
+    }
+
+    let micro = get_reference_capabilities("amazon.nova-micro-v1:0")
+        .expect("nova-micro must resolve to reference capabilities");
+    assert!(!micro.vision);
+    assert!(!micro.structured_output);
+    assert_eq!(micro.max_input_tokens, 128_000);
+
+    let two_lite = get_reference_capabilities("amazon.nova-2-lite-v1:0")
+        .expect("nova-2-lite must resolve to reference capabilities");
+    assert!(two_lite.vision);
+    assert!(!two_lite.structured_output);
+    assert_eq!(two_lite.max_input_tokens, 1_000_000);
+}

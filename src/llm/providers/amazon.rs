@@ -103,7 +103,6 @@ impl AiProvider for AmazonBedrockProvider {
         if model_lower.contains("claude-3")
             || model_lower.contains("claude-4")
             || model_lower.contains("anthropic.claude")
-            || model_lower.contains("nova")
         {
             return true;
         }

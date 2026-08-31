@@ -100,6 +100,8 @@ const PRICING: &[PricingTuple] = &[
     ),
     ("@cf/qwen/qwen3.8-27b", 0.450, 3.200, 0.450, 0.450),
     ("@cf/zai-org/glm-5.2", 1.400, 4.400, 1.400, 0.260),
+    ("@cf/zai-org/glm-5.3-flash", 0.150, 0.500, 0.150, 0.030),
+    ("@cf/zai-org/glm-5.3", 1.400, 4.400, 1.400, 0.260),
     ("@cf/zai-org/glm-4.7-flash", 0.060, 0.400, 0.060, 0.060),
     (
         "@cf/nvidia/nemotron-3-120b-a12b",
@@ -108,6 +110,7 @@ const PRICING: &[PricingTuple] = &[
         0.500,
         0.500,
     ),
+    ("@cf/moonshotai/kimi-k2.5", 0.600, 3.000, 0.600, 0.100),
     ("@cf/moonshotai/kimi-k2.7-code", 0.950, 4.000, 0.950, 0.190),
     ("@cf/moonshotai/kimi-k2.6", 0.950, 4.000, 0.950, 0.160),
     ("@cf/openai/gpt-oss-120b", 0.350, 0.750, 0.350, 0.350),

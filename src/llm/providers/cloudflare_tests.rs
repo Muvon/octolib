@@ -58,3 +58,31 @@ fn current_workers_ai_models_use_cloudflare_prices() {
     assert_eq!(qwen.output_price_per_1m, 3.200);
     assert!(!provider.supports_caching("@cf/qwen/qwen3.8-27b"));
 }
+
+#[test]
+fn august_2026_additions_use_cloudflare_prices() {
+    let provider = CloudflareWorkersAiProvider::new();
+
+    // GLM-5.3-Flash must resolve before the GLM-5.3 substring entry.
+    let flash = provider
+        .get_model_pricing("@cf/zai-org/glm-5.3-flash")
+        .unwrap();
+    assert_eq!(flash.input_price_per_1m, 0.150);
+    assert_eq!(flash.output_price_per_1m, 0.500);
+    assert_eq!(flash.cache_read_price_per_1m, 0.030);
+    assert!(provider.supports_caching("@cf/zai-org/glm-5.3-flash"));
+
+    let glm = provider.get_model_pricing("@cf/zai-org/glm-5.3").unwrap();
+    assert_eq!(glm.input_price_per_1m, 1.400);
+    assert_eq!(glm.output_price_per_1m, 4.400);
+    assert_eq!(glm.cache_read_price_per_1m, 0.260);
+    assert!(provider.supports_caching("@cf/zai-org/glm-5.3"));
+
+    let kimi = provider
+        .get_model_pricing("@cf/moonshotai/kimi-k2.5")
+        .unwrap();
+    assert_eq!(kimi.input_price_per_1m, 0.600);
+    assert_eq!(kimi.output_price_per_1m, 3.000);
+    assert_eq!(kimi.cache_read_price_per_1m, 0.100);
+    assert!(provider.supports_caching("@cf/moonshotai/kimi-k2.5"));
+}

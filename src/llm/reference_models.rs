@@ -79,6 +79,42 @@ const fn pricing(
 /// substring matching resolves aliases such as `gpt-4o-mini` before `gpt-4o`.
 const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     ReferenceModelEntry {
+        // Amazon Nova 2 Lite (GA Dec 2025): 1M-context multimodal model on
+        // Bedrock; text/image/video input, no structured outputs, free cache
+        // writes with $0.075 cache reads (us-east-1 rates).
+        pattern: "nova-2-lite",
+        capabilities: caps(true, true, false, 1_000_000),
+        pricing: pricing(0.30, 2.50, 0.00, 0.075),
+    },
+    ReferenceModelEntry {
+        // Amazon Nova Premier: 1M-context multimodal reasoning model; legacy
+        // lifecycle (EOL 2026-09-14) but still served and billable.
+        pattern: "nova-premier",
+        capabilities: caps(true, true, false, 1_000_000),
+        pricing: pricing(2.50, 12.50, 0.00, 0.625),
+    },
+    ReferenceModelEntry {
+        // Amazon Nova Pro: 300K-context multimodal model; no structured
+        // outputs, free cache writes with $0.20 cache reads.
+        pattern: "nova-pro",
+        capabilities: caps(true, true, false, 300_000),
+        pricing: pricing(0.80, 3.20, 0.00, 0.20),
+    },
+    ReferenceModelEntry {
+        // Amazon Nova Lite: 300K-context multimodal model; no structured
+        // outputs, free cache writes with $0.015 cache reads.
+        pattern: "nova-lite",
+        capabilities: caps(true, true, false, 300_000),
+        pricing: pricing(0.06, 0.24, 0.00, 0.015),
+    },
+    ReferenceModelEntry {
+        // Amazon Nova Micro: text-only 128K-context model; no structured
+        // outputs, free cache writes with $0.0087 cache reads.
+        pattern: "nova-micro",
+        capabilities: caps(false, false, false, 128_000),
+        pricing: pricing(0.035, 0.14, 0.00, 0.0087),
+    },
+    ReferenceModelEntry {
         pattern: "nemotron-3.5-lightning-30b-a3b",
         capabilities: caps(false, false, false, 1_000_000),
         pricing: pricing(0.05, 0.20, 0.05, 0.01),

@@ -54,3 +54,21 @@ fn test_supports_vision_case_insensitive() {
     // Test mixed case
     assert!(provider.supports_vision("Anthropic.Claude-3-Haiku"));
 }
+
+#[test]
+fn test_nova_vision_and_pricing_resolve_from_reference_table() {
+    let provider = AmazonBedrockProvider::new();
+
+    // Multimodal Nova models keep vision through the reference fallback.
+    assert!(provider.supports_vision("amazon.nova-2-lite-v1:0"));
+    assert!(provider.supports_vision("amazon.nova-pro-v1:0"));
+    // Nova Micro is text-only and must not inherit family-wide vision.
+    assert!(!provider.supports_vision("amazon.nova-micro-v1:0"));
+
+    let pricing = provider
+        .get_model_pricing("amazon.nova-pro-v1:0")
+        .expect("nova-pro must resolve to pricing");
+    assert_eq!(pricing.input_price_per_1m, 0.80);
+    assert_eq!(pricing.output_price_per_1m, 3.20);
+    assert_eq!(pricing.cache_read_price_per_1m, 0.20);
+}

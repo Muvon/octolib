@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.34.8] - 2026-08-31
+
+### 📋 Release Summary
+
+This release expands model metadata coverage and adds response schema enforcement for more reliable structured outputs (d49aceb7, 013d4322). Provider and DeepSeek compatibility, schema validation diagnostics and usage reporting, and embedding runtime stability have been improved (cc16ef63, 31896474, 508f4f51, 90a9d450, 2d451fb5, 235fda22, 76da6adb).
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: expand model metadata coverage `d49aceb7`
+- **llm**: enforce response schemas `013d4322`
+
+### 🔧 Improvements & Optimizations
+
+- **coverage**: configure llvm-cov coverage reporting `7d773ac8`
+- **tests**: extract tests into modules `2cbd3e96`
+- **llm**: unify schema enforcement `3ce46f0a`
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: align provider model handling `cc16ef63`
+- **deepseek**: align thinking request format `31896474`
+- **llm**: handle Alibaba DeepSeek schemas `508f4f51`
+- **llm**: log failed schema validation output `90a9d450`
+- **llm**: aggregate usage across schema attempts `2d451fb5`
+- **embedding**: refresh HTTP client runtimes `235fda22`
+- **llm**: fail closed on structured output `76da6adb`
+
+### 🔄 Other Changes
+
+1 maintenance, dependency, and tooling update not listed individually.
+
 ## [0.34.7] - 2026-08-29
 
 ### 📋 Release Summary

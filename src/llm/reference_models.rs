@@ -79,9 +79,17 @@ const fn pricing(
 /// substring matching resolves aliases such as `gpt-4o-mini` before `gpt-4o`.
 const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     ReferenceModelEntry {
+        // Amazon Nova 2 Lite via US geo cross-region routing (`us.` model ID
+        // prefix): bills 10% above the global tier per the AWS Price List API.
+        pattern: "us.amazon.nova-2-lite",
+        capabilities: caps(true, true, false, 1_000_000),
+        pricing: pricing(0.33, 2.75, 0.00, 0.0825),
+    },
+    ReferenceModelEntry {
         // Amazon Nova 2 Lite (GA Dec 2025): 1M-context multimodal model on
         // Bedrock; text/image/video input, no structured outputs, free cache
-        // writes with $0.075 cache reads (us-east-1 rates).
+        // writes with $0.075 cache reads (global cross-region tier; the `us.`
+        // geo tier above is 10% higher).
         pattern: "nova-2-lite",
         capabilities: caps(true, true, false, 1_000_000),
         pricing: pricing(0.30, 2.50, 0.00, 0.075),
@@ -109,10 +117,10 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         // Amazon Nova Micro: text-only 128K-context model; no structured
-        // outputs, free cache writes with $0.0087 cache reads.
+        // outputs, free cache writes with $0.00875 cache reads.
         pattern: "nova-micro",
         capabilities: caps(false, false, false, 128_000),
-        pricing: pricing(0.035, 0.14, 0.00, 0.0087),
+        pricing: pricing(0.035, 0.14, 0.00, 0.00875),
     },
     ReferenceModelEntry {
         pattern: "nemotron-3.5-lightning-30b-a3b",

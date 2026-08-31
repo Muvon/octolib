@@ -237,10 +237,13 @@ fn nova_family_resolves_pricing_and_capabilities() {
     // (Bedrock model ID, input, output, cache_read per 1M — us-east-1 rates)
     for (model, input, output, cache_read) in [
         ("amazon.nova-2-lite-v1:0", 0.30, 2.50, 0.075),
+        ("global.amazon.nova-2-lite-v1:0", 0.30, 2.50, 0.075),
+        // US geo cross-region routing bills 10% above the global tier.
+        ("us.amazon.nova-2-lite-v1:0", 0.33, 2.75, 0.0825),
         ("amazon.nova-premier-v1:0", 2.50, 12.50, 0.625),
         ("amazon.nova-pro-v1:0", 0.80, 3.20, 0.20),
         ("amazon.nova-lite-v1:0", 0.06, 0.24, 0.015),
-        ("amazon.nova-micro-v1:0", 0.035, 0.14, 0.0087),
+        ("amazon.nova-micro-v1:0", 0.035, 0.14, 0.00875),
     ] {
         let pricing = get_reference_pricing(model)
             .unwrap_or_else(|| panic!("{model} must resolve to reference pricing"));

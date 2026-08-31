@@ -127,12 +127,17 @@ impl AiProvider for AmazonBedrockProvider {
             .unwrap_or(32_768)
     }
 
-    fn supports_structured_output(&self, _model: &str) -> bool {
-        true
-    }
-
-    fn enforces_response_schema(&self, _model: &str) -> bool {
-        true
+    fn supports_structured_output(&self, model: &str) -> bool {
+        // Bedrock structured outputs cover the Anthropic Claude routes. Other
+        // hosted families resolve through reference capabilities — the Nova
+        // model cards list structured outputs as not supported.
+        let model_lower = normalize_model_name(model);
+        if model_lower.contains("claude") {
+            return true;
+        }
+        crate::llm::reference_models::get_reference_capabilities(model)
+            .map(|c| c.structured_output)
+            .unwrap_or(false)
     }
 
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
@@ -149,7 +154,7 @@ impl AiProvider for AmazonBedrockProvider {
                 provider_name: "amazon",
                 usage_fallback_cost: None,
                 use_response_cost: true,
-                enforces_response_schema: true,
+                enforces_response_schema: self.enforces_response_schema(&params.model),
                 supports_required_tool_choice: false,
             },
             api_key,

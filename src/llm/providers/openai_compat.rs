@@ -195,13 +195,7 @@ async fn chat_completion_raw(
     tool_choice: Option<ToolChoice>,
     params: ChatCompletionParams,
 ) -> Result<ProviderResponse> {
-    let has_tools = params.tools.as_ref().is_some_and(|tools| !tools.is_empty());
-    let messages = convert_messages(
-        &params.messages,
-        config.provider_name,
-        &params.model,
-        has_tools,
-    );
+    let messages = convert_messages(&params.messages, config.provider_name, &params.model);
 
     let mut request_body = serde_json::json!({
         "model": params.model,
@@ -301,6 +295,16 @@ fn apply_response_format(
                 request_body["response_format"] = serde_json::json!({
                     "type": "json_object"
                 });
+                // Model Studio rejects json_object requests unless the word
+                // "JSON" appears somewhere in the messages.
+                if provider_name.eq_ignore_ascii_case("alibaba") {
+                    if let Some(messages) = request_body["messages"].as_array_mut() {
+                        messages.push(serde_json::json!({
+                            "role": "system",
+                            "content": "Respond with a single JSON object."
+                        }));
+                    }
+                }
             }
         }
         crate::llm::types::OutputFormat::JsonSchema => {
@@ -369,10 +373,6 @@ struct OpenAiCompatMessage {
     /// preserve reasoning across turns.
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning: Option<String>,
-    /// Alibaba/DeepSeek's OpenAI-compatible continuation field. DeepSeek tool
-    /// requests require prior assistant reasoning under this exact key.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    reasoning_content: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -482,7 +482,6 @@ fn convert_messages(
     messages: &[Message],
     provider_name: &str,
     model: &str,
-    has_tools: bool,
 ) -> Vec<OpenAiCompatMessage> {
     let mut result = Vec::new();
 
@@ -496,9 +495,6 @@ fn convert_messages(
             && (Some(idx) == last_assistant
                 || crate::llm::providers::moonshot::preserves_historical_thinking(model))
     };
-    // DeepSeek requires the reasoning_content of all prior assistant turns when
-    // tools are present, including assistant turns that did not call a tool.
-    let replays_reasoning_content = has_tools && is_alibaba_deepseek_v4(provider_name, model);
 
     for (msg_idx, message) in messages.iter().enumerate() {
         match message.role.as_str() {
@@ -509,7 +505,6 @@ fn convert_messages(
                     tool_calls: None,
                     tool_call_id: message.tool_call_id.clone(),
                     reasoning: None,
-                    reasoning_content: None,
                 });
             }
             "assistant" if message.tool_calls.is_some() => {
@@ -552,11 +547,6 @@ fn convert_messages(
                     tool_calls,
                     tool_call_id: None,
                     reasoning: if replays_reasoning(msg_idx) {
-                        message.thinking.as_ref().map(|t| t.content.clone())
-                    } else {
-                        None
-                    },
-                    reasoning_content: if replays_reasoning_content {
                         message.thinking.as_ref().map(|t| t.content.clone())
                     } else {
                         None
@@ -618,11 +608,6 @@ fn convert_messages(
                     tool_calls: None,
                     tool_call_id: None,
                     reasoning: if message.role == "assistant" && replays_reasoning(msg_idx) {
-                        message.thinking.as_ref().map(|t| t.content.clone())
-                    } else {
-                        None
-                    },
-                    reasoning_content: if message.role == "assistant" && replays_reasoning_content {
                         message.thinking.as_ref().map(|t| t.content.clone())
                     } else {
                         None

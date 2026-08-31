@@ -72,3 +72,15 @@ fn test_nova_vision_and_pricing_resolve_from_reference_table() {
     assert_eq!(pricing.output_price_per_1m, 3.20);
     assert_eq!(pricing.cache_read_price_per_1m, 0.20);
 }
+
+#[test]
+fn test_nova_has_no_native_structured_outputs() {
+    let provider = AmazonBedrockProvider::new();
+
+    // Nova model cards list structured outputs as not supported; Claude
+    // routes on Bedrock keep them.
+    assert!(!provider.supports_structured_output("amazon.nova-pro-v1:0"));
+    assert!(!provider.enforces_response_schema("amazon.nova-micro-v1:0"));
+    assert!(provider.supports_structured_output("anthropic.claude-sonnet-4-5"));
+    assert!(provider.enforces_response_schema("anthropic.claude-sonnet-4-5"));
+}

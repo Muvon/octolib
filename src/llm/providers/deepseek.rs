@@ -36,7 +36,7 @@
 //! (<https://api-docs.deepseek.com/news/news260821/>).
 //!
 //! Legacy aliases deepseek-chat / deepseek-reasoner were removed by DeepSeek
-//! on 2026-07-24 15:59 UTC per <https://api-docs.deepseek.com/updates>.
+//! on 2026-07-24 per <https://api-docs.deepseek.com/updates>.
 //!
 //! Thinking is enabled by default (effort "high"); effort is controlled via
 //! the top-level `reasoning_effort` field: "low" | "high" | "max"
@@ -96,9 +96,11 @@ fn pricing_table_at(time: std::time::SystemTime) -> &'static [PricingTuple] {
 }
 
 /// Map generic ReasoningEffort to DeepSeek's `reasoning_effort` string.
-/// DeepSeek supports only "low" / "high" / "max" (default "high" when the
-/// field is omitted, thinking enabled by default). Intermediate internal levels
-/// floor to the nearest supported tier so the adapter never increases effort.
+/// DeepSeek's canonical values are "low" / "high" / "max" (default "high"
+/// when omitted, thinking enabled by default); the API also accepts "medium"
+/// and "xhigh" but maps both UP to "high". Intermediate internal levels
+/// instead floor to the nearest lower tier so the adapter never increases
+/// effort (Medium → "low", deviating from the API's own medium → "high").
 fn map_reasoning_effort(
     effort: Option<crate::llm::types::ReasoningEffort>,
 ) -> Option<&'static str> {

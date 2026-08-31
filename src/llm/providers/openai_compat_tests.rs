@@ -66,7 +66,7 @@ fn test_gemini_thought_signature_round_trip() {
         thinking: None,
         id: None,
     };
-    let converted = convert_messages(std::slice::from_ref(&msg), "local", "test-model", false);
+    let converted = convert_messages(std::slice::from_ref(&msg), "local", "test-model");
     let json = serde_json::to_value(&converted[0]).unwrap();
     assert_eq!(
         json["tool_calls"][0]["extra_content"]["google"]["thought_signature"],
@@ -85,12 +85,7 @@ fn test_gemini_thought_signature_round_trip() {
         tool_calls: Some(plain),
         ..msg
     };
-    let converted = convert_messages(
-        std::slice::from_ref(&msg_plain),
-        "local",
-        "test-model",
-        false,
-    );
+    let converted = convert_messages(std::slice::from_ref(&msg_plain), "local", "test-model");
     let json = serde_json::to_value(&converted[0]).unwrap();
     assert!(json["tool_calls"][0].get("extra_content").is_none());
 }
@@ -133,7 +128,7 @@ fn test_ollama_reasoning_is_stored_and_replayed() {
         id: None,
     };
 
-    let converted = convert_messages(&[history], "ollama", "glm-5.2", true);
+    let converted = convert_messages(&[history], "ollama", "glm-5.2");
     let json = serde_json::to_value(&converted[0]).unwrap();
     assert_eq!(
         json.get("reasoning").and_then(serde_json::Value::as_str),
@@ -162,12 +157,12 @@ fn test_ollama_reasoning_replays_only_on_last_assistant() {
     };
     let messages = [assistant("one"), assistant("two")];
 
-    let converted = convert_messages(&messages, "ollama", "glm-5.2", false);
+    let converted = convert_messages(&messages, "ollama", "glm-5.2");
     assert!(converted[0].reasoning.is_none());
     assert_eq!(converted[1].reasoning.as_deref(), Some("thinking for two"));
 
     // Kimi preserve-thinking models keep reasoning on every assistant turn.
-    let converted = convert_messages(&messages, "ollama", "kimi-k2.7-code", false);
+    let converted = convert_messages(&messages, "ollama", "kimi-k2.7-code");
     assert_eq!(converted[0].reasoning.as_deref(), Some("thinking for one"));
     assert_eq!(converted[1].reasoning.as_deref(), Some("thinking for two"));
 }
@@ -189,41 +184,21 @@ fn test_openai_compat_reasoning_field_variants_are_stored() {
     }
 }
 
+/// Model Studio ignores historical `reasoning_content` for DeepSeek (its
+/// `preserve_thinking` mechanism covers only Qwen/Kimi), so no assistant turn
+/// carries reasoning fields on the Alibaba route.
 #[test]
-fn test_alibaba_deepseek_replays_all_reasoning_when_tools_are_present() {
+fn test_alibaba_deepseek_sends_no_reasoning_fields() {
     let assistant = |text: &str| {
         Message::assistant(text).with_thinking(ThinkingBlock {
             content: format!("thinking for {text}"),
             tokens: 4,
         })
     };
-    let mut assistant_with_tool = assistant("two");
-    assistant_with_tool.tool_calls = Some(
-        serde_json::to_value(vec![crate::llm::tool_calls::GenericToolCall {
-            id: "call_1".to_string(),
-            name: "inspect".to_string(),
-            arguments: serde_json::json!({}),
-            meta: None,
-        }])
-        .unwrap(),
-    );
-    let messages = [assistant("one"), assistant_with_tool];
+    let messages = [assistant("one"), assistant("two")];
 
-    let converted = convert_messages(&messages, "alibaba", "deepseek-v4-flash-0731", true);
-    assert_eq!(
-        converted[0].reasoning_content.as_deref(),
-        Some("thinking for one")
-    );
-    assert_eq!(
-        converted[1].reasoning_content.as_deref(),
-        Some("thinking for two")
-    );
+    let converted = convert_messages(&messages, "alibaba", "deepseek-v4-flash-0731");
     assert!(converted.iter().all(|message| message.reasoning.is_none()));
-
-    let without_tools = convert_messages(&messages, "alibaba", "deepseek-v4-flash-0731", false);
-    assert!(without_tools
-        .iter()
-        .all(|message| message.reasoning_content.is_none()));
 }
 
 #[test]
@@ -257,6 +232,41 @@ fn test_alibaba_deepseek_uses_json_object_guidance_not_json_schema() {
         .expect("schema guidance message");
     assert!(guidance.contains("JSON schema"));
     assert!(guidance.contains(&schema.to_string()));
+}
+
+/// Model Studio rejects json_object requests unless the word "JSON" appears
+/// in the messages, so the Alibaba route injects a guidance line.
+#[test]
+fn test_alibaba_json_mode_injects_json_keyword() {
+    let response_format = crate::llm::types::StructuredOutputRequest::json();
+    let mut request_body = serde_json::json!({
+        "messages": [{"role": "user", "content": "answer"}]
+    });
+
+    apply_response_format(
+        &mut request_body,
+        "alibaba",
+        "qwen3.8-flash",
+        &response_format,
+    );
+
+    assert_eq!(
+        request_body["response_format"],
+        serde_json::json!({"type": "json_object"})
+    );
+    let guidance = request_body["messages"]
+        .as_array()
+        .and_then(|messages| messages.last())
+        .and_then(|message| message["content"].as_str())
+        .expect("JSON guidance message");
+    assert!(guidance.contains("JSON"));
+
+    // Other providers keep the request untouched.
+    let mut other_body = serde_json::json!({
+        "messages": [{"role": "user", "content": "answer"}]
+    });
+    apply_response_format(&mut other_body, "groq", "some-model", &response_format);
+    assert_eq!(other_body["messages"].as_array().map(Vec::len), Some(1));
 }
 
 #[test]

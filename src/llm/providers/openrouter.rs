@@ -637,7 +637,7 @@ async fn execute_openrouter_request(
             let openrouter_app_title =
                 std::env::var("OPENROUTER_APP_TITLE").unwrap_or_else(|_| "octolib".to_string());
             let openrouter_http_referer = std::env::var("OPENROUTER_HTTP_REFERER")
-                .unwrap_or_else(|_| "https://octolib.muvon.io".to_string());
+                .unwrap_or_else(|_| "https://octomind.run/product/octolib".to_string());
 
             Box::pin(async move {
                 let req = client

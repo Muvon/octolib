@@ -17,14 +17,15 @@
 use std::path::PathBuf;
 
 /// Get cache directory for FastEmbed models
+///
+/// FastEmbed (via `hf-hub`) and the HuggingFace provider download the SAME
+/// models in the SAME hf-hub cache layout (`models--org--name/{blobs,snapshots,refs}`).
+/// A separate `fastembed` subdirectory here used to duplicate every model on
+/// disk — up to ~3.7GB doubled on a single machine, enough to fill a 5GB
+/// working disk and crash local-storage-dependent tools (octobrain memory,
+/// LanceDB) with ENOSPC. Share the one cache dir instead.
 pub fn get_fastembed_cache_dir() -> anyhow::Result<PathBuf> {
-    let cache_dir = dirs::cache_dir()
-        .ok_or_else(|| anyhow::anyhow!("Could not determine cache directory"))?
-        .join("octolib")
-        .join("fastembed");
-
-    std::fs::create_dir_all(&cache_dir)?;
-    Ok(cache_dir)
+    get_huggingface_cache_dir()
 }
 
 /// Get cache directory for HuggingFace models

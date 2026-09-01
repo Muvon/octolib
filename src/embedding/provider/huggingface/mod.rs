@@ -239,7 +239,7 @@ impl HuggingFaceModel {
 
         // Use our custom cache directory for consistency with FastEmbed
         // Set HF_HOME environment variable to control where models are downloaded
-        let cache_dir = crate::storage::get_huggingface_cache_dir()
+        let cache_dir = crate::storage::get_model_cache_dir()
             .context("Failed to get HuggingFace cache directory")?;
 
         // Set the HuggingFace cache directory via environment variable

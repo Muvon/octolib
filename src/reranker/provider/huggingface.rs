@@ -142,7 +142,7 @@ impl CrossEncoderModel {
     async fn load(model_name: &str) -> Result<Self> {
         let device = Device::Cpu;
 
-        let cache_dir = crate::storage::get_huggingface_cache_dir()
+        let cache_dir = crate::storage::get_model_cache_dir()
             .context("Failed to get HuggingFace cache directory")?;
         std::env::set_var("HF_HOME", &cache_dir);
 

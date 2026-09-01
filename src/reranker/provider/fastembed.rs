@@ -38,7 +38,7 @@ impl FastEmbedProvider {
     pub fn new(model_name: &str) -> Result<Self> {
         let model_enum = Self::map_model_name(model_name)?;
 
-        let cache_dir = crate::storage::get_fastembed_cache_dir()
+        let cache_dir = crate::storage::get_model_cache_dir()
             .context("Failed to get FastEmbed cache directory")?;
 
         let model = TextRerank::try_new(

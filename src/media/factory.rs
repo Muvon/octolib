@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::errors::{MediaError, MediaResult};
-use super::providers::{OpenRouterMediaProvider, ReplicateMediaProvider};
+use super::providers::{FalMediaProvider, OpenRouterMediaProvider, ReplicateMediaProvider};
 use super::traits::*;
 
 pub struct MediaProviderFactory;
@@ -34,6 +34,7 @@ impl MediaProviderFactory {
 
     pub fn create_image_provider(name: &str) -> MediaResult<Box<dyn ImageGenerationProvider>> {
         match name.to_ascii_lowercase().as_str() {
+            "fal" => Ok(Box::new(FalMediaProvider::new())),
             "openrouter" => Ok(Box::new(OpenRouterMediaProvider::new())),
             "replicate" => Ok(Box::new(ReplicateMediaProvider::new())),
             other => Err(MediaError::UnsupportedProvider(other.to_string())),
@@ -57,6 +58,7 @@ impl MediaProviderFactory {
 
     pub fn create_video_provider(name: &str) -> MediaResult<Box<dyn VideoGenerationProvider>> {
         match name.to_ascii_lowercase().as_str() {
+            "fal" => Ok(Box::new(FalMediaProvider::new())),
             "openrouter" => Ok(Box::new(OpenRouterMediaProvider::new())),
             "replicate" => Ok(Box::new(ReplicateMediaProvider::new())),
             other => Err(MediaError::UnsupportedProvider(other.to_string())),
@@ -80,6 +82,7 @@ impl MediaProviderFactory {
 
     pub fn create_speech_provider(name: &str) -> MediaResult<Box<dyn SpeechSynthesisProvider>> {
         match name.to_ascii_lowercase().as_str() {
+            "fal" => Ok(Box::new(FalMediaProvider::new())),
             "openrouter" => Ok(Box::new(OpenRouterMediaProvider::new())),
             "replicate" => Ok(Box::new(ReplicateMediaProvider::new())),
             other => Err(MediaError::UnsupportedProvider(other.to_string())),
@@ -105,6 +108,7 @@ impl MediaProviderFactory {
         name: &str,
     ) -> MediaResult<Box<dyn TranscriptionProvider>> {
         match name.to_ascii_lowercase().as_str() {
+            "fal" => Ok(Box::new(FalMediaProvider::new())),
             "openrouter" => Ok(Box::new(OpenRouterMediaProvider::new())),
             "replicate" => Ok(Box::new(ReplicateMediaProvider::new())),
             other => Err(MediaError::UnsupportedProvider(other.to_string())),
@@ -127,7 +131,7 @@ impl MediaProviderFactory {
     }
 
     pub fn supported_providers() -> &'static [&'static str] {
-        &["openrouter", "replicate"]
+        &["fal", "openrouter", "replicate"]
     }
 }
 

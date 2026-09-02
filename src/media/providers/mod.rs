@@ -12,9 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+pub mod fal;
 pub mod openrouter;
 pub mod replicate;
 pub(crate) mod shared;
 
+pub use fal::{FalMediaOptions, FalMediaProvider};
 pub use openrouter::{OpenRouterMediaOptions, OpenRouterMediaProvider};
 pub use replicate::{ReplicateMediaOptions, ReplicateMediaProvider};

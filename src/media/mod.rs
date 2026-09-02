@@ -28,7 +28,8 @@ pub mod types;
 pub use errors::{MediaError, MediaResult};
 pub use factory::MediaProviderFactory;
 pub use providers::{
-    OpenRouterMediaOptions, OpenRouterMediaProvider, ReplicateMediaOptions, ReplicateMediaProvider,
+    FalMediaOptions, FalMediaProvider, OpenRouterMediaOptions, OpenRouterMediaProvider,
+    ReplicateMediaOptions, ReplicateMediaProvider,
 };
 pub use traits::*;
 pub use types::*;

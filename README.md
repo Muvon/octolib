@@ -24,7 +24,7 @@ Octolib is a comprehensive, self-sufficient AI provider library that provides a 
 - **⚙️ Configuration Migration**: Reusable, comment-preserving TOML upgrades with locking, versioned backups, and atomic writes
 - **🎯 Embedding Support**: Multi-provider embedding generation with Jina, Voyage, Google, OpenAI, Together, OctoHub, Local (Ollama, llama.cpp, LM Studio, vLLM), FastEmbed, and HuggingFace
 - **🔄 Reranking**: Document relevance scoring with cross-encoder models (Voyage AI, Cohere, Jina AI, Mixedbread, Local (llama.cpp, vLLM, TEI), HuggingFace)
-- **🎬 Media Generation**: Typed image, asynchronous video, speech, and transcription APIs for OpenRouter and Replicate, with durable jobs and dimensional cost reporting
+- **🎬 Media Generation**: Typed image, asynchronous video, speech, and transcription APIs for fal, OpenRouter, and Replicate, with durable jobs and dimensional cost reporting
 
 ## 📦 Quick Installation
 

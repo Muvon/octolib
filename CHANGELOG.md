@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.35.0] - 2026-09-02
+
+### 📋 Release Summary
+
+Hugging Face model state handling has been reorganized, which may require compatibility updates (61eddf07). Support for Claude 5.1 models has been added through Anthropic (f3137847). Model caching and app attribution have been improved across providers, and Octolib product URLs have been updated (26dddd32, 3dff660c, 5c152b14, 85e464ae).
+
+
+### 🚨 Breaking Changes
+
+⚠️ **Important**: This release contains breaking changes that may require code updates.
+
+- **huggingface**: centralize model state `61eddf07`
+
+### ✨ New Features & Enhancements
+
+- **anthropic**: support Claude 5.1 models `f3137847`
+
+### 🔧 Improvements & Optimizations
+
+- **links**: update Octolib product URLs `85e464ae`
+
+### 🐛 Bug Fixes & Stability
+
+- **storage**: share model cache across providers `26dddd32`
+- **storage**: share HuggingFace model cache directory `3dff660c`
+- **octohub**: forward app attribution headers `5c152b14`
+
 ## [0.34.8] - 2026-08-31
 
 ### 📋 Release Summary

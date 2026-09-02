@@ -635,10 +635,14 @@ mod tests {
 
     #[test]
     fn rejects_oversized_file_before_reading_it() {
+        // Test thread names contain `::`, which is invalid in Windows paths.
         let path = std::env::temp_dir().join(format!(
             "octolib-media-size-{}-{}",
             std::process::id(),
-            std::thread::current().name().unwrap_or("test")
+            std::thread::current()
+                .name()
+                .unwrap_or("test")
+                .replace(':', "-")
         ));
         std::fs::write(&path, b"12345").unwrap();
         let source = MediaSource::File {
@@ -665,10 +669,12 @@ mod tests {
         let address = listener.local_addr().unwrap();
         drop(listener);
         let url = format!("http://{address}");
+        // Windows needs ~1s per refused loopback connect (internal SYN retries);
+        // a 1s submit_timeout misclassified the refusal as a timeout and skipped retries.
         let options = RequestOptions {
             max_retries: 2,
             retry_backoff: Duration::ZERO,
-            submit_timeout: Some(Duration::from_secs(1)),
+            submit_timeout: Some(Duration::from_secs(30)),
             ..RequestOptions::default()
         };
 

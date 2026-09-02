@@ -230,7 +230,13 @@ fn test_anthropic_claude() {
         get_reference_capabilities("claude-sonnet-4-6")
             .unwrap()
             .max_input_tokens,
-        200_000
+        1_000_000
+    );
+    assert_eq!(
+        get_reference_capabilities("claude-fable-5-1")
+            .unwrap()
+            .max_input_tokens,
+        1_000_000
     );
     assert_eq!(
         get_reference_capabilities("claude-haiku-4-5-20251001")

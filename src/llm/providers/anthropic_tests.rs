@@ -223,6 +223,49 @@ fn test_fable_5() {
 }
 
 #[test]
+fn test_fable_5_1() {
+    let provider = AnthropicProvider::new();
+
+    let model = "claude-fable-5-1";
+    assert!(provider.supports_model(model));
+
+    // Cache read is 0.025x input ($0.25), not the 0.1x every other Claude
+    // uses — proves the 5.1 row is matched ahead of the "claude-fable-5" row.
+    let pricing = provider.get_model_pricing(model).unwrap();
+    assert_eq!(pricing.input_price_per_1m, 10.0);
+    assert_eq!(pricing.output_price_per_1m, 50.0);
+    assert_eq!(pricing.cache_write_price_per_1m, 12.50);
+    assert_eq!(pricing.cache_read_price_per_1m, 0.25);
+
+    assert_eq!(provider.get_max_input_tokens(model), 1_000_000);
+    assert_eq!(
+        provider.supported_sampling_params(model),
+        SamplingSupport::NONE
+    );
+    assert_eq!(effort_value(model, ReasoningEffort::XHigh, true), "xhigh");
+}
+
+#[test]
+fn test_sonnet_5() {
+    let provider = AnthropicProvider::new();
+
+    let model = "claude-sonnet-5";
+    assert!(provider.supports_model(model));
+
+    // Adaptive-only like the Opus 5 tier: manual thinking and every sampling
+    // parameter return a 400.
+    assert_eq!(
+        provider.supported_sampling_params(model),
+        SamplingSupport::NONE
+    );
+    assert!(THINKING_MODELS.contains(&"sonnet-5"));
+    assert!(ADAPTIVE_THINKING_MODELS.contains(&"sonnet-5"));
+    assert!(ADAPTIVE_ONLY_MODELS.contains(&"sonnet-5"));
+    assert!(EFFORT_PARAM_MODELS.contains(&"sonnet-5"));
+    assert_eq!(effort_value(model, ReasoningEffort::XHigh, true), "xhigh");
+}
+
+#[test]
 fn test_mythos_5() {
     let provider = AnthropicProvider::new();
 

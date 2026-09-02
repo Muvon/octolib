@@ -345,12 +345,14 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "claude-sonnet-4-6",
-        capabilities: caps(true, false, false, 200_000),
+        capabilities: caps(true, false, false, 1_000_000),
         pricing: pricing(3.00, 15.00, 3.75, 0.30),
     },
     ReferenceModelEntry {
+        // 1M context, but unlike 4.6+ the >200K tier is billed at a premium
+        // ($6/$22.50) that a single pricing row cannot express.
         pattern: "claude-sonnet-4-5",
-        capabilities: caps(true, false, false, 200_000),
+        capabilities: caps(true, false, false, 1_000_000),
         pricing: pricing(3.00, 15.00, 3.75, 0.30),
     },
     ReferenceModelEntry {
@@ -507,6 +509,13 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(1.00, 3.00, 1.00, 1.00),
     },
     ReferenceModelEntry {
+        // Cache hits on the 5.1 pair are 0.025x input ($0.25), not the 0.1x
+        // every other Claude uses.
+        pattern: "claude-mythos-5-1",
+        capabilities: caps(true, false, false, 1_000_000),
+        pricing: pricing(10.00, 50.00, 12.50, 0.25),
+    },
+    ReferenceModelEntry {
         pattern: "claude-mythos-5",
         capabilities: caps(true, false, false, 1_000_000),
         pricing: pricing(10.00, 50.00, 12.50, 1.00),
@@ -523,7 +532,7 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "claude-opus-4-6",
-        capabilities: caps(true, false, false, 200_000),
+        capabilities: caps(true, false, false, 1_000_000),
         pricing: pricing(5.00, 25.00, 6.25, 0.50),
     },
     ReferenceModelEntry {
@@ -643,6 +652,13 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pattern: "command-r-plus",
         capabilities: caps(false, false, true, 131_072),
         pricing: pricing(2.50, 10.00, 2.50, 2.50),
+    },
+    ReferenceModelEntry {
+        // Cache hits on the 5.1 pair are 0.025x input ($0.25), not the 0.1x
+        // every other Claude uses.
+        pattern: "claude-fable-5-1",
+        capabilities: caps(true, false, false, 1_000_000),
+        pricing: pricing(10.00, 50.00, 12.50, 0.25),
     },
     ReferenceModelEntry {
         pattern: "claude-fable-5",

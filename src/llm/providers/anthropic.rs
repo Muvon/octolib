@@ -34,6 +34,11 @@ use std::env;
 /// Prices sourced from Anthropic pricing docs (verified Aug 26, 2026).
 /// Format: (model, input, output, cache_write, cache_read)
 const PRICING: &[PricingTuple] = &[
+    // Mythos-class (Fable/Mythos 5.1): $10/$50, cache write 1.25x, but cache
+    // read is 0.025x ($0.25) — the only Claude models off the 0.1x multiplier.
+    // Must precede the 5 entries: lookup is a first-match substring scan.
+    ("claude-fable-5-1", 10.00, 50.00, 12.50, 0.25),
+    ("claude-mythos-5-1", 10.00, 50.00, 12.50, 0.25),
     // Mythos-class (Fable 5): $10/$50, cache write 1.25x, cache read 0.1x
     ("claude-fable-5", 10.00, 50.00, 12.50, 1.00),
     // Claude Mythos 5 (Project Glasswing only): same pricing/capabilities as Fable 5
@@ -97,7 +102,9 @@ struct CacheTokenUsage {
 }
 
 /// Models that reject ALL sampling parameters (temperature, top_p, top_k).
-const NO_SAMPLING_MODELS: &[&str] = &["fable-5", "mythos-5", "opus-5", "opus-4-8", "opus-4-7"];
+const NO_SAMPLING_MODELS: &[&str] = &[
+    "fable-5", "mythos-5", "opus-5", "opus-4-8", "opus-4-7", "sonnet-5",
+];
 
 /// Models that support extended thinking via the `thinking` block.
 /// Substring match against `params.model`. Order matters only for documentation.
@@ -111,6 +118,7 @@ const THINKING_MODELS: &[&str] = &[
     "opus-4-5",
     "opus-4-1",
     "opus-4",
+    "sonnet-5",
     "sonnet-4-7",
     "sonnet-4-6",
     "sonnet-4-5",
@@ -129,6 +137,7 @@ const ADAPTIVE_THINKING_MODELS: &[&str] = &[
     "opus-4-8",
     "opus-4-7",
     "opus-4-6",
+    "sonnet-5",
     "sonnet-4-6",
 ];
 
@@ -136,16 +145,21 @@ const ADAPTIVE_THINKING_MODELS: &[&str] = &[
 /// `thinking.type: "enabled"` returns a 400. These models also default
 /// `display: "omitted"`, so we opt in to `"summarized"` to keep thinking
 /// text visible in `ProviderResponse::thinking`.
-const ADAPTIVE_ONLY_MODELS: &[&str] = &["fable-5", "mythos-5", "opus-4-7"];
+const ADAPTIVE_ONLY_MODELS: &[&str] = &[
+    "fable-5", "mythos-5", "opus-5", "opus-4-8", "opus-4-7", "sonnet-5",
+];
 
-/// Models that accept `output_config.effort`. Per Anthropic docs:
-/// Fable 5, Mythos 5, Opus 5, Opus 4.7, Opus 4.6, Sonnet 4.6, Opus 4.5.
+/// Models that accept `output_config.effort`. Per the models API capability
+/// report: Fable 5/5.1, Mythos 5/5.1, Opus 5, Opus 4.8, Opus 4.7, Opus 4.6,
+/// Sonnet 5, Sonnet 4.6, Opus 4.5.
 const EFFORT_PARAM_MODELS: &[&str] = &[
     "fable-5",
     "mythos-5",
     "opus-5",
+    "opus-4-8",
     "opus-4-7",
     "opus-4-6",
+    "sonnet-5",
     "sonnet-4-6",
     "opus-4-5",
 ];
@@ -226,7 +240,10 @@ fn calculate_anthropic_cost(
 }
 
 fn effort_value(model: &str, effort: ReasoningEffort, supports_adaptive: bool) -> &'static str {
-    let supports_xhigh = model.contains("opus-5") || model.contains("opus-4-7");
+    const XHIGH_MODELS: &[&str] = &[
+        "fable-5", "mythos-5", "opus-5", "opus-4-8", "opus-4-7", "sonnet-5",
+    ];
+    let supports_xhigh = XHIGH_MODELS.iter().any(|p| model.contains(p));
     match effort {
         ReasoningEffort::Low => "low",
         ReasoningEffort::Medium => "medium",
@@ -552,7 +569,7 @@ impl AiProvider for AnthropicProvider {
 
                 if supports_effort_param {
                     // Per-model value constraints:
-                    //   "xhigh" — Opus 5 and Opus 4.7
+                    //   "xhigh" — Fable/Mythos 5+, Opus 5, Opus 4.8/4.7, Sonnet 5
                     //   "max"   — adaptive models (NOT Opus 4.5)
                     // Downgrade unsupported levels to "high" rather than 400ing the call.
                     let effort_str = effort_value(&params.model, effort, supports_adaptive);

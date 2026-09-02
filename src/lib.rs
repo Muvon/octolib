@@ -136,3 +136,6 @@ pub use reranker::{
     create_rerank_provider_from_parts, parse_provider_model as parse_rerank_provider_model, rerank,
     rerank_with_truncation, RerankProvider, RerankProviderType, RerankResponse, RerankResult,
 };
+/// The tokenizer type handed out by [`EmbeddingProvider::tokenizer`].
+#[cfg(feature = "huggingface")]
+pub use tokenizers::Tokenizer;

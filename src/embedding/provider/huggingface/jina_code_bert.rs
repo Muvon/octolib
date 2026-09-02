@@ -345,7 +345,6 @@ impl Module for JinaCodeBertEncoder {
 pub struct JinaCodeBertModel {
     embeddings: JinaCodeEmbeddings,
     encoder: JinaCodeBertEncoder,
-    pub device: Device,
     span: tracing::Span,
 }
 
@@ -356,7 +355,6 @@ impl JinaCodeBertModel {
         Ok(Self {
             embeddings,
             encoder,
-            device: vb.device().clone(),
             span: tracing::span!(tracing::Level::TRACE, "jina-code-bert"),
         })
     }

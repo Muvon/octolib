@@ -95,6 +95,19 @@ pub trait EmbeddingProvider: Send + Sync {
     fn is_model_supported(&self) -> bool {
         true
     }
+
+    /// Identity of the loaded weights (HF commit sha) for in-process models.
+    /// `None` for API providers, whose model versions are not observable.
+    async fn model_revision(&self) -> Result<Option<String>> {
+        Ok(None)
+    }
+
+    /// The model's own tokenizer for in-process models, so callers can count
+    /// and split tokens exactly as the model does. `None` for API providers.
+    #[cfg(feature = "huggingface")]
+    async fn tokenizer(&self) -> Result<Option<std::sync::Arc<tokenizers::Tokenizer>>> {
+        Ok(None)
+    }
 }
 
 /// Create an embedding provider from provider type and model

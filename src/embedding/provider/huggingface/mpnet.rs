@@ -31,7 +31,7 @@
 //! Reference: <https://arxiv.org/abs/2004.09297>
 //! Weight format: `sentence-transformers/all-mpnet-base-v2` (safetensors)
 
-use candle_core::{DType, Device, Result, Tensor};
+use candle_core::{DType, Result, Tensor};
 use candle_nn::{embedding, layer_norm, linear, Embedding, LayerNorm, Linear, Module, VarBuilder};
 use serde::Deserialize;
 
@@ -46,11 +46,6 @@ pub struct MPNetConfig {
     pub num_hidden_layers: usize,
     pub num_attention_heads: usize,
     pub intermediate_size: usize,
-    pub hidden_act: String,
-    #[serde(default = "default_hidden_dropout")]
-    pub hidden_dropout_prob: f64,
-    #[serde(default = "default_attention_dropout")]
-    pub attention_probs_dropout_prob: f64,
     pub max_position_embeddings: usize,
     #[serde(default = "default_layer_norm_eps")]
     pub layer_norm_eps: f64,
@@ -60,12 +55,6 @@ pub struct MPNetConfig {
     pub pad_token_id: usize,
 }
 
-fn default_hidden_dropout() -> f64 {
-    0.1
-}
-fn default_attention_dropout() -> f64 {
-    0.1
-}
 fn default_layer_norm_eps() -> f64 {
     1e-5
 }
@@ -457,7 +446,6 @@ impl MPNetEncoder {
 pub struct MPNetModel {
     embeddings: MPNetEmbeddings,
     encoder: MPNetEncoder,
-    pub device: Device,
 }
 
 impl MPNetModel {
@@ -467,7 +455,6 @@ impl MPNetModel {
         Ok(Self {
             embeddings,
             encoder,
-            device: vb.device().clone(),
         })
     }
 }

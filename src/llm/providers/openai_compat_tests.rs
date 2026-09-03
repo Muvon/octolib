@@ -357,3 +357,33 @@ fn test_opencode_kimi_k3_max_reasoning_effort_is_kept() {
         "high"
     );
 }
+
+#[test]
+fn test_meta_reasoning_effort_xhigh_ceiling() {
+    // Muse Spark accepts minimal..xhigh ("none" is a 400): XHigh maps
+    // through and Max collapses onto the same xhigh ceiling.
+    assert_eq!(
+        reasoning_effort_value(
+            "meta",
+            "muse-spark-1.3",
+            crate::llm::types::ReasoningEffort::Low
+        ),
+        "low"
+    );
+    assert_eq!(
+        reasoning_effort_value(
+            "meta",
+            "muse-spark-1.3",
+            crate::llm::types::ReasoningEffort::XHigh
+        ),
+        "xhigh"
+    );
+    assert_eq!(
+        reasoning_effort_value(
+            "meta",
+            "muse-spark-1.3",
+            crate::llm::types::ReasoningEffort::Max
+        ),
+        "xhigh"
+    );
+}

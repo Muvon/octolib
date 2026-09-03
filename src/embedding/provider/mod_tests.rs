@@ -157,14 +157,39 @@ async fn test_create_huggingface_qwen2_provider() {
     }
 }
 
+/// True when a HuggingFace model-load error is environmental (anonymous CI
+/// runners get 429 rate limits; CI networks flake) rather than a regression
+/// in this crate — such tests skip instead of failing.
+#[cfg(feature = "huggingface")]
+fn hf_download_unavailable(e: &anyhow::Error) -> bool {
+    let chain = e
+        .chain()
+        .map(|cause| cause.to_string().to_ascii_lowercase())
+        .collect::<String>();
+    chain.contains("429")
+        || chain.contains("too many requests")
+        || chain.contains("rate limit")
+        || chain.contains("request error")
+}
 #[tokio::test]
 #[cfg(feature = "huggingface")]
 async fn test_load_qwen3_embedding_model() {
-    let model = crate::embedding::provider::huggingface::HuggingFaceProvider::get_model_for_test(
-        "Qwen/Qwen3-Embedding-0.6B",
-    )
-    .await
-    .expect("Qwen3 embedding model must load");
+    let model =
+        match crate::embedding::provider::huggingface::HuggingFaceProvider::get_model_for_test(
+            "Qwen/Qwen3-Embedding-0.6B",
+        )
+        .await
+        {
+            Ok(model) => model,
+            Err(e) if hf_download_unavailable(&e) => {
+                println!(
+                    "HuggingFace Qwen3 test skipped (model download unavailable in CI): {}",
+                    e
+                );
+                return;
+            }
+            Err(e) => panic!("Qwen3 embedding model must load: {e}"),
+        };
     let embedding = model
         .encode("Qwen3 embedding regression test")
         .expect("Qwen3 embedding model must encode");
@@ -176,11 +201,22 @@ async fn test_load_qwen3_embedding_model() {
 #[tokio::test]
 #[cfg(feature = "huggingface")]
 async fn test_qwen3_batch_embeddings_match_single_inputs() {
-    let model = crate::embedding::provider::huggingface::HuggingFaceProvider::get_model_for_test(
-        "Qwen/Qwen3-Embedding-0.6B",
-    )
-    .await
-    .expect("Qwen3 embedding model must load");
+    let model =
+        match crate::embedding::provider::huggingface::HuggingFaceProvider::get_model_for_test(
+            "Qwen/Qwen3-Embedding-0.6B",
+        )
+        .await
+        {
+            Ok(model) => model,
+            Err(e) if hf_download_unavailable(&e) => {
+                println!(
+                    "HuggingFace Qwen3 test skipped (model download unavailable in CI): {}",
+                    e
+                );
+                return;
+            }
+            Err(e) => panic!("Qwen3 embedding model must load: {e}"),
+        };
     let texts = [
         "Generate a normalized embedding for this short Rust function.",
         "Batch inference must preserve each source text's vector.",

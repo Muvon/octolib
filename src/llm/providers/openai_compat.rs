@@ -64,6 +64,11 @@ fn reasoning_effort_value(
         crate::llm::types::ReasoningEffort::Low => "low",
         crate::llm::types::ReasoningEffort::Medium => "medium",
         crate::llm::types::ReasoningEffort::High => "high",
+        // Meta Model API accepts "xhigh" as its ceiling ("none" is a 400):
+        // map XHigh through instead of the generic downgrade.
+        crate::llm::types::ReasoningEffort::XHigh if provider_name.eq_ignore_ascii_case("meta") => {
+            "xhigh"
+        }
         crate::llm::types::ReasoningEffort::XHigh => "high",
         crate::llm::types::ReasoningEffort::Max if provider_name.eq_ignore_ascii_case("ollama") => {
             "max"
@@ -76,6 +81,10 @@ fn reasoning_effort_value(
                 && crate::llm::utils::contains_ignore_ascii_case(model, "kimi-k3") =>
         {
             "max"
+        }
+        // Meta has no level above xhigh; collapse Max onto that ceiling.
+        crate::llm::types::ReasoningEffort::Max if provider_name.eq_ignore_ascii_case("meta") => {
+            "xhigh"
         }
         crate::llm::types::ReasoningEffort::Max => "high",
     }

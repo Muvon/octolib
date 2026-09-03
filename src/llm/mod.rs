@@ -50,7 +50,7 @@ pub use types::{
 pub use providers::{
     AlibabaProvider, AmazonBedrockProvider, AnthropicProvider, BytePlusProvider, CerebrasProvider,
     CliProvider, CloudflareWorkersAiProvider, DeepSeekProvider, FireworksProvider,
-    GoogleStudioProvider, GoogleVertexProvider, GroqProvider, LocalProvider, MinimaxProvider,
-    MoonshotProvider, OctoHubProvider, OllamaProvider, OpenAiProvider, OpenRouterProvider,
-    TogetherProvider, XaiProvider, ZaiProvider,
+    GoogleStudioProvider, GoogleVertexProvider, GroqProvider, LocalProvider, MetaProvider,
+    MinimaxProvider, MoonshotProvider, OctoHubProvider, OllamaProvider, OpenAiProvider,
+    OpenRouterProvider, TogetherProvider, XaiProvider, ZaiProvider,
 };

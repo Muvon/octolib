@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.35.1] - 2026-09-03
+
+### 📋 Release Summary
+
+This release adds support for Meta’s Model API provider, expanding octolib’s multi-provider capabilities (c4bed667). Embedding tests are now more resilient when Hugging Face model downloads are unavailable (80ea7e95).
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: add Meta Model API provider `c4bed667`
+
+### 🔧 Improvements & Optimizations
+
+- **embedding**: skip unavailable HuggingFace downloads `80ea7e95`
+
 ## [0.35.0] - 2026-09-02
 
 ### 📋 Release Summary

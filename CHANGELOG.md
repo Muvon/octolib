@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.35.3] - 2026-09-04
+
+### 📋 Release Summary
+
+This release adds support for Gemini 3.8 Flash models (79ce03fa). Dependency updates and improved CI run management enhance overall maintenance and reliability (f0f4edf5, 1e18ba63).
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: support Gemini 3.8 Flash models `79ce03fa`
+
+### 🔧 Improvements & Optimizations
+
+- **workflow**: cancel superseded CI runs `1e18ba63`
+
+### 🔄 Other Changes
+
+1 maintenance, dependency, and tooling update not listed individually.
+
 ## [0.35.2] - 2026-09-04
 
 ### 📋 Release Summary

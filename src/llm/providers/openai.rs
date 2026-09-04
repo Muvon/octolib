@@ -34,6 +34,8 @@ use std::env;
 /// Format: (model, input, output, cache_write, cache_read)
 /// Note: For models without caching, cache_write = input and cache_read = input
 const PRICING: &[PricingTuple] = &[
+    // GPT-6 family. Cache writes cost 1.25x uncached input; cache reads 0.1x.
+    ("gpt-6-astra", 10.00, 50.00, 12.50, 1.00),
     // GPT-5.6 family. The gpt-5.6 alias routes to gpt-5.6-sol.
     // Cache writes cost 1.25x uncached input; cache reads cost 0.1x.
     // Sol is on promotional pricing at least through Nov 21, 2026.
@@ -118,12 +120,18 @@ const PRICING: &[PricingTuple] = &[
 /// for the entire request: 2x input/cache rates and 1.5x output rates.
 const GPT_5_LONG_CONTEXT_THRESHOLD: u64 = 272_000;
 
+/// GPT-5.6 and later share billed cache writes with explicit breakpoints,
+/// `max` reasoning effort, and long-context tiered pricing.
+fn is_gpt_5_6_or_later(normalized: &str) -> bool {
+    normalized.starts_with("gpt-5.6") || normalized.starts_with("gpt-6")
+}
+
 fn get_usage_pricing(model: &str, input_tokens: u64) -> Option<(f64, f64, f64, f64)> {
     let (mut input, mut output, mut cache_write, mut cache_read) =
         get_model_pricing(model, PRICING)?;
 
     let normalized = normalize_model_name(model);
-    let tiered_long_context = normalized.starts_with("gpt-5.6")
+    let tiered_long_context = is_gpt_5_6_or_later(&normalized)
         || (normalized.starts_with("gpt-5.5") && !normalized.starts_with("gpt-5.5-pro"));
     if tiered_long_context && input_tokens > GPT_5_LONG_CONTEXT_THRESHOLD {
         input *= 2.0;
@@ -169,8 +177,8 @@ fn calculate_cost_with_cache(
 }
 
 /// Models that reject temperature and top_p (reasoning models).
-/// O1, O2, O3, O4 and GPT-5 series use internal reasoning and don't accept sampling params.
-const NO_TEMPERATURE_PREFIXES: &[&str] = &["o1", "o2", "o3", "o4", "gpt-5"];
+/// O1, O2, O3, O4 and GPT-5/GPT-6 series use internal reasoning and don't accept sampling params.
+const NO_TEMPERATURE_PREFIXES: &[&str] = &["o1", "o2", "o3", "o4", "gpt-5", "gpt-6"];
 
 /// Convert messages to Responses API input format
 ///
@@ -186,7 +194,7 @@ const NO_TEMPERATURE_PREFIXES: &[&str] = &["o1", "o2", "o3", "o4", "gpt-5"];
 /// # Arguments
 /// * `messages` - Full conversation history
 /// * `previous_response_id` - Exact OpenAI response being continued, if any
-/// * `explicit_cache_breakpoints` - Map `Message.cached` to GPT-5.6 content breakpoints
+/// * `explicit_cache_breakpoints` - Map `Message.cached` to GPT-5.6+ content breakpoints
 fn messages_to_input(
     messages: &[Message],
     previous_response_id: Option<&str>,
@@ -437,6 +445,7 @@ impl AiProvider for OpenAiProvider {
             && (model_lower.contains("gpt-4o")
                 || model_lower.contains("gpt-4.1")
                 || model_lower.contains("gpt-5")
+                || model_lower.contains("gpt-6")
                 || model_lower.contains("codex-mini")
                 || model_lower.contains("gpt-realtime")
                 || model_lower.contains("o1-preview")
@@ -455,6 +464,7 @@ impl AiProvider for OpenAiProvider {
             || normalized.starts_with("gpt-4-vision-preview")
             || normalized.starts_with("gpt-4o-")
             || normalized.starts_with("gpt-5")
+            || normalized.starts_with("gpt-6")
             || normalized.starts_with("codex-mini")
             || normalized.starts_with("gpt-realtime")
     }
@@ -464,6 +474,10 @@ impl AiProvider for OpenAiProvider {
         // These are the actual context windows - API handles output limits
         let normalized = normalize_model_name(model);
 
+        // GPT-6 family: 1.05M context window.
+        if normalized.starts_with("gpt-6") {
+            return 1_050_000;
+        }
         // GPT-5.6 Cyber is a separately provisioned 400K-context model.
         if normalized.starts_with("gpt-5.6-cyber") {
             return 400_000;
@@ -579,8 +593,9 @@ impl AiProvider for OpenAiProvider {
             resolve_previous_response_id(&params.messages, params.previous_id.clone());
 
         // Convert messages to array input format for Responses API
-        let is_gpt_5_6 = normalize_model_name(&params.model).starts_with("gpt-5.6");
-        let input_array = messages_to_input(&params.messages, previous_id.as_deref(), is_gpt_5_6);
+        let is_gpt_5_6_plus = is_gpt_5_6_or_later(&normalize_model_name(&params.model));
+        let input_array =
+            messages_to_input(&params.messages, previous_id.as_deref(), is_gpt_5_6_plus);
         let explicit_cache_breakpoints = count_explicit_cache_breakpoints(&input_array);
 
         // Create the request body for Responses API
@@ -616,19 +631,20 @@ impl AiProvider for OpenAiProvider {
 
         // Add reasoning effort for reasoning models (o1/o3/o4/gpt-5/gpt-5.5+).
         // Maps generic ReasoningEffort -> OpenAI Responses API "effort" string.
-        // GPT-5.6 additionally accepts "max".
+        // GPT-5.6 and later additionally accept "max".
         // Default when caller omits is "medium" (per OpenAI guidance).
         if params.model.starts_with("o1")
             || params.model.starts_with("o3")
             || params.model.starts_with("o4")
             || params.model.starts_with("gpt-5")
+            || params.model.starts_with("gpt-6")
         {
             let effort = match params.reasoning_effort {
                 Some(ReasoningEffort::Low) => "low",
                 Some(ReasoningEffort::Medium) => "medium",
                 Some(ReasoningEffort::High) => "high",
                 Some(ReasoningEffort::XHigh) => "xhigh",
-                Some(ReasoningEffort::Max) if params.model.starts_with("gpt-5.6") => "max",
+                Some(ReasoningEffort::Max) if is_gpt_5_6_plus => "max",
                 Some(ReasoningEffort::Max) => "xhigh",
                 None => "medium",
             };
@@ -701,7 +717,7 @@ impl AiProvider for OpenAiProvider {
         // GPT-5.6 replaced the old maximum-retention field with
         // prompt_cache_options.ttl. Its sole supported TTL is already the 30m
         // default, so do not send the deprecated 24h field for this family.
-        if params.use_long_cache && !normalize_model_name(&params.model).starts_with("gpt-5.6") {
+        if params.use_long_cache && !is_gpt_5_6_plus {
             request_body["prompt_cache_retention"] = serde_json::json!("24h");
         }
 

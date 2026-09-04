@@ -159,6 +159,12 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(0.40, 1.60, 0.40, 0.08),
     },
     ReferenceModelEntry {
+        // OpenAI GPT-6 Astra: 1.05M-context flagship, text/image input.
+        pattern: "gpt-6-astra",
+        capabilities: caps(true, false, true, 1_050_000),
+        pricing: pricing(10.00, 50.00, 12.50, 1.00),
+    },
+    ReferenceModelEntry {
         pattern: "gpt-5.6-terra",
         capabilities: caps(true, false, true, 1_050_000),
         pricing: pricing(2.00, 12.00, 2.50, 0.20),

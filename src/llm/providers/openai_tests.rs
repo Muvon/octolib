@@ -762,6 +762,39 @@ fn test_gpt_5_6_long_context_and_cache_write_pricing() {
 }
 
 #[test]
+fn test_gpt_6_astra() {
+    let provider = OpenAiProvider::new();
+
+    assert!(provider.supports_model("gpt-6-astra"));
+    assert_eq!(provider.get_max_input_tokens("gpt-6-astra"), 1_050_000);
+    assert!(provider.supports_vision("gpt-6-astra"));
+    assert!(provider.supports_caching("gpt-6-astra"));
+    assert!(
+        !provider
+            .supported_sampling_params("gpt-6-astra")
+            .temperature
+    );
+
+    let pricing = provider.get_model_pricing("gpt-6-astra").unwrap();
+    assert_eq!(pricing.input_price_per_1m, 10.00);
+    assert_eq!(pricing.output_price_per_1m, 50.00);
+    assert_eq!(pricing.cache_write_price_per_1m, 12.50);
+    assert_eq!(pricing.cache_read_price_per_1m, 1.00);
+
+    let reference = crate::llm::reference_models::get_reference_pricing("gpt-6-astra").unwrap();
+    assert_eq!(reference.input_price_per_1m, pricing.input_price_per_1m);
+    assert_eq!(reference.output_price_per_1m, pricing.output_price_per_1m);
+
+    // Standard tier: 100K input at $10 + 10K output at $50.
+    let standard = calculate_cost_with_cache("gpt-6-astra", 100_000, 0, 0, 10_000).unwrap();
+    assert!((standard - 1.5).abs() < 0.0000001);
+
+    // Above 272K total input: 2x input/cache rates and 1.5x output.
+    let long = calculate_cost_with_cache("gpt-6-astra", 300_000, 0, 0, 10_000).unwrap();
+    assert!((long - 6.75).abs() < 0.0000001);
+}
+
+#[test]
 fn test_gpt_5_6_usage_deserializes_cache_writes() {
     let usage: ResponseUsage = serde_json::from_value(serde_json::json!({
         "input_tokens": 3_000,

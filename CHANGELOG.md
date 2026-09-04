@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.35.2] - 2026-09-04
+
+### 📋 Release Summary
+
+This release adds support for GPT-6 models in the OpenAI provider (40a99f1f).
+
+
+### ✨ New Features & Enhancements
+
+- **openai**: support GPT-6 models `40a99f1f`
+
 ## [0.35.1] - 2026-09-03
 
 ### 📋 Release Summary

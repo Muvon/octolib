@@ -73,6 +73,7 @@ fn reference_pricing_matches_first_party_provider_tables() {
 
     let google = GoogleVertexProvider::new();
     for model in [
+        "gemini-3.8-flash",
         "gemini-3.7-flash",
         "gemini-3.6-flash",
         "gemini-3.5-flash",

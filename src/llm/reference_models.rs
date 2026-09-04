@@ -412,6 +412,12 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(0.40, 2.00, 0.40, 0.10),
     },
     ReferenceModelEntry {
+        pattern: "gemini-3.8-flash",
+        capabilities: caps(true, true, true, 1_048_576),
+        // Introductory pricing through Dec 31, 2026 (matches providers/google_vertex.rs)
+        pricing: pricing(0.75, 3.75, 0.75, 0.075),
+    },
+    ReferenceModelEntry {
         pattern: "gemini-3.7-flash",
         capabilities: caps(true, true, true, 1_048_576),
         // Introductory pricing through Dec 31, 2026 (matches providers/google_vertex.rs)

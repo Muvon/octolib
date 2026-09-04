@@ -22,6 +22,7 @@ fn test_supports_model_before_cache() {
     assert!(provider.supports_model("gemini-2.5-flash"));
     assert!(provider.supports_model("gemini-3.6-flash"));
     assert!(provider.supports_model("gemini-3.7-flash"));
+    assert!(provider.supports_model("gemini-3.8-flash"));
     assert!(!provider.supports_model(""));
 }
 
@@ -41,6 +42,10 @@ fn test_default_capabilities() {
 fn test_sampling_params() {
     let provider = GoogleStudioProvider::new();
     assert_eq!(
+        provider.supported_sampling_params("gemini-3.8-flash"),
+        SamplingSupport::NONE
+    );
+    assert_eq!(
         provider.supported_sampling_params("gemini-3.7-flash"),
         SamplingSupport::NONE
     );
@@ -57,6 +62,10 @@ fn test_sampling_params() {
 #[test]
 fn test_model_pricing() {
     let provider = GoogleStudioProvider::new();
+
+    let p = provider.get_model_pricing("gemini-3.8-flash").unwrap();
+    assert_eq!(p.input_price_per_1m, 0.75);
+    assert_eq!(p.output_price_per_1m, 3.75);
 
     let p = provider.get_model_pricing("gemini-3.7-flash").unwrap();
     assert_eq!(p.input_price_per_1m, 0.75);

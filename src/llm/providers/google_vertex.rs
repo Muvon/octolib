@@ -61,8 +61,9 @@ impl GoogleVertexProvider {
 /// Matching is substring-based and first-match-wins: keep "-lite"/"-pro" variants
 /// before their shorter prefixes.
 pub(super) const PRICING: &[PricingTuple] = &[
-    // Gemini 3.7 / 3.6 series — introductory pricing through Dec 31, 2026;
+    // Gemini 3.8 / 3.7 / 3.6 series — introductory pricing through Dec 31, 2026;
     // standard rates from Jan 1, 2027: input $1.50, output $7.50, cache read $0.15
+    ("gemini-3.8-flash", 0.75, 3.75, 0.75, 0.075),
     ("gemini-3.7-flash", 0.75, 3.75, 0.75, 0.075),
     ("gemini-3.6-flash", 0.75, 3.75, 0.75, 0.075),
     // Gemini 3.5 series (gemini-flash-latest points here)
@@ -239,10 +240,13 @@ pub(super) fn gemini_max_input_tokens(model: &str) -> usize {
 }
 
 /// Sampling-parameter support for Gemini models (shared with the google-studio
-/// provider). Gemini 3.6/3.7 dropped temperature/top_p/top_k support.
+/// provider). Gemini 3.6/3.7/3.8 dropped temperature/top_p/top_k support.
 pub(super) fn gemini_sampling_support(model: &str) -> SamplingSupport {
     let normalized = normalize_model_name(model);
-    if normalized.contains("gemini-3.6") || normalized.contains("gemini-3.7") {
+    if normalized.contains("gemini-3.6")
+        || normalized.contains("gemini-3.7")
+        || normalized.contains("gemini-3.8")
+    {
         SamplingSupport::NONE
     } else {
         SamplingSupport::ALL

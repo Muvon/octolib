@@ -47,6 +47,10 @@ fn test_model_pricing() {
     assert_eq!(p.input_price_per_1m, 1.50);
     assert_eq!(p.output_price_per_1m, 9.00);
 
+    let p = provider.get_model_pricing("gemini-3.8-flash").unwrap();
+    assert_eq!(p.input_price_per_1m, 0.75);
+    assert_eq!(p.output_price_per_1m, 3.75);
+
     let p = provider.get_model_pricing("gemini-3.7-flash").unwrap();
     assert_eq!(p.input_price_per_1m, 0.75);
     assert_eq!(p.output_price_per_1m, 3.75);
@@ -85,6 +89,10 @@ fn test_max_input_tokens_fallback() {
 #[test]
 fn test_sampling_params() {
     let provider = GoogleVertexProvider::new();
+    assert_eq!(
+        provider.supported_sampling_params("gemini-3.8-flash"),
+        SamplingSupport::NONE
+    );
     assert_eq!(
         provider.supported_sampling_params("gemini-3.7-flash"),
         SamplingSupport::NONE

@@ -256,3 +256,30 @@ fn test_provider_capabilities() {
     assert!(!provider.supports_vision("glm-5"));
     assert!(!provider.supports_vision("glm-4.7"));
 }
+
+#[test]
+fn image_attachments_become_multimodal_content() {
+    use crate::llm::types::{ImageAttachment, ImageData, Message, SourceType};
+    // The regression this pins: a vision turn used to serialize as a plain text
+    // string, so GLM-5.3-Flash never received the image and answered as if blind.
+    let msg = Message::user("what is on the image?").with_images(vec![ImageAttachment {
+        data: ImageData::Base64("QUJD".to_string()),
+        media_type: "image/jpeg".to_string(),
+        source_type: SourceType::Clipboard,
+        dimensions: None,
+        size_bytes: None,
+    }]);
+    let converted = convert_messages(std::slice::from_ref(&msg));
+    let content = converted[0].content.clone().unwrap();
+    assert_eq!(content[0]["type"], "text");
+    assert_eq!(content[0]["text"], "what is on the image?");
+    assert_eq!(content[1]["type"], "image_url");
+    assert_eq!(
+        content[1]["image_url"]["url"],
+        "data:image/jpeg;base64,QUJD"
+    );
+
+    // A text-only turn keeps the plain string shape Z.ai expects.
+    let plain = convert_messages(&[Message::user("hi")]);
+    assert_eq!(plain[0].content, Some(serde_json::json!("hi")));
+}

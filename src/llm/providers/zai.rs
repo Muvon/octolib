@@ -213,7 +213,11 @@ struct ZaiRequest {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct ZaiMessage {
     role: String,
-    content: String,
+    /// Plain string for text turns, OpenAI-style content parts when the turn
+    /// carries images (vision route only). A String here silently dropped every
+    /// image and GLM-5.3-Flash answered as if blind.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_content: Option<String>, // For thinking mode
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -368,6 +372,23 @@ impl AiProvider for ZaiProvider {
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
         let (api_key, api_url) = get_api_key_and_url()?;
 
+        // Reject an empty message here rather than letting Z.ai answer it with an
+        // opaque 1214 rejection. A turn with no text, no image/video, and no tool
+        // call carries nothing for the model — it is a bug in the caller, and it
+        // should fail loudly and point at the offending message, not be papered over.
+        if let Some(i) = params.messages.iter().position(|m| {
+            m.content.trim().is_empty()
+                && m.images.as_ref().map_or(true, |v| v.is_empty())
+                && m.videos.as_ref().map_or(true, |v| v.is_empty())
+                && m.tool_calls.is_none()
+                && m.tool_call_id.is_none()
+        }) {
+            return Err(anyhow::anyhow!(
+                "Z.ai: message {i} (role {}) is empty — no text, image, or tool content",
+                params.messages[i].role
+            ));
+        }
+
         // Convert messages to Z.ai format
         let messages = convert_messages(&params.messages);
 
@@ -443,14 +464,36 @@ impl AiProvider for ZaiProvider {
 fn convert_messages(messages: &[crate::llm::types::Message]) -> Vec<ZaiMessage> {
     messages
         .iter()
-        .map(|msg| ZaiMessage {
-            role: msg.role.clone(),
-            content: msg.content.clone(),
-            reasoning_content: msg.thinking.as_ref().map(|t| t.content.clone()),
-            tool_calls: msg.tool_calls.as_ref().map(convert_tool_calls),
-            // Tool results must reference the matching assistant tool call. Without
-            // this field Z.ai cannot associate the returned content with the call.
-            tool_call_id: msg.tool_call_id.clone(),
+        .map(|msg| {
+            // A message with images becomes the OpenAI-compatible content array
+            // Z.ai expects for vision; without it every image was dropped and
+            // GLM-5.3-Flash answered as if it saw nothing. Text-only stays a plain
+            // string. (Videos ride their own provider path.)
+            let images = msg.images.as_deref().unwrap_or_default();
+            let content = if images.is_empty() {
+                serde_json::json!(msg.content)
+            } else {
+                let mut parts = vec![serde_json::json!({"type": "text", "text": msg.content})];
+                parts.extend(images.iter().map(|image| {
+                    let url = match &image.data {
+                        crate::llm::types::ImageData::Base64(data) => {
+                            format!("data:{};base64,{}", image.media_type, data)
+                        }
+                        crate::llm::types::ImageData::Url(u) => u.clone(),
+                    };
+                    serde_json::json!({"type": "image_url", "image_url": {"url": url}})
+                }));
+                serde_json::json!(parts)
+            };
+            ZaiMessage {
+                role: msg.role.clone(),
+                content: Some(content),
+                reasoning_content: msg.thinking.as_ref().map(|t| t.content.clone()),
+                tool_calls: msg.tool_calls.as_ref().map(convert_tool_calls),
+                // Tool results must reference the matching assistant tool call. Without
+                // this field Z.ai cannot associate the returned content with the call.
+                tool_call_id: msg.tool_call_id.clone(),
+            }
         })
         .collect()
 }
@@ -578,9 +621,6 @@ async fn execute_zai_request(
             .iter()
             .map(|m| {
                 let mut f = String::from(m.role.as_str());
-                if m.content.is_empty() {
-                    f.push_str("+empty");
-                }
                 if m.reasoning_content.is_some() {
                     f.push_str("+reasoning");
                 }
@@ -613,8 +653,10 @@ async fn execute_zai_request(
     let raw_content = zai_response
         .choices
         .first()
-        .map(|choice| choice.message.content.clone())
-        .unwrap_or_default();
+        .and_then(|choice| choice.message.content.as_ref())
+        .and_then(|c| c.as_str())
+        .unwrap_or_default()
+        .to_string();
 
     // Extract thinking from reasoning_content field first, then fall back to tags
     let (thinking, content) = extract_thinking(

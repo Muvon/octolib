@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.35.4] - 2026-09-05
+
+### 📋 Release Summary
+
+This release fixes an issue in the ZAI provider to ensure images are preserved in chat messages (47b167e8).
+
+
+### 🐛 Bug Fixes & Stability
+
+- **zai**: preserve images in chat messages `47b167e8`
+
 ## [0.35.3] - 2026-09-04
 
 ### 📋 Release Summary

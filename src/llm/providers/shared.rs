@@ -21,6 +21,9 @@ use arc_swap::ArcSwap;
 use std::sync::LazyLock;
 use std::time::Duration;
 
+const USER_AGENT_ENV: &str = "OCTOLIB_USER_AGENT";
+const DEFAULT_USER_AGENT: &str = concat!("octolib/", env!("CARGO_PKG_VERSION"));
+
 /// Process-wide shared HTTP client, swappable on connection errors.
 ///
 /// `reqwest::Client` holds a connection pool internally — reusing it across
@@ -76,11 +79,21 @@ use std::time::Duration;
 static HTTP_CLIENT: LazyLock<ArcSwap<reqwest::Client>> =
     LazyLock::new(|| ArcSwap::from_pointee(build_http_client()));
 
+/// Client identification sent as `User-Agent`; reqwest sends none by default
+/// and some upstreams (OpenCode) reject anonymous requests. Embedding apps
+/// name themselves through `OCTOLIB_USER_AGENT`, same as the OpenRouter
+/// attribution vars. Unusable values fall back to the default.
+fn user_agent() -> String {
+    std::env::var(USER_AGENT_ENV)
+        .ok()
+        .map(|ua| ua.trim().to_string())
+        .filter(|ua| !ua.is_empty() && reqwest::header::HeaderValue::from_str(ua).is_ok())
+        .unwrap_or_else(|| DEFAULT_USER_AGENT.to_string())
+}
+
 fn build_http_client() -> reqwest::Client {
     reqwest::Client::builder()
-        // Identify the client to upstreams that require a User-Agent
-        // (OpenCode errors on anonymous requests); reqwest sends none by default.
-        .user_agent(concat!("octolib/", env!("CARGO_PKG_VERSION")))
+        .user_agent(user_agent())
         .connect_timeout(Duration::from_secs(20))
         .tcp_keepalive(Duration::from_secs(10))
         .tcp_keepalive_interval(Duration::from_secs(5))

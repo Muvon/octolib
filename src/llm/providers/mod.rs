@@ -45,6 +45,8 @@ pub mod xai;
 pub mod zai;
 
 // Re-export provider implementations
+pub use shared::set_user_agent;
+
 pub use alibaba::AlibabaProvider;
 pub use amazon::AmazonBedrockProvider;
 pub use anthropic::AnthropicProvider;

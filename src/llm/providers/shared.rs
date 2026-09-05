@@ -21,8 +21,30 @@ use arc_swap::ArcSwap;
 use std::sync::LazyLock;
 use std::time::Duration;
 
-const USER_AGENT_ENV: &str = "OCTOLIB_USER_AGENT";
 const DEFAULT_USER_AGENT: &str = concat!("octolib/", env!("CARGO_PKG_VERSION"));
+
+/// `User-Agent` sent with every upstream request. reqwest sends none by default
+/// and some upstreams (OpenCode) reject anonymous requests, so octolib always
+/// identifies itself; embedding apps rename it with [`set_user_agent`].
+static USER_AGENT: LazyLock<ArcSwap<String>> =
+    LazyLock::new(|| ArcSwap::from_pointee(DEFAULT_USER_AGENT.to_string()));
+
+/// Identify the calling application in the `User-Agent` of every upstream
+/// request, replacing the `octolib/<version>` default.
+///
+/// Call once at startup: it rebuilds the shared HTTP client, so in-flight
+/// requests keep the old client and pooled connections are dropped. Values that
+/// are empty or not a valid header are ignored.
+pub fn set_user_agent(user_agent: impl Into<String>) {
+    let user_agent = user_agent.into();
+    if user_agent.trim().is_empty() || reqwest::header::HeaderValue::from_str(&user_agent).is_err()
+    {
+        tracing::warn!(user_agent = %user_agent, "ignoring invalid user agent");
+        return;
+    }
+    USER_AGENT.store(std::sync::Arc::new(user_agent));
+    refresh_http_client();
+}
 
 /// Process-wide shared HTTP client, swappable on connection errors.
 ///
@@ -79,21 +101,9 @@ const DEFAULT_USER_AGENT: &str = concat!("octolib/", env!("CARGO_PKG_VERSION"));
 static HTTP_CLIENT: LazyLock<ArcSwap<reqwest::Client>> =
     LazyLock::new(|| ArcSwap::from_pointee(build_http_client()));
 
-/// Client identification sent as `User-Agent`; reqwest sends none by default
-/// and some upstreams (OpenCode) reject anonymous requests. Embedding apps
-/// name themselves through `OCTOLIB_USER_AGENT`, same as the OpenRouter
-/// attribution vars. Unusable values fall back to the default.
-fn user_agent() -> String {
-    std::env::var(USER_AGENT_ENV)
-        .ok()
-        .map(|ua| ua.trim().to_string())
-        .filter(|ua| !ua.is_empty() && reqwest::header::HeaderValue::from_str(ua).is_ok())
-        .unwrap_or_else(|| DEFAULT_USER_AGENT.to_string())
-}
-
 fn build_http_client() -> reqwest::Client {
     reqwest::Client::builder()
-        .user_agent(user_agent())
+        .user_agent(USER_AGENT.load().as_str())
         .connect_timeout(Duration::from_secs(20))
         .tcp_keepalive(Duration::from_secs(10))
         .tcp_keepalive_interval(Duration::from_secs(5))

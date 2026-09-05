@@ -47,6 +47,7 @@ pub use types::{
 };
 
 // Re-export all provider implementations
+pub use providers::set_user_agent;
 pub use providers::{
     AlibabaProvider, AmazonBedrockProvider, AnthropicProvider, BytePlusProvider, CerebrasProvider,
     CliProvider, CloudflareWorkersAiProvider, DeepSeekProvider, FireworksProvider,

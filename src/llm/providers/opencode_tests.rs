@@ -202,3 +202,23 @@ fn test_default_capabilities() {
     assert!(go.supports_caching("any-model"));
     assert!(go.supports_structured_output("any-model"));
 }
+
+#[test]
+fn test_session_header_is_added_unless_caller_set_it() {
+    let mut params = ChatCompletionParams::new(&[], "kimi-k3", 1.0, 1.0, 0, 0);
+    set_session_header(&mut params);
+    let headers = params.extra_headers.unwrap();
+    assert_eq!(headers.len(), 1);
+    assert!(!headers[OPENCODE_SESSION_HEADER].is_empty());
+
+    // Caller-supplied session wins, whatever the header casing
+    let mut params = ChatCompletionParams::new(&[], "kimi-k3", 1.0, 1.0, 0, 0);
+    params.extra_headers = Some(std::collections::HashMap::from([(
+        "X-OpenCode-Session".to_string(),
+        "caller-session".to_string(),
+    )]));
+    set_session_header(&mut params);
+    let headers = params.extra_headers.unwrap();
+    assert_eq!(headers.len(), 1);
+    assert_eq!(headers["X-OpenCode-Session"], "caller-session");
+}

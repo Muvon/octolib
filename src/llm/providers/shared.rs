@@ -78,6 +78,9 @@ static HTTP_CLIENT: LazyLock<ArcSwap<reqwest::Client>> =
 
 fn build_http_client() -> reqwest::Client {
     reqwest::Client::builder()
+        // Identify the client to upstreams that require a User-Agent
+        // (OpenCode errors on anonymous requests); reqwest sends none by default.
+        .user_agent(concat!("octolib/", env!("CARGO_PKG_VERSION")))
         .connect_timeout(Duration::from_secs(20))
         .tcp_keepalive(Duration::from_secs(10))
         .tcp_keepalive_interval(Duration::from_secs(5))

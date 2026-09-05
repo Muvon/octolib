@@ -39,6 +39,8 @@
 //! - `OPENCODE_API_KEY`: Required API key, shared by both providers (one key
 //!   from opencode.ai/auth covers Zen and Go — matches the models.dev registry)
 //! - `OPENCODE_ZEN_API_URL` / `OPENCODE_GO_API_URL`: Optional endpoint overrides
+//! - `OPENCODE_SESSION_ID`: Optional fixed value for the required
+//!   `x-opencode-session` header (default: one random id per process)
 
 use crate::llm::providers::openai_compat::{
     chat_completion_with_sampling as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
@@ -50,6 +52,7 @@ use crate::llm::types::{
 use crate::llm::utils::contains_ignore_ascii_case;
 use anyhow::Result;
 use std::env;
+use std::sync::LazyLock;
 
 const OPENCODE_API_KEY_ENV: &str = "OPENCODE_API_KEY";
 
@@ -58,6 +61,21 @@ const OPENCODE_ZEN_API_URL: &str = "https://opencode.ai/zen/v1/chat/completions"
 
 const OPENCODE_GO_API_URL_ENV: &str = "OPENCODE_GO_API_URL";
 const OPENCODE_GO_API_URL: &str = "https://opencode.ai/zen/go/v1/chat/completions";
+
+const OPENCODE_SESSION_HEADER: &str = "x-opencode-session";
+const OPENCODE_SESSION_ID_ENV: &str = "OPENCODE_SESSION_ID";
+
+/// Session id sent as `x-opencode-session`. OpenCode requires the header on
+/// every request (announced 2026-09-05: missing ones may error from 2026-09-06)
+/// and only needs it to be stable per client session, so one random id per
+/// process is enough. Callers tracking their own sessions override it through
+/// `extra_headers` or `OPENCODE_SESSION_ID`.
+static OPENCODE_SESSION_ID: LazyLock<String> = LazyLock::new(|| {
+    env::var(OPENCODE_SESSION_ID_ENV)
+        .ok()
+        .filter(|id| !id.trim().is_empty())
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string())
+});
 
 fn get_opencode_api_key(provider_label: &str) -> Result<String> {
     env::var(OPENCODE_API_KEY_ENV).map_err(|_| {
@@ -180,6 +198,20 @@ fn remove_empty_kimi_assistant_messages(model: &str, messages: &mut Vec<Message>
     });
 }
 
+/// Attach `x-opencode-session` unless the caller already supplied it.
+fn set_session_header(params: &mut ChatCompletionParams) {
+    let headers = params.extra_headers.get_or_insert_with(Default::default);
+    if !headers
+        .keys()
+        .any(|name| name.eq_ignore_ascii_case(OPENCODE_SESSION_HEADER))
+    {
+        headers.insert(
+            OPENCODE_SESSION_HEADER.to_string(),
+            OPENCODE_SESSION_ID.clone(),
+        );
+    }
+}
+
 async fn opencode_chat_completion(
     provider_name: &'static str,
     api_key: String,
@@ -192,6 +224,8 @@ async fn opencode_chat_completion(
     // before the generic openai_compat passthrough serializes the field.
     params.reasoning_effort = adjust_reasoning_effort(&model, params.reasoning_effort);
     remove_empty_kimi_assistant_messages(&model, &mut params.messages);
+
+    set_session_header(&mut params);
 
     let mut response = openai_compat_chat_completion(
         OpenAiCompatConfig {

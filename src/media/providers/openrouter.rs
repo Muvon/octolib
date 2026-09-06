@@ -204,7 +204,7 @@ impl OpenRouterMediaProvider {
         options.max_retries = options.max_retries.min(1);
         let url = format!("{}/generation", self.api_base());
         let response = shared::send_idempotent(PROVIDER, &options, || {
-            crate::llm::providers::shared::http_client()
+            crate::http::http_client()
                 .get(&url)
                 .bearer_auth(key)
                 .query(&[("id", generation_id)])
@@ -328,7 +328,7 @@ impl ImageGenerationProvider for OpenRouterMediaProvider {
         let key = self.key()?;
         let url = format!("{}/images", self.api_base());
         let response = shared::send(PROVIDER, &request.request_options, || {
-            crate::llm::providers::shared::http_client()
+            crate::http::http_client()
                 .post(&url)
                 .bearer_auth(&key)
                 .json(&body)
@@ -501,7 +501,7 @@ impl VideoGenerationProvider for OpenRouterMediaProvider {
         let key = self.key()?;
         let url = format!("{}/videos", self.api_base());
         let response = shared::send(PROVIDER, &request.request_options, || {
-            crate::llm::providers::shared::http_client()
+            crate::http::http_client()
                 .post(&url)
                 .bearer_auth(&key)
                 .json(&body)
@@ -533,9 +533,7 @@ impl VideoGenerationProvider for OpenRouterMediaProvider {
         let url = format!("{}/videos/{}", self.api_base(), handle.remote_id);
         let options = RequestOptions::default();
         let response = shared::send_idempotent(PROVIDER, &options, || {
-            crate::llm::providers::shared::http_client()
-                .get(&url)
-                .bearer_auth(&key)
+            crate::http::http_client().get(&url).bearer_auth(&key)
         })
         .await?;
         let value = shared::parse_json(PROVIDER, &response)?;
@@ -583,7 +581,7 @@ impl SpeechSynthesisProvider for OpenRouterMediaProvider {
         let key = self.key()?;
         let url = format!("{}/audio/speech", self.api_base());
         let response = shared::send(PROVIDER, &request.request_options, || {
-            crate::llm::providers::shared::http_client()
+            crate::http::http_client()
                 .post(&url)
                 .bearer_auth(&key)
                 .json(&body)
@@ -671,7 +669,7 @@ impl SpeechSynthesisProvider for OpenRouterMediaProvider {
         let key = self.key()?;
         let url = format!("{}/audio/speech", self.api_base());
         let response = shared::send_stream(PROVIDER, &request.request_options, || {
-            crate::llm::providers::shared::http_client()
+            crate::http::http_client()
                 .post(&url)
                 .bearer_auth(&key)
                 .json(&body)
@@ -751,7 +749,7 @@ impl TranscriptionProvider for OpenRouterMediaProvider {
         let key = self.key()?;
         let url = format!("{}/audio/transcriptions", self.api_base());
         let response = shared::send(PROVIDER, &request.request_options, || {
-            crate::llm::providers::shared::http_client()
+            crate::http::http_client()
                 .post(&url)
                 .bearer_auth(&key)
                 .json(&body)

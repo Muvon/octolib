@@ -33,6 +33,14 @@
 //! - **Self-sufficient**: No external dependencies on application-specific types
 //! - **CLI provider**: `cli:<backend>/<model>` proxies CLIs; tool calling/MCP is not used or controllable (prompt-only)
 //!
+//! ## Cargo features
+//!
+//! Every capability is enabled by default. Turn defaults off to compile only
+//! what you use: `llm`, `embeddings`, `reranker`, and `media` — each gates the
+//! module of the same name. The local embedding backends `fastembed` and
+//! `huggingface` both imply `embeddings`. The `errors`, `storage` and `utils`
+//! modules and `set_user_agent` are always compiled.
+//!
 //! ## Usage
 //!
 //! ### Basic Chat Completion
@@ -120,15 +128,23 @@
 //! }
 //! ```
 
+#[cfg(feature = "embeddings")]
 pub mod embedding;
 pub mod errors;
+pub mod http;
+#[cfg(feature = "llm")]
 pub mod llm;
+#[cfg(feature = "media")]
 pub mod media;
+#[cfg(feature = "reranker")]
 pub mod reranker;
 pub mod storage;
 pub mod utils;
 
+pub use http::set_user_agent;
+
 // Re-export main types and traits for easy access (backward compatibility)
+#[cfg(feature = "embeddings")]
 pub use embedding::{
     calculate_embedding_cost, count_tokens, create_embedding_provider_from_parts,
     generate_embeddings, generate_embeddings_batch, split_texts_into_token_limited_batches,
@@ -139,19 +155,20 @@ pub use errors::{
     ConfigError, ConfigResult, MessageError, MessageResult, ProviderError, ProviderResult,
     StructuredOutputError, StructuredOutputResult, ToolCallError, ToolCallResult,
 };
+#[cfg(feature = "llm")]
 pub use llm::{
-    chat_completion_enforced, set_user_agent, AiProvider, AmazonBedrockProvider, AnthropicProvider,
-    CacheConfig, CacheTTL, CacheType, CerebrasProvider, ChatCompletionParams,
-    CloudflareWorkersAiProvider, DeepSeekProvider, EffectiveSamplingParams, FireworksProvider,
-    FunctionDefinition, GenericToolCall, GoogleStudioProvider, GoogleVertexProvider,
-    ImageAttachment, ImageData, LocalProvider, Message, MessageBuilder, MetaProvider,
-    MinimaxProvider, ModelLimits, MoonshotProvider, OllamaProvider, OpenAiProvider,
-    OpenRouterProvider, OutputFormat, ProviderExchange, ProviderFactory, ProviderResponse,
-    ProviderStrategy, ProviderToolCalls, ReasoningEffort, ResponseMode, SamplingSupport,
-    SourceType, StrategyFactory, StructuredOutputRequest, ThinkingBlock, TogetherProvider,
-    TokenUsage, ToolCall, ToolChoice, ToolResult, VideoAttachment, VideoData, XaiProvider,
-    ZaiProvider,
+    chat_completion_enforced, AiProvider, AmazonBedrockProvider, AnthropicProvider, CacheConfig,
+    CacheTTL, CacheType, CerebrasProvider, ChatCompletionParams, CloudflareWorkersAiProvider,
+    DeepSeekProvider, EffectiveSamplingParams, FireworksProvider, FunctionDefinition,
+    GenericToolCall, GoogleStudioProvider, GoogleVertexProvider, ImageAttachment, ImageData,
+    LocalProvider, Message, MessageBuilder, MetaProvider, MinimaxProvider, ModelLimits,
+    MoonshotProvider, OllamaProvider, OpenAiProvider, OpenRouterProvider, OutputFormat,
+    ProviderExchange, ProviderFactory, ProviderResponse, ProviderStrategy, ProviderToolCalls,
+    ReasoningEffort, ResponseMode, SamplingSupport, SourceType, StrategyFactory,
+    StructuredOutputRequest, ThinkingBlock, TogetherProvider, TokenUsage, ToolCall, ToolChoice,
+    ToolResult, VideoAttachment, VideoData, XaiProvider, ZaiProvider,
 };
+#[cfg(feature = "media")]
 pub use media::{
     download_artifact, generate_image, generate_video, reference_cost_estimate, synthesize_speech,
     transcribe, ArtifactSource, AudioFormat, AudioOutputSpec, CapabilitySupport, CostEstimate,
@@ -169,6 +186,7 @@ pub use media::{
     UsageLineItem, UsageUnit, VideoCapabilities, VideoFormat, VideoGenerationMode,
     VideoGenerationProvider, VideoGenerationRequest, VideoGenerationResult, WarningCode,
 };
+#[cfg(feature = "reranker")]
 pub use reranker::{
     create_rerank_provider_from_parts, parse_provider_model as parse_rerank_provider_model, rerank,
     rerank_with_truncation, RerankProvider, RerankProviderType, RerankResponse, RerankResult,

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 //! Reference pricing for media models — the media counterpart of
-//! [`crate::llm::reference_models`], so a caller reads a cost off
+//! `llm::reference_models`, so a caller reads a cost off
 //! [`MediaUsage`](super::types::MediaUsage) without having to know a rate up front.
 //!
 //! Two things make media pricing structurally different from LLM pricing, and
@@ -42,7 +42,7 @@
 //! table does not have.
 
 use super::types::{CostEstimate, UsageUnit};
-use crate::llm::utils::{normalize_model_name, sanitize_model_name};
+use crate::utils::naming::{normalize_model_name, sanitize_model_name};
 
 /// Reference rate for a matched media model, plus the pattern that matched —
 /// callers surface the pattern when explaining where a price came from.

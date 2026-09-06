@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.36.1] - 2026-09-06
+
+### 📋 Release Summary
+
+This release introduces a multimodal generation framework with Fal, ElevenLabs, and Runway support, reference pricing estimates, and media usage examples (fbb0ee1a, 2038029d, b685a5a3, 4a56def1, c122be73). It improves HTTP and feature availability consistency, media usage warnings and pricing, provider API-key configuration, and ZAI media handling (1c175436, 5abcd53b, a7bc54eb, a84f104b).
+
+
+### ✨ New Features & Enhancements
+
+- **core**: centralize HTTP and feature gating `1c175436`
+- **examples**: add multimodal media examples `c122be73`
+- **media**: add reference pricing estimates `4a56def1`
+- **media**: add ElevenLabs and Runway support `b685a5a3`
+- **media**: add Fal provider integration `2038029d`
+- **media**: implement multimodal generation framework `fbb0ee1a`
+
+### 🔧 Improvements & Optimizations
+
+- **zai**: simplify empty media checks `a84f104b`
+- **media**: stabilize Windows provider tests `4cd98e55`
+
+### 🐛 Bug Fixes & Stability
+
+- **media**: correct usage warnings and pricing `5abcd53b`
+- **auth**: standardize provider API key variables `a7bc54eb`
+
 ## [0.36.0] - 2026-09-06
 
 ### 📋 Release Summary

@@ -47,7 +47,7 @@ arc-swap = "1"
 base64 = { version = "0.22", optional = true }
 thiserror = "2.0.18"
 tracing = "0.1.44"
-dirs = "6.0.0"
+dirs = "7.0.0"
 jsonwebtoken = { version = "10", optional = true }
 # Schema validation only — no $ref resolution over HTTP/file needed (client
 # schemas are self-contained), so default features (which pull in a second

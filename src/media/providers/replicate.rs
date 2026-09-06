@@ -392,7 +392,7 @@ impl ImageGenerationProvider for ReplicateMediaProvider {
             &value,
             &request.model,
             task_for_image_mode(request.mode),
-            options.cost_estimate,
+            shared::resolved_cost_estimate(PROVIDER, &request.model, options.cost_estimate, None),
             request.count,
             &mut warnings,
         )
@@ -548,7 +548,17 @@ impl VideoGenerationProvider for ReplicateMediaProvider {
             &value,
             &request.model,
             task,
-            options.cost_estimate,
+            shared::resolved_cost_estimate(
+                PROVIDER,
+                &request.model,
+                options.cost_estimate,
+                request.duration_secs.map(|seconds| {
+                    (
+                        UsageUnit::VideoSeconds,
+                        seconds * f64::from(request.count.unwrap_or(1)),
+                    )
+                }),
+            ),
             request.count,
             &mut warnings,
         )
@@ -653,7 +663,13 @@ impl SpeechSynthesisProvider for ReplicateMediaProvider {
                 &mut warnings,
             )
             .await?;
-        parse_speech_operation(&value, &request.model, options.cost_estimate, &mut warnings)
+        let estimate = shared::resolved_cost_estimate(
+            PROVIDER,
+            &request.model,
+            options.cost_estimate,
+            Some((UsageUnit::Characters, request.text.chars().count() as f64)),
+        );
+        parse_speech_operation(&value, &request.model, estimate, &mut warnings)
     }
 
     async fn poll_speech(
@@ -729,7 +745,9 @@ impl TranscriptionProvider for ReplicateMediaProvider {
                 &mut warnings,
             )
             .await?;
-        parse_transcription_operation(&value, &request.model, options.cost_estimate, &mut warnings)
+        let estimate =
+            shared::resolved_cost_estimate(PROVIDER, &request.model, options.cost_estimate, None);
+        parse_transcription_operation(&value, &request.model, estimate, &mut warnings)
     }
 
     async fn poll_transcription(

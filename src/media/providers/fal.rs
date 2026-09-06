@@ -324,7 +324,7 @@ impl ImageGenerationProvider for FalMediaProvider {
             &request.model,
             task,
             &value,
-            options.cost_estimate,
+            shared::resolved_cost_estimate(PROVIDER, &request.model, options.cost_estimate, None),
             warnings,
             request.count,
         )?)
@@ -477,7 +477,17 @@ impl VideoGenerationProvider for FalMediaProvider {
             &request.model,
             task,
             &value,
-            options.cost_estimate,
+            shared::resolved_cost_estimate(
+                PROVIDER,
+                &request.model,
+                options.cost_estimate,
+                request.duration_secs.map(|seconds| {
+                    (
+                        UsageUnit::VideoSeconds,
+                        seconds * f64::from(request.count.unwrap_or(1)),
+                    )
+                }),
+            ),
             warnings,
             request.count,
         )?)
@@ -593,7 +603,12 @@ impl SpeechSynthesisProvider for FalMediaProvider {
             &request.model,
             MediaTask::TextToSpeech,
             &value,
-            options.cost_estimate,
+            shared::resolved_cost_estimate(
+                PROVIDER,
+                &request.model,
+                options.cost_estimate,
+                Some((UsageUnit::Characters, request.text.chars().count() as f64)),
+            ),
             warnings,
             None,
         )?)
@@ -680,7 +695,7 @@ impl TranscriptionProvider for FalMediaProvider {
             &request.model,
             MediaTask::SpeechToText,
             &value,
-            options.cost_estimate,
+            shared::resolved_cost_estimate(PROVIDER, &request.model, options.cost_estimate, None),
             warnings,
             None,
         )?)

@@ -96,7 +96,7 @@ Low-level `submit_*`, `poll_*`, and `cancel_*` methods are public. Persist the c
 
 Only idempotent schema and polling queries are retried. Generation POSTs are deliberately not replayed after an ambiguous transport failure because doing so can create duplicate paid work.
 
-Cost semantics are strict: `provider_reported_cost` is used only when the upstream returns a dollar amount. Replicate normally reports compute time rather than dollars, so its cost remains unknown unless a verified `CostEstimate` is supplied; that result is stored separately as `estimated_cost`, never disguised as provider-reported cost. See [multimodal.md](multimodal.md) and the `media_openrouter` / `media_replicate` examples for the full contract.
+Cost semantics are strict: `provider_reported_cost` is used only when the upstream returns a dollar amount. Replicate normally reports compute time rather than dollars, so its cost falls back to a rate — either a caller-supplied `CostEstimate` or, failing that, this crate's reference table (`media::reference_pricing`, the media counterpart of the LLM `reference_models` table, keyed by provider and carrying the model's billing unit). Either way the result is stored as `estimated_cost`, never disguised as provider-reported cost, and the rate is frozen into the `JobHandle` at submit so a resumed job prices identically. Every reference rate is an estimate pending verification against the provider's published pricing. See [multimodal.md](multimodal.md) and the `media_openrouter` / `media_replicate` examples for the full contract.
 
 ### 📋 Structured Output
 

@@ -22,6 +22,7 @@
 pub mod errors;
 pub mod factory;
 pub mod providers;
+pub mod reference_pricing;
 pub mod traits;
 pub mod types;
 
@@ -32,6 +33,7 @@ pub use providers::{
     OpenRouterMediaOptions, OpenRouterMediaProvider, ReplicateMediaOptions, ReplicateMediaProvider,
     RunwayMediaOptions, RunwayMediaProvider,
 };
+pub use reference_pricing::{get_reference_pricing, reference_cost_estimate, MediaModelPricing};
 pub use traits::*;
 pub use types::*;
 

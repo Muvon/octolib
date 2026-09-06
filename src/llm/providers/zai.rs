@@ -372,28 +372,6 @@ impl AiProvider for ZaiProvider {
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
         let (api_key, api_url) = get_api_key_and_url()?;
 
-        // Reject an empty message here rather than letting Z.ai answer it with an
-        // opaque 1214 rejection. A turn with no text, no image/video, and no tool
-        // call carries nothing for the model — it is a bug in the caller, and it
-        // should fail loudly and point at the offending message, not be papered over.
-        // `thinking` counts as content: convert_messages sends it as
-        // reasoning_content, and GLM-5.x hybrid thinking produces assistant turns
-        // whose text is empty while the reasoning carries the turn. Treating those
-        // as empty rejected every request on a preserved-thinking session.
-        if let Some(i) = params.messages.iter().position(|m| {
-            m.content.trim().is_empty()
-                && m.thinking.is_none()
-                && m.images.as_ref().is_none_or(|v| v.is_empty())
-                && m.videos.as_ref().is_none_or(|v| v.is_empty())
-                && m.tool_calls.is_none()
-                && m.tool_call_id.is_none()
-        }) {
-            return Err(anyhow::anyhow!(
-                "Z.ai: message {i} (role {}) is empty — no text, image, or tool content",
-                params.messages[i].role
-            ));
-        }
-
         // Convert messages to Z.ai format
         let messages = convert_messages(&params.messages);
 

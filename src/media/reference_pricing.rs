@@ -121,11 +121,13 @@ const REFERENCE_MEDIA_MODELS: &[MediaPricingEntry] = &[
     entry("replicate", "kling", UsageUnit::VideoSeconds, 0.09),
     // ── Runway (estimate — verify at runwayml.com/pricing) ──
     // Runway sells credits; these are one second of generated video converted
-    // at the standard plan's credit price. `gen4` also covers gen4_aleph and
-    // gen4_image, which is why the turbo tier must precede it.
+    // at the standard plan's credit price. The video models are listed by name
+    // rather than as a `gen4` prefix: that prefix would also catch gen4_image,
+    // and stamping a per-second video rate onto an image job is worse than
+    // leaving it unpriced.
     entry("runway", "gen4_turbo", UsageUnit::VideoSeconds, 0.05),
     entry("runway", "gen3a_turbo", UsageUnit::VideoSeconds, 0.05),
-    entry("runway", "gen4", UsageUnit::VideoSeconds, 0.12),
+    entry("runway", "gen4_aleph", UsageUnit::VideoSeconds, 0.15),
 ];
 
 fn matches_model(normalized: &str, pattern: &str) -> bool {

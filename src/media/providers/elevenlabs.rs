@@ -213,7 +213,7 @@ impl SpeechSynthesisProvider for ElevenLabsMediaProvider {
         let estimate = shared::resolved_cost_estimate(
             PROVIDER,
             &request.model,
-            options.cost_estimate.clone(),
+            options.cost_estimate,
             Some((UsageUnit::Characters, characters)),
         );
         let usage = character_usage(characters, estimate.as_ref(), &mut warnings);

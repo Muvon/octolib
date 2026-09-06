@@ -407,12 +407,11 @@ impl VideoGenerationProvider for RunwayMediaProvider {
                 PROVIDER,
                 &request.model,
                 options.cost_estimate,
-                request.duration_secs.map(|seconds| {
-                    (
-                        UsageUnit::VideoSeconds,
-                        seconds * f64::from(request.count.unwrap_or(1)),
-                    )
-                }),
+                // Runway ignores `count` (dropped above), so the billable
+                // amount is one video's duration however many were asked for.
+                request
+                    .duration_secs
+                    .map(|seconds| (UsageUnit::VideoSeconds, seconds)),
             ),
             warnings,
             None,

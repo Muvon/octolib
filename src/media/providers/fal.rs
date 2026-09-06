@@ -1536,6 +1536,20 @@ mod tests {
     }
 
     #[test]
+    fn missing_cost_surfaces_as_a_warning_on_the_result() {
+        let payload = json!({"images":[{"url":"https://v3.fal.media/files/a.png"}]});
+        let status_value = json!({"status":"COMPLETED"});
+        let mut warnings = Vec::new();
+        let result =
+            parse_image_result(&payload, &status_value, None, None, &mut warnings).unwrap();
+        assert!(result
+            .warnings
+            .iter()
+            .any(|warning| warning.code == WarningCode::CostUnavailable));
+        assert!(warnings.is_empty(), "warnings must move onto the result");
+    }
+
+    #[test]
     fn transcription_payload_normalizes_text_and_segments() {
         let payload = json!({
             "text":"hello world",

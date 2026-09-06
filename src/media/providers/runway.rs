@@ -21,7 +21,7 @@ use crate::media::types::*;
 use serde_json::{json, Map, Value};
 
 const PROVIDER: &str = "runway";
-const API_KEY_ENV: &str = "RUNWAYML_API_SECRET";
+const API_KEY_ENV: &str = "RUNWAY_API_KEY";
 const API_BASE_ENV: &str = "RUNWAY_API_URL";
 const API_BASE: &str = "https://api.dev.runwayml.com/v1";
 /// Runway pins request and response shapes to a dated contract.

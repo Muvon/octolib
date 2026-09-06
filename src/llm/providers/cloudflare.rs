@@ -22,7 +22,7 @@
 //! 3. Copy the API token
 //! 4. Get Account ID from Cloudflare Dashboard → Workers & Pages (in URL or sidebar)
 //! 5. Set environment variables:
-//!    - export CLOUDFLARE_API_TOKEN="your-api-token"
+//!    - export CLOUDFLARE_API_KEY="your-api-token"
 //!    - export CLOUDFLARE_ACCOUNT_ID="your-account-id"
 //!
 //! The API token is sent as a Bearer token in the Authorization header.
@@ -53,14 +53,14 @@ impl CloudflareWorkersAiProvider {
 
     /// Get Cloudflare API token
     fn get_api_token(&self) -> Result<String> {
-        env::var(CLOUDFLARE_API_TOKEN_ENV).map_err(|_| {
+        env::var(CLOUDFLARE_API_KEY_ENV).map_err(|_| {
             anyhow::anyhow!(
                 "Cloudflare API token not found. Set {} environment variable.\n\
                 To create an API token:\n\
                 1. Cloudflare Dashboard → My Profile → API Tokens\n\
                 2. Create Token → Use 'Workers AI' template or create custom\n\
                 3. Ensure token has Workers AI permissions",
-                CLOUDFLARE_API_TOKEN_ENV
+                CLOUDFLARE_API_KEY_ENV
             )
         })
     }
@@ -77,7 +77,7 @@ impl CloudflareWorkersAiProvider {
     }
 }
 
-const CLOUDFLARE_API_TOKEN_ENV: &str = "CLOUDFLARE_API_TOKEN";
+const CLOUDFLARE_API_KEY_ENV: &str = "CLOUDFLARE_API_KEY";
 const CLOUDFLARE_ACCOUNT_ID_ENV: &str = "CLOUDFLARE_ACCOUNT_ID";
 const CLOUDFLARE_API_URL_ENV: &str = "CLOUDFLARE_API_URL";
 

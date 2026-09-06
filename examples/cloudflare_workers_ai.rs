@@ -18,13 +18,13 @@
 //!
 //! # Prerequisites
 //!
-//! 1. Set `CLOUDFLARE_API_TOKEN` environment variable with your Cloudflare API token
+//! 1. Set `CLOUDFLARE_API_KEY` environment variable with your Cloudflare API token
 //! 2. Set `CLOUDFLARE_ACCOUNT_ID` environment variable with your Cloudflare account ID
 //!
 //! # Running the example
 //!
 //! ```bash
-//! export CLOUDFLARE_API_TOKEN="your_api_token_here"
+//! export CLOUDFLARE_API_KEY="your_api_token_here"
 //! export CLOUDFLARE_ACCOUNT_ID="your_account_id_here"
 //! cargo run --example cloudflare_workers_ai
 //! ```
@@ -35,9 +35,9 @@ use std::env;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Check for API token
-    let api_token = env::var("CLOUDFLARE_API_TOKEN");
+    let api_token = env::var("CLOUDFLARE_API_KEY");
     if api_token.is_err() {
-        eprintln!("Error: CLOUDFLARE_API_TOKEN environment variable not set");
+        eprintln!("Error: CLOUDFLARE_API_KEY environment variable not set");
         eprintln!("Get your API token from: https://dash.cloudflare.com/profile/api-tokens");
         std::process::exit(1);
     }

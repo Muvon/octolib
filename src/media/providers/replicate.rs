@@ -25,7 +25,7 @@ use std::sync::{LazyLock, RwLock};
 use std::time::{Duration, Instant};
 
 const PROVIDER: &str = "replicate";
-const API_KEY_ENV: &str = "REPLICATE_API_TOKEN";
+const API_KEY_ENV: &str = "REPLICATE_API_KEY";
 const API_BASE_ENV: &str = "REPLICATE_API_URL";
 const API_BASE: &str = "https://api.replicate.com/v1";
 const DEFAULT_ARTIFACT_TTL_SECS: u64 = 3600;

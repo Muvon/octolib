@@ -23,7 +23,7 @@ use serde_json::{json, Map, Value};
 use std::collections::{HashMap, HashSet};
 
 const PROVIDER: &str = "fal";
-const API_KEY_ENV: &str = "FAL_KEY";
+const API_KEY_ENV: &str = "FAL_API_KEY";
 const API_BASE_ENV: &str = "FAL_API_URL";
 const API_BASE: &str = "https://queue.fal.run";
 

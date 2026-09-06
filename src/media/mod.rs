@@ -124,7 +124,7 @@ pub async fn download_artifact(
                     .and_then(serde_json::Value::as_str)
                 {
                     Some("openrouter") => "OPENROUTER_API_KEY",
-                    Some("replicate") => "REPLICATE_API_TOKEN",
+                    Some("replicate") => "REPLICATE_API_KEY",
                     _ => {
                         return Err(MediaError::InvalidRequest(
                             "authenticated artifact has no recognized provider".to_string(),

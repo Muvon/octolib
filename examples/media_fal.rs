@@ -13,7 +13,7 @@
 // limitations under the License.
 
 //! fal queue lifecycle against a cheap endpoint.
-//! Run with `FAL_KEY=... cargo run --example media_fal`.
+//! Run with `FAL_API_KEY=... cargo run --example media_fal`.
 
 use octolib::{
     generate_image, ArtifactSource, ImageGenerationRequest, MediaProviderFactory, OutputGeometry,

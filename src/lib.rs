@@ -46,6 +46,8 @@
 //! ### Basic Chat Completion
 //!
 //! ```rust,no_run
+//! # #[cfg(feature = "llm")]
+//! # mod chat {
 //! use octolib::llm::{ProviderFactory, ChatCompletionParams, Message};
 //!
 //! // This example shows basic usage but requires API keys to run
@@ -67,11 +69,14 @@
 //!
 //!     Ok(())
 //! }
+//! # }
 //! ```
 
 //! ## Media generation
 //!
 //! ```rust,no_run
+//! # #[cfg(feature = "media")]
+//! # mod media {
 //! use octolib::{generate_image, ImageGenerationRequest};
 //!
 //! # async fn example() -> octolib::MediaResult<()> {
@@ -84,11 +89,14 @@
 //! # let _ = cost;
 //! # Ok(())
 //! # }
+//! # }
 //! ```
 //!
 //! ### Structured Output
 //!
 //! ```rust,no_run
+//! # #[cfg(feature = "llm")]
+//! # mod structured {
 //! use octolib::llm::{ProviderFactory, ChatCompletionParams, Message, StructuredOutputRequest};
 //! use serde::{Deserialize, Serialize};
 //!
@@ -126,6 +134,7 @@
 //!
 //!     Ok(())
 //! }
+//! # }
 //! ```
 
 #[cfg(feature = "embeddings")]

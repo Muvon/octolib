@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.36.2] - 2026-09-06
+
+### 📋 Release Summary
+
+Improved ZAI response handling so assistant turns containing only thinking content are preserved rather than lost (09e6e8bf).
+
+
+### 🐛 Bug Fixes & Stability
+
+- **zai**: preserve thinking-only assistant turns `09e6e8bf`
+
 ## [0.36.1] - 2026-09-06
 
 ### 📋 Release Summary

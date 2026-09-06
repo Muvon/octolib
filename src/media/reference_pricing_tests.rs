@@ -34,7 +34,9 @@ fn patterns_survive_the_shared_sanitizer() {
     let turbo = get_reference_pricing("runway", "gen4_turbo").unwrap();
     assert_eq!(turbo.pattern, "gen4_turbo");
     let aleph = get_reference_pricing("runway", "gen4_aleph").unwrap();
-    assert_eq!(aleph.pattern, "gen4");
+    assert_eq!(aleph.pattern, "gen4_aleph");
+    // gen4_image is an image model; a per-second video rate must not reach it.
+    assert!(get_reference_pricing("runway", "gen4_image").is_none());
     // gen3a_turbo must not be captured by the gen4 entries.
     let legacy = get_reference_pricing("runway", "gen3a_turbo").unwrap();
     assert_eq!(legacy.pattern, "gen3a_turbo");
@@ -80,6 +82,10 @@ fn specific_patterns_beat_broader_ones() {
     assert_eq!(veo.pattern, "veo");
     let other = get_reference_pricing("fal", "fal-ai/some-unlisted-endpoint").unwrap();
     assert_eq!(other.pattern, "fal-ai");
+
+    // Runway has no catch-all at all, so an unlisted model stays unpriced
+    // rather than inheriting a sibling's billing unit.
+    assert!(get_reference_pricing("runway", "gen5_something").is_none());
 }
 
 #[test]

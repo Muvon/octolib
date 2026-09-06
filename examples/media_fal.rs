@@ -63,6 +63,10 @@ async fn main() -> anyhow::Result<()> {
             _ => println!("image: provider-managed artifact"),
         }
     }
+    println!("warnings: {}", result.warnings.len());
+    if let Some(usage) = result.usage.as_ref() {
+        println!("usage: {}", serde_json::to_string(usage)?);
+    }
     for warning in &result.warnings {
         println!("warning [{:?}]: {}", warning.code, warning.message);
     }

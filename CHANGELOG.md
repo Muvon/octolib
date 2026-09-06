@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.36.3] - 2026-09-06
+
+### 📋 Release Summary
+
+Provider compatibility was improved with corrected audio format handling for Fal and support for preserved-thinking messages in Zai (69f8e298, a3aaaa22). Message content handling was refined, including clearer treatment of empty content (f7b15884, aa16c27a).
+
+
+### 🔧 Improvements & Optimizations
+
+- **messages**: allow empty message content `aa16c27a`
+
+### 🐛 Bug Fixes & Stability
+
+- **fal**: map audio formats to valid output values `69f8e298`
+- **messages**: reject empty message content `f7b15884`
+- **zai**: allow preserved-thinking messages `a3aaaa22`
+
+### 🔄 Other Changes
+
+1 maintenance, dependency, and tooling update not listed individually.
+
 ## [0.36.2] - 2026-09-06
 
 ### 📋 Release Summary

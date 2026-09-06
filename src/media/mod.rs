@@ -28,8 +28,9 @@ pub mod types;
 pub use errors::{MediaError, MediaResult};
 pub use factory::MediaProviderFactory;
 pub use providers::{
-    FalMediaOptions, FalMediaProvider, OpenRouterMediaOptions, OpenRouterMediaProvider,
-    ReplicateMediaOptions, ReplicateMediaProvider,
+    ElevenLabsMediaOptions, ElevenLabsMediaProvider, FalMediaOptions, FalMediaProvider,
+    OpenRouterMediaOptions, OpenRouterMediaProvider, ReplicateMediaOptions, ReplicateMediaProvider,
+    RunwayMediaOptions, RunwayMediaProvider,
 };
 pub use traits::*;
 pub use types::*;

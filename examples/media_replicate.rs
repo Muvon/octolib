@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Run with `REPLICATE_API_TOKEN=... cargo run --example media_replicate`.
+//! Run with `REPLICATE_API_KEY=... cargo run --example media_replicate`.
 
 use octolib::{ImageGenerationRequest, MediaProviderFactory, OperationStatus};
 use std::time::Duration;

@@ -17,9 +17,12 @@
 //! - git project ID derivation (this module)
 //! - [`config_migration`] — versioned TOML configuration upgrades
 //! - [`config_file`] — crash-safe, lock-guarded configuration file writes
+//! - `naming` — model-name canonicalization shared by the pricing tables
 
 pub mod config_file;
 pub mod config_migration;
+#[cfg(any(feature = "llm", feature = "media"))]
+pub(crate) mod naming;
 
 use sha2::{Digest, Sha256};
 use std::path::Path;

@@ -174,9 +174,7 @@ impl ReplicateMediaProvider {
             ..RequestOptions::default()
         };
         let response = shared::send_idempotent(PROVIDER, &options, || {
-            crate::llm::providers::shared::http_client()
-                .get(&url)
-                .bearer_auth(&key)
+            crate::http::http_client().get(&url).bearer_auth(&key)
         })
         .await?;
         let value = shared::parse_json(PROVIDER, &response)?;
@@ -239,7 +237,7 @@ impl ReplicateMediaProvider {
         let key = self.key()?;
         let cancel_after = options.cancel_after.clone();
         let response = shared::send(PROVIDER, request_options, || {
-            let mut builder = crate::llm::providers::shared::http_client()
+            let mut builder = crate::http::http_client()
                 .post(&url)
                 .bearer_auth(&key)
                 .json(&body);
@@ -264,9 +262,7 @@ impl ReplicateMediaProvider {
         let url = format!("{}/predictions/{}", self.api_base(), handle.remote_id);
         let options = RequestOptions::default();
         let response = shared::send_idempotent(PROVIDER, &options, || {
-            crate::llm::providers::shared::http_client()
-                .get(&url)
-                .bearer_auth(&key)
+            crate::http::http_client().get(&url).bearer_auth(&key)
         })
         .await?;
         shared::parse_json(PROVIDER, &response)
@@ -281,9 +277,7 @@ impl ReplicateMediaProvider {
         );
         let options = RequestOptions::default();
         let response = shared::send(PROVIDER, &options, || {
-            crate::llm::providers::shared::http_client()
-                .post(&url)
-                .bearer_auth(&key)
+            crate::http::http_client().post(&url).bearer_auth(&key)
         })
         .await?;
         shared::require_success(PROVIDER, &response)

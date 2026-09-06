@@ -38,7 +38,23 @@ octolib = "<latest>"
 octolib = { git = "https://github.com/muvon/octolib" }
 ```
 
-Local embedding/reranking (`fastembed`, `huggingface`) is enabled by default. Hardware acceleration is opt-in via features: `metal`, `cuda`, `cudnn`, `mkl`, `accelerate`.
+Every capability is on by default. Pick only what you need to cut compile time and dependencies:
+
+| Feature | Module | Pulls in |
+|---|---|---|
+| `llm` | `octolib::llm` — chat completion, tool calling, structured output | `jsonschema`, `jsonwebtoken` |
+| `embeddings` | `octolib::embedding` | `tiktoken-rs` |
+| `reranker` | `octolib::reranker` | — |
+| `media` | `octolib::media` — image, video, speech, transcription | `base64` |
+| `fastembed` | local embedding backend (implies `embeddings`) | `fastembed` |
+| `huggingface` | local embedding backend (implies `embeddings`) | `candle`, `tokenizers`, `hf-hub` |
+
+```toml
+# Chat only — no embedding, reranking, or media stack compiled.
+octolib = { version = "<latest>", default-features = false, features = ["llm"] }
+```
+
+`octolib::errors`, `octolib::storage`, `octolib::utils` and `set_user_agent` are always available. Hardware acceleration is opt-in via features: `metal`, `cuda`, `cudnn`, `mkl`, `accelerate`.
 
 ## 🚀 Quick Start
 

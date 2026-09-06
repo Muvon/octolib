@@ -122,7 +122,7 @@ impl RunwayMediaProvider {
         let key = self.key()?;
         let body = Value::Object(body);
         let response = shared::send(PROVIDER, request_options, || {
-            crate::llm::providers::shared::http_client()
+            crate::http::http_client()
                 .post(&url)
                 .bearer_auth(&key)
                 .header("X-Runway-Version", API_VERSION)
@@ -145,7 +145,7 @@ impl RunwayMediaProvider {
         let url = format!("{}/tasks/{}", self.api_base(), handle.remote_id);
         let options = RequestOptions::default();
         let response = shared::send_idempotent(PROVIDER, &options, || {
-            crate::llm::providers::shared::http_client()
+            crate::http::http_client()
                 .get(&url)
                 .bearer_auth(&key)
                 .header("X-Runway-Version", API_VERSION)
@@ -159,7 +159,7 @@ impl RunwayMediaProvider {
         let url = format!("{}/tasks/{}", self.api_base(), handle.remote_id);
         let options = RequestOptions::default();
         let response = shared::send(PROVIDER, &options, || {
-            crate::llm::providers::shared::http_client()
+            crate::http::http_client()
                 .delete(&url)
                 .bearer_auth(&key)
                 .header("X-Runway-Version", API_VERSION)

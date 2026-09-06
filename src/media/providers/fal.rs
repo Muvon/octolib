@@ -133,7 +133,7 @@ impl FalMediaProvider {
         let webhook = options.webhook.clone();
         let body = Value::Object(input);
         let response = shared::send(PROVIDER, request_options, || {
-            let mut builder = crate::llm::providers::shared::http_client()
+            let mut builder = crate::http::http_client()
                 .post(&url)
                 .header("Authorization", format!("Key {key}"))
                 .json(&body);
@@ -163,7 +163,7 @@ impl FalMediaProvider {
         );
         let options = RequestOptions::default();
         let response = shared::send_idempotent(PROVIDER, &options, || {
-            crate::llm::providers::shared::http_client()
+            crate::http::http_client()
                 .get(&url)
                 .header("Authorization", format!("Key {key}"))
         })
@@ -187,7 +187,7 @@ impl FalMediaProvider {
         );
         let options = RequestOptions::default();
         let response = shared::send_idempotent(PROVIDER, &options, || {
-            crate::llm::providers::shared::http_client()
+            crate::http::http_client()
                 .get(&url)
                 .header("Authorization", format!("Key {key}"))
         })
@@ -224,7 +224,7 @@ impl FalMediaProvider {
         );
         let options = RequestOptions::default();
         let response = shared::send(PROVIDER, &options, || {
-            crate::llm::providers::shared::http_client()
+            crate::http::http_client()
                 .put(&url)
                 .header("Authorization", format!("Key {key}"))
         })

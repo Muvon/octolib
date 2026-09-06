@@ -14,9 +14,19 @@ categories = ["api-bindings", "development-tools"]
 exclude = ["scripts/"]
 
 [features]
-default = ["fastembed", "huggingface"]
-fastembed = ["dep:fastembed"]
-huggingface = ["dep:candle-core", "dep:candle-nn", "dep:candle-transformers", "dep:tokenizers", "dep:hf-hub"]
+default = ["llm", "embeddings", "reranker", "media", "fastembed", "huggingface"]
+
+# Capability modules. Each gates one top-level module and the dependencies only
+# it needs, so an LLM-only build does not compile the media or embedding stack.
+llm = ["dep:jsonschema", "dep:jsonwebtoken"]
+embeddings = ["dep:tiktoken-rs"]
+reranker = []
+media = ["dep:base64"]
+
+# Local embedding backends. Both are useless without the embedding module, so
+# they enable it.
+fastembed = ["embeddings", "dep:fastembed"]
+huggingface = ["embeddings", "dep:candle-core", "dep:candle-nn", "dep:candle-transformers", "dep:tokenizers", "dep:hf-hub"]
 
 # Hardware acceleration — enable whichever matches your hardware.
 # Each feature activates the backend in both candle and fastembed (when those features are active).
@@ -34,15 +44,15 @@ serde_json = "1.0.149"
 reqwest = { version = "0.12", features = ["json", "rustls-tls", "gzip", "brotli", "zstd", "deflate", "http2", "charset"], default-features = false }
 tokio = { version = "1.52.3", features = ["time", "sync", "macros", "rt-multi-thread"] }
 arc-swap = "1"
-base64 = "0.22"
+base64 = { version = "0.22", optional = true }
 thiserror = "2.0.18"
 tracing = "0.1.44"
 dirs = "6.0.0"
-jsonwebtoken = "10"
+jsonwebtoken = { version = "10", optional = true }
 # Schema validation only — no $ref resolution over HTTP/file needed (client
 # schemas are self-contained), so default features (which pull in a second
 # reqwest/rustls stack) are disabled.
-jsonschema = { version = "0.46.9", default-features = false }
+jsonschema = { version = "0.46.9", default-features = false, optional = true }
 
 sha2 = "0.10"
 hex = "0.4"
@@ -55,7 +65,7 @@ fs4 = "0.8.4"
 uuid = { version = "1", features = ["v4"] }
 
 # Embedding dependencies
-tiktoken-rs = "0.9.1"
+tiktoken-rs = { version = "0.9.1", optional = true }
 
 # Optional embedding provider dependencies
 fastembed = { version = "5.13.4", default-features = false, features = ["hf-hub-rustls-tls", "ort-download-binaries-rustls-tls"], optional = true }
@@ -69,7 +79,95 @@ tokenizers = { version = "0.22.2", optional = true }
 # Pinned to 0.4.x to share single version with fastembed (which uses hf-hub 0.4.1)
 hf-hub = { version = "0.4.3", default-features = false, features = ["tokio", "rustls-tls"], optional = true }
 
+# Examples only build when the module they exercise is enabled.
+
+[[example]]
+name = "amazon_bedrock"
+required-features = ["llm"]
+
+[[example]]
+name = "anthropic_oauth"
+required-features = ["llm"]
+
+[[example]]
+name = "cloudflare_workers_ai"
+required-features = ["llm"]
+
+[[example]]
+name = "fireworks_chat"
+required-features = ["llm"]
+
+[[example]]
+name = "google_vertex_ai"
+required-features = ["llm"]
+
+[[example]]
+name = "hetzner_chat"
+required-features = ["llm"]
+
+[[example]]
+name = "local_chat"
+required-features = ["llm"]
+
+[[example]]
+name = "meta_chat"
+required-features = ["llm"]
+
+[[example]]
+name = "minimax_chat"
+required-features = ["llm"]
+
+[[example]]
+name = "moonshot_vision"
+required-features = ["llm"]
+
+[[example]]
+name = "openai_oauth"
+required-features = ["llm"]
+
+[[example]]
+name = "structured_output"
+required-features = ["llm"]
+
+[[example]]
+name = "test_structured_output"
+required-features = ["llm"]
+
+[[example]]
+name = "xai"
+required-features = ["llm"]
+
+[[example]]
+name = "media_fal"
+required-features = ["media"]
+
+[[example]]
+name = "media_openrouter"
+required-features = ["media"]
+
+[[example]]
+name = "media_openrouter_audio_video"
+required-features = ["media"]
+
+[[example]]
+name = "media_replicate"
+required-features = ["media"]
+
+[[example]]
+name = "openrouter_embeddings"
+required-features = ["embeddings"]
+
+[[example]]
+name = "reranker_basic"
+required-features = ["reranker"]
+
+[[example]]
+name = "reranker_comparison"
+required-features = ["reranker"]
+
 [dev-dependencies]
+# Examples encode local media inline regardless of which features are on.
+base64 = "0.22"
 serial_test = "3.4.0"
 tracing-subscriber = "0.3"
 # Migration tests assert on the parsed result, not on the edited document.

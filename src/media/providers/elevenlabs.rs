@@ -194,7 +194,7 @@ impl SpeechSynthesisProvider for ElevenLabsMediaProvider {
         let key = self.key()?;
         let format = audio.api_format.clone();
         let response = shared::send(PROVIDER, &request.request_options, || {
-            crate::llm::providers::shared::http_client()
+            crate::http::http_client()
                 .post(&url)
                 .header(AUTH_HEADER, &key)
                 .query(&[("output_format", format.as_str())])
@@ -254,7 +254,7 @@ impl SpeechSynthesisProvider for ElevenLabsMediaProvider {
         let key = self.key()?;
         let format = audio.api_format.clone();
         let response = shared::send_stream(PROVIDER, &request.request_options, || {
-            crate::llm::providers::shared::http_client()
+            crate::http::http_client()
                 .post(&url)
                 .header(AUTH_HEADER, &key)
                 .query(&[("output_format", format.as_str())])
@@ -335,7 +335,7 @@ impl TranscriptionProvider for ElevenLabsMediaProvider {
         let key = self.key()?;
         let url = format!("{}/speech-to-text", self.api_base());
         let response = shared::send(PROVIDER, &request.request_options, || {
-            crate::llm::providers::shared::http_client()
+            crate::http::http_client()
                 .post(&url)
                 .header(AUTH_HEADER, &key)
                 .header(reqwest::header::CONTENT_TYPE, &form.content_type)

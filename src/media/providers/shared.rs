@@ -322,7 +322,7 @@ async fn send_with_retry_policy(
                 });
             }
             Err(error) if retry_safe && attempt < options.max_retries && !error.is_timeout() => {
-                crate::llm::providers::shared::refresh_http_client();
+                crate::http::refresh_http_client();
                 tracing::warn!(provider, attempt, error = %error, "retrying media request");
                 tokio::time::sleep(backoff(options.retry_backoff, attempt)).await;
                 attempt += 1;
@@ -703,7 +703,7 @@ mod tests {
         let post_counter = Arc::clone(&post_attempts);
         let _ = send("provider", &options, || {
             post_counter.fetch_add(1, Ordering::Relaxed);
-            crate::llm::providers::shared::http_client().post(&url)
+            crate::http::http_client().post(&url)
         })
         .await;
         assert_eq!(post_attempts.load(Ordering::Relaxed), 1);
@@ -712,7 +712,7 @@ mod tests {
         let get_counter = Arc::clone(&get_attempts);
         let _ = send_idempotent("provider", &options, || {
             get_counter.fetch_add(1, Ordering::Relaxed);
-            crate::llm::providers::shared::http_client().get(&url)
+            crate::http::http_client().get(&url)
         })
         .await;
         assert_eq!(get_attempts.load(Ordering::Relaxed), 3);

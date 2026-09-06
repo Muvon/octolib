@@ -296,6 +296,20 @@ impl MessageBuilder {
             _ => return Err(crate::errors::MessageError::InvalidRole { role }),
         }
 
+        // A message that carries nothing informs no model, so reject it where it is
+        // built and the caller bug is, not as a provider rejection mid-conversation.
+        // Empty TEXT alone is normal — an assistant turn is routinely only tool
+        // calls or only thinking — so every carrier counts before failing.
+        if content.trim().is_empty()
+            && self.tool_calls.is_none()
+            && self.tool_call_id.is_none()
+            && self.thinking.is_none()
+            && self.images.as_ref().is_none_or(|v| v.is_empty())
+            && self.videos.as_ref().is_none_or(|v| v.is_empty())
+        {
+            return Err(crate::errors::MessageError::EmptyMessage { role });
+        }
+
         // Validate tool messages have required fields
         if role == "tool" {
             if self.tool_call_id.is_none() {

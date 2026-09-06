@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.36.0] - 2026-09-06
+
+### 📋 Release Summary
+
+This release adds configurable user-agent support for LLM and HTTP interactions (21abd6fd, 56a561f8). OpenCode request handling was improved to include the session header and user agent, while the session ID environment override was removed (ecb12d88, dc885cf3).
+
+
+### ✨ New Features & Enhancements
+
+- **llm**: allow configuring the user agent `21abd6fd`
+
+### 🔧 Improvements & Optimizations
+
+- **opencode**: remove session ID environment override `dc885cf3`
+
+### 🐛 Bug Fixes & Stability
+
+- **http**: allow configurable user agent `56a561f8`
+- **opencode**: send session header and user agent `ecb12d88`
+
 ## [0.35.4] - 2026-09-05
 
 ### 📋 Release Summary

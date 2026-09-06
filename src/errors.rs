@@ -28,9 +28,6 @@ pub enum MessageError {
     #[error("Missing required content for message")]
     MissingContent,
 
-    #[error("Message (role {role}) carries nothing: no text, tool call, media or thinking")]
-    EmptyMessage { role: String },
-
     #[error("Invalid timestamp: {0}")]
     InvalidTimestamp(#[from] std::time::SystemTimeError),
 

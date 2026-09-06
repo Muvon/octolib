@@ -545,6 +545,24 @@ impl VideoGenerationProvider for FalMediaProvider {
     }
 }
 
+/// Map octolib's coarse [`AudioFormat`] to a fal `output_format` value, or `None`
+/// to omit it (fal then uses the model's own default). fal audio endpoints reject
+/// a bare codec like `"mp3"`; they expect `{codec}_{sample_rate}_{bitrate}` (or
+/// `{codec}_{sample_rate}` for PCM). Fixed, known-valid values are used rather
+/// than composing from `sample_rate_hz`, because fal only accepts specific
+/// rate/bitrate combinations per codec.
+fn fal_audio_output_format(format: AudioFormat) -> Option<&'static str> {
+    match format {
+        AudioFormat::Mp3 => Some("mp3_44100_128"),
+        AudioFormat::Pcm => Some("pcm_44100"),
+        AudioFormat::Wav
+        | AudioFormat::Flac
+        | AudioFormat::Aac
+        | AudioFormat::Ogg
+        | AudioFormat::M4a => None,
+    }
+}
+
 #[async_trait::async_trait]
 impl SpeechSynthesisProvider for FalMediaProvider {
     fn name(&self) -> &str {
@@ -585,12 +603,20 @@ impl SpeechSynthesisProvider for FalMediaProvider {
         if let Some(speed) = request.speed {
             insert_semantic(&mut options, "speed", "speed", json!(speed))?;
         }
-        insert_semantic(
-            &mut options,
-            "output_format",
-            "output_format",
-            json!(request.output.format.as_str()),
-        )?;
+        // fal audio models take a codec+rate+bitrate enum (e.g. "mp3_44100_128"),
+        // not the bare codec `AudioFormat::as_str()` spells — a bare "mp3" is
+        // rejected by every fal audio model. Map the common codecs to a known-valid
+        // fal value and omit the rest so fal falls back to the model's own default.
+        // (Verified live against fal-ai/elevenlabs/music: bare "mp3" 422s;
+        // "mp3_44100_128" and omitting both succeed.)
+        if let Some(fal_format) = fal_audio_output_format(request.output.format) {
+            insert_semantic(
+                &mut options,
+                "output_format",
+                "output_format",
+                json!(fal_format),
+            )?;
+        }
         let value = self
             .submit_queue(
                 &request.model,
@@ -1399,6 +1425,21 @@ fn no_artifacts(kind: &str) -> MediaError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fal_audio_output_format_maps_common_codecs_and_omits_the_rest() {
+        // fal audio models reject a bare codec like "mp3"; they want a
+        // codec+rate+bitrate enum. Map the ones fal supports, omit the rest so fal
+        // uses the model's own (always valid) default.
+        assert_eq!(
+            fal_audio_output_format(AudioFormat::Mp3),
+            Some("mp3_44100_128")
+        );
+        assert_eq!(fal_audio_output_format(AudioFormat::Pcm), Some("pcm_44100"));
+        assert_eq!(fal_audio_output_format(AudioFormat::Wav), None);
+        assert_eq!(fal_audio_output_format(AudioFormat::Flac), None);
+        assert_eq!(fal_audio_output_format(AudioFormat::Aac), None);
+    }
 
     #[test]
     fn model_paths_validate_and_reduce_to_app_alias() {

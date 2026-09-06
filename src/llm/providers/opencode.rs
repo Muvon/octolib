@@ -39,8 +39,6 @@
 //! - `OPENCODE_API_KEY`: Required API key, shared by both providers (one key
 //!   from opencode.ai/auth covers Zen and Go — matches the models.dev registry)
 //! - `OPENCODE_ZEN_API_URL` / `OPENCODE_GO_API_URL`: Optional endpoint overrides
-//! - `OPENCODE_SESSION_ID`: Optional fixed value for the required
-//!   `x-opencode-session` header (default: one random id per process)
 
 use crate::llm::providers::openai_compat::{
     chat_completion_with_sampling as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
@@ -63,19 +61,13 @@ const OPENCODE_GO_API_URL_ENV: &str = "OPENCODE_GO_API_URL";
 const OPENCODE_GO_API_URL: &str = "https://opencode.ai/zen/go/v1/chat/completions";
 
 const OPENCODE_SESSION_HEADER: &str = "x-opencode-session";
-const OPENCODE_SESSION_ID_ENV: &str = "OPENCODE_SESSION_ID";
 
 /// Session id sent as `x-opencode-session`. OpenCode requires the header on
 /// every request (announced 2026-09-05: missing ones may error from 2026-09-06)
 /// and only needs it to be stable per client session, so one random id per
-/// process is enough. Callers tracking their own sessions override it through
-/// `extra_headers` or `OPENCODE_SESSION_ID`.
-static OPENCODE_SESSION_ID: LazyLock<String> = LazyLock::new(|| {
-    env::var(OPENCODE_SESSION_ID_ENV)
-        .ok()
-        .filter(|id| !id.trim().is_empty())
-        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string())
-});
+/// process is enough. Callers tracking their own sessions pass their id through
+/// `extra_headers` instead.
+static OPENCODE_SESSION_ID: LazyLock<String> = LazyLock::new(|| uuid::Uuid::new_v4().to_string());
 
 fn get_opencode_api_key(provider_label: &str) -> Result<String> {
     env::var(OPENCODE_API_KEY_ENV).map_err(|_| {

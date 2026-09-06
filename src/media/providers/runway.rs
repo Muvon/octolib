@@ -247,7 +247,7 @@ impl ImageGenerationProvider for RunwayMediaProvider {
             &request.model,
             task,
             &id,
-            options.cost_estimate,
+            shared::resolved_cost_estimate(PROVIDER, &request.model, options.cost_estimate, None),
             warnings,
             None,
         ))
@@ -403,7 +403,17 @@ impl VideoGenerationProvider for RunwayMediaProvider {
             &request.model,
             task,
             &id,
-            options.cost_estimate,
+            shared::resolved_cost_estimate(
+                PROVIDER,
+                &request.model,
+                options.cost_estimate,
+                request.duration_secs.map(|seconds| {
+                    (
+                        UsageUnit::VideoSeconds,
+                        seconds * f64::from(request.count.unwrap_or(1)),
+                    )
+                }),
+            ),
             warnings,
             None,
         ))

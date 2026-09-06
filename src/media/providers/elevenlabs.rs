@@ -210,7 +210,13 @@ impl SpeechSynthesisProvider for ElevenLabsMediaProvider {
             .unwrap_or(audio.media_type)
             .to_string();
         let characters = request.text.chars().count() as f64;
-        let usage = character_usage(characters, options.cost_estimate.as_ref(), &mut warnings);
+        let estimate = shared::resolved_cost_estimate(
+            PROVIDER,
+            &request.model,
+            options.cost_estimate.clone(),
+            Some((UsageUnit::Characters, characters)),
+        );
+        let usage = character_usage(characters, estimate.as_ref(), &mut warnings);
         let bytes = response.body;
         Ok(Operation::completed(SpeechSynthesisResult {
             artifact: MediaArtifact {
@@ -337,9 +343,13 @@ impl TranscriptionProvider for ElevenLabsMediaProvider {
         })
         .await?;
         let value = shared::parse_json(PROVIDER, &response)?;
+        // Scribe bills the input audio's duration, which ElevenLabs only
+        // reports after the upload is processed, so no quantity is known here.
+        let estimate =
+            shared::resolved_cost_estimate(PROVIDER, &request.model, options.cost_estimate, None);
         Ok(Operation::completed(parse_transcription(
             &value,
-            options.cost_estimate.as_ref(),
+            estimate.as_ref(),
             warnings,
         )?))
     }

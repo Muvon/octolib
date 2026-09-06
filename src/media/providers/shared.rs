@@ -13,7 +13,9 @@
 // limitations under the License.
 
 use crate::media::errors::{MediaError, MediaResult};
-use crate::media::types::{JobHandle, MediaSource, MediaTask, ProviderOptions, RequestOptions};
+use crate::media::types::{
+    CostEstimate, JobHandle, MediaSource, MediaTask, ProviderOptions, RequestOptions, UsageUnit,
+};
 use base64::Engine;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use serde_json::{Map, Value};
@@ -35,6 +37,25 @@ pub(crate) struct CapturedResponse {
     pub status: reqwest::StatusCode,
     pub headers: HeaderMap,
     pub body: Vec<u8>,
+}
+
+/// The caller's rate when they supplied one, else this provider's entry in the
+/// reference table. An explicit `CostEstimate` is a deliberate override and
+/// always wins — the table is the floor, not a correction.
+///
+/// `known_quantity` is the billable amount already settled at submit, such as
+/// requested video seconds or input characters. A unit only the upstream can
+/// report is left open so the adapter's usage builder fills it from the
+/// response metrics.
+pub(crate) fn resolved_cost_estimate(
+    provider: &str,
+    model: &str,
+    supplied: Option<CostEstimate>,
+    known_quantity: Option<(UsageUnit, f64)>,
+) -> Option<CostEstimate> {
+    supplied.or_else(|| {
+        crate::media::reference_pricing::reference_cost_estimate(provider, model, known_quantity)
+    })
 }
 
 pub(crate) fn artifact_http_client() -> reqwest::Client {

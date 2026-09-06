@@ -378,8 +378,8 @@ impl AiProvider for ZaiProvider {
         // should fail loudly and point at the offending message, not be papered over.
         if let Some(i) = params.messages.iter().position(|m| {
             m.content.trim().is_empty()
-                && m.images.as_ref().map_or(true, |v| v.is_empty())
-                && m.videos.as_ref().map_or(true, |v| v.is_empty())
+                && m.images.as_ref().is_none_or(|v| v.is_empty())
+                && m.videos.as_ref().is_none_or(|v| v.is_empty())
                 && m.tool_calls.is_none()
                 && m.tool_call_id.is_none()
         }) {

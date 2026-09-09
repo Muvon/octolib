@@ -49,6 +49,7 @@ fn test_pricing_seed_models() {
     let p = provider.get_model_pricing("seed-2-1-turbo-260812").unwrap();
     assert_eq!(p.input_price_per_1m, 0.50);
     assert_eq!(p.output_price_per_1m, 2.50);
+    assert_eq!(p.cache_read_price_per_1m, 0.10);
 
     let p = provider.get_model_pricing("seed-1-6-flash-250715").unwrap();
     assert_eq!(p.input_price_per_1m, 0.075);
@@ -68,6 +69,31 @@ fn test_pricing_coding_plan_aliases() {
 
     let p = provider.get_model_pricing("bytedance-seed-code").unwrap();
     assert_eq!(p.input_price_per_1m, 0.50);
+}
+
+#[test]
+fn test_pricing_third_party_models() {
+    let provider = BytePlusProvider::new();
+
+    // Both the preview (`-260425`) and GA snapshots share one rate card.
+    for model in ["deepseek-v4-pro-260425", "deepseek-v4-pro-ga-260813"] {
+        let p = provider.get_model_pricing(model).unwrap();
+        assert_eq!(p.input_price_per_1m, 1.32);
+        assert_eq!(p.output_price_per_1m, 3.96);
+        assert_eq!(p.cache_read_price_per_1m, 0.044);
+    }
+
+    for model in ["deepseek-v4-flash-260425", "deepseek-v4-flash-ga-260731"] {
+        let p = provider.get_model_pricing(model).unwrap();
+        assert_eq!(p.input_price_per_1m, 0.44);
+        assert_eq!(p.output_price_per_1m, 1.32);
+        assert_eq!(p.cache_read_price_per_1m, 0.014);
+    }
+
+    let p = provider.get_model_pricing("glm-5-2-260617").unwrap();
+    assert_eq!(p.input_price_per_1m, 1.40);
+    assert_eq!(p.output_price_per_1m, 4.40);
+    assert_eq!(p.cache_read_price_per_1m, 0.26);
 }
 
 #[test]

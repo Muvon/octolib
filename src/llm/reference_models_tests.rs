@@ -267,3 +267,54 @@ fn nova_family_resolves_pricing_and_capabilities() {
     assert!(!two_lite.structured_output);
     assert_eq!(two_lite.max_input_tokens, 1_000_000);
 }
+
+/// Models added to live provider catalogs in Aug-Sep 2026. Before these rows
+/// the aggregator routes served them with no pricing and the 32K context
+/// default, and `muse-spark-1.2-contributor` inherited the 12x-higher base rate.
+#[test]
+fn september_2026_additions_resolve() {
+    // Contributor tiers must win over their base version.
+    let p = get_reference_pricing("meta/muse-spark-1.2-contributor").unwrap();
+    assert_eq!(p.input_price_per_1m, 0.10);
+    let p = get_reference_pricing("meta/muse-spark-1.3").unwrap();
+    assert_eq!(p.input_price_per_1m, 1.25);
+    assert_eq!(p.cache_read_price_per_1m, 0.15);
+
+    // Short aggregator ID resolves without stealing the NVIDIA-hosted route.
+    let p = get_reference_pricing("nvidia/nemotron-3.5-lightning").unwrap();
+    assert_eq!(p.input_price_per_1m, 0.08);
+    let p = get_reference_pricing("nvidia/nemotron-3.5-lightning-30b-a3b").unwrap();
+    assert_eq!(p.input_price_per_1m, 0.05);
+
+    // Qwen 3.6 35B A3B: free on Hetzner, priced on OpenRouter.
+    let caps = get_reference_capabilities("Qwen/Qwen3.6-35B-A3B-FP8").unwrap();
+    assert!(caps.vision);
+    assert!(caps.video);
+    assert_eq!(caps.max_input_tokens, 262_144);
+    let p = get_reference_pricing("qwen/qwen3.6-35b-a3b").unwrap();
+    assert_eq!(p.output_price_per_1m, 0.90);
+
+    // New families that previously fell through to the unpriced default.
+    for (model, input, output) in [
+        ("inception/mercury-2.5", 0.04, 0.15),
+        ("tencent/hy4-preview", 0.834, 2.501),
+        ("ibm-granite/granite-4.2-8b", 0.06, 0.25),
+        ("inclusionai/ling-3.0-flash", 0.021, 0.063),
+        ("inclusionai/ling-3.0-flash-fin", 0.06, 0.18),
+        ("sakana/sakana-namazu", 0.95, 4.00),
+        ("upstage/solar-pro4", 0.03, 0.12),
+        ("poolside/laguna-s-2.1", 0.09, 0.18),
+        ("poolside/laguna-xs-2.1", 0.06, 0.12),
+        ("meituan/longcat-2.0", 0.30, 1.20),
+        ("kwaipilot/kat-coder-pro-v2.5", 0.74, 2.96),
+        ("xiaomi/mimo-v2.5", 0.14, 0.28),
+        ("xiaomi/mimo-v2.5-pro", 0.435, 0.87),
+        ("qwen/qwen3.8-2.4t-a95b", 2.00, 6.00),
+        ("nvidia/nemotron-3-super-120b-a12b", 0.085, 0.40),
+    ] {
+        let pricing = get_reference_pricing(model)
+            .unwrap_or_else(|| panic!("{model} must resolve to reference pricing"));
+        assert_eq!(pricing.input_price_per_1m, input);
+        assert_eq!(pricing.output_price_per_1m, output);
+    }
+}

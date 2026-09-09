@@ -17,10 +17,11 @@
 //! Uses Hetzner's Inference API (Experiments Platform), an OpenAI-compatible
 //! endpoint at: `https://inference.hetzner.com/api/v1/chat/completions`
 //!
-//! Serves a small curated set of open-weight models (DeepSeek, GLM, Kimi,
-//! Qwen). The catalogue is fixed and known (see `MODELS`), so unknown model
-//! IDs are rejected — update the table when Hetzner adds models
-//! (`GET /v1/models`).
+//! Serves a small curated set of open-weight Qwen models. The catalogue is
+//! fixed and known (see `MODELS`), so unknown model IDs are rejected — update
+//! the table when Hetzner changes the catalogue (`GET /v1/models`). The
+//! DeepSeek, GLM and Kimi routes were withdrawn (verified Sep 2026: absent
+//! from `GET /v1/models`, and requests answer "model use not permitted").
 //!
 //! The API is **free of charge** while in experimental status, so cost is
 //! reported as $0. Rate limits per API key: 4M input / 100k output tokens
@@ -57,9 +58,7 @@ const HETZNER_API_URL: &str = "https://inference.hetzner.com/api/v1/chat/complet
 /// (model id, vision, max input tokens) — from the Hetzner models table and
 /// `GET /v1/models` (`max_model_len`).
 const MODELS: &[(&str, bool, usize)] = &[
-    ("DeepSeek-V4-Flash-0731", false, 512_000),
-    ("GLM-5.2-NVFP4", false, 512_000),
-    ("Kimi-K2.7-Code", true, 262_144),
+    ("Qwen3.8-27B", true, 262_144),
     ("Qwen/Qwen3.6-35B-A3B-FP8", true, 262_144),
 ];
 

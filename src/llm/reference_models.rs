@@ -133,9 +133,48 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(0.60, 2.40, 0.60, 0.12),
     },
     ReferenceModelEntry {
+        // NVIDIA Nemotron 3 Super 120B: 262K-context text model on the NVIDIA
+        // API and OpenRouter; no structured outputs, no prompt caching.
+        pattern: "nemotron-3-super-120b-a12b",
+        capabilities: caps(false, false, false, 262_144),
+        pricing: pricing(0.085, 0.40, 0.085, 0.085),
+    },
+    ReferenceModelEntry {
+        // Aggregator routes (OpenRouter, OpenCode Zen) expose Nemotron 3.5
+        // Lightning under the short ID at 262K context and a higher rate than
+        // the NVIDIA-hosted `-30b-a3b` route above.
+        pattern: "nemotron-3.5-lightning",
+        capabilities: caps(false, false, true, 262_144),
+        pricing: pricing(0.08, 0.20, 0.08, 0.04),
+    },
+    ReferenceModelEntry {
+        // Contributor tiers trade training rights for a much lower rate, so
+        // they must precede their base versions in this substring-matched table.
+        pattern: "muse-spark-1.3-contributor",
+        capabilities: caps(true, true, false, 1_048_576),
+        pricing: pricing(0.10, 0.20, 0.10, 0.002),
+    },
+    ReferenceModelEntry {
+        pattern: "muse-spark-1.2-contributor",
+        capabilities: caps(true, true, false, 1_048_576),
+        pricing: pricing(0.10, 0.20, 0.10, 0.002),
+    },
+    ReferenceModelEntry {
+        // Meta Muse Spark 1.3 (Sep 2026): current flagship on the Meta Model
+        // API, OpenCode Zen and OpenRouter; 1.1/1.2/1.3 share one rate card.
+        pattern: "muse-spark-1.3",
+        capabilities: caps(true, true, false, 1_048_576),
+        pricing: pricing(1.25, 4.25, 1.25, 0.15),
+    },
+    ReferenceModelEntry {
         // Meta Muse Spark 1.2 (Aug 2026): closed flagship on the Meta Model API
         // and OpenRouter; text/image/video/audio input, 1M context.
         pattern: "muse-spark-1.2",
+        capabilities: caps(true, true, false, 1_048_576),
+        pricing: pricing(1.25, 4.25, 1.25, 0.15),
+    },
+    ReferenceModelEntry {
+        pattern: "muse-spark-1.1",
         capabilities: caps(true, true, false, 1_048_576),
         pricing: pricing(1.25, 4.25, 1.25, 0.15),
     },
@@ -157,6 +196,100 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pattern: "qwen3p7-plus",
         capabilities: caps(true, false, true, 262_144),
         pricing: pricing(0.40, 1.60, 0.40, 0.08),
+    },
+    ReferenceModelEntry {
+        // Same Qwen 3.8 2.4T weights on aggregator routes, which spell the ID
+        // with dots (`qwen/qwen3.8-2.4t-a95b`) and serve 1M context.
+        pattern: "qwen-3.8-2.4t",
+        capabilities: caps(false, false, true, 1_048_576),
+        pricing: pricing(2.00, 6.00, 2.00, 0.25),
+    },
+    ReferenceModelEntry {
+        // Qwen 3.6 35B A3B: open-weight multimodal MoE served free by Hetzner
+        // and priced on OpenRouter; 262K context, text/image/video input.
+        pattern: "qwen-3.6-35b-a3b",
+        capabilities: caps(true, true, true, 262_144),
+        pricing: pricing(0.10, 0.90, 0.10, 0.05),
+    },
+    ReferenceModelEntry {
+        // Inception Mercury 2.5 (Sep 2026): diffusion LLM, 260K context.
+        pattern: "mercury-2.5",
+        capabilities: caps(false, false, true, 260_000),
+        pricing: pricing(0.04, 0.15, 0.04, 0.004),
+    },
+    ReferenceModelEntry {
+        // Tencent Hunyuan 4 preview (Aug 2026): 1M-context text model.
+        pattern: "hy4-preview",
+        capabilities: caps(false, false, true, 1_048_576),
+        pricing: pricing(0.834, 2.501, 0.834, 0.042),
+    },
+    ReferenceModelEntry {
+        // IBM Granite 4.2 8B (Aug 2026): 131K-context text model.
+        pattern: "granite-4.2",
+        capabilities: caps(false, false, true, 131_072),
+        pricing: pricing(0.06, 0.25, 0.06, 0.015),
+    },
+    ReferenceModelEntry {
+        // InclusionAI Ling 3.0 Flash finance variant — priced above the base
+        // model, so it must precede it here.
+        pattern: "ling-3.0-flash-fin",
+        capabilities: caps(false, false, true, 262_144),
+        pricing: pricing(0.06, 0.18, 0.06, 0.012),
+    },
+    ReferenceModelEntry {
+        // InclusionAI Ling 3.0 Flash: 262K-context MoE, no structured outputs.
+        pattern: "ling-3.0-flash",
+        capabilities: caps(false, false, false, 262_144),
+        pricing: pricing(0.021, 0.063, 0.021, 0.0042),
+    },
+    ReferenceModelEntry {
+        // Sakana Namazu (Aug 2026): 262K-context model with image/file input.
+        pattern: "sakana-namazu",
+        capabilities: caps(true, false, true, 262_144),
+        pricing: pricing(0.95, 4.00, 0.95, 0.15),
+    },
+    ReferenceModelEntry {
+        // Upstage Solar Pro 4 (Aug 2026): 512K-context text model.
+        pattern: "solar-pro4",
+        capabilities: caps(false, false, true, 524_288),
+        pricing: pricing(0.03, 0.12, 0.03, 0.006),
+    },
+    ReferenceModelEntry {
+        // Poolside Laguna S 2.1 (Jul 2026): 1M-context coding model.
+        pattern: "laguna-s-2.1",
+        capabilities: caps(false, false, false, 1_048_576),
+        pricing: pricing(0.09, 0.18, 0.09, 0.009),
+    },
+    ReferenceModelEntry {
+        pattern: "laguna-xs-2.1",
+        capabilities: caps(false, false, false, 262_144),
+        pricing: pricing(0.06, 0.12, 0.06, 0.03),
+    },
+    ReferenceModelEntry {
+        // Meituan LongCat 2.0 (Jul 2026): 1M-context text model.
+        pattern: "longcat-2.0",
+        capabilities: caps(false, false, false, 1_048_576),
+        pricing: pricing(0.30, 1.20, 0.30, 0.006),
+    },
+    ReferenceModelEntry {
+        // Kwaipilot KAT Coder Pro v2.5 (Jul 2026): 262K-context coding model.
+        pattern: "kat-coder-pro-v2.5",
+        capabilities: caps(false, false, true, 262_144),
+        pricing: pricing(0.74, 2.96, 0.74, 0.15),
+    },
+    ReferenceModelEntry {
+        // Xiaomi MiMo v2.5 Pro is text-only and priced above the multimodal
+        // base model, so it must precede it here.
+        pattern: "mimo-v2.5-pro",
+        capabilities: caps(false, false, true, 1_050_000),
+        pricing: pricing(0.435, 0.87, 0.435, 0.0036),
+    },
+    ReferenceModelEntry {
+        // Xiaomi MiMo v2.5: 1.05M context, text/image/video/audio input;
+        // served free on OpenCode Zen and priced on OpenRouter.
+        pattern: "mimo-v2.5",
+        capabilities: caps(true, true, true, 1_050_000),
+        pricing: pricing(0.14, 0.28, 0.14, 0.0028),
     },
     ReferenceModelEntry {
         // OpenAI GPT-6 Astra: 1.05M-context flagship, text/image input.

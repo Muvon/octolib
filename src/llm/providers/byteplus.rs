@@ -20,7 +20,7 @@
 //! Hosts ByteDance Seed models plus third-party models (GLM, DeepSeek, Kimi, etc.).
 //! Also supports the Coding Plan subscription via endpoint override.
 //!
-//! PRICING UPDATE: April 2026
+//! PRICING UPDATE: September 2026
 //! Source: <https://docs.byteplus.com/en/docs/ModelArk/1544106>
 //!
 //! Configuration:
@@ -56,13 +56,13 @@ const BYTEPLUS_API_KEY_ENV: &str = "BYTEPLUS_API_KEY";
 const BYTEPLUS_API_URL_ENV: &str = "BYTEPLUS_API_URL";
 const BYTEPLUS_API_URL: &str = "https://ark.ap-southeast.bytepluses.com/api/v3/chat/completions";
 
-// BytePlus ModelArk pricing (per 1M tokens in USD) - Apr 2026
+// BytePlus ModelArk pricing (per 1M tokens in USD) - Sep 2026
 // Source: https://docs.byteplus.com/en/docs/ModelArk/1544106
 // Format: (model, input, output, cache_write, cache_read)
 // cache_write = input price, cache_read = cache-hit price
 const PRICING: &[PricingTuple] = &[
     // Seed 2.1 family (Aug 2026) — Turbo only; Pro has no published USD rates
-    ("seed-2-1-turbo", 0.50, 2.50, 0.50, 0.50),
+    ("seed-2-1-turbo", 0.50, 2.50, 0.50, 0.10),
     // Seed 2.0 family (256K context)
     ("seed-2-0-pro", 0.50, 3.00, 0.50, 0.10),
     ("seed-2-0-code-preview", 0.50, 3.00, 0.50, 0.10),
@@ -77,7 +77,12 @@ const PRICING: &[PricingTuple] = &[
     ("seed-1-8", 0.25, 2.00, 0.25, 0.05),
     ("seed-1-6-flash", 0.075, 0.30, 0.075, 0.015),
     ("seed-1-6", 0.25, 2.00, 0.25, 0.05),
-    // Third-party models hosted on BytePlus (BytePlus-specific pricing)
+    // Third-party models hosted on BytePlus (BytePlus-specific pricing).
+    // The DeepSeek V4 rows cover both the `-260425` preview IDs and the GA
+    // snapshots (`-ga-260731`, `-ga-260813`), which share one rate card.
+    ("deepseek-v4-pro", 1.32, 3.96, 1.32, 0.044),
+    ("deepseek-v4-flash", 0.44, 1.32, 0.44, 0.014),
+    ("glm-5-2", 1.40, 4.40, 1.40, 0.26),
     ("glm-4-7-251222", 0.60, 2.20, 0.60, 0.11),
     ("gpt-oss-120b-250805", 0.10, 0.50, 0.10, 0.00),
 ];

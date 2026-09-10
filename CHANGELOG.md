@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.36.4] - 2026-09-10
+
+### 📋 Release Summary
+
+Improved model routing and refreshed pricing information across supported providers for more accurate model selection and cost tracking (ef3ce929, c1bb6185).
+
+
+### 🐛 Bug Fixes & Stability
+
+- **deepseek**: update live model routing `ef3ce929`
+- **llm**: refresh model pricing and routes `c1bb6185`
+
 ## [0.36.3] - 2026-09-06
 
 ### 📋 Release Summary

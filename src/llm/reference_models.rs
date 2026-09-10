@@ -468,6 +468,13 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(2.00, 2.00, 2.00, 2.00),
     },
     ReferenceModelEntry {
+        // DeepSeek-V4.1-Flash, served as `deepseek-flash` (2026-09-10):
+        // peak rates as the static baseline — off-peak is half.
+        pattern: "deepseek-flash",
+        capabilities: caps(true, false, true, 1_000_000),
+        pricing: pricing(0.3, 1.2, 0.3, 0.006),
+    },
+    ReferenceModelEntry {
         pattern: "deepseek-v4-flash-vision-exp",
         capabilities: caps(true, false, true, 1_000_000),
         // Experimental multimodal route (2026-08-21): text-identical to

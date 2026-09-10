@@ -109,7 +109,7 @@
 //!
 //! async fn structured_example() -> anyhow::Result<()> {
 //!     // Works with OpenAI, OpenRouter, and DeepSeek
-//!     let (provider, model) = ProviderFactory::get_provider_for_model("deepseek:deepseek-v4-flash")?;
+//!     let (provider, model) = ProviderFactory::get_provider_for_model("deepseek:deepseek-flash")?;
 //!
 //!     // Check if provider supports structured output
 //!     if !provider.supports_structured_output(&model) {

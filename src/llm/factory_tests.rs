@@ -73,6 +73,7 @@ fn test_supported_providers() {
     assert!(providers.contains(&"minimax"));
     assert!(providers.contains(&"moonshot"));
     assert!(providers.contains(&"groq"));
+    assert!(providers.contains(&"inception"));
     assert!(providers.contains(&"meta"));
     assert!(providers.contains(&"xai"));
     assert!(providers.contains(&"cli"));
@@ -106,6 +107,7 @@ fn test_create_provider() {
     assert!(ProviderFactory::create_provider("moonshot").is_ok());
     assert!(ProviderFactory::create_provider("nvidia").is_ok());
     assert!(ProviderFactory::create_provider("groq").is_ok());
+    assert!(ProviderFactory::create_provider("inception").is_ok());
     assert!(ProviderFactory::create_provider("xai").is_ok());
     assert!(ProviderFactory::create_provider("meta").is_ok());
     assert!(ProviderFactory::create_provider("cli").is_err());
@@ -254,6 +256,16 @@ fn test_get_provider_for_model() {
     assert!(provider.supports_model(&model));
     assert!(provider.supports_structured_output(&model));
     assert!(ProviderFactory::get_provider_for_model("meta:muse-spark-9").is_err());
+
+    // Test Inception provider (closed catalog)
+    let result = ProviderFactory::get_provider_for_model("inception:mercury-2.5");
+    assert!(result.is_ok());
+    let (provider, model) = result.unwrap();
+    assert_eq!(provider.name(), "inception");
+    assert_eq!(model, "mercury-2.5");
+    assert!(provider.supports_model(&model));
+    assert!(provider.supports_structured_output(&model));
+    assert!(ProviderFactory::get_provider_for_model("inception:mercury-9").is_err());
 
     // Test Featherless provider
     let result = ProviderFactory::get_provider_for_model(

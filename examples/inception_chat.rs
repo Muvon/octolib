@@ -34,7 +34,7 @@ async fn main() -> anyhow::Result<()> {
         "In one short sentence, what is a diffusion language model?",
     )];
     // Mercury reasons by default, so leave headroom for reasoning tokens
-    let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 512);
+    let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1024);
 
     let response = provider.chat_completion(params).await?;
     println!("Response: {}", response.content);

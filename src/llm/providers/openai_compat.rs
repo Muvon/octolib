@@ -69,6 +69,14 @@ fn reasoning_effort_value(
         crate::llm::types::ReasoningEffort::XHigh if provider_name.eq_ignore_ascii_case("meta") => {
             "xhigh"
         }
+        // Tinker maps the OpenAI ladder to floats and accepts "xhigh"
+        // (0.99) as its ceiling, so keep XHigh instead of the generic
+        // downgrade.
+        crate::llm::types::ReasoningEffort::XHigh
+            if provider_name.eq_ignore_ascii_case("tinker") =>
+        {
+            "xhigh"
+        }
         crate::llm::types::ReasoningEffort::XHigh => "high",
         crate::llm::types::ReasoningEffort::Max if provider_name.eq_ignore_ascii_case("ollama") => {
             "max"
@@ -84,6 +92,10 @@ fn reasoning_effort_value(
         }
         // Meta has no level above xhigh; collapse Max onto that ceiling.
         crate::llm::types::ReasoningEffort::Max if provider_name.eq_ignore_ascii_case("meta") => {
+            "xhigh"
+        }
+        // Tinker has no level above xhigh; collapse Max onto that ceiling.
+        crate::llm::types::ReasoningEffort::Max if provider_name.eq_ignore_ascii_case("tinker") => {
             "xhigh"
         }
         crate::llm::types::ReasoningEffort::Max => "high",

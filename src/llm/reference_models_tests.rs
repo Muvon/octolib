@@ -297,6 +297,7 @@ fn september_2026_additions_resolve() {
     // New families that previously fell through to the unpriced default.
     for (model, input, output) in [
         ("inception/mercury-2.5", 0.04, 0.15),
+        ("inception/mercury-2", 0.25, 0.75),
         ("tencent/hy4-preview", 0.834, 2.501),
         ("ibm-granite/granite-4.2-8b", 0.06, 0.25),
         ("inclusionai/ling-3.0-flash", 0.021, 0.063),

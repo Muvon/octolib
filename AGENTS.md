@@ -1,6 +1,6 @@
 #! Octolib — AI Provider Library Guide
 
-Rust library providing a unified interface to multiple AI providers (OpenAI, Anthropic, OpenRouter, NVIDIA, Ollama, Google Vertex, Google Studio, Amazon, Cloudflare, DeepSeek, Moonshot, Z.ai, BytePlus, Alibaba, Groq, Cerebras, Together, Featherless, Fireworks, Hetzner, OpenCode Zen/Go, OctoHub, CLI proxies). Handles chat completions, embeddings, reranking, cost tracking, caching, structured output, vision, and tool calls. No panics, no `println!`, always `Result`. Copyright year is **2026**.
+Rust library providing a unified interface to multiple AI providers (OpenAI, Anthropic, OpenRouter, NVIDIA, Ollama, Google Vertex, Google Studio, Amazon, Cloudflare, DeepSeek, Moonshot, Z.ai, BytePlus, Alibaba, Groq, Cerebras, Together, Featherless, Fireworks, Hetzner, Inception, OpenCode Zen/Go, OctoHub, CLI proxies). Handles chat completions, embeddings, reranking, cost tracking, caching, structured output, vision, and tool calls. No panics, no `println!`, always `Result`. Copyright year is **2026**.
 
 ## Project Structure
 
@@ -45,6 +45,7 @@ src/
 │       ├── octohub.rs              → Proxy — delegates to openai_compat
 │       ├── featherless.rs          → Proxy — delegates to openai_compat
 │       ├── hetzner.rs              → Proxy — delegates to openai_compat (free, experimental, fixed MODELS table)
+│       ├── inception.rs           → Native — PRICING table (Mercury diffusion LLMs, strict catalogue)
 │       ├── opencode.rs             → Proxy — Zen + Go providers, delegates to openai_compat (shared OPENCODE_API_KEY)
 │       ├── fireworks.rs            → Proxy — delegates to openai_compat (auto prefix-cache)
 │       └── cli/                    → CLI proxy: claude, codex, cursor, gemini, generic backends
@@ -109,7 +110,7 @@ files declare them with `#[cfg(test)]`, `#[path = "<name>_tests.rs"]`, and
 
 ### Provider Shape: Native vs. Proxy
 
-**Native** (OpenAI, Anthropic, Amazon, DeepSeek, Moonshot, MiniMax, Z.ai, BytePlus, Alibaba, Groq):
+**Native** (OpenAI, Anthropic, Amazon, DeepSeek, Moonshot, MiniMax, Z.ai, BytePlus, Alibaba, Groq, Inception):
 - Own `PRICING` const table in the provider file — `(model, input, output, cache_write, cache_read)` per 1M tokens
 - Own `chat_completion()` implementation with provider-specific request/response structs
 - Override `supports_caching()`, `supports_vision()`, `get_max_input_tokens()`, `supports_structured_output()` directly

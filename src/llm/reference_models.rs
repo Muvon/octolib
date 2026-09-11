@@ -218,6 +218,12 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(0.04, 0.15, 0.04, 0.004),
     },
     ReferenceModelEntry {
+        // Inception Mercury 2 (Mar 2026): diffusion LLM, 128K context.
+        pattern: "mercury-2",
+        capabilities: caps(false, false, true, 128_000),
+        pricing: pricing(0.25, 0.75, 0.25, 0.025),
+    },
+    ReferenceModelEntry {
         // Tencent Hunyuan 4 preview (Aug 2026): 1M-context text model.
         pattern: "hy4-preview",
         capabilities: caps(false, false, true, 1_048_576),

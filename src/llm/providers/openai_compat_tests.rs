@@ -387,3 +387,33 @@ fn test_meta_reasoning_effort_xhigh_ceiling() {
         "xhigh"
     );
 }
+
+#[test]
+fn test_tinker_reasoning_effort_xhigh_ceiling() {
+    // Tinker accepts the full OpenAI ladder including "xhigh" (0.99):
+    // XHigh maps through and Max collapses onto the same ceiling.
+    assert_eq!(
+        reasoning_effort_value(
+            "tinker",
+            "thinkingmachines/Inkling",
+            crate::llm::types::ReasoningEffort::Low
+        ),
+        "low"
+    );
+    assert_eq!(
+        reasoning_effort_value(
+            "tinker",
+            "thinkingmachines/Inkling",
+            crate::llm::types::ReasoningEffort::XHigh
+        ),
+        "xhigh"
+    );
+    assert_eq!(
+        reasoning_effort_value(
+            "tinker",
+            "thinkingmachines/Inkling",
+            crate::llm::types::ReasoningEffort::Max
+        ),
+        "xhigh"
+    );
+}

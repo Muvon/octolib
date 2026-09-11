@@ -46,6 +46,7 @@ src/
 │       ├── featherless.rs          → Proxy — delegates to openai_compat
 │       ├── hetzner.rs              → Proxy — delegates to openai_compat (free, experimental, fixed MODELS table)
 │       ├── inception.rs           → Native — PRICING table (Mercury diffusion LLMs, strict catalogue)
+│       ├── tinker.rs               → Proxy — delegates to openai_compat (Inkling family + sampler checkpoints)
 │       ├── opencode.rs             → Proxy — Zen + Go providers, delegates to openai_compat (shared OPENCODE_API_KEY)
 │       ├── fireworks.rs            → Proxy — delegates to openai_compat (auto prefix-cache)
 │       └── cli/                    → CLI proxy: claude, codex, cursor, gemini, generic backends

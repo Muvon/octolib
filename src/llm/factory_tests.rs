@@ -76,6 +76,7 @@ fn test_supported_providers() {
     assert!(providers.contains(&"inception"));
     assert!(providers.contains(&"meta"));
     assert!(providers.contains(&"xai"));
+    assert!(providers.contains(&"tinker"));
     assert!(providers.contains(&"cli"));
 }
 
@@ -110,6 +111,7 @@ fn test_create_provider() {
     assert!(ProviderFactory::create_provider("inception").is_ok());
     assert!(ProviderFactory::create_provider("xai").is_ok());
     assert!(ProviderFactory::create_provider("meta").is_ok());
+    assert!(ProviderFactory::create_provider("tinker").is_ok());
     assert!(ProviderFactory::create_provider("cli").is_err());
 
     // Test case insensitive
@@ -291,6 +293,15 @@ fn test_get_provider_for_model() {
     assert!(provider.supports_structured_output(&model));
     assert!(provider.supports_caching(&model));
     assert!(provider.get_model_pricing(&model).is_some());
+
+    // Test Tinker provider (model IDs contain colons; only the first splits)
+    let result =
+        ProviderFactory::get_provider_for_model("tinker:thinkingmachines/Inkling:peft:262144");
+    assert!(result.is_ok());
+    let (provider, model) = result.unwrap();
+    assert_eq!(provider.name(), "tinker");
+    assert_eq!(model, "thinkingmachines/Inkling:peft:262144");
+    assert!(provider.supports_model(&model));
 
     // Test invalid format
     let result = ProviderFactory::get_provider_for_model("gpt-4o");

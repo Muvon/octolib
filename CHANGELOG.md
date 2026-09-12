@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.37.0] - 2026-09-12
+
+### 📋 Release Summary
+
+This release adds Tinker and Inception provider support, including short model name resolution and expanded model selection examples (0e0155f2, 236c0aff, d26bf901, 0107ce37). Reasoning examples now provide increased token headroom for improved execution (030b65c0).
+
+
+### ✨ New Features & Enhancements
+
+- **examples**: extend model selection `0107ce37`
+- **tinker**: resolve short model names `d26bf901`
+- **llm**: add Tinker provider `0e0155f2`
+- **llm**: add Inception provider `236c0aff`
+
+### 🐛 Bug Fixes & Stability
+
+- **example**: increase reasoning token headroom `030b65c0`
+
 ## [0.36.4] - 2026-09-10
 
 ### 📋 Release Summary

@@ -24,8 +24,10 @@ use octolib::llm::{ChatCompletionParams, Message, ProviderFactory};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let model_spec = "inception:mercury-2.5";
-    let (provider, model) = ProviderFactory::get_provider_for_model(model_spec)?;
+    let model_spec = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "inception:mercury-2.5".to_string());
+    let (provider, model) = ProviderFactory::get_provider_for_model(&model_spec)?;
 
     println!("Provider: {}", provider.name());
     println!("Model: {}", model);

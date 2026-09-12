@@ -106,6 +106,10 @@ name = "hetzner_chat"
 required-features = ["llm"]
 
 [[example]]
+name = "inception_chat"
+required-features = ["llm"]
+
+[[example]]
 name = "local_chat"
 required-features = ["llm"]
 
@@ -131,6 +135,10 @@ required-features = ["llm"]
 
 [[example]]
 name = "test_structured_output"
+required-features = ["llm"]
+
+[[example]]
+name = "tinker_chat"
 required-features = ["llm"]
 
 [[example]]

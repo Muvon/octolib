@@ -22,6 +22,10 @@
 //! training (`tinker://...` paths). Model IDs contain colons
 //! (`thinkingmachines/Inkling:peft:262144`); the factory splits only on the
 //! first colon, so they pass through intact.
+//! Short names `inkling` and `inkling-small` resolve to their full
+//! `thinkingmachines/Inkling` and `thinkingmachines/Inkling-Small` IDs.
+//! Sampling: temperature and top_p are forwarded; top_k is not supported
+//! by this OpenAI-compatible adapter.
 //!
 //! Reasoning: the server separates chain-of-thought into `reasoning_content`
 //! by default (`separate_reasoning` defaults to true since June 2026), which
@@ -239,13 +243,25 @@ const CONTEXTS: &[(&str, usize)] = &[
     ("deepseek-ai/deepseek-v3.1", 32_768),
 ];
 
+fn resolve_model(model: &str) -> &str {
+    if model.eq_ignore_ascii_case("inkling") {
+        "thinkingmachines/Inkling"
+    } else if model.eq_ignore_ascii_case("inkling-small") {
+        "thinkingmachines/Inkling-Small"
+    } else {
+        // Preserve fully qualified IDs and case-sensitive checkpoint paths.
+        model
+    }
+}
+
 fn tinker_model_pricing(model: &str) -> Option<ModelPricing> {
-    let (input, output, cache_write, cache_read) = get_model_pricing(model, PRICING)?;
+    let (input, output, cache_write, cache_read) =
+        get_model_pricing(resolve_model(model), PRICING)?;
     Some(ModelPricing::new(input, output, cache_write, cache_read))
 }
 
 fn tinker_model_context(model: &str) -> Option<usize> {
-    let normalized = normalize_model_name(model);
+    let normalized = normalize_model_name(resolve_model(model));
     CONTEXTS
         .iter()
         .find(|(name, _)| normalized.contains(&normalize_model_name(name)))
@@ -293,9 +309,14 @@ impl AiProvider for TinkerProvider {
         tinker_model_context(model).unwrap_or(262_144)
     }
 
-    async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
+    fn supported_sampling_params(&self, _model: &str) -> SamplingSupport {
+        SamplingSupport::TEMPERATURE_AND_TOP_P
+    }
+
+    async fn chat_completion(&self, mut params: ChatCompletionParams) -> Result<ProviderResponse> {
         let api_key = self.get_api_key()?;
         let api_url = get_api_url(TINKER_API_URL_ENV, TINKER_API_URL);
+        params.model = resolve_model(&params.model).to_string();
         let model = params.model.clone();
 
         let mut response = openai_compat_chat_completion(
@@ -306,7 +327,7 @@ impl AiProvider for TinkerProvider {
                 enforces_response_schema: false,
                 supports_required_tool_choice: false,
             },
-            SamplingSupport::TEMPERATURE_AND_TOP_P,
+            self.supported_sampling_params(&model),
             api_key,
             api_url,
             params,

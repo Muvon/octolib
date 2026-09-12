@@ -15,6 +15,57 @@
 use super::*;
 
 #[test]
+fn test_short_names_resolve_consistently() {
+    let provider = TinkerProvider::new();
+    for (alias, canonical) in [
+        ("inkling", "thinkingmachines/Inkling"),
+        ("INKLING", "thinkingmachines/Inkling"),
+        ("inkling-small", "thinkingmachines/Inkling-Small"),
+        ("INKLING-SMALL", "thinkingmachines/Inkling-Small"),
+    ] {
+        assert_eq!(resolve_model(alias), canonical);
+        assert!(provider.supports_model(alias));
+        assert_eq!(provider.get_max_input_tokens(alias), 65_536);
+        let pricing = provider.get_model_pricing(alias).unwrap();
+        let canonical_pricing = provider.get_model_pricing(canonical).unwrap();
+        assert_eq!(
+            pricing.input_price_per_1m,
+            canonical_pricing.input_price_per_1m
+        );
+        assert_eq!(
+            pricing.output_price_per_1m,
+            canonical_pricing.output_price_per_1m
+        );
+        assert_eq!(
+            pricing.cache_read_price_per_1m,
+            canonical_pricing.cache_read_price_per_1m
+        );
+    }
+}
+
+#[test]
+fn test_qualified_model_ids_are_preserved() {
+    for model in [
+        "thinkingmachines/Inkling:peft:262144:sampling-nvfp4",
+        "thinkingmachines/Inkling-Small",
+        "moonshotai/Kimi-K2.6",
+        "tinker://CaseSensitive-ID:train:0/sampler_weights/000080",
+        "unknown-model",
+    ] {
+        assert_eq!(resolve_model(model), model);
+    }
+}
+
+#[test]
+fn test_sampling_capabilities() {
+    let provider = TinkerProvider::new();
+    assert_eq!(
+        provider.supported_sampling_params("inkling"),
+        SamplingSupport::TEMPERATURE_AND_TOP_P
+    );
+}
+
+#[test]
 fn test_supports_model() {
     let provider = TinkerProvider::new();
     // Known Tinker IDs (colons intact — the factory splits only the first)

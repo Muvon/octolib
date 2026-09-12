@@ -154,7 +154,7 @@ impl AiProvider for InceptionProvider {
                 enforces_response_schema: true,
                 supports_required_tool_choice: true,
             },
-            SamplingSupport::TEMPERATURE_ONLY,
+            self.supported_sampling_params(&model),
             api_key,
             api_url,
             params,

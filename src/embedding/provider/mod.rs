@@ -51,6 +51,7 @@ fn http_client() -> Client {
 pub mod fastembed;
 #[cfg(feature = "huggingface")]
 pub mod huggingface;
+pub mod onnx;
 
 // Always available provider modules
 pub mod google;
@@ -66,6 +67,7 @@ pub mod voyage;
 pub use fastembed::{FastEmbedProvider, FastEmbedProviderImpl};
 #[cfg(feature = "huggingface")]
 pub use huggingface::{HuggingFaceProvider, HuggingFaceProviderImpl};
+pub use onnx::OnnxProviderImpl;
 
 // Always available provider re-exports
 pub use google::{GoogleProvider, GoogleProviderImpl};
@@ -146,6 +148,7 @@ pub async fn create_embedding_provider_from_parts(
                 Err(anyhow::anyhow!("HuggingFace support is not compiled in. Please rebuild with --features huggingface"))
             }
         }
+        EmbeddingProviderType::Onnx => Ok(Box::new(OnnxProviderImpl::new(model).await?)),
     }
 }
 

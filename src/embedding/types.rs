@@ -64,6 +64,10 @@ pub enum EmbeddingProviderType {
     Voyage,
     Google,
     HuggingFace,
+    /// Local ONNX Runtime inference over a HuggingFace-hosted `onnx/` export.
+    /// Faster and smaller than the candle path, and the only way to run a
+    /// quantized graph. Model string: `onnx:<org>/<repo>[#<path-to.onnx>]`.
+    Onnx,
     OpenAI,
     OpenRouter,
     OctoHub,
@@ -137,6 +141,7 @@ pub fn parse_provider_model(input: &str) -> Result<(EmbeddingProviderType, Strin
         "voyageai" | "voyage" => EmbeddingProviderType::Voyage,
         "google" => EmbeddingProviderType::Google,
         "huggingface" | "hf" => EmbeddingProviderType::HuggingFace,
+        "onnx" | "ort" => EmbeddingProviderType::Onnx,
         "openai" => EmbeddingProviderType::OpenAI,
         "openrouter" => EmbeddingProviderType::OpenRouter,
         "octohub" => EmbeddingProviderType::OctoHub,
@@ -144,7 +149,7 @@ pub fn parse_provider_model(input: &str) -> Result<(EmbeddingProviderType, Strin
         "together" => EmbeddingProviderType::Together,
         unknown => {
             return Err(anyhow::anyhow!(
-                "Unknown embedding provider '{}'. Supported: fastembed, jina, voyage, google, huggingface, openai, openrouter, octohub, local, together. \
+                "Unknown embedding provider '{}'. Supported: fastembed, jina, voyage, google, huggingface, onnx, openai, openrouter, octohub, local, together. \
                  This is a programming error - the provider should be validated before calling parse_provider_model.",
                 unknown
             ));
@@ -168,7 +173,7 @@ impl EmbeddingConfig {
             EmbeddingProviderType::Google => std::env::var("GOOGLE_API_KEY").ok(),
             EmbeddingProviderType::Together => std::env::var("TOGETHER_API_KEY").ok(),
             EmbeddingProviderType::Local => std::env::var("LOCAL_EMBED_API_KEY").ok(),
-            _ => None, // FastEmbed, HuggingFace, OctoHub, OpenAI, OpenRouter don't use this path
+            _ => None, // FastEmbed, HuggingFace, Onnx, OctoHub, OpenAI, OpenRouter don't use this path
         }
     }
 

@@ -747,6 +747,7 @@ fn dimension_strategy(provider: &EmbeddingProviderType) -> DimensionStrategy {
     match provider {
         EmbeddingProviderType::FastEmbed
         | EmbeddingProviderType::HuggingFace
+        | EmbeddingProviderType::Onnx
         | EmbeddingProviderType::Jina
         | EmbeddingProviderType::Voyage
         | EmbeddingProviderType::Google
@@ -775,6 +776,12 @@ fn every_provider_declares_a_dimension_strategy() {
     // Static providers must resolve a dimension without any network probe.
     assert_eq!(
         dimension_strategy(&EmbeddingProviderType::Voyage),
+        DimensionStrategy::StaticAtConstruction
+    );
+    // ONNX reads its dimension from the repo's own `1_Pooling/config.json`
+    // (or `hidden_size`) during async construction — a declaration, not a probe.
+    assert_eq!(
+        dimension_strategy(&EmbeddingProviderType::Onnx),
         DimensionStrategy::StaticAtConstruction
     );
 }

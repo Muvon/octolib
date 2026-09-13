@@ -52,15 +52,11 @@ pub struct FastEmbedProviderImpl {
 #[cfg(feature = "fastembed")]
 impl FastEmbedProviderImpl {
     pub fn new(model_name: &str) -> Result<Self> {
-        // Validate model is supported BEFORE creating
-        if !Self::is_model_supported_static(model_name) {
-            return Err(anyhow::anyhow!(
-                "Unsupported FastEmbed model: {}",
-                model_name
-            ));
-        }
-
-        let model_enum = FastEmbedProvider::map_model_to_fastembed(model_name);
+        // The mapper is the single source of truth for supported model strings
+        // (including -quantized aliases, which never appear in fastembed's
+        // model_code list and were wrongly rejected by the old substring check).
+        let model_enum = FastEmbedProvider::map_model_to_fastembed(model_name)
+            .ok_or_else(|| anyhow::anyhow!("Unsupported FastEmbed model: {}", model_name))?;
 
         // Use system-wide cache for FastEmbed models
         let cache_dir = crate::storage::get_model_cache_dir()
@@ -75,24 +71,6 @@ impl FastEmbedProviderImpl {
 
         Ok(Self {
             model: Arc::new(Mutex::new(model)),
-        })
-    }
-
-    /// Check if model is supported using PURE dynamic API discovery
-    fn is_model_supported_static(model_name: &str) -> bool {
-        // Use FastEmbed's dynamic model discovery API - NO STATIC LISTS
-        let supported_models = TextEmbedding::list_supported_models();
-
-        // Check if the model name matches any supported model
-        supported_models.iter().any(|model_info| {
-            // Convert ModelInfo to string representation to check against model_name
-            let model_str = format!("{:?}", model_info);
-            model_str.contains(model_name) ||
-            // Handle common aliases dynamically
-            (model_name == "all-MiniLM-L12-v2" && model_str.contains("sentence-transformers/all-MiniLM-L12-v2")) ||
-            (model_name == "multilingual-e5-small" && model_str.contains("intfloat/multilingual-e5-small")) ||
-            (model_name == "multilingual-e5-base" && model_str.contains("intfloat/multilingual-e5-base")) ||
-            (model_name == "multilingual-e5-large" && model_str.contains("intfloat/multilingual-e5-large"))
         })
     }
 
@@ -236,66 +214,79 @@ pub struct FastEmbedProvider;
 
 #[cfg(feature = "fastembed")]
 impl FastEmbedProvider {
-    /// Map model name to FastEmbed model enum
-    pub fn map_model_to_fastembed(model: &str) -> EmbeddingModel {
+    /// Map model name to FastEmbed model enum. Returns `None` for unknown
+    /// model strings — the same match serves as the supported-model check.
+    pub fn map_model_to_fastembed(model: &str) -> Option<EmbeddingModel> {
         match model {
             "sentence-transformers/all-MiniLM-L6-v2" | "Xenova/all-MiniLM-L6-v2" => {
-                EmbeddingModel::AllMiniLML6V2
+                Some(EmbeddingModel::AllMiniLML6V2)
             }
             "sentence-transformers/all-MiniLM-L6-v2-quantized" | "Qdrant/all-MiniLM-L6-v2-onnx" => {
-                EmbeddingModel::AllMiniLML6V2Q
+                Some(EmbeddingModel::AllMiniLML6V2Q)
             }
             "sentence-transformers/all-MiniLM-L12-v2"
             | "all-MiniLM-L12-v2"
-            | "Xenova/all-MiniLM-L12-v2" => EmbeddingModel::AllMiniLML12V2,
-            "sentence-transformers/all-MiniLM-L12-v2-quantized" => EmbeddingModel::AllMiniLML12V2Q,
-            "BAAI/bge-base-en-v1.5" | "Xenova/bge-base-en-v1.5" => EmbeddingModel::BGEBaseENV15,
-            "BAAI/bge-base-en-v1.5-quantized" | "Qdrant/bge-base-en-v1.5-onnx-Q" => {
-                EmbeddingModel::BGEBaseENV15Q
+            | "Xenova/all-MiniLM-L12-v2" => Some(EmbeddingModel::AllMiniLML12V2),
+            "sentence-transformers/all-MiniLM-L12-v2-quantized" => {
+                Some(EmbeddingModel::AllMiniLML12V2Q)
             }
-            "BAAI/bge-large-en-v1.5" | "Xenova/bge-large-en-v1.5" => EmbeddingModel::BGELargeENV15,
+            "BAAI/bge-base-en-v1.5" | "Xenova/bge-base-en-v1.5" => {
+                Some(EmbeddingModel::BGEBaseENV15)
+            }
+            "BAAI/bge-base-en-v1.5-quantized" | "Qdrant/bge-base-en-v1.5-onnx-Q" => {
+                Some(EmbeddingModel::BGEBaseENV15Q)
+            }
+            "BAAI/bge-large-en-v1.5" | "Xenova/bge-large-en-v1.5" => {
+                Some(EmbeddingModel::BGELargeENV15)
+            }
             "BAAI/bge-large-en-v1.5-quantized" | "Qdrant/bge-large-en-v1.5-onnx-Q" => {
-                EmbeddingModel::BGELargeENV15Q
+                Some(EmbeddingModel::BGELargeENV15Q)
             }
             "BAAI/bge-small-en-v1.5"
             | "Xenova/bge-small-en-v1.5"
-            | "Qdrant/bge-small-en-v1.5-onnx-Q" => EmbeddingModel::BGESmallENV15,
-            "BAAI/bge-small-en-v1.5-quantized" => EmbeddingModel::BGESmallENV15Q,
-            "nomic-ai/nomic-embed-text-v1" => EmbeddingModel::NomicEmbedTextV1,
-            "nomic-ai/nomic-embed-text-v1.5" => EmbeddingModel::NomicEmbedTextV15,
-            "nomic-ai/nomic-embed-text-v1.5-quantized" => EmbeddingModel::NomicEmbedTextV15Q,
+            | "Qdrant/bge-small-en-v1.5-onnx-Q" => Some(EmbeddingModel::BGESmallENV15),
+            "BAAI/bge-small-en-v1.5-quantized" => Some(EmbeddingModel::BGESmallENV15Q),
+            "nomic-ai/nomic-embed-text-v1" => Some(EmbeddingModel::NomicEmbedTextV1),
+            "nomic-ai/nomic-embed-text-v1.5" => Some(EmbeddingModel::NomicEmbedTextV15),
+            "nomic-ai/nomic-embed-text-v1.5-quantized" => Some(EmbeddingModel::NomicEmbedTextV15Q),
             "sentence-transformers/paraphrase-MiniLM-L6-v2" => {
-                EmbeddingModel::ParaphraseMLMiniLML12V2
+                Some(EmbeddingModel::ParaphraseMLMiniLML12V2)
             }
             "sentence-transformers/paraphrase-MiniLM-L6-v2-quantized"
             | "Qdrant/paraphrase-multilingual-MiniLM-L12-v2-onnx-Q" => {
-                EmbeddingModel::ParaphraseMLMiniLML12V2Q
+                Some(EmbeddingModel::ParaphraseMLMiniLML12V2Q)
             }
             "sentence-transformers/paraphrase-mpnet-base-v2"
             | "Xenova/paraphrase-multilingual-mpnet-base-v2" => {
-                EmbeddingModel::ParaphraseMLMpnetBaseV2
+                Some(EmbeddingModel::ParaphraseMLMpnetBaseV2)
             }
-            "BAAI/bge-small-zh-v1.5" | "Xenova/bge-small-zh-v1.5" => EmbeddingModel::BGESmallZHV15,
-            "BAAI/bge-large-zh-v1.5" | "Xenova/bge-large-zh-v1.5" => EmbeddingModel::BGELargeZHV15,
-            "lightonai/modernbert-embed-large" => EmbeddingModel::ModernBertEmbedLarge,
+            "BAAI/bge-small-zh-v1.5" | "Xenova/bge-small-zh-v1.5" => {
+                Some(EmbeddingModel::BGESmallZHV15)
+            }
+            "BAAI/bge-large-zh-v1.5" | "Xenova/bge-large-zh-v1.5" => {
+                Some(EmbeddingModel::BGELargeZHV15)
+            }
+            "lightonai/modernbert-embed-large" => Some(EmbeddingModel::ModernBertEmbedLarge),
             "intfloat/multilingual-e5-small" | "multilingual-e5-small" => {
-                EmbeddingModel::MultilingualE5Small
+                Some(EmbeddingModel::MultilingualE5Small)
             }
             "intfloat/multilingual-e5-base" | "multilingual-e5-base" => {
-                EmbeddingModel::MultilingualE5Base
+                Some(EmbeddingModel::MultilingualE5Base)
             }
             "intfloat/multilingual-e5-large"
             | "multilingual-e5-large"
-            | "Qdrant/multilingual-e5-large-onnx" => EmbeddingModel::MultilingualE5Large,
-            "mixedbread-ai/mxbai-embed-large-v1" => EmbeddingModel::MxbaiEmbedLargeV1,
-            "mixedbread-ai/mxbai-embed-large-v1-quantized" => EmbeddingModel::MxbaiEmbedLargeV1Q,
-            "Alibaba-NLP/gte-base-en-v1.5" => EmbeddingModel::GTEBaseENV15,
-            "Alibaba-NLP/gte-base-en-v1.5-quantized" => EmbeddingModel::GTEBaseENV15Q,
-            "Alibaba-NLP/gte-large-en-v1.5" => EmbeddingModel::GTELargeENV15,
-            "Alibaba-NLP/gte-large-en-v1.5-quantized" => EmbeddingModel::GTELargeENV15Q,
-            "Qdrant/clip-ViT-B-32-text" => EmbeddingModel::ClipVitB32,
-            "jinaai/jina-embeddings-v2-base-code" => EmbeddingModel::JinaEmbeddingsV2BaseCode,
-            _ => unreachable!("Unsupported embedding model: {} - this is a bug as model should be validated in new()", model),
+            | "Qdrant/multilingual-e5-large-onnx" => Some(EmbeddingModel::MultilingualE5Large),
+            "mixedbread-ai/mxbai-embed-large-v1" => Some(EmbeddingModel::MxbaiEmbedLargeV1),
+            "mixedbread-ai/mxbai-embed-large-v1-quantized" => {
+                Some(EmbeddingModel::MxbaiEmbedLargeV1Q)
+            }
+            "Alibaba-NLP/gte-base-en-v1.5" => Some(EmbeddingModel::GTEBaseENV15),
+            "Alibaba-NLP/gte-base-en-v1.5-quantized" => Some(EmbeddingModel::GTEBaseENV15Q),
+            "Alibaba-NLP/gte-large-en-v1.5" => Some(EmbeddingModel::GTELargeENV15),
+            "Alibaba-NLP/gte-large-en-v1.5-quantized" => Some(EmbeddingModel::GTELargeENV15Q),
+            "Qdrant/clip-ViT-B-32-text" => Some(EmbeddingModel::ClipVitB32),
+            "jinaai/jina-embeddings-v2-base-code" => Some(EmbeddingModel::JinaEmbeddingsV2BaseCode),
+            _ => None,
         }
     }
 }

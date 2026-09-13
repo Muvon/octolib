@@ -17,29 +17,64 @@ use super::*;
 #[test]
 fn test_short_names_resolve_consistently() {
     let provider = TinkerProvider::new();
-    for (alias, canonical) in [
-        ("inkling", "thinkingmachines/Inkling"),
-        ("INKLING", "thinkingmachines/Inkling"),
-        ("inkling-small", "thinkingmachines/Inkling-Small"),
-        ("INKLING-SMALL", "thinkingmachines/Inkling-Small"),
+    // Absolute rates, not "same as whatever the alias resolves to" — comparing
+    // the alias against its own resolution is true for any mapping, including
+    // the wrong one. These are the Serverless Inference rows of the models page.
+    for (alias, canonical, input, output, cached) in [
+        (
+            "inkling",
+            "thinkingmachines/Inkling:peft:262144:sampling-nvfp4",
+            1.00,
+            4.05,
+            0.17,
+        ),
+        (
+            "INKLING",
+            "thinkingmachines/Inkling:peft:262144:sampling-nvfp4",
+            1.00,
+            4.05,
+            0.17,
+        ),
+        (
+            "inkling-small",
+            "thinkingmachines/Inkling-Small:peft:262144:sampling-nvfp4",
+            0.30,
+            1.20,
+            0.06,
+        ),
+        (
+            "INKLING-SMALL",
+            "thinkingmachines/Inkling-Small:peft:262144:sampling-nvfp4",
+            0.30,
+            1.20,
+            0.06,
+        ),
     ] {
         assert_eq!(resolve_model(alias), canonical);
         assert!(provider.supports_model(alias));
-        assert_eq!(provider.get_max_input_tokens(alias), 65_536);
+        assert_eq!(provider.get_max_input_tokens(alias), 262_144);
         let pricing = provider.get_model_pricing(alias).unwrap();
-        let canonical_pricing = provider.get_model_pricing(canonical).unwrap();
-        assert_eq!(
-            pricing.input_price_per_1m,
-            canonical_pricing.input_price_per_1m
-        );
-        assert_eq!(
-            pricing.output_price_per_1m,
-            canonical_pricing.output_price_per_1m
-        );
-        assert_eq!(
-            pricing.cache_read_price_per_1m,
-            canonical_pricing.cache_read_price_per_1m
-        );
+        assert_eq!(pricing.input_price_per_1m, input);
+        assert_eq!(pricing.output_price_per_1m, output);
+        assert_eq!(pricing.cache_read_price_per_1m, cached);
+    }
+}
+
+/// The bare ids are the TRAINING table's spelling of the same two models and
+/// keep that table's rate and window. Naming one explicitly still means the
+/// training tier — the alias fix must not collapse the two.
+#[test]
+fn test_bare_ids_keep_the_training_tier() {
+    let provider = TinkerProvider::new();
+    for (model, input, output, context) in [
+        ("thinkingmachines/Inkling", 1.87, 4.68, 65_536),
+        ("thinkingmachines/Inkling-Small", 0.58, 1.44, 65_536),
+    ] {
+        assert_eq!(resolve_model(model), model);
+        let pricing = provider.get_model_pricing(model).unwrap();
+        assert_eq!(pricing.input_price_per_1m, input);
+        assert_eq!(pricing.output_price_per_1m, output);
+        assert_eq!(provider.get_max_input_tokens(model), context);
     }
 }
 

@@ -22,8 +22,10 @@
 //! training (`tinker://...` paths). Model IDs contain colons
 //! (`thinkingmachines/Inkling:peft:262144`); the factory splits only on the
 //! first colon, so they pass through intact.
-//! Short names `inkling` and `inkling-small` resolve to their full
-//! `thinkingmachines/Inkling` and `thinkingmachines/Inkling-Small` IDs.
+//! Short names `inkling` and `inkling-small` resolve to the SERVERLESS
+//! INFERENCE ids (`...:peft:262144:sampling-nvfp4`), which is the tier this
+//! endpoint serves — the bare `thinkingmachines/Inkling` spelling is the same
+//! model in the TRAINING table, at a different rate and window.
 //! Sampling: temperature and top_p are forwarded; top_k is not supported
 //! by this OpenAI-compatible adapter.
 //!
@@ -243,11 +245,22 @@ const CONTEXTS: &[(&str, usize)] = &[
     ("deepseek-ai/deepseek-v3.1", 32_768),
 ];
 
+/// The short names resolve to the SERVERLESS INFERENCE ids, not the bare base
+/// ids. This provider only ever does inference — it has one endpoint, the
+/// OpenAI-compatible chat completion route, which is the serverless offering —
+/// and the models page lists a different id per table for the same model name:
+/// "Inkling" is `thinkingmachines/Inkling:peft:262144:sampling-nvfp4` under
+/// Serverless Inference and `thinkingmachines/Inkling` under Training. The bare
+/// id therefore carried the TRAINING tier's rate and window into every inference
+/// call made by short name — 1.87/4.68 and 64K instead of 1.00/4.05 and 256K,
+/// i.e. an 87% over-bill and a context window quoted at a quarter of the truth.
+/// Both bare ids stay priced in the tables above: a caller may still name one
+/// explicitly, and that spelling means the training tier.
 fn resolve_model(model: &str) -> &str {
     if model.eq_ignore_ascii_case("inkling") {
-        "thinkingmachines/Inkling"
+        "thinkingmachines/Inkling:peft:262144:sampling-nvfp4"
     } else if model.eq_ignore_ascii_case("inkling-small") {
-        "thinkingmachines/Inkling-Small"
+        "thinkingmachines/Inkling-Small:peft:262144:sampling-nvfp4"
     } else {
         // Preserve fully qualified IDs and case-sensitive checkpoint paths.
         model

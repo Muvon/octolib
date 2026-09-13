@@ -201,5 +201,5 @@ pub use reranker::{
     rerank_with_truncation, RerankProvider, RerankProviderType, RerankResponse, RerankResult,
 };
 /// The tokenizer type handed out by [`EmbeddingProvider::tokenizer`].
-#[cfg(feature = "huggingface")]
+#[cfg(any(feature = "huggingface", feature = "onnx"))]
 pub use tokenizers::Tokenizer;

@@ -390,7 +390,7 @@ pub struct OnnxProviderImpl;
 impl OnnxProviderImpl {
     pub async fn new(_model: &str) -> Result<Self> {
         Err(anyhow::anyhow!(
-            "ONNX support is not compiled in. Please rebuild with --features onnx"
+            "ONNX support is not compiled in. Please rebuild with --features fastembed (or huggingface)"
         ))
     }
 }
@@ -406,7 +406,7 @@ impl super::EmbeddingProvider for OnnxProviderImpl {
         _text: &str,
     ) -> Result<(Vec<f32>, super::super::EmbeddingUsage)> {
         Err(anyhow::anyhow!(
-            "ONNX support is not compiled in. Please rebuild with --features onnx"
+            "ONNX support is not compiled in. Please rebuild with --features fastembed (or huggingface)"
         ))
     }
 
@@ -416,7 +416,7 @@ impl super::EmbeddingProvider for OnnxProviderImpl {
         _input_type: super::super::types::InputType,
     ) -> Result<(Vec<Vec<f32>>, super::super::EmbeddingUsage)> {
         Err(anyhow::anyhow!(
-            "ONNX support is not compiled in. Please rebuild with --features onnx"
+            "ONNX support is not compiled in. Please rebuild with --features fastembed (or huggingface)"
         ))
     }
 

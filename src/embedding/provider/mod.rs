@@ -106,7 +106,7 @@ pub trait EmbeddingProvider: Send + Sync {
 
     /// The model's own tokenizer for in-process models, so callers can count
     /// and split tokens exactly as the model does. `None` for API providers.
-    #[cfg(feature = "huggingface")]
+    #[cfg(any(feature = "huggingface", feature = "onnx"))]
     async fn tokenizer(&self) -> Result<Option<std::sync::Arc<tokenizers::Tokenizer>>> {
         Ok(None)
     }

@@ -14,7 +14,7 @@ categories = ["api-bindings", "development-tools"]
 exclude = ["scripts/"]
 
 [features]
-default = ["llm", "embeddings", "reranker", "media", "fastembed", "huggingface", "onnx"]
+default = ["llm", "embeddings", "reranker", "media", "fastembed", "huggingface"]
 
 # Capability modules. Each gates one top-level module and the dependencies only
 # it needs, so an LLM-only build does not compile the media or embedding stack.
@@ -24,12 +24,15 @@ reranker = []
 media = ["dep:base64"]
 
 # Local embedding backends. Both are useless without the embedding module, so
-# they enable it.
-fastembed = ["embeddings", "dep:fastembed"]
-huggingface = ["embeddings", "dep:candle-core", "dep:candle-nn", "dep:candle-transformers", "dep:tokenizers", "dep:hf-hub"]
-# ONNX Runtime path: runs a HF-hosted `onnx/` export through ORT instead of
-# candle. Reuses fastembed's bundled ort session builder (its user-defined
-# model API), so it adds no new heavy dependency on top of `fastembed`.
+# they enable it. Both also enable `onnx`, so the ONNX provider is present
+# whenever any local backend is — it is never a separate opt-in.
+fastembed = ["embeddings", "onnx", "dep:fastembed"]
+huggingface = ["embeddings", "onnx", "dep:candle-core", "dep:candle-nn", "dep:candle-transformers", "dep:tokenizers", "dep:hf-hub"]
+
+# ONNX Runtime embedding provider: runs a HF-hosted `onnx/` export through ORT
+# instead of candle. Not selected directly — `fastembed` and `huggingface` both
+# turn it on. It borrows ort + the session builder from the fastembed crate,
+# which is why it pulls that dep even in a candle-only build.
 onnx = ["embeddings", "dep:fastembed", "dep:tokenizers", "dep:hf-hub"]
 
 # Hardware acceleration — enable whichever matches your hardware.

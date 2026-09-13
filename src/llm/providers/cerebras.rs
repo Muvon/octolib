@@ -52,28 +52,24 @@ const CEREBRAS_API_KEY_ENV: &str = "CEREBRAS_API_KEY";
 const CEREBRAS_API_URL_ENV: &str = "CEREBRAS_API_URL";
 const CEREBRAS_API_URL: &str = "https://api.cerebras.ai/v1/chat/completions";
 
-/// Cerebras supported model IDs (Mar 2026 docs)
+/// Cerebras supported model IDs (Sep 2026 docs)
 /// Source: https://inference-docs.cerebras.ai/models/overview
 const SUPPORTED_MODELS: &[&str] = &[
-    // Production models
+    // Shared-tier production models
     "gpt-oss-120b",
-    "llama-3.1-8b",
-    // Preview models
-    "gemma-4-31b",
-    "qwen-3-235b-a22b-instruct-2507",
-    "zai-glm-4.7",
+    "qwen-3.8-27b",
 ];
 
 /// Cerebras model pricing (per 1M tokens in USD)
 /// Format: (model, input, output, cache_write, cache_read)
 ///
-/// Source: https://www.cerebras.ai/pricing (checked Mar 31, 2026)
+/// Source: https://www.cerebras.ai/pricing (gpt-oss-120b, checked Mar 31,
+/// 2026) and https://inference-docs.cerebras.ai/models/qwen-3.8-27b
+/// (checked Sep 13, 2026). No separate cache rates are published, so
+/// cache fields mirror input.
 const PRICING: &[PricingTuple] = &[
-    ("gemma-4-31b", 0.99, 1.49, 0.99, 0.99),
-    ("zai-glm-4.7", 2.25, 2.75, 2.25, 2.25),
-    ("qwen-3-235b-a22b-instruct-2507", 0.60, 1.20, 0.60, 0.60),
+    ("qwen-3.8-27b", 0.99, 1.49, 0.99, 0.99),
     ("gpt-oss-120b", 0.35, 0.75, 0.35, 0.35),
-    ("llama-3.1-8b", 0.10, 0.10, 0.10, 0.10),
 ];
 
 fn calculate_cost(
@@ -118,8 +114,29 @@ impl AiProvider for CerebrasProvider {
         false
     }
 
-    // supports_vision, supports_video, get_max_input_tokens
-    // are resolved via reference capabilities (trait defaults)
+    // supports_vision is resolved via reference capabilities (trait default)
+
+    fn supports_video(&self, model: &str) -> bool {
+        // The Cerebras qwen-3.8-27b endpoint accepts text and base64-encoded
+        // PNG/JPEG images only, unlike the native route that also takes video.
+        if normalize_model_name(model) == "qwen-3.8-27b" {
+            return false;
+        }
+        crate::llm::reference_models::get_reference_capabilities(model)
+            .map(|c| c.video)
+            .unwrap_or(false)
+    }
+
+    fn get_max_input_tokens(&self, model: &str) -> usize {
+        // Cerebras serves Qwen 3.8 27B at 128K (131,072) on paid tiers —
+        // below the 262K native context in the reference tables.
+        if normalize_model_name(model) == "qwen-3.8-27b" {
+            return 131_072;
+        }
+        crate::llm::reference_models::get_reference_capabilities(model)
+            .map(|c| c.max_input_tokens)
+            .unwrap_or(262_144)
+    }
 
     fn supports_structured_output(&self, _model: &str) -> bool {
         true

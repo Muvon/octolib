@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.37.1] - 2026-09-13
+
+### 📋 Release Summary
+
+Improved model validation by refining alias handling and fallback behavior, providing more reliable model selection and configuration (2d3681dd).
+
+
+### 🐛 Bug Fixes & Stability
+
+- **models**: validate aliases and fallback handling `2d3681dd`
+
 ## [0.37.0] - 2026-09-12
 
 ### 📋 Release Summary

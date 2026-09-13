@@ -27,8 +27,8 @@
  *
  * Model string format:
  *
- *   onnx:<org>/<repo>                     → auto-pick the ONNX graph
- *   onnx:<org>/<repo>#onnx/model.onnx     → pin an exact file in the repo
+ *   `onnx:<org>/<repo>`                     → auto-pick the ONNX graph
+ *   `onnx:<org>/<repo>#onnx/model.onnx`     → pin an exact file in the repo
  *
  * Auto-pick order (first hit wins):
  *   onnx/model_quantized.onnx, onnx/model_int8.onnx, onnx/model.onnx,

@@ -87,6 +87,9 @@ const PRICING: &[PricingTuple] = &[
     ("qwen-plus", 0.40, 1.20, 0.40, 0.08),
     ("qwen-turbo", 0.05, 0.20, 0.05, 0.01),
     // Third-party models resold by Model Studio at Alibaba's own rates
+    // V4.1 Flash bills busy/idle (idle is half; busy is the baseline here) and its
+    // implicit cache hits are 10% of input, not 20%.
+    ("deepseek-v4.1-flash", 0.30, 1.20, 0.30, 0.03),
     ("deepseek-v4-pro", 2.40, 4.80, 2.40, 0.24),
     ("deepseek-v4-flash", 0.20, 0.40, 0.20, 0.04),
     ("glm-5.2", 1.40, 4.40, 1.40, 0.28),

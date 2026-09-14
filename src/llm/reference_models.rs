@@ -481,6 +481,15 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(0.3, 1.2, 0.3, 0.006),
     },
     ReferenceModelEntry {
+        // The same V4.1-Flash weights under their model-card name, which is how
+        // ollama (`deepseek-v4.1-flash:cloud`) and Alibaba spell it. It must sit
+        // ahead of the generic `deepseek-v4` row: that spelling contains it too,
+        // and would bill V4.1 at V4 Flash's 0.44/1.32 as a text-only model.
+        pattern: "deepseek-v4.1-flash",
+        capabilities: caps(true, false, true, 1_000_000),
+        pricing: pricing(0.3, 1.2, 0.3, 0.006),
+    },
+    ReferenceModelEntry {
         pattern: "deepseek-v4-flash-vision-exp",
         capabilities: caps(true, false, true, 1_000_000),
         // Experimental multimodal route (2026-08-21): text-identical to

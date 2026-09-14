@@ -74,6 +74,12 @@ fn test_pricing_qwen() {
         .unwrap();
     assert_eq!(p.input_price_per_1m, 0.20);
 
+    // V4.1 Flash: busy rate, and the 10% cache-hit exception
+    let p = provider.get_model_pricing("deepseek-v4.1-flash").unwrap();
+    assert_eq!(p.input_price_per_1m, 0.30);
+    assert_eq!(p.output_price_per_1m, 1.20);
+    assert_eq!(p.cache_read_price_per_1m, 0.03);
+
     // Unversioned aliases must not shadow more specific entries
     let p = provider.get_model_pricing("qwen-plus-latest").unwrap();
     assert_eq!(p.input_price_per_1m, 0.40);

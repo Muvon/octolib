@@ -32,6 +32,24 @@ fn qwen_3_7_flash_resolves_for_the_openrouter_route() {
     assert_eq!(pricing.output_price_per_1m, 0.13);
 }
 
+/// Ollama names V4.1 Flash by its model card, not by DeepSeek's `deepseek-flash`
+/// route, and that spelling also contains the generic `deepseek-v4` pattern — a
+/// miss here bills V4 Flash's rate and reports the model as blind.
+#[test]
+fn deepseek_v4_1_flash_resolves_by_its_model_card_name() {
+    for model in ["deepseek-v4.1-flash:cloud", "deepseek-v4.1-flash"] {
+        let caps = get_reference_capabilities(model)
+            .expect("deepseek-v4.1-flash must resolve to a reference entry");
+        assert!(caps.vision);
+        assert_eq!(caps.max_input_tokens, 1_000_000);
+        let pricing = get_reference_pricing(model)
+            .expect("deepseek-v4.1-flash must resolve to reference pricing");
+        assert_eq!(pricing.input_price_per_1m, 0.3);
+        assert_eq!(pricing.output_price_per_1m, 1.2);
+        assert_eq!(pricing.cache_read_price_per_1m, 0.006);
+    }
+}
+
 fn assert_same_capabilities(left: ModelCapabilities, right: ModelCapabilities) {
     assert_eq!(left.vision, right.vision);
     assert_eq!(left.video, right.video);

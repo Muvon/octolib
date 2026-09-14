@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.38.0] - 2026-09-14
+
+### 📋 Release Summary
+
+This release adds ONNX provider support for embedding models and updates the Cerebras model catalog and capabilities (98e4ed23, 0a4539a1, 172ce9c8). It also improves model configuration accuracy by correcting DeepSeek V4.1 Flash pricing and refining ONNX model examples (54451cf8, 98b0e8c4).
+
+
+### ✨ New Features & Enhancements
+
+- **cerebras**: update model catalog and capabilities `172ce9c8`
+- **embedding**: add ONNX provider support `98e4ed23`
+
+### 🔧 Improvements & Optimizations
+
+- **onnx**: format model examples `98b0e8c4`
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: correct DeepSeek V4.1 Flash pricing `54451cf8`
+- **embeddings**: align ONNX feature gating `0a4539a1`
+
 ## [0.37.1] - 2026-09-13
 
 ### 📋 Release Summary

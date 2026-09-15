@@ -14,11 +14,23 @@
 
 use super::*;
 
-#[test]
-fn test_provider_creation() {
-    assert!(OctoHubEmbeddingProvider::new("voyage-3.5").is_ok());
-    assert!(OctoHubEmbeddingProvider::new("any-model").is_ok());
-    assert!(OctoHubEmbeddingProvider::new("").is_err());
+#[tokio::test]
+async fn test_empty_model_rejected() {
+    // Rejected before any network probe, so this is safe offline.
+    assert!(OctoHubEmbeddingProvider::new("").await.is_err());
+}
+
+#[tokio::test]
+async fn test_probed_dimension_is_reported_and_reused() {
+    // Callers size their vector store from get_dimension before the first write;
+    // a 0 here made octocode build its tables with a zero-length embedding field.
+    let model = "dimension-cache-test-model";
+    DIMENSION_CACHE.write().unwrap().insert(
+        (OctoHubEmbeddingProvider::api_url(), model.to_string()),
+        1536,
+    );
+    let provider = OctoHubEmbeddingProvider::new(model).await.unwrap();
+    assert_eq!(provider.get_dimension(), 1536);
 }
 
 #[test]

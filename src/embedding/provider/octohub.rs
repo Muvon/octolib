@@ -21,6 +21,9 @@
 //! - `OCTOHUB_API_KEY`: Optional API key for OctoHub server authentication
 //! - `OCTOHUB_API_URL`: OctoHub server base URL (default: http://127.0.0.1:8080)
 
+use std::collections::HashMap;
+use std::sync::{LazyLock, RwLock};
+
 use anyhow::{Context, Result};
 use serde_json::{json, Value};
 
@@ -32,19 +35,60 @@ const OCTOHUB_API_KEY_ENV: &str = "OCTOHUB_API_KEY";
 const OCTOHUB_API_URL_ENV: &str = "OCTOHUB_API_URL";
 const OCTOHUB_DEFAULT_URL: &str = "https://hub.octomind.run";
 
+/// Probed embedding dimensions, keyed by `(endpoint, model)`.
+///
+/// OctoHub answers with a bare vector and no model facts, while callers build
+/// their vector store schema from `get_dimension` before the first write. So the
+/// size is learned from one embedding at construction, once per `(endpoint,
+/// model)` per process, like the local provider.
+static DIMENSION_CACHE: LazyLock<RwLock<HashMap<(String, String), usize>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
+
 /// OctoHub embedding provider - routes through OctoHub proxy server
 pub struct OctoHubEmbeddingProvider {
     model_name: String,
+    dimension: usize,
 }
 
 impl OctoHubEmbeddingProvider {
-    pub fn new(model: &str) -> Result<Self> {
+    /// Construct the provider and probe its embedding dimension.
+    pub async fn new(model: &str) -> Result<Self> {
         if model.is_empty() {
             return Err(anyhow::anyhow!("Model name cannot be empty"));
         }
-        Ok(Self {
+        let cache_key = (Self::api_url(), model.to_string());
+
+        // Reuse a dimension already probed for this (endpoint, model) — no network.
+        if let Some(dimension) = DIMENSION_CACHE
+            .read()
+            .ok()
+            .and_then(|cache| cache.get(&cache_key).copied())
+        {
+            return Ok(Self {
+                model_name: model.to_string(),
+                dimension,
+            });
+        }
+
+        let mut provider = Self {
             model_name: model.to_string(),
-        })
+            dimension: 0,
+        };
+        let probe = provider
+            .generate_embedding("dimension probe")
+            .await
+            .context("Failed to probe embedding dimension from OctoHub")?;
+        provider.dimension = probe.0.len();
+        if provider.dimension == 0 {
+            return Err(anyhow::anyhow!(
+                "OctoHub embedding model '{}' returned a zero-length embedding while probing dimension",
+                model
+            ));
+        }
+        if let Ok(mut cache) = DIMENSION_CACHE.write() {
+            cache.insert(cache_key, provider.dimension);
+        }
+        Ok(provider)
     }
 
     fn api_url() -> String {
@@ -162,10 +206,8 @@ impl EmbeddingProvider for OctoHubEmbeddingProvider {
         Ok((vectors, usage))
     }
 
-    /// Dimension is unknown until the underlying provider responds;
-    /// callers should not rely on this for OctoHub.
     fn get_dimension(&self) -> usize {
-        0
+        self.dimension
     }
 }
 

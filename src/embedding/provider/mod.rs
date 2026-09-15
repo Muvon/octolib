@@ -136,7 +136,7 @@ pub async fn create_embedding_provider_from_parts(
             Ok(Box::new(OpenRouterProviderImpl::new(model).await?))
         }
         EmbeddingProviderType::Together => Ok(Box::new(TogetherProviderImpl::new(model)?)),
-        EmbeddingProviderType::OctoHub => Ok(Box::new(OctoHubEmbeddingProvider::new(model)?)),
+        EmbeddingProviderType::OctoHub => Ok(Box::new(OctoHubEmbeddingProvider::new(model).await?)),
         EmbeddingProviderType::Local => Ok(Box::new(LocalEmbeddingProvider::new(model).await?)),
         EmbeddingProviderType::HuggingFace => {
             #[cfg(feature = "huggingface")]

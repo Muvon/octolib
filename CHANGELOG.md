@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.38.2] - 2026-09-15
+
+### 📋 Release Summary
+
+Updated the rustls dependency to version 0.23.45 for improved compatibility and maintenance.
+
+
+### 🔄 Other Changes
+
+1 maintenance, dependency, and tooling update not listed individually.
+
 ## [0.38.1] - 2026-09-15
 
 ### 📋 Release Summary

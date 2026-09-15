@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.38.1] - 2026-09-15
+
+### 📋 Release Summary
+
+Embedding support was improved by ensuring OctoHub embedding dimensions are detected correctly (17397153).
+
+
+### 🐛 Bug Fixes & Stability
+
+- **embedding**: probe OctoHub embedding dimensions `17397153`
+
 ## [0.38.0] - 2026-09-14
 
 ### 📋 Release Summary

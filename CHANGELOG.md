@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.39.1] - 2026-09-18
+
+### 📋 Release Summary
+
+Improved evaluation reliability by rejecting blank provider API keys, helping prevent invalid configuration from proceeding (62473af6).
+
+
+### 🐛 Bug Fixes & Stability
+
+- **evaluation**: reject blank provider API keys `62473af6`
+
 ## [0.39.0] - 2026-09-18
 
 ### 📋 Release Summary

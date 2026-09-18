@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.38.3] - 2026-09-18
+
+### 📋 Release Summary
+
+Structured output handling was improved with consistent validation and safer behavior when schema guidance is ignored (6aa59929, 3cbd42d3, 97e48350). Provider compatibility was refined through aligned Cloudflare model metadata and improved mapping of reasoning effort tiers (3590d3fa, e3ab5526).
+
+
+### 🔧 Improvements & Optimizations
+
+- **llm**: validate structured outputs once `6aa59929`
+
+### 🐛 Bug Fixes & Stability
+
+- **ollama**: mark response schemas unenforced `97e48350`
+- **cloudflare**: align model metadata `3590d3fa`
+- **llm**: map provider reasoning effort tiers `e3ab5526`
+- **openai**: fail closed on ignored schema guidance `3cbd42d3`
+
 ## [0.38.2] - 2026-09-15
 
 ### 📋 Release Summary

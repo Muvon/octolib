@@ -34,9 +34,13 @@ pub(crate) struct CapturedResponse {
     pub body: Vec<u8>,
 }
 
+/// A blank value is no key: container env files pass unset variables through
+/// as empty strings, and sending one only earns the provider's 403.
 pub(crate) fn api_key(environment_variable: &str) -> EvaluationResult<String> {
     std::env::var(environment_variable)
-        .map_err(|_| EvaluationError::MissingApiKey(environment_variable.to_string()))
+        .ok()
+        .filter(|key| !key.trim().is_empty())
+        .ok_or_else(|| EvaluationError::MissingApiKey(environment_variable.to_string()))
 }
 
 /// POST with retries on 429, 529 and 5xx, honouring `Retry-After` and
@@ -209,6 +213,23 @@ mod tests {
             headers: HeaderMap::new(),
             body: body.as_bytes().to_vec(),
         }
+    }
+
+    #[test]
+    fn blank_api_key_is_missing() {
+        const VAR: &str = "OCTOLIB_TEST_EVALUATION_BLANK_KEY";
+        std::env::set_var(VAR, "  ");
+        assert!(matches!(
+            api_key(VAR),
+            Err(EvaluationError::MissingApiKey(_))
+        ));
+        std::env::set_var(VAR, "k");
+        assert_eq!(api_key(VAR).unwrap(), "k");
+        std::env::remove_var(VAR);
+        assert!(matches!(
+            api_key(VAR),
+            Err(EvaluationError::MissingApiKey(_))
+        ));
     }
 
     #[test]

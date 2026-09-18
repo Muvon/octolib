@@ -44,6 +44,9 @@ const ACCOUNT_ID_ENV: &str = "CLOUDFLARE_ACCOUNT_ID";
 const API_BASE_ENV: &str = "CLOUDFLARE_MEDIA_API_URL";
 const API_BASE: &str = "https://api.cloudflare.com/client/v4/accounts";
 const TILE_PIXELS: f64 = 512.0 * 512.0;
+/// Workers AI bills $0.011 per 1,000 neurons; some JSON results report the
+/// neurons consumed, which is the authoritative charge for that request.
+const NEURON_USD: f64 = 0.011 / 1000.0;
 
 #[derive(Debug, Clone, Default)]
 pub struct CloudflareMediaProvider;
@@ -91,12 +94,15 @@ struct ImageModel {
     usd_per_step: f64,
     output: ImageOutput,
     steps_field: &'static str,
+    seed: bool,
     dimensions: bool,
     negative_prompt: bool,
 }
 
 const IMAGE_MODELS: &[ImageModel] = &[
-    // Output size is not documented, so only the per-step part is known.
+    // Output size is not documented, so only the per-step part is known. The
+    // schema is closed (`additionalProperties: false`): a `seed` is rejected
+    // live even though the docs' curl example sends one.
     ImageModel {
         id: "@cf/black-forest-labs/flux-1-schnell",
         default_size: None,
@@ -105,6 +111,7 @@ const IMAGE_MODELS: &[ImageModel] = &[
         usd_per_step: 0.000_105_6,
         output: ImageOutput::Base64Json,
         steps_field: "steps",
+        seed: false,
         dimensions: false,
         negative_prompt: false,
     },
@@ -116,6 +123,7 @@ const IMAGE_MODELS: &[ImageModel] = &[
         usd_per_step: 0.000_132,
         output: ImageOutput::Base64Json,
         steps_field: "num_steps",
+        seed: true,
         dimensions: true,
         negative_prompt: false,
     },
@@ -127,6 +135,7 @@ const IMAGE_MODELS: &[ImageModel] = &[
         usd_per_step: 0.000_11,
         output: ImageOutput::Binary,
         steps_field: "num_steps",
+        seed: true,
         dimensions: true,
         negative_prompt: true,
     },
@@ -247,7 +256,7 @@ impl CloudflareMediaProvider {
             },
             parameters: ParameterCapabilities {
                 count: CapabilitySupport::Unsupported,
-                seed: supported(task == MediaTask::TextToImage),
+                seed: supported(image.is_some_and(|m| m.seed)),
                 dimensions: supported(image.is_some_and(|m| m.dimensions)),
                 aspect_ratio: CapabilitySupport::Unsupported,
                 duration: CapabilitySupport::Unsupported,
@@ -434,9 +443,9 @@ impl SpeechSynthesisProvider for CloudflareMediaProvider {
         } else {
             response.body
         };
-        let media_type = header_type
-            .filter(|value| value.starts_with("audio/"))
-            .unwrap_or_else(|| plan.media_type.to_string());
+        // The requested encoding decides the container; Cloudflare's header
+        // says audio/mpeg even when the bytes are a RIFF/WAV (verified live).
+        let media_type = plan.media_type.to_string();
         let characters = request.text.chars().count() as f64;
         let estimate = shared::resolved_cost_estimate(
             PROVIDER,
@@ -640,6 +649,14 @@ fn plan_image(model: &ImageModel, request: &ImageGenerationRequest) -> MediaResu
             "only phoenix-1.0 accepts a negative prompt",
         )?;
     }
+    if request.seed.is_some() && !model.seed {
+        unsupported(
+            &request.request_options,
+            &mut warnings,
+            "seed",
+            "flux-1-schnell's input schema is closed and rejects a seed",
+        )?;
+    }
 
     let mut size = model.default_size;
     match request.geometry {
@@ -671,7 +688,7 @@ fn plan_image(model: &ImageModel, request: &ImageGenerationRequest) -> MediaResu
     if let Some(steps) = options.steps {
         body.insert(model.steps_field.to_string(), json!(steps));
     }
-    if let Some(seed) = request.seed {
+    if let (Some(seed), true) = (request.seed, model.seed) {
         body.insert("seed".to_string(), json!(seed));
     }
     if let Some(guidance) = options.guidance {
@@ -900,7 +917,7 @@ fn parse_transcription(
                         Some(TranscriptWord {
                             start_secs: word.get("start")?.as_f64()?,
                             end_secs: word.get("end")?.as_f64()?,
-                            word: word.get("word")?.as_str()?.to_string(),
+                            word: word.get("word")?.as_str()?.trim().to_string(),
                             speaker: if speaker {
                                 word.get("speaker").map(|value| value.to_string())
                             } else {
@@ -987,8 +1004,8 @@ fn parse_transcription(
                 .ok_or_else(|| missing("transcript"))?;
             (
                 text.to_string(),
-                channel
-                    .get("detected_language")
+                alternative
+                    .pointer("/languages/0")
                     .and_then(Value::as_str)
                     .map(str::to_string),
                 result.pointer("/metadata/duration").and_then(Value::as_f64),
@@ -999,6 +1016,10 @@ fn parse_transcription(
         }
     };
 
+    let provider_reported_cost = result
+        .pointer("/usage/neurons")
+        .and_then(Value::as_f64)
+        .map(|neurons| neurons * NEURON_USD);
     let estimated_cost = estimate.and_then(|rate| {
         let quantity = rate.quantity.or(match rate.unit {
             UsageUnit::AudioSeconds => duration_secs,
@@ -1006,10 +1027,10 @@ fn parse_transcription(
         })?;
         Some(quantity * rate.usd_per_unit)
     });
-    if estimated_cost.is_none() {
+    if provider_reported_cost.is_none() && estimated_cost.is_none() {
         warnings.push(ProviderWarning {
             code: WarningCode::CostUnavailable,
-            message: "Workers AI bills transcription per audio minute and this response carries no duration; supply a cost_estimate with the quantity in seconds to price it".to_string(),
+            message: "Workers AI bills transcription per audio minute and this response carries neither neurons nor a duration; supply a cost_estimate with the quantity in seconds to price it".to_string(),
             parameter: None,
             provider_metadata: Value::Null,
         });
@@ -1026,15 +1047,15 @@ fn parse_transcription(
                     vec![UsageLineItem {
                         unit: UsageUnit::AudioSeconds,
                         quantity: seconds,
-                        cost: estimated_cost,
+                        cost: provider_reported_cost.or(estimated_cost),
                         description: Some("input audio".to_string()),
                     }]
                 })
                 .unwrap_or_default(),
-            provider_reported_cost: None,
+            provider_reported_cost,
             estimated_cost,
             currency: "USD".to_string(),
-            metadata: Value::Null,
+            metadata: json!({"neurons": result.pointer("/usage/neurons")}),
         }),
         warnings,
         provider_metadata: metadata,
@@ -1305,6 +1326,7 @@ mod tests {
         });
         request.negative_prompt = Some("blurry".to_string());
         request.count = Some(2);
+        request.seed = Some(3);
         request.provider_options = CloudflareMediaOptions {
             steps: Some(6),
             ..Default::default()
@@ -1326,7 +1348,7 @@ mod tests {
             .iter()
             .filter_map(|w| w.parameter.as_deref())
             .collect();
-        assert_eq!(dropped, ["count", "negative_prompt", "geometry"]);
+        assert_eq!(dropped, ["count", "negative_prompt", "seed", "geometry"]);
     }
 
     #[test]
@@ -1509,9 +1531,10 @@ mod tests {
         let result = json!({
             "text": "one two",
             "word_count": 2,
+            "usage": {"neurons": 93.27},
             "transcription_info": {"language": "en", "language_probability": 0.99, "duration": 120.0},
             "segments": [
-                {"start": 0.0, "end": 1.0, "text": " one", "words": [{"word": "one", "start": 0.0, "end": 0.4}]},
+                {"start": 0.0, "end": 1.0, "text": " one", "words": [{"word": " one", "start": 0.0, "end": 0.4}]},
                 {"start": 1.0, "end": 2.0, "text": "two ", "words": [{"word": "two", "start": 1.1, "end": 1.5}]}
             ]
         });
@@ -1536,6 +1559,8 @@ mod tests {
         // Two minutes at $0.000513 per minute.
         let usage = parsed.usage.unwrap();
         assert!((usage.estimated_cost.unwrap() - 0.001_026).abs() < 1e-9);
+        assert!((usage.provider_reported_cost.unwrap() - 93.27 * NEURON_USD).abs() < 1e-12);
+        assert_eq!(parsed.words[0].word, "one");
         assert_eq!(usage.line_items[0].unit, UsageUnit::AudioSeconds);
         assert!(parsed.warnings.is_empty());
     }
@@ -1543,12 +1568,12 @@ mod tests {
     #[test]
     fn nova3_response_reads_deepgram_alternatives() {
         let result = json!({
-            "metadata": {"duration": 30.0},
+            "usage": {"prompt_tokens": 0, "completion_tokens": 0, "neurons": 24.01419},
             "results": {"channels": [{
-                "detected_language": "en",
                 "alternatives": [{
                     "transcript": "good morning",
                     "confidence": 0.98,
+                    "languages": ["en"],
                     "words": [
                         {"word": "good", "start": 0.1, "end": 0.3, "speaker": 0},
                         {"word": "morning", "start": 0.4, "end": 0.9, "speaker": 0}
@@ -1567,8 +1592,12 @@ mod tests {
         assert_eq!(parsed.text, "good morning");
         assert_eq!(parsed.language.as_deref(), Some("en"));
         assert_eq!(parsed.words[0].speaker.as_deref(), Some("0"));
-        // Half a minute at $0.0052 per minute.
-        assert!((parsed.usage.unwrap().estimated_cost.unwrap() - 0.0026).abs() < 1e-9);
+        assert!(parsed.duration_secs.is_none());
+        // No duration, so no estimate, but the billed neurons price it exactly.
+        let usage = parsed.usage.unwrap();
+        assert!(usage.estimated_cost.is_none());
+        assert!((usage.provider_reported_cost.unwrap() - 24.01419 * NEURON_USD).abs() < 1e-12);
+        assert!(parsed.warnings.is_empty());
 
         assert!(parse_transcription(
             TranscriptionApi::Nova3,
@@ -1676,6 +1705,8 @@ mod tests {
             "@cf/black-forest-labs/flux-1-schnell",
         );
         assert_eq!(flux.parameters.dimensions, CapabilitySupport::Unsupported);
+        assert_eq!(flux.parameters.seed, CapabilitySupport::Unsupported);
+        assert_eq!(phoenix.parameters.seed, CapabilitySupport::Supported);
 
         let aura = SpeechSynthesisProvider::capabilities(&provider, "@cf/deepgram/aura-1");
         assert_eq!(aura.parameters.output_format, CapabilitySupport::Supported);

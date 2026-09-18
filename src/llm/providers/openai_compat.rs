@@ -60,6 +60,16 @@ fn reasoning_effort_value(
         };
     }
 
+    // Workers AI publishes each model's accepted levels in its catalog, which
+    // is more specific than the low|medium|high the page schemas advertise.
+    if provider_name.eq_ignore_ascii_case("cloudflare") {
+        if let Some(value) =
+            crate::llm::providers::cloudflare::catalog_reasoning_effort(model, effort)
+        {
+            return value;
+        }
+    }
+
     if let Some(value) = glm_reasoning_effort(provider_name, model, effort) {
         return value;
     }

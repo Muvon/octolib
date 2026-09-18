@@ -45,7 +45,7 @@ use crate::llm::providers::openai_compat::{
     chat_completion as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
 };
 use crate::llm::traits::AiProvider;
-use crate::llm::types::{ChatCompletionParams, ModelPricing, ProviderResponse};
+use crate::llm::types::{ChatCompletionParams, ModelPricing, ProviderResponse, ReasoningEffort};
 use crate::llm::utils::{get_model_pricing, normalize_model_name, PricingTuple};
 use anyhow::{anyhow, Context, Result};
 use serde::Deserialize;
@@ -66,6 +66,10 @@ pub struct CatalogModel {
     pub vision: bool,
     pub function_calling: bool,
     pub pricing: Option<ModelPricing>,
+    /// `reasoning_effort.supported_efforts`; empty when the model has no effort knob.
+    pub supported_efforts: Vec<String>,
+    /// `reasoning_effort.normalizes_to`: levels Cloudflare maps itself.
+    pub normalized_efforts: Vec<String>,
 }
 
 /// Process-wide catalog, filled by [`preload`] or the first chat call.
@@ -136,12 +140,31 @@ fn parse_catalog(entries: Vec<SearchEntry>) -> Vec<CatalogModel> {
                     let cached = rate("per M cached input tokens").unwrap_or(input);
                     Some(ModelPricing::new(input, output, input, cached))
                 });
+            let strings = |value: Option<&Value>| -> Vec<String> {
+                value
+                    .and_then(Value::as_array)
+                    .map(|items| {
+                        items
+                            .iter()
+                            .filter_map(Value::as_str)
+                            .map(str::to_string)
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            };
+            let effort = property("reasoning_effort");
             CatalogModel {
                 id: entry.name,
                 context_window,
                 vision: flag("vision"),
                 function_calling: flag("function_calling"),
                 pricing,
+                supported_efforts: strings(effort.and_then(|e| e.get("supported_efforts"))),
+                normalized_efforts: effort
+                    .and_then(|e| e.get("normalizes_to"))
+                    .and_then(Value::as_object)
+                    .map(|map| map.keys().cloned().collect())
+                    .unwrap_or_default(),
             }
         })
         .collect()
@@ -551,6 +574,48 @@ fn default_cloudflare_api_url(account_id: &str) -> String {
     )
 }
 
+const EFFORT_LADDER: [(ReasoningEffort, &str); 5] = [
+    (ReasoningEffort::Low, "low"),
+    (ReasoningEffort::Medium, "medium"),
+    (ReasoningEffort::High, "high"),
+    (ReasoningEffort::XHigh, "xhigh"),
+    (ReasoningEffort::Max, "max"),
+];
+
+/// The `reasoning_effort` value to send for a catalog entry. A supported level
+/// goes verbatim, and so does one Cloudflare documents it normalizes itself
+/// (the catalog lists e.g. `medium -> max` for GLM-5.3). Anything else floors
+/// to the nearest supported level below, or the lowest supported level when
+/// nothing is below. `None` when the model has no effort knob, which leaves
+/// the shared ladder in charge.
+fn select_effort(entry: &CatalogModel, effort: ReasoningEffort) -> Option<&'static str> {
+    if entry.supported_efforts.is_empty() {
+        return None;
+    }
+    let supported = |name: &str| entry.supported_efforts.iter().any(|s| s == name);
+    let index = EFFORT_LADDER
+        .iter()
+        .position(|(level, _)| *level == effort)?;
+    let requested = EFFORT_LADDER[index].1;
+    if supported(requested) || entry.normalized_efforts.iter().any(|s| s == requested) {
+        return Some(requested);
+    }
+    EFFORT_LADDER[..index]
+        .iter()
+        .rev()
+        .chain(EFFORT_LADDER[index + 1..].iter())
+        .map(|(_, name)| *name)
+        .find(|name| supported(name))
+}
+
+/// Catalog-driven effort for a Cloudflare model once the catalog is loaded.
+pub(crate) fn catalog_reasoning_effort(
+    model: &str,
+    effort: ReasoningEffort,
+) -> Option<&'static str> {
+    cached_model(model).and_then(|entry| select_effort(entry, effort))
+}
+
 #[async_trait::async_trait]
 impl AiProvider for CloudflareWorkersAiProvider {
     fn name(&self) -> &str {
@@ -605,7 +670,7 @@ impl AiProvider for CloudflareWorkersAiProvider {
             .unwrap_or(false)
     }
 
-    /// Schemas are enforced through the forced-tool path (see
+    /// Legacy-schema models reach a schema only through a forced tool call (see
     /// `enforces_response_schema`), so structured output needs function calling.
     fn supports_structured_output(&self, model: &str) -> bool {
         if let Some(entry) = cached_model(model) {
@@ -619,11 +684,14 @@ impl AiProvider for CloudflareWorkersAiProvider {
         }
     }
 
-    /// JSON Mode is best effort — "Workers AI can't guarantee that the model
-    /// responds according to the requested JSON Schema" — and does not support
-    /// streaming, so the schema is enforced locally via a forced tool call.
-    fn enforces_response_schema(&self, _model: &str) -> bool {
-        false
+    /// OpenAI-shaped models decode against `response_format` json_schema: a
+    /// prompt demanding prose still got the single value an enum-only schema
+    /// allowed, 12 of 12 times (GLM-5.3 Flash, DeepSeek V4 Flash, Kimi K2.6,
+    /// Sep 18, 2026). The docs' "can't guarantee" caveat surfaces as an error
+    /// ("JSON Mode couldn't be met"), not as output of another shape. Legacy
+    /// models fall back to the forced tool call.
+    fn enforces_response_schema(&self, model: &str) -> bool {
+        model_facts(model).is_some_and(|(_, _, _, _, openai_schema)| *openai_schema)
     }
 
     fn get_model_pricing(&self, model: &str) -> Option<ModelPricing> {
@@ -667,7 +735,7 @@ impl AiProvider for CloudflareWorkersAiProvider {
                 provider_name: "cloudflare",
                 usage_fallback_cost: None,
                 use_response_cost: true,
-                enforces_response_schema: false,
+                enforces_response_schema: self.enforces_response_schema(&model),
                 supports_required_tool_choice: self.supports_required_tool_choice(&model),
             },
             api_key,

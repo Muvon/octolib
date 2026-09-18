@@ -126,11 +126,15 @@ fn model_pages_drive_context_vision_and_tool_support() {
     assert!(provider.supports_vision("@cf/google/gemma-4-26b-a4b-it"));
     assert!(!provider.supports_vision("@cf/zai-org/glm-5.3"));
 
-    // Structured output rides on function calling; JSON Mode is best effort.
+    // OpenAI-shaped models decode against the schema; legacy ones need a
+    // forced tool call, so their structured output rides on function calling.
     assert!(provider.supports_structured_output("@cf/zai-org/glm-5.3"));
     assert!(provider.supports_structured_output("@cf/openai/gpt-oss-120b"));
     assert!(!provider.supports_structured_output("@cf/qwen/qwq-32b"));
-    assert!(!provider.enforces_response_schema("@cf/zai-org/glm-5.3"));
+    assert!(provider.enforces_response_schema("@cf/zai-org/glm-5.3-flash"));
+    assert!(provider.enforces_response_schema("@cf/deepseek-ai/deepseek-v4-flash-0731"));
+    assert!(!provider.enforces_response_schema("@cf/openai/gpt-oss-120b"));
+    assert!(!provider.enforces_response_schema("@cf/meta/llama-3.3-70b-instruct-fp8-fast"));
 
     // Only the OpenAI-shaped schemas document tool_choice "required".
     assert!(provider.supports_required_tool_choice("@cf/zai-org/glm-5.3"));
@@ -178,6 +182,13 @@ fn catalog_fixture() -> Vec<SearchEntry> {
                 {"property_id": "context_window", "value": "1310720"},
                 {"property_id": "function_calling", "value": "true"},
                 {"property_id": "reasoning", "value": "true"},
+                {"property_id": "reasoning_effort", "value": {
+                    "supported_efforts": ["max", "high", "low"],
+                    "default_effort": "max",
+                    "normalizes_to": {"none": "max", "medium": "max", "null": "max"},
+                    "mandatory": true,
+                    "default_enabled": true
+                }},
                 {"property_id": "price", "value": [
                     {"unit": "per M input tokens", "price": 1.4, "currency": "USD"},
                     {"unit": "per M output tokens", "price": 4.4, "currency": "USD"},
@@ -192,6 +203,13 @@ fn catalog_fixture() -> Vec<SearchEntry> {
                 {"property_id": "context_window", "value": "262144"},
                 {"property_id": "function_calling", "value": "true"},
                 {"property_id": "vision", "value": "true"},
+                {"property_id": "reasoning_effort", "value": {
+                    "supported_efforts": ["high", "none"],
+                    "default_effort": "high",
+                    "normalizes_to": {"low": "high", "medium": "high", "max": "high", "null": "high"},
+                    "mandatory": false,
+                    "default_enabled": true
+                }},
                 {"property_id": "price", "value": [
                     {"unit": "per M input tokens", "price": 0.95, "currency": "USD"},
                     {"unit": "per M output tokens", "price": 4, "currency": "USD"},
@@ -270,4 +288,49 @@ fn catalog_entries_without_price_or_context_stay_open() {
     assert!(bare.pricing.is_none());
     assert!(bare.context_window.is_none());
     assert!(!bare.vision);
+}
+
+#[test]
+fn catalog_effort_prefers_supported_then_documented_normalization_then_floor() {
+    use crate::llm::types::ReasoningEffort;
+    let catalog = parse_catalog(catalog_fixture());
+
+    // GLM-5.3: max|high|low supported; medium is documented as normalized.
+    let glm = catalog_model(&catalog, "@cf/zai-org/glm-5.3").unwrap();
+    assert_eq!(glm.supported_efforts, ["max", "high", "low"]);
+    assert_eq!(select_effort(glm, ReasoningEffort::Max), Some("max"));
+    assert_eq!(select_effort(glm, ReasoningEffort::Low), Some("low"));
+    assert_eq!(select_effort(glm, ReasoningEffort::Medium), Some("medium"));
+    // xhigh is neither supported nor normalized, so it floors to high.
+    assert_eq!(select_effort(glm, ReasoningEffort::XHigh), Some("high"));
+
+    // Kimi K2.6: only high (and none); everything Cloudflare normalizes goes verbatim.
+    let kimi = catalog_model(&catalog, "@cf/moonshotai/kimi-k2.6").unwrap();
+    assert_eq!(select_effort(kimi, ReasoningEffort::Max), Some("max"));
+    assert_eq!(select_effort(kimi, ReasoningEffort::Low), Some("low"));
+    // xhigh is undocumented there too; high is the only ladder level supported.
+    assert_eq!(select_effort(kimi, ReasoningEffort::XHigh), Some("high"));
+
+    // No effort knob at all: the shared ladder stays in charge.
+    let llama = catalog_model(&catalog, "@cf/meta/llama-3.2-1b-instruct").unwrap();
+    assert_eq!(select_effort(llama, ReasoningEffort::Max), None);
+
+    // Only high supported and nothing below it: the lowest supported wins.
+    let only_high = CatalogModel {
+        id: "@cf/moonshotai/kimi-k2.7-code".to_string(),
+        context_window: None,
+        vision: false,
+        function_calling: true,
+        pricing: None,
+        supported_efforts: vec!["high".to_string()],
+        normalized_efforts: Vec::new(),
+    };
+    assert_eq!(
+        select_effort(&only_high, ReasoningEffort::Low),
+        Some("high")
+    );
+    assert_eq!(
+        select_effort(&only_high, ReasoningEffort::Max),
+        Some("high")
+    );
 }

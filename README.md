@@ -24,7 +24,7 @@ Octolib is a comprehensive, self-sufficient AI provider library that provides a 
 - **⚙️ Configuration Migration**: Reusable, comment-preserving TOML upgrades with locking, versioned backups, and atomic writes
 - **🎯 Embedding Support**: Multi-provider embedding generation with Jina, Voyage, Google, OpenAI, Together, OctoHub, Local (Ollama, llama.cpp, LM Studio, vLLM), FastEmbed, and HuggingFace
 - **🔄 Reranking**: Document relevance scoring with cross-encoder models (Voyage AI, Cohere, Jina AI, Mixedbread, Local (llama.cpp, vLLM, TEI), HuggingFace)
-- **🎬 Media Generation**: Typed image, asynchronous video, speech, and transcription APIs for ElevenLabs, fal, OpenRouter, Replicate, and Runway, with durable jobs and dimensional cost reporting
+- **🎬 Media Generation**: Typed image, asynchronous video, speech, and transcription APIs for Cloudflare Workers AI, ElevenLabs, fal, OpenRouter, Replicate, and Runway, with durable jobs and dimensional cost reporting
 
 ## 📦 Quick Installation
 
@@ -106,7 +106,7 @@ async fn image_example() -> octolib::MediaResult<()> {
 }
 ```
 
-Five providers are wired, and not every provider serves every task. OpenRouter, Replicate, and fal cover all four task traits: OpenRouter through dedicated endpoints, Replicate through its prediction lifecycle, and fal through its request queue. Runway serves image and video only, against its dated `X-Runway-Version` contract. ElevenLabs serves speech synthesis and transcription only, and answers synchronously, so its results are complete on submission and there is no job to poll. Arbitrary model fields live under the provider's own namespace, such as `provider_options["replicate"].input` or `provider_options["fal"].input`, with optional `field_map` mappings for portable fields.
+Six providers are wired, and not every provider serves every task. OpenRouter, Replicate, and fal cover all four task traits: OpenRouter through dedicated endpoints, Replicate through its prediction lifecycle, and fal through its request queue. Runway serves image and video only, against its dated `X-Runway-Version` contract. ElevenLabs serves speech synthesis and transcription only, and answers synchronously, so its results are complete on submission and there is no job to poll. Cloudflare Workers AI serves image, speech, and transcription the same synchronous way through `/ai/run`, priced per output tile and step for images and per character or audio minute for audio. Arbitrary model fields live under the provider's own namespace, such as `provider_options["replicate"].input` or `provider_options["fal"].input`, with optional `field_map` mappings for portable fields.
 
 Low-level `submit_*`, `poll_*`, and `cancel_*` methods are public. Persist the credential-free `JobHandle` to resume work after a restart. A local `wait_timeout` returns `MediaError::WaitTimeout { handle }` and does not cancel the remote job. Generated URLs are never downloaded automatically; call `download_artifact` with an explicit byte limit. That helper accepts HTTPS only, rejects embedded credentials and literal local/private addresses, validates MIME type, and does not follow redirects; applications can impose a stricter DNS/network policy.
 

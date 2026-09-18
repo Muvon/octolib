@@ -14,8 +14,8 @@
 
 use super::errors::{MediaError, MediaResult};
 use super::providers::{
-    ElevenLabsMediaProvider, FalMediaProvider, OpenRouterMediaProvider, ReplicateMediaProvider,
-    RunwayMediaProvider,
+    CloudflareMediaProvider, ElevenLabsMediaProvider, FalMediaProvider, OpenRouterMediaProvider,
+    ReplicateMediaProvider, RunwayMediaProvider,
 };
 use super::traits::*;
 
@@ -37,6 +37,7 @@ impl MediaProviderFactory {
 
     pub fn create_image_provider(name: &str) -> MediaResult<Box<dyn ImageGenerationProvider>> {
         match name.to_ascii_lowercase().as_str() {
+            "cloudflare" => Ok(Box::new(CloudflareMediaProvider::new())),
             "fal" => Ok(Box::new(FalMediaProvider::new())),
             "openrouter" => Ok(Box::new(OpenRouterMediaProvider::new())),
             "replicate" => Ok(Box::new(ReplicateMediaProvider::new())),
@@ -87,6 +88,7 @@ impl MediaProviderFactory {
 
     pub fn create_speech_provider(name: &str) -> MediaResult<Box<dyn SpeechSynthesisProvider>> {
         match name.to_ascii_lowercase().as_str() {
+            "cloudflare" => Ok(Box::new(CloudflareMediaProvider::new())),
             "elevenlabs" => Ok(Box::new(ElevenLabsMediaProvider::new())),
             "fal" => Ok(Box::new(FalMediaProvider::new())),
             "openrouter" => Ok(Box::new(OpenRouterMediaProvider::new())),
@@ -114,6 +116,7 @@ impl MediaProviderFactory {
         name: &str,
     ) -> MediaResult<Box<dyn TranscriptionProvider>> {
         match name.to_ascii_lowercase().as_str() {
+            "cloudflare" => Ok(Box::new(CloudflareMediaProvider::new())),
             "elevenlabs" => Ok(Box::new(ElevenLabsMediaProvider::new())),
             "fal" => Ok(Box::new(FalMediaProvider::new())),
             "openrouter" => Ok(Box::new(OpenRouterMediaProvider::new())),
@@ -138,7 +141,14 @@ impl MediaProviderFactory {
     }
 
     pub fn supported_providers() -> &'static [&'static str] {
-        &["elevenlabs", "fal", "openrouter", "replicate", "runway"]
+        &[
+            "cloudflare",
+            "elevenlabs",
+            "fal",
+            "openrouter",
+            "replicate",
+            "runway",
+        ]
     }
 }
 
@@ -158,6 +168,25 @@ mod tests {
     fn rejects_missing_parts() {
         assert!(MediaProviderFactory::parse_model("model-only").is_err());
         assert!(MediaProviderFactory::parse_model("replicate:").is_err());
+    }
+
+    #[test]
+    fn cloudflare_serves_image_speech_and_transcription_but_not_video() {
+        let (provider, model) = MediaProviderFactory::get_image_provider_for_model(
+            "cloudflare:@cf/leonardo/phoenix-1.0",
+        )
+        .unwrap();
+        assert_eq!(provider.name(), "cloudflare");
+        assert_eq!(model, "@cf/leonardo/phoenix-1.0");
+        assert!(MediaProviderFactory::get_speech_provider_for_model(
+            "cloudflare:@cf/deepgram/aura-2-en"
+        )
+        .is_ok());
+        assert!(MediaProviderFactory::get_transcription_provider_for_model(
+            "cloudflare:@cf/deepgram/nova-3"
+        )
+        .is_ok());
+        assert!(MediaProviderFactory::create_video_provider("cloudflare").is_err());
     }
 
     #[test]

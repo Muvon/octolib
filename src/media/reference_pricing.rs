@@ -89,6 +89,36 @@ const fn entry(
 /// same way model names are, so they must be written with the model's own
 /// separators — `gen4_turbo`, not `gen4-turbo`.
 const REFERENCE_MEDIA_MODELS: &[MediaPricingEntry] = &[
+    // ── Cloudflare Workers AI (verified Sep 18, 2026 at the model pages) ──
+    // Audio only: images bill per 512x512 output tile plus per step, which
+    // one unit cannot express, so the adapter prices those itself. Per-minute
+    // rates are stored per second; the duration comes from the response.
+    entry("cloudflare", "aura-2", UsageUnit::Characters, 0.000_03),
+    entry("cloudflare", "aura-1", UsageUnit::Characters, 0.000_015),
+    entry(
+        "cloudflare",
+        "melotts",
+        UsageUnit::AudioSeconds,
+        0.000_205 / 60.0,
+    ),
+    entry(
+        "cloudflare",
+        "whisper-large-v3-turbo",
+        UsageUnit::AudioSeconds,
+        0.000_513 / 60.0,
+    ),
+    entry(
+        "cloudflare",
+        "whisper",
+        UsageUnit::AudioSeconds,
+        0.000_453 / 60.0,
+    ),
+    entry(
+        "cloudflare",
+        "nova-3",
+        UsageUnit::AudioSeconds,
+        0.0052 / 60.0,
+    ),
     // ── ElevenLabs (estimate — verify at elevenlabs.io/pricing) ──
     // Billed against a subscription character quota; these are the
     // pay-as-you-go per-character equivalents. Scribe bills input audio, which

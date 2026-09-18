@@ -166,3 +166,108 @@ fn august_2026_additions_use_cloudflare_prices() {
     assert_eq!(kimi.cache_read_price_per_1m, 0.100);
     assert!(provider.supports_caching("@cf/moonshotai/kimi-k2.5"));
 }
+
+fn catalog_fixture() -> Vec<SearchEntry> {
+    // Trimmed from the catalog entries the docs site is generated from.
+    serde_json::from_value(serde_json::json!([
+        {
+            "name": "@cf/zai-org/glm-5.3",
+            "task": {"name": "Text Generation"},
+            "properties": [
+                {"property_id": "require_workers_paid", "value": "true"},
+                {"property_id": "context_window", "value": "1310720"},
+                {"property_id": "function_calling", "value": "true"},
+                {"property_id": "reasoning", "value": "true"},
+                {"property_id": "price", "value": [
+                    {"unit": "per M input tokens", "price": 1.4, "currency": "USD"},
+                    {"unit": "per M output tokens", "price": 4.4, "currency": "USD"},
+                    {"unit": "per M cached input tokens", "price": 0.26, "currency": "USD"}
+                ]}
+            ]
+        },
+        {
+            "name": "@cf/moonshotai/kimi-k2.6",
+            "task": {"name": "Text Generation"},
+            "properties": [
+                {"property_id": "context_window", "value": "262144"},
+                {"property_id": "function_calling", "value": "true"},
+                {"property_id": "vision", "value": "true"},
+                {"property_id": "price", "value": [
+                    {"unit": "per M input tokens", "price": 0.95, "currency": "USD"},
+                    {"unit": "per M output tokens", "price": 4, "currency": "USD"},
+                    {"unit": "per M cached input tokens", "price": 0.16, "currency": "USD"}
+                ]}
+            ]
+        },
+        {
+            "name": "@cf/meta/llama-3.2-1b-instruct",
+            "task": {"name": "Text Generation"},
+            "properties": [
+                {"property_id": "context_window", "value": "60000"},
+                {"property_id": "price", "value": [
+                    {"unit": "per M input tokens", "price": 0.027, "currency": "USD"},
+                    {"unit": "per M output tokens", "price": 0.201, "currency": "USD"}
+                ]}
+            ]
+        },
+        {
+            "name": "@cf/openai/whisper",
+            "task": {"name": "Automatic Speech Recognition"},
+            "properties": [
+                {"property_id": "price", "value": [
+                    {"unit": "per audio minute", "price": 0.000453, "currency": "USD"}
+                ]}
+            ]
+        },
+        {
+            "name": "@cf/example/no-task",
+            "properties": []
+        }
+    ]))
+    .unwrap()
+}
+
+#[test]
+fn catalog_keeps_text_generation_entries_with_their_properties() {
+    let catalog = parse_catalog(catalog_fixture());
+    assert_eq!(catalog.len(), 3);
+
+    let glm = catalog_model(&catalog, "@CF/zai-org/GLM-5.3").unwrap();
+    assert_eq!(glm.context_window, Some(1_310_720));
+    assert!(glm.function_calling);
+    assert!(!glm.vision);
+    let pricing = glm.pricing.as_ref().unwrap();
+    assert_eq!(pricing.input_price_per_1m, 1.4);
+    assert_eq!(pricing.output_price_per_1m, 4.4);
+    assert_eq!(pricing.cache_write_price_per_1m, 1.4);
+    assert_eq!(pricing.cache_read_price_per_1m, 0.26);
+
+    let kimi = catalog_model(&catalog, "@cf/moonshotai/kimi-k2.6").unwrap();
+    assert!(kimi.vision);
+
+    // No cached rate means cache hits bill at the input rate.
+    let llama = catalog_model(&catalog, "@cf/meta/llama-3.2-1b-instruct").unwrap();
+    assert!(!llama.function_calling);
+    let pricing = llama.pricing.as_ref().unwrap();
+    assert_eq!(pricing.cache_read_price_per_1m, pricing.input_price_per_1m);
+
+    // Membership is exact, not a substring match.
+    assert!(catalog_model(&catalog, "@cf/zai-org/glm-5").is_none());
+    assert!(catalog_model(&catalog, "@cf/openai/whisper").is_none());
+}
+
+#[test]
+fn catalog_entries_without_price_or_context_stay_open() {
+    let catalog = parse_catalog(
+        serde_json::from_value(serde_json::json!([{
+            "name": "@cf/example/bare",
+            "task": {"name": "Text Generation"},
+            "properties": [{"property_id": "price", "value": "n/a"}]
+        }]))
+        .unwrap(),
+    );
+    let bare = catalog_model(&catalog, "@cf/example/bare").unwrap();
+    assert!(bare.pricing.is_none());
+    assert!(bare.context_window.is_none());
+    assert!(!bare.vision);
+}

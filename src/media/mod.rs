@@ -29,9 +29,10 @@ pub mod types;
 pub use errors::{MediaError, MediaResult};
 pub use factory::MediaProviderFactory;
 pub use providers::{
-    ElevenLabsMediaOptions, ElevenLabsMediaProvider, FalMediaOptions, FalMediaProvider,
-    OpenRouterMediaOptions, OpenRouterMediaProvider, ReplicateMediaOptions, ReplicateMediaProvider,
-    RunwayMediaOptions, RunwayMediaProvider,
+    CloudflareMediaOptions, CloudflareMediaProvider, ElevenLabsMediaOptions,
+    ElevenLabsMediaProvider, FalMediaOptions, FalMediaProvider, OpenRouterMediaOptions,
+    OpenRouterMediaProvider, ReplicateMediaOptions, ReplicateMediaProvider, RunwayMediaOptions,
+    RunwayMediaProvider,
 };
 pub use reference_pricing::{get_reference_pricing, reference_cost_estimate, MediaModelPricing};
 pub use traits::*;

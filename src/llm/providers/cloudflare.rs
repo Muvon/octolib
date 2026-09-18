@@ -34,15 +34,177 @@
 //! Frontier models (DeepSeek V4, GLM-5.x, Kimi K2.6/K2.7) require the Workers
 //! Paid plan or prepaid AI Gateway credits; on the Free plan they return
 //! HTTP 403 with Cloudflare error 5035.
+//!
+//! The account's Text Generation catalog is fetched once per process from
+//! `GET /accounts/{account_id}/ai/models/search`, either through [`preload`]
+//! or lazily on the first chat call, and then drives model existence, context
+//! window, vision, function calling and pricing. The compiled tables below are
+//! the offline fallback and the source for anything the catalog omits.
 
 use crate::llm::providers::openai_compat::{
     chat_completion as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
 };
 use crate::llm::traits::AiProvider;
-use crate::llm::types::{ChatCompletionParams, ProviderResponse};
+use crate::llm::types::{ChatCompletionParams, ModelPricing, ProviderResponse};
 use crate::llm::utils::{get_model_pricing, normalize_model_name, PricingTuple};
-use anyhow::Result;
+use anyhow::{anyhow, Context, Result};
+use serde::Deserialize;
+use serde_json::Value;
 use std::env;
+use tokio::sync::OnceCell;
+
+const CLOUDFLARE_API_BASE: &str = "https://api.cloudflare.com/client/v4/accounts";
+const CATALOG_TASK: &str = "Text Generation";
+const CATALOG_PAGE_SIZE: usize = 100;
+const CATALOG_MAX_PAGES: usize = 20;
+
+/// One Text Generation entry from the account's model catalog.
+#[derive(Debug, Clone)]
+pub struct CatalogModel {
+    pub id: String,
+    pub context_window: Option<usize>,
+    pub vision: bool,
+    pub function_calling: bool,
+    pub pricing: Option<ModelPricing>,
+}
+
+/// Process-wide catalog, filled by [`preload`] or the first chat call.
+static CATALOG: OnceCell<Vec<CatalogModel>> = OnceCell::const_new();
+
+#[derive(Deserialize)]
+struct SearchResponse {
+    #[serde(default)]
+    result: Vec<SearchEntry>,
+}
+
+/// Catalog item shape: `name` is the `@cf/...` id, `properties` are
+/// `{property_id, value}` pairs whose values are strings ("true", "262144")
+/// except `price`, an array of `{unit, price, currency}`.
+#[derive(Deserialize)]
+struct SearchEntry {
+    name: String,
+    task: Option<SearchTask>,
+    #[serde(default)]
+    properties: Vec<SearchProperty>,
+}
+
+#[derive(Deserialize)]
+struct SearchTask {
+    name: String,
+}
+
+#[derive(Deserialize)]
+struct SearchProperty {
+    property_id: String,
+    #[serde(default)]
+    value: Value,
+}
+
+fn parse_catalog(entries: Vec<SearchEntry>) -> Vec<CatalogModel> {
+    entries
+        .into_iter()
+        .filter(|entry| {
+            entry
+                .task
+                .as_ref()
+                .is_some_and(|task| task.name == CATALOG_TASK)
+        })
+        .map(|entry| {
+            let property = |id: &str| {
+                entry
+                    .properties
+                    .iter()
+                    .find(|property| property.property_id == id)
+                    .map(|property| &property.value)
+            };
+            let flag = |id: &str| property(id).and_then(Value::as_str) == Some("true");
+            let context_window = property("context_window")
+                .and_then(Value::as_str)
+                .and_then(|value| value.parse().ok());
+            let pricing = property("price")
+                .and_then(Value::as_array)
+                .and_then(|rates| {
+                    let rate = |unit: &str| {
+                        rates
+                            .iter()
+                            .find(|rate| rate.get("unit").and_then(Value::as_str) == Some(unit))
+                            .and_then(|rate| rate.get("price"))
+                            .and_then(Value::as_f64)
+                    };
+                    let input = rate("per M input tokens")?;
+                    let output = rate("per M output tokens")?;
+                    let cached = rate("per M cached input tokens").unwrap_or(input);
+                    Some(ModelPricing::new(input, output, input, cached))
+                });
+            CatalogModel {
+                id: entry.name,
+                context_window,
+                vision: flag("vision"),
+                function_calling: flag("function_calling"),
+                pricing,
+            }
+        })
+        .collect()
+}
+
+async fn fetch_catalog(api_token: &str, account_id: &str) -> Result<Vec<CatalogModel>> {
+    let url = format!("{CLOUDFLARE_API_BASE}/{account_id}/ai/models/search");
+    let mut models = Vec::new();
+    for page in 1..=CATALOG_MAX_PAGES {
+        let response = super::shared::http_client()
+            .get(&url)
+            .query(&[
+                ("task", CATALOG_TASK),
+                ("per_page", &CATALOG_PAGE_SIZE.to_string()),
+                ("page", &page.to_string()),
+            ])
+            .header("Authorization", format!("Bearer {api_token}"))
+            .send()
+            .await
+            .context("Failed to fetch Cloudflare model catalog")?;
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            return Err(anyhow!("Cloudflare models API error {status}: {text}"));
+        }
+        let list: SearchResponse = response
+            .json()
+            .await
+            .context("Failed to parse Cloudflare model catalog")?;
+        let count = list.result.len();
+        models.extend(parse_catalog(list.result));
+        if count < CATALOG_PAGE_SIZE {
+            break;
+        }
+    }
+    Ok(models)
+}
+
+/// Fetch the account's Text Generation catalog once per process. Idempotent:
+/// the first chat call does the same lazily, and a failure leaves the compiled
+/// tables in charge until the next attempt.
+pub async fn preload() -> Result<()> {
+    let provider = CloudflareWorkersAiProvider::new();
+    let api_token = provider.get_api_token()?;
+    let account_id = provider.get_account_id()?;
+    CATALOG
+        .get_or_try_init(|| async move { fetch_catalog(&api_token, &account_id).await })
+        .await
+        .map(|_| ())
+}
+
+fn catalog_model<'a>(catalog: &'a [CatalogModel], model: &str) -> Option<&'a CatalogModel> {
+    let normalized = normalize_model_name(model);
+    catalog
+        .iter()
+        .find(|entry| normalize_model_name(&entry.id) == normalized)
+}
+
+fn cached_model(model: &str) -> Option<&'static CatalogModel> {
+    CATALOG
+        .get()
+        .and_then(|catalog| catalog_model(catalog, model))
+}
 
 /// Cloudflare Workers AI provider
 #[derive(Debug, Clone)]
@@ -396,7 +558,14 @@ impl AiProvider for CloudflareWorkersAiProvider {
     }
 
     fn supports_model(&self, model: &str) -> bool {
-        !model.is_empty()
+        if model.is_empty() {
+            return false;
+        }
+        // Exact catalog membership once it is loaded; anything goes before.
+        CATALOG
+            .get()
+            .map(|catalog| catalog_model(catalog, model).is_some())
+            .unwrap_or(true)
     }
 
     fn get_api_key(&self) -> Result<String> {
@@ -411,12 +580,17 @@ impl AiProvider for CloudflareWorkersAiProvider {
     }
 
     fn supports_caching(&self, model: &str) -> bool {
-        cloudflare_model_pricing(model)
+        cached_model(model)
+            .and_then(|entry| entry.pricing)
+            .or_else(|| cloudflare_model_pricing(model))
             .map(|pricing| pricing.cache_read_price_per_1m < pricing.input_price_per_1m)
             .unwrap_or(false)
     }
 
     fn supports_vision(&self, model: &str) -> bool {
+        if let Some(entry) = cached_model(model) {
+            return entry.vision;
+        }
         if let Some((_, _, vision, _, _)) = model_facts(model) {
             return *vision;
         }
@@ -434,6 +608,9 @@ impl AiProvider for CloudflareWorkersAiProvider {
     /// Schemas are enforced through the forced-tool path (see
     /// `enforces_response_schema`), so structured output needs function calling.
     fn supports_structured_output(&self, model: &str) -> bool {
+        if let Some(entry) = cached_model(model) {
+            return entry.function_calling;
+        }
         match model_facts(model) {
             Some((_, _, _, function_calling, _)) => *function_calling,
             None => crate::llm::reference_models::get_reference_capabilities(model)
@@ -449,12 +626,17 @@ impl AiProvider for CloudflareWorkersAiProvider {
         false
     }
 
-    fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
-        cloudflare_model_pricing(model)
+    fn get_model_pricing(&self, model: &str) -> Option<ModelPricing> {
+        cached_model(model)
+            .and_then(|entry| entry.pricing)
+            .or_else(|| cloudflare_model_pricing(model))
             .or_else(|| crate::llm::reference_models::get_reference_pricing(model))
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {
+        if let Some(context_window) = cached_model(model).and_then(|entry| entry.context_window) {
+            return context_window;
+        }
         if let Some((_, context_window, ..)) = model_facts(model) {
             return *context_window;
         }
@@ -471,6 +653,13 @@ impl AiProvider for CloudflareWorkersAiProvider {
             CLOUDFLARE_API_URL_ENV,
             &default_cloudflare_api_url(&account_id),
         );
+
+        // Lazy catalog load on first call; errors are ignored and retried next call.
+        let token = api_key.clone();
+        let account = account_id.clone();
+        let _ = CATALOG
+            .get_or_try_init(|| async move { fetch_catalog(&token, &account).await })
+            .await;
 
         let model = params.model.clone();
         let mut response = openai_compat_chat_completion(

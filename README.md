@@ -25,6 +25,7 @@ Octolib is a comprehensive, self-sufficient AI provider library that provides a 
 - **🎯 Embedding Support**: Multi-provider embedding generation with Jina, Voyage, Google, OpenAI, Together, OctoHub, Local (Ollama, llama.cpp, LM Studio, vLLM), FastEmbed, and HuggingFace
 - **🔄 Reranking**: Document relevance scoring with cross-encoder models (Voyage AI, Cohere, Jina AI, Mixedbread, Local (llama.cpp, vLLM, TEI), HuggingFace)
 - **🎬 Media Generation**: Typed image, asynchronous video, speech, and transcription APIs for Cloudflare Workers AI, ElevenLabs, fal, OpenRouter, Replicate, and Runway, with durable jobs and dimensional cost reporting
+- **⚖️ Structured Evaluation**: Typed yes/no, choice, and score questions answered with calibrated probabilities by TypeSafe's Jev, directly or through Cloudflare AI Gateway
 
 ## 📦 Quick Installation
 
@@ -46,6 +47,7 @@ Every capability is on by default. Pick only what you need to cut compile time a
 | `embeddings` | `octolib::embedding` | `tiktoken-rs` |
 | `reranker` | `octolib::reranker` | — |
 | `media` | `octolib::media` — image, video, speech, transcription | `base64` |
+| `evaluation` | structured evaluation (TypeSafe Jev, Cloudflare AI Gateway) | `evaluation` |
 | `fastembed` | local embedding backend (implies `embeddings`) | `fastembed` |
 | `huggingface` | local embedding backend (implies `embeddings`) | `candle`, `tokenizers`, `hf-hub` |
 
@@ -113,6 +115,38 @@ Low-level `submit_*`, `poll_*`, and `cancel_*` methods are public. Persist the c
 Only idempotent schema and polling queries are retried. Generation POSTs are deliberately not replayed after an ambiguous transport failure because doing so can create duplicate paid work.
 
 Cost semantics are strict: `provider_reported_cost` is used only when the upstream returns a dollar amount. Replicate normally reports compute time rather than dollars, so its cost falls back to a rate — either a caller-supplied `CostEstimate` or, failing that, this crate's reference table (`media::reference_pricing`, the media counterpart of the LLM `reference_models` table, keyed by provider and carrying the model's billing unit). Either way the result is stored as `estimated_cost`, never disguised as provider-reported cost, and the rate is frozen into the `JobHandle` at submit so a resumed job prices identically. Every reference rate is an estimate pending verification against the provider's published pricing. See [multimodal.md](multimodal.md) and the `media_openrouter` / `media_replicate` examples for the full contract.
+
+### Evaluation
+
+Evaluation models answer typed questions about one state with calibrated probabilities instead of generated text. Ask several independent questions in one call and branch on the numbers in code:
+
+```rust
+use octolib::{evaluate, Answer, EvaluationRequest, Question};
+
+async fn triage() -> octolib::EvaluationResult<()> {
+    // Requires TYPESAFE_API_KEY; use "cloudflare:typesafe/jev" to bill AI Gateway credits instead.
+    let request = EvaluationRequest::new("Help! My payouts have been failing for 3 days.")
+        .with_question("is_urgent", Question::noul("Does this convey urgency?"))
+        .with_question(
+            "department",
+            Question::choice(
+                "Which team should handle this?",
+                [("billing", "Payments, refunds"), ("technical", "Bugs, outages")],
+            ),
+        )
+        .with_question(
+            "frustration",
+            Question::score("How frustrated is the customer?", ["Calm", "Frustrated", "Very angry"]),
+        );
+    let response = evaluate("typesafe:jev-latest", request).await?;
+    if let Answer::Noul { noul } = response.answers["is_urgent"] {
+        println!("urgent with p={noul:.2}, cost {:?}", response.usage.cost);
+    }
+    Ok(())
+}
+```
+
+Jev bills input tokens only ($0.042 per 1M, output free) and has a 32k context, so trim the state to what the questions need. The response's `model` field reports the versioned model that answered.
 
 ### 📋 Structured Output
 
@@ -555,7 +589,8 @@ if let Some(usage) = &response.exchange.usage {
 | Google Vertex AI | ✅ Supported | Enterprise AI Integration |
 | Google AI Studio | ✅ Supported | Gemini API, API-Key Auth |
 | Amazon Bedrock | ✅ Supported | Cloud AI Services |
-| Cloudflare Workers AI | ✅ Supported | Edge AI Compute |
+| Cloudflare Workers AI | ✅ Supported | Edge AI Compute, Media (image, speech, transcription), Evaluation (Jev via AI Gateway) |
+| TypeSafe | ✅ Supported | Jev structured evaluation (noul, choice, score) |
 | Local LLM | ✅ Supported | Ollama, LM Studio, LocalAI, Jan, vLLM |
 | Ollama | ✅ Supported | Local LLM Runner |
 | CLI Proxy | ✅ Supported | Codex, Claude, Gemini, Cursor |

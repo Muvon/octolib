@@ -140,6 +140,8 @@
 #[cfg(feature = "embeddings")]
 pub mod embedding;
 pub mod errors;
+#[cfg(feature = "evaluation")]
+pub mod evaluation;
 pub mod http;
 #[cfg(feature = "llm")]
 pub mod llm;
@@ -163,6 +165,11 @@ pub use embedding::{
 pub use errors::{
     ConfigError, ConfigResult, MessageError, MessageResult, ProviderError, ProviderResult,
     StructuredOutputError, StructuredOutputResult, ToolCallError, ToolCallResult,
+};
+#[cfg(feature = "evaluation")]
+pub use evaluation::{
+    evaluate, Answer, EvaluationError, EvaluationProvider, EvaluationProviderFactory,
+    EvaluationRequest, EvaluationResponse, EvaluationResult, EvaluationUsage, Question,
 };
 #[cfg(feature = "llm")]
 pub use llm::{

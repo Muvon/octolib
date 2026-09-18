@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.39.0] - 2026-09-18
+
+### 📋 Release Summary
+
+This release adds OctoHub as a provider and introduces provider evaluation support, expanding model evaluation capabilities (63c98076, a6c9cda8). Cloudflare Workers AI now supports media, with improved handling of catalog model capabilities (1752a912, d225c578).
+
+
+### ✨ New Features & Enhancements
+
+- **evaluation**: add OctoHub provider `63c98076`
+- **evaluation**: add provider evaluation support `a6c9cda8`
+- **cloudflare**: support Workers AI media `1752a912`
+
+### 🐛 Bug Fixes & Stability
+
+- **cloudflare**: honor catalog model capabilities `d225c578`
+
 ## [0.38.3] - 2026-09-18
 
 ### 📋 Release Summary

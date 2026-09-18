@@ -1,35 +1,33 @@
-# Octolib: Self-Sufficient AI Provider Library
+# Octolib
 
+> One `provider:model` string — 30 AI providers, one trait, cost tracking built in.
 
-**© 2026 Muvon Un Limited (Hong Kong)** | [Website](https://muvon.io) | [Product Page](https://octomind.run/product/octolib)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org)
+[![Crates.io](https://img.shields.io/crates/v/octolib.svg)](https://crates.io/crates/octolib)
+[![Documentation](https://docs.rs/octolib/badge.svg)](https://docs.rs/octolib)
 [![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmuvon%2Foctolib%2Fbadges%2Fcoverage.json&style=flat-square)](https://github.com/muvon/octolib/actions/workflows/ci.yml)
+## Overview
 
-## 🚀 Overview
+Octolib is a self-sufficient Rust library for AI providers. One `provider:model` string — `openai:gpt-4o`, `anthropic:claude-opus-4`, `ollama:llama3.2` — resolves through `ProviderFactory` to a provider behind the `AiProvider` trait. Switching models is a string change, not a rewrite: the same `chat_completion` call drives OpenAI's Responses API, Anthropic's Messages API, an OpenAI-compatible proxy, or a local Ollama server.
 
-Octolib is a comprehensive, self-sufficient AI provider library that provides a unified, type-safe interface for interacting with multiple AI services. It offers intelligent model selection, robust error handling, and advanced features like cross-provider tool calling and vision support.
+Pricing and capability tables ship inside the crate, so every response reports token usage and USD cost — input, output, cache reads/writes, and reasoning tokens — with zero configuration. The API is `Result`-based end to end with no panics or printing in library code, and API keys are read from environment variables only.
+
+**Contents:** [Features](#-key-features) · [Installation](#-quick-installation) · [Quick Start](#-quick-start) · [Media](#media-generation) · [Evaluation](#evaluation) · [Structured Output](#-structured-output) · [CLI Provider](#-cli-provider-proxy-mode) · [Tool Calling](#-tool-calling) · [Embeddings](#-embedding-generation) · [Reranking](#-document-reranking) · [OAuth](#-oauth-authentication) · [Provider Matrix](#-provider-support-matrix) · [Thinking](#-thinkingreasoning-support) · [Docs](#-complete-documentation) · [Security](#-privacy--security) · [Support](#-support--community) · [License](#-license)
 
 ## ✨ Key Features
-- **🔌 Multi-Provider Support**: OpenAI, Anthropic, xAI, OpenRouter, Cerebras, NVIDIA NIM, Groq, BytePlus, Alibaba Model Studio, Ollama, Together, Featherless, Fireworks, Hetzner, Inception Labs (Mercury), OpenCode Zen/Go, Google Vertex, Google Studio, Amazon, Cloudflare, DeepSeek, MiniMax, Moonshot AI (Kimi), Z.ai, Tinker (Inkling), OctoHub, Local, CLI proxies
-- **🛡️ Unified Interface**: Consistent API across different providers
-- **🔍 Intelligent Model Validation**: Strict `provider:model` format parsing with case-insensitive model support
-- **📋 Structured Output**: JSON and JSON Schema support for OpenAI, xAI, OpenRouter, DeepSeek, Together, and Z.ai
-- **💰 Cost Tracking**: Automatic token usage and cost calculation
-- **🖼️ Vision Support**: Image and video attachment handling for vision-capable models
-- **🧰 Tool Calling**: Cross-provider tool call standardization
-- **🧩 CLI Provider**: Use `cli:<backend>/<model>` (e.g. `cli:codex/gpt-5.2-codex`). Proxy-only: tools/MCP are not used or controllable.
-- **⏱️ Retry Management**: Configurable exponential backoff
-- **🔒 Secure Design**: Environment-based API key management
-- **⚙️ Configuration Migration**: Reusable, comment-preserving TOML upgrades with locking, versioned backups, and atomic writes
-- **🎯 Embedding Support**: Multi-provider embedding generation with Jina, Voyage, Google, OpenAI, Together, OctoHub, Local (Ollama, llama.cpp, LM Studio, vLLM), FastEmbed, and HuggingFace
-- **🔄 Reranking**: Document relevance scoring with cross-encoder models (Voyage AI, Cohere, Jina AI, Mixedbread, Local (llama.cpp, vLLM, TEI), HuggingFace)
-- **🎬 Media Generation**: Typed image, asynchronous video, speech, and transcription APIs for Cloudflare Workers AI, ElevenLabs, fal, OpenRouter, Replicate, and Runway, with durable jobs and dimensional cost reporting
-- **⚖️ Structured Evaluation**: Typed yes/no, choice, and score questions answered with calibrated probabilities by TypeSafe's Jev, directly or through Cloudflare AI Gateway
+
+- **🔌 30 providers, one interface** — OpenAI, Anthropic, xAI, OpenRouter, Google Vertex & Studio, Amazon Bedrock, DeepSeek, Moonshot (Kimi), MiniMax, Z.ai, BytePlus, Alibaba Model Studio, Groq, Cerebras, NVIDIA NIM, Together, Featherless, Fireworks, Hetzner, Inception Labs, Meta, Tinker, OpenCode Zen/Go, OctoHub, Cloudflare Workers AI, Ollama, Local, and CLI proxies (Codex, Claude, Gemini, Cursor)
+- **💰 Cost tracking with zero config** — per-model pricing tables ship in the crate; every response carries input, output, cache, and reasoning tokens with USD cost
+- **🧰 Tool calling** — one `ToolCall` format across providers, with JSON Schema parameter validation and multi-turn conversations
+- **📋 Structured output** — JSON and JSON Schema modes, validated locally even when the upstream doesn't enforce them
+- **🧠 Thinking/reasoning** — reasoning content and token counts surfaced separately from the answer; the `ReasoningEffort` hint maps to each provider's knob
+- **🖼️ Vision & video** — image and video attachments on vision-capable models
+- **🎯 Embeddings & reranking** — Jina, Voyage, Google, OpenAI, Together, OctoHub, plus local FastEmbed and HuggingFace backends
+- **🎬 Media generation** — typed image, video, speech, and transcription APIs with durable jobs and dimensional cost reporting
+- **🧩 CLI proxies** — drive `codex`, `claude`, `gemini`, or `cursor-agent` as a provider via `cli:<backend>/<model>` (prompt-only)
+- **🛡️ Production posture** — `Result` everywhere, exponential-backoff retries, cancellation tokens, and API keys from the environment only
 
 ## 📦 Quick Installation
-
-[![Crates.io](https://img.shields.io/crates/v/octolib.svg)](https://crates.io/crates/octolib)
 
 ```toml
 # From crates.io (recommended) — use the latest version from the badge above
@@ -47,7 +45,7 @@ Every capability is on by default. Pick only what you need to cut compile time a
 | `embeddings` | `octolib::embedding` | `tiktoken-rs` |
 | `reranker` | `octolib::reranker` | — |
 | `media` | `octolib::media` — image, video, speech, transcription | `base64` |
-| `evaluation` | structured evaluation (TypeSafe Jev, Cloudflare AI Gateway) | `evaluation` |
+| `evaluation` | structured evaluation (TypeSafe Jev, Cloudflare AI Gateway) | — |
 | `fastembed` | local embedding backend (implies `embeddings`) | `fastembed` |
 | `huggingface` | local embedding backend (implies `embeddings`) | `candle`, `tokenizers`, `hf-hub` |
 
@@ -64,24 +62,32 @@ octolib = { version = "<latest>", default-features = false, features = ["llm"] }
 use octolib::{ProviderFactory, ChatCompletionParams, Message};
 
 async fn example() -> anyhow::Result<()> {
-    // Parse model and get provider
+    // One string picks both the provider and the model.
     let (provider, model) = ProviderFactory::get_provider_for_model("openai:gpt-4o")?;
 
-    // Create messages
-    let messages = vec![
-        Message::user("Hello, how are you?"),
-    ];
+    let messages = vec![Message::user("Hello, how are you?")];
 
-    // Create completion parameters
+    // Arguments: messages, model, temperature, top_p, top_k, max_tokens
     let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000);
 
-    // Get completion (requires OPENAI_API_KEY environment variable)
+    // Requires OPENAI_API_KEY in the environment
     let response = provider.chat_completion(params).await?;
     println!("Response: {}", response.content);
+
+    // Token usage and USD cost are attached to every response:
+    if let Some(usage) = &response.exchange.usage {
+        println!(
+            "Input: {}, Output: {}, Cost: ${:.6}",
+            usage.input_tokens, usage.output_tokens,
+            usage.cost.unwrap_or(0.0),
+        );
+    }
 
     Ok(())
 }
 ```
+
+Switching providers is the same call with a different string — `anthropic:claude-opus-4`, `ollama:llama3.2` — after exporting the matching `*_API_KEY` (see the [key table in the docs](doc/04-advanced-guide.md)).
 
 ### Media generation
 
@@ -108,13 +114,13 @@ async fn image_example() -> octolib::MediaResult<()> {
 }
 ```
 
-Six providers are wired, and not every provider serves every task. OpenRouter, Replicate, and fal cover all four task traits: OpenRouter through dedicated endpoints, Replicate through its prediction lifecycle, and fal through its request queue. Runway serves image and video only, against its dated `X-Runway-Version` contract. ElevenLabs serves speech synthesis and transcription only, and answers synchronously, so its results are complete on submission and there is no job to poll. Cloudflare Workers AI serves image, speech, and transcription the same synchronous way through `/ai/run`, priced per output tile and step for images and per character or audio minute for audio. Arbitrary model fields live under the provider's own namespace, such as `provider_options["replicate"].input` or `provider_options["fal"].input`, with optional `field_map` mappings for portable fields.
+- **Coverage** — OpenRouter, Replicate, and fal serve all four task traits; Runway serves image and video; ElevenLabs serves speech and transcription; Cloudflare Workers AI serves image, speech, and transcription via `/ai/run`
+- **Synchronous vs. durable** — ElevenLabs and Cloudflare answer synchronously, so results are complete on submission; the rest return a credential-free `JobHandle` you can persist and resume after a restart, and a local `wait_timeout` returns `MediaError::WaitTimeout { handle }` without cancelling the remote job
+- **Honest costs** — `provider_reported_cost` only when the upstream returns a dollar amount; otherwise a caller-supplied `CostEstimate` or the crate's reference rates, always stored as `estimated_cost`, with the rate frozen into the `JobHandle` at submit
+- **Safe downloads** — generated URLs are never fetched automatically; `download_artifact` takes an explicit byte limit, accepts HTTPS only, rejects embedded credentials and local/private addresses, and does not follow redirects
+- **No duplicate paid work** — only idempotent schema and polling queries are retried; generation POSTs are never replayed after an ambiguous transport failure
 
-Low-level `submit_*`, `poll_*`, and `cancel_*` methods are public. Persist the credential-free `JobHandle` to resume work after a restart. A local `wait_timeout` returns `MediaError::WaitTimeout { handle }` and does not cancel the remote job. Generated URLs are never downloaded automatically; call `download_artifact` with an explicit byte limit. That helper accepts HTTPS only, rejects embedded credentials and literal local/private addresses, validates MIME type, and does not follow redirects; applications can impose a stricter DNS/network policy.
-
-Only idempotent schema and polling queries are retried. Generation POSTs are deliberately not replayed after an ambiguous transport failure because doing so can create duplicate paid work.
-
-Cost semantics are strict: `provider_reported_cost` is used only when the upstream returns a dollar amount. Replicate normally reports compute time rather than dollars, so its cost falls back to a rate — either a caller-supplied `CostEstimate` or, failing that, this crate's reference table (`media::reference_pricing`, the media counterpart of the LLM `reference_models` table, keyed by provider and carrying the model's billing unit). Either way the result is stored as `estimated_cost`, never disguised as provider-reported cost, and the rate is frozen into the `JobHandle` at submit so a resumed job prices identically. Every reference rate is an estimate pending verification against the provider's published pricing. See [multimodal.md](multimodal.md) and the `media_openrouter` / `media_replicate` examples for the full contract.
+Provider-specific fields live under the provider's own namespace (`provider_options["replicate"].input`), with optional `field_map` mappings for portable fields. The `media_openrouter`, `media_replicate`, and `media_fal` examples show the full contract.
 
 ### Evaluation
 
@@ -383,7 +389,7 @@ async fn embedding_example() -> anyhow::Result<()> {
 // - HuggingFace: sentence-transformers models
 ```
 
-### 🎯 Document Reranking
+### 🔎 Document Reranking
 
 Improve search results by scoring document relevance with cross-encoder models:
 
@@ -445,38 +451,42 @@ export ANTHROPIC_OAUTH_TOKEN="your_bearer_token"
 
 The library automatically detects OAuth credentials and prefers them over API keys. See `examples/openai_oauth.rs` and `examples/anthropic_oauth.rs` for full usage examples.
 
-## 🎯 Provider Support Matrix
+## 📊 Provider Support Matrix
 
-| Provider | Structured Output | Vision | Tool Calls | Caching |
-|----------|------------------|--------|------------|---------|
-| **OpenAI** | ✅ JSON + Schema | ✅ Yes | ✅ Yes | ✅ Yes |
-| **xAI** | ✅ JSON + Schema | ✅ Yes | ✅ Yes | ✅ Yes |
-| **OpenRouter** | ✅ JSON + Schema | ✅ Yes | ✅ Yes | ✅ Yes |
-| **DeepSeek** | ✅ JSON Mode | ❌ No | ❌ No | ✅ Yes |
-| **Moonshot AI (Kimi)** | ✅ JSON Mode | ✅ kimi-k2.5 | ✅ Yes | ✅ Yes |
-| **MiniMax** | ✅ JSON Mode | ❌ No | ✅ Yes | ✅ Yes |
-| **Anthropic** | ❌ No | ✅ Yes | ✅ Yes | ✅ Yes |
-| **Z.ai** | ✅ JSON Mode | ❌ No | ✅ Yes | ✅ Yes |
-| **NVIDIA NIM** | ✅ JSON + Schema | Per-model | ✅ Yes | ❌ No |
-| **Groq** | ✅ JSON + Schema | Per-model | ❌ No | ✅ Select models |
-| **BytePlus** | ✅ JSON + Schema | Per-model | ❌ No | ✅ Yes |
-| **Alibaba Model Studio** | ❌ No | Per-model | ✅ Yes | ✅ Yes |
-| **Cerebras** | ✅ JSON + Schema | ❌ No | ❌ No | ❌ No |
-| **Featherless** | ✅ JSON + Schema | ❌ No | ❌ No | ❌ No |
-| **Hetzner** | ✅ JSON + Schema | Per-model | ✅ Yes | ❌ No |
-| **Inception Labs** | ✅ JSON + Schema | ❌ No | ✅ Yes | ✅ Yes |
-| **Tinker** | ❌ No | ❌ No | ✅ Yes | ❌ No |
-| **OpenCode Zen** | Per-model | Per-model | ✅ Yes | ❌ No |
-| **OpenCode Go** | ✅ JSON + Schema | Per-model | ✅ Yes | ✅ Yes |
-| **Google Vertex** | ❌ No | ✅ Yes | ✅ Yes | ❌ No |
-| **Google Studio** | ✅ JSON + Schema | ✅ Yes | ✅ Yes | ✅ Yes |
-| **Amazon Bedrock** | ❌ No | ✅ Yes | ✅ Yes | ❌ No |
-| **OctoHub** | Per-model | Per-model | ✅ Yes | ✅ Yes |
-| **Together** | Per-model | Per-model | ✅ Yes | ✅ Yes (auto) |
-| **Fireworks** | ✅ JSON + Schema | Per-model | ✅ Yes | ✅ Yes (auto) |
-| **Cloudflare** | ❌ No | ❌ No | ❌ No | ❌ No |
-| **Local** | Per-model | Per-model | Per-model | ❌ No |
-| **Ollama** | Per-model | Per-model | Per-model | ❌ No |
+Capabilities marked "Per-model" are resolved per model from the provider's capability tables.
+
+| Provider | Highlights | Structured Output | Vision | Tool Calls | Caching |
+|----------|------------|-------------------|--------|------------|---------|
+| **OpenAI** | Responses API, OAuth support | ✅ JSON + Schema | ✅ | ✅ | ✅ |
+| **xAI** | Grok 4.5/4.3/4.20/Build, encrypted reasoning | ✅ JSON + Schema | ✅ | ✅ | ✅ |
+| **Anthropic** | Claude models, thinking blocks, OAuth support | ❌ | ✅ | ✅ | ✅ |
+| **OpenRouter** | Multi-provider proxy | ✅ JSON + Schema | ✅ | ✅ | ✅ |
+| **Google Vertex** | Enterprise, service-account auth | ❌ | ✅ | ✅ | ❌ |
+| **Google Studio** | Gemini API, API-key auth | ✅ JSON + Schema | ✅ | ✅ | ✅ |
+| **Amazon Bedrock** | Cloud AI services | ❌ | ✅ | ✅ | ❌ |
+| **DeepSeek** | Open-source models | ✅ JSON Mode | ❌ | ❌ | ✅ |
+| **Moonshot (Kimi)** | K2/K3 series | ✅ JSON Mode | ✅ kimi-k2.5 | ✅ | ✅ |
+| **MiniMax** | Anthropic-compatible API | ✅ JSON Mode | ❌ | ✅ | ✅ |
+| **Z.ai** | GLM models | ✅ JSON Mode | ❌ | ✅ | ✅ |
+| **BytePlus** | Seed models | ✅ JSON + Schema | Per-model | ❌ | ✅ |
+| **Alibaba Model Studio** | Qwen + resold DeepSeek/GLM | ❌ | Per-model | ✅ | ✅ |
+| **Groq** | Fast inference | ✅ JSON + Schema | Per-model | ❌ | ✅ Select models |
+| **Cerebras** | Fast inference | ✅ JSON + Schema | ❌ | ❌ | ❌ |
+| **NVIDIA NIM** | 100+ hosted models | ✅ JSON + Schema | Per-model | ✅ | ❌ |
+| **Together** | Multi-provider proxy | Per-model | Per-model | ✅ | ✅ (auto) |
+| **Fireworks** | Auto prefix-cache | ✅ JSON + Schema | Per-model | ✅ | ✅ (auto) |
+| **Featherless** | Open-weight models, subscription billing | ✅ JSON + Schema | ❌ | ❌ | ❌ |
+| **Hetzner** | Open-weight models, free while experimental | ✅ JSON + Schema | Per-model | ✅ | ❌ |
+| **Inception Labs** | Mercury diffusion LLMs | ✅ JSON + Schema | ❌ | ✅ | ✅ |
+| **Meta** | Muse Spark models, 1M-token context | ✅ JSON + Schema | ✅ | ✅ | ✅ |
+| **Tinker** | Inkling family, sampler checkpoints | ❌ | ❌ | ✅ | ❌ |
+| **OpenCode Zen** | Multi-provider proxy, pay-as-you-go | Per-model | Per-model | ✅ | ❌ |
+| **OpenCode Go** | Multi-provider proxy, subscription billing | ✅ JSON + Schema | Per-model | ✅ | ✅ |
+| **OctoHub** | Local AI serving, evaluation proxy | Per-model | Per-model | ✅ | ✅ |
+| **Cloudflare Workers AI** | Edge AI, media, evaluation | ❌ | ❌ | ❌ | ❌ |
+| **Local** | Ollama, LM Studio, LocalAI, Jan, vLLM | Per-model | Per-model | Per-model | ❌ |
+| **Ollama** | Local LLM runner | Per-model | Per-model | Per-model | ❌ |
+| **CLI Proxy** | Codex, Claude, Gemini, Cursor — prompt-only | ❌ | ❌ | ❌ | ❌ |
 
 ### Structured Output Details
 
@@ -492,7 +502,7 @@ Octolib provides first-class support for models that produce thinking/reasoning 
 use octolib::{ProviderFactory, ChatCompletionParams, Message, ThinkingBlock};
 
 async fn thinking_example() -> anyhow::Result<()> {
-    // Thinking-capable models: MiniMax, OpenAI o-series, Moonshot (kimi-k2-thinking*), Z.ai, xAI
+    // Thinking-capable models: MiniMax, OpenAI o-series, Moonshot (kimi-k2-thinking*, K3), Z.ai (GLM hybrid thinking), xAI
     let (provider, model) = ProviderFactory::get_provider_for_model("minimax:MiniMax-M2")?;
 
     let messages = vec![
@@ -531,6 +541,8 @@ async fn thinking_example() -> anyhow::Result<()> {
 | **xAI** | Responses API reasoning items | Summary extraction plus encrypted reasoning preservation across tool rounds |
 | **OpenAI o-series** | `reasoning_content` field | o1, o3, o4 models |
 | **OpenRouter** | `reasoning_details` | Gemini and other providers |
+| **Moonshot (Kimi)** | `reasoning_content` field | kimi-k2-thinking models; K3 always reasons |
+| **Z.ai** | reasoning_content field with legacy think-tag fallback | GLM hybrid thinking models (4.5/4.6/4.7/5.x) |
 
 #### Token Tracking
 
@@ -549,64 +561,34 @@ if let Some(usage) = &response.exchange.usage {
 
 ## 📚 Complete Documentation
 
-📖 **Quick Navigation**
+- **[Overview](doc/01-overview.md)** — library introduction and core concepts
+- **[Installation Guide](doc/02-installation.md)** — setup and API keys
+- **[Advanced Usage](doc/03-advanced-usage.md)** and **[Advanced Guide](doc/04-advanced-guide.md)** — advanced features and the full environment-variable table
+- **[Embedding Guide](doc/05-embedding.md)** — embedding generation with multiple providers
+- **[Reranking Guide](doc/06-reranking.md)** — document relevance scoring
+- **[Tool Calling](doc/07-tool-calling.md)** — cross-provider tool calling
+- **[Thinking/Reasoning](doc/08-thinking.md)** — reasoning model support
+- **[Configuration Migration](doc/09-configuration-migration.md)** — versioned TOML upgrades and safe file persistence
 
-- **[Overview](doc/01-overview.md)** - Library introduction and core concepts
-- **[Installation Guide](doc/02-installation.md)** - Setup and configuration
-- **[Advanced Usage](doc/03-advanced-usage.md)** - Advanced features and customization
-- **[Advanced Guide](doc/04-advanced-guide.md)** - Comprehensive usage patterns
-- **[Embedding Guide](doc/05-embedding.md)** - Embedding generation with multiple providers
-- **[Reranking Guide](doc/06-reranking.md)** - Document relevance scoring
-- **[Tool Calling](doc/07-tool-calling.md)** - Cross-provider tool calling
-- **[Thinking/Reasoning](doc/08-thinking.md)** - Reasoning model support
-- **[Configuration Migration](doc/09-configuration-migration.md)** - Versioned TOML upgrades and safe file persistence
-- **[Media and Multimodal Providers](multimodal.md)** - Architecture, OpenRouter/Replicate contracts, durable jobs, artifacts, and cost semantics
+Also:
 
-## 🌐 Supported Providers
+- **[Examples](examples/)** — one runnable file per feature; every snippet in this README has a fuller version there
+- **[CHANGELOG](CHANGELOG.md)** — release history
+- **[API reference](https://docs.rs/octolib)** — generated rustdoc
+- **[AGENTS.md](AGENTS.md)** — repository guide: project layout, conventions, and how to add a provider
 
-| Provider | Status | Capabilities |
-|----------|--------|--------------|
-| OpenAI | ✅ Full Support | Chat, Vision, Tools, Structured Output, Caching |
-| xAI | ✅ Full Support | Grok 4.5/4.3/4.20/Build, Vision, Tools, Structured Output, Caching, Encrypted Reasoning |
-| Anthropic | ✅ Full Support | Claude Models, Vision, Tools, Caching |
-| OpenRouter | ✅ Full Support | Multi-Provider Proxy, Vision, Caching, Structured Output |
-| Groq | ✅ Full Support | Fast Inference, Structured Output, Caching |
-| BytePlus | ✅ Full Support | Seed Models, Structured Output, Caching |
-| Alibaba Model Studio | ✅ Full Support | Qwen Models + Resold DeepSeek/GLM, Vision, Video, Tools, Thinking, Caching |
-| DeepSeek | ✅ Full Support | Open-Source AI Models, Structured Output, Caching |
-| Moonshot AI (Kimi) | ✅ Full Support | Kimi K2 Series, Vision (kimi-k2.5), Tools, Structured Output, Caching, Thinking |
-| MiniMax | ✅ Full Support | Anthropic-Compatible API, Tools, Caching, Thinking, Structured Output |
-| Z.ai | ✅ Full Support | GLM Models, Caching, Structured Output |
-| NVIDIA NIM | ✅ Full Support | 100+ Hosted Models, Tools, Structured Output, Reference Pricing |
-| Together AI | ✅ Full Support | Multi-Provider Proxy, Vision, Tools, Structured Output |
-| Cerebras | ✅ Full Support | Fast Inference, Structured Output |
-| Featherless | ✅ Full Support | Open-Weight Models (Qwen, Llama, Mistral, DeepSeek, RWKV), Subscription Billing |
-| Hetzner | ✅ Full Support | Open-Weight Models (DeepSeek, GLM, Kimi, Qwen), Free While Experimental |
-| Tinker | ✅ Full Support | Inkling Family + Open-Weight Models (Nemotron, GLM, Kimi, Qwen, GPT-OSS, DeepSeek), Sampler Checkpoints |
-| OpenCode Zen | ✅ Full Support | Multi-Provider Proxy (Claude, GPT, Gemini, Grok, DeepSeek, Kimi…), Pay-As-You-Go |
-| OpenCode Go | ✅ Full Support | Multi-Provider Proxy (Kimi, GLM, DeepSeek, Qwen, MiniMax…), Subscription Billing |
-| OctoHub | ✅ Supported | Local AI Serving |
-| Google Vertex AI | ✅ Supported | Enterprise AI Integration |
-| Google AI Studio | ✅ Supported | Gemini API, API-Key Auth |
-| Amazon Bedrock | ✅ Supported | Cloud AI Services |
-| Cloudflare Workers AI | ✅ Supported | Edge AI Compute, Media (image, speech, transcription), Evaluation (Jev via AI Gateway) |
-| TypeSafe | ✅ Supported | Jev structured evaluation (noul, choice, score) |
-| OctoHub | ✅ Supported | Local AI Serving, Evaluation proxy (`octohub:<alias>`) |
-| Local LLM | ✅ Supported | Ollama, LM Studio, LocalAI, Jan, vLLM |
-| Ollama | ✅ Supported | Local LLM Runner |
-| CLI Proxy | ✅ Supported | Codex, Claude, Gemini, Cursor |
 ## 🔒 Privacy & Security
 
-- **🏠 Local-first design**
-- **🔑 Secure API key management**
-- **📁 Respects .gitignore**
-- **🛡️ Comprehensive error handling**
+- **Keys from the environment only** — read at call time, never accepted as function parameters
+- **No panics in library code** — every fallible path returns `Result`; no `unwrap()`, `expect()`, or `panic!()` outside tests
+- **No hidden output** — the library never prints; diagnostics go through `tracing` when you enable it
+- **Local-first option** — Ollama, Local, and OctoHub run against your own infrastructure with no external calls
 
 ## 🤝 Support & Community
 
 - **🐛 Issues**: [GitHub Issues](https://github.com/Muvon/octolib/issues)
 - **📧 Email**: [opensource@muvon.io](mailto:opensource@muvon.io)
-- **🏢 Company**: Muvon Un Limited (Hong Kong)
+- **🏢 Company**: [Muvon Un Limited](https://muvon.io) (Hong Kong)
 
 ## ⚖️ License
 
@@ -614,4 +596,4 @@ This project is licensed under the **Apache License 2.0** - see the [LICENSE](LI
 
 ---
 
-**Built with ❤️ by the Muvon team in Hong Kong**
+**© 2026 Muvon Un Limited (Hong Kong)** · Built with ❤️ by the [Muvon team](https://muvon.io)

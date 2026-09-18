@@ -135,6 +135,41 @@ fn glm_5_3_flash_promo_switches_to_list_price_at_documented_cutoff() {
 }
 
 #[test]
+fn test_reasoning_effort_floors_to_glm_5_3_supported_levels() {
+    // GLM-5.3 / GLM-5.3-Flash reject anything but low/high/max with a 400.
+    assert_eq!(
+        reasoning_effort_value("glm-5.3", ReasoningEffort::Medium),
+        "low"
+    );
+    assert_eq!(
+        reasoning_effort_value("glm-5.3", ReasoningEffort::XHigh),
+        "high"
+    );
+    assert_eq!(
+        reasoning_effort_value("glm-5.3-flash", ReasoningEffort::Medium),
+        "low"
+    );
+    assert_eq!(
+        reasoning_effort_value("GLM-5.3", ReasoningEffort::Max),
+        "max"
+    );
+
+    // GLM-5.2 maps intermediate levels itself, so the caller's level is kept.
+    assert_eq!(
+        reasoning_effort_value("glm-5.2", ReasoningEffort::Medium),
+        "medium"
+    );
+    assert_eq!(
+        reasoning_effort_value("glm-5.2", ReasoningEffort::XHigh),
+        "xhigh"
+    );
+    assert_eq!(
+        reasoning_effort_value("glm-5.2", ReasoningEffort::Max),
+        "max"
+    );
+}
+
+#[test]
 fn test_extract_thinking_from_reasoning_content() {
     let content = "Final answer";
     let (thinking, clean) = extract_thinking(content, Some("step by step".to_string()));

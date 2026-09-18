@@ -313,6 +313,97 @@ fn test_alibaba_deepseek_reasoning_effort_preserves_supported_values() {
 }
 
 #[test]
+fn test_alibaba_glm_reasoning_effort_follows_model_studio_ladder() {
+    use crate::llm::types::ReasoningEffort;
+
+    // glm-5.3 accepts only low/high/max; "medium" is an invalid_parameter_error.
+    assert_eq!(
+        reasoning_effort_value("alibaba", "glm-5.3", ReasoningEffort::Low),
+        "low"
+    );
+    assert_eq!(
+        reasoning_effort_value("alibaba", "glm-5.3", ReasoningEffort::Medium),
+        "low"
+    );
+    assert_eq!(
+        reasoning_effort_value("alibaba", "glm-5.3", ReasoningEffort::High),
+        "high"
+    );
+    assert_eq!(
+        reasoning_effort_value("alibaba", "glm-5.3", ReasoningEffort::XHigh),
+        "high"
+    );
+    assert_eq!(
+        reasoning_effort_value("alibaba", "glm-5.3", ReasoningEffort::Max),
+        "max"
+    );
+
+    // glm-5.2 accepts the full ladder through max.
+    assert_eq!(
+        reasoning_effort_value("alibaba", "glm-5.2", ReasoningEffort::Medium),
+        "medium"
+    );
+    assert_eq!(
+        reasoning_effort_value("alibaba", "glm-5.2", ReasoningEffort::XHigh),
+        "xhigh"
+    );
+    assert_eq!(
+        reasoning_effort_value("alibaba", "glm-5.2-fast-preview", ReasoningEffort::Max),
+        "max"
+    );
+
+    // glm-5.1 tops out at xhigh.
+    assert_eq!(
+        reasoning_effort_value("alibaba", "glm-5.1", ReasoningEffort::XHigh),
+        "xhigh"
+    );
+    assert_eq!(
+        reasoning_effort_value("alibaba", "glm-5.1", ReasoningEffort::Max),
+        "xhigh"
+    );
+
+    // Undocumented GLM models and non-GLM models keep the generic ladder.
+    assert_eq!(
+        reasoning_effort_value("alibaba", "glm-4.7", ReasoningEffort::Max),
+        "high"
+    );
+    assert_eq!(
+        reasoning_effort_value("alibaba", "qwen3.8-max", ReasoningEffort::Max),
+        "high"
+    );
+}
+
+#[test]
+fn test_fireworks_glm_5_2_reasoning_effort_reaches_max_tier() {
+    use crate::llm::types::ReasoningEffort;
+
+    // Fireworks collapses low/medium to High and xhigh/max to Max itself.
+    let model = "accounts/fireworks/models/glm-5p2";
+    assert_eq!(
+        reasoning_effort_value("fireworks", model, ReasoningEffort::Medium),
+        "medium"
+    );
+    assert_eq!(
+        reasoning_effort_value("fireworks", model, ReasoningEffort::XHigh),
+        "xhigh"
+    );
+    assert_eq!(
+        reasoning_effort_value("fireworks", model, ReasoningEffort::Max),
+        "max"
+    );
+
+    // Other Fireworks models keep the generic cap.
+    assert_eq!(
+        reasoning_effort_value(
+            "fireworks",
+            "accounts/fireworks/models/glm-4p7",
+            ReasoningEffort::Max
+        ),
+        "high"
+    );
+}
+
+#[test]
 fn test_ollama_max_reasoning_effort_is_not_downgraded() {
     assert_eq!(
         reasoning_effort_value("ollama", "qwen3", crate::llm::types::ReasoningEffort::Max),

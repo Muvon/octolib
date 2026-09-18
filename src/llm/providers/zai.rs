@@ -61,8 +61,8 @@ use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-    ChatCompletionParams, ProviderExchange, ProviderResponse, ResponseMode, SamplingSupport,
-    ThinkingBlock, TokenUsage, ToolCall,
+    ChatCompletionParams, ProviderExchange, ProviderResponse, ReasoningEffort, ResponseMode,
+    SamplingSupport, ThinkingBlock, TokenUsage, ToolCall,
 };
 use crate::llm::utils::{
     get_model_pricing, is_model_in_pricing_table, normalize_model_name, PricingTuple,
@@ -208,6 +208,8 @@ struct ZaiRequest {
     response_format: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     thinking: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<&'static str>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -408,14 +410,18 @@ impl AiProvider for ZaiProvider {
                 })
             }),
             // Z.ai GLM hybrid thinking models (4.5/4.6/4.7/5.x) accept
-            // `thinking: { "type": "enabled" | "disabled" }`. The API is binary —
-            // there is no budget knob, so any non-None ReasoningEffort enables it.
-            // Models without hybrid thinking (e.g. glm-4-32b, glm-ocr) ignore the field.
-            // GLM-5.3 requires thinking ("disabled" is rejected); omitting the field
-            // uses the API default, which is enabled.
+            // `thinking: { "type": "enabled" | "disabled" }`; any non-None
+            // ReasoningEffort enables it and the level itself goes through
+            // `reasoning_effort` below. Models without hybrid thinking
+            // (e.g. glm-4-32b, glm-ocr) ignore the field. GLM-5.3 requires
+            // thinking ("disabled" is rejected); omitting the field uses the
+            // API default, which is enabled.
             thinking: params
                 .reasoning_effort
                 .map(|_| serde_json::json!({ "type": "enabled" })),
+            reasoning_effort: params
+                .reasoning_effort
+                .map(|effort| reasoning_effort_value(&params.model, effort)),
         };
 
         // Execute request with retry logic
@@ -771,6 +777,26 @@ fn extract_structured_output(response: &serde_json::Value) -> Option<serde_json:
         }
     }
     None
+}
+
+/// Z.ai `reasoning_effort` (chat-completion reference, Sep 2026): supported by
+/// GLM-5.2 and above, default `max`. GLM-5.2 maps `low`/`medium` to `high` and
+/// `xhigh` to `max` itself, so the caller's level is forwarded. GLM-5.3 and
+/// GLM-5.3-Flash accept only `low|high|max` — verified live: `medium` and
+/// `xhigh` return 400 "please use low, high, or max". Intermediate levels floor
+/// to the next supported one, matching the K3 handling in `opencode`. Older
+/// models ignore the field (glm-5.1 and glm-4.7 returned 200 with it set).
+fn reasoning_effort_value(model: &str, effort: ReasoningEffort) -> &'static str {
+    let glm_5_3 = normalize_model_name(model).contains("glm-5.3");
+    match effort {
+        ReasoningEffort::Low => "low",
+        ReasoningEffort::Medium if glm_5_3 => "low",
+        ReasoningEffort::Medium => "medium",
+        ReasoningEffort::High => "high",
+        ReasoningEffort::XHigh if glm_5_3 => "high",
+        ReasoningEffort::XHigh => "xhigh",
+        ReasoningEffort::Max => "max",
+    }
 }
 
 /// Extract thinking content from reasoning_content field or <think>...</think> tags

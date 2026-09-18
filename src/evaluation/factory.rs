@@ -13,7 +13,9 @@
 // limitations under the License.
 
 use super::errors::{EvaluationError, EvaluationResult};
-use super::providers::{CloudflareEvaluationProvider, TypeSafeEvaluationProvider};
+use super::providers::{
+    CloudflareEvaluationProvider, OctoHubEvaluationProvider, TypeSafeEvaluationProvider,
+};
 use super::traits::EvaluationProvider;
 
 pub struct EvaluationProviderFactory;
@@ -35,6 +37,7 @@ impl EvaluationProviderFactory {
     pub fn create_provider(name: &str) -> EvaluationResult<Box<dyn EvaluationProvider>> {
         match name.to_ascii_lowercase().as_str() {
             "cloudflare" => Ok(Box::new(CloudflareEvaluationProvider::new())),
+            "octohub" => Ok(Box::new(OctoHubEvaluationProvider::new())),
             "typesafe" => Ok(Box::new(TypeSafeEvaluationProvider::new())),
             other => Err(EvaluationError::UnsupportedProvider(other.to_string())),
         }
@@ -55,7 +58,7 @@ impl EvaluationProviderFactory {
     }
 
     pub fn supported_providers() -> &'static [&'static str] {
-        &["cloudflare", "typesafe"]
+        &["cloudflare", "octohub", "typesafe"]
     }
 }
 
@@ -74,6 +77,11 @@ mod tests {
             EvaluationProviderFactory::get_provider_for_model("cloudflare:typesafe/jev").unwrap();
         assert_eq!(provider.name(), "cloudflare");
         assert_eq!(model, "typesafe/jev");
+
+        let (provider, model) =
+            EvaluationProviderFactory::get_provider_for_model("octohub:jev").unwrap();
+        assert_eq!(provider.name(), "octohub");
+        assert_eq!(model, "jev");
     }
 
     #[test]

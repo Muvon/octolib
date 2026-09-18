@@ -591,6 +591,7 @@ if let Some(usage) = &response.exchange.usage {
 | Amazon Bedrock | ✅ Supported | Cloud AI Services |
 | Cloudflare Workers AI | ✅ Supported | Edge AI Compute, Media (image, speech, transcription), Evaluation (Jev via AI Gateway) |
 | TypeSafe | ✅ Supported | Jev structured evaluation (noul, choice, score) |
+| OctoHub | ✅ Supported | Local AI Serving, Evaluation proxy (`octohub:<alias>`) |
 | Local LLM | ✅ Supported | Ollama, LM Studio, LocalAI, Jan, vLLM |
 | Ollama | ✅ Supported | Local LLM Runner |
 | CLI Proxy | ✅ Supported | Codex, Claude, Gemini, Cursor |

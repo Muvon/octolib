@@ -22,8 +22,9 @@
 //! (`score`). There is no generated text to parse and no job to poll.
 //!
 //! The first such model is TypeSafe's Jev, reachable directly
-//! (`typesafe:jev-latest`) or through Cloudflare AI Gateway unified billing
-//! (`cloudflare:typesafe/jev`). Both speak the same payload; only the
+//! (`typesafe:jev-latest`), through Cloudflare AI Gateway unified billing
+//! (`cloudflare:typesafe/jev`), or through an OctoHub proxy that maps its
+//! own aliases (`octohub:jev`). All speak the same payload; only the
 //! envelope differs.
 
 pub mod errors;
@@ -34,7 +35,9 @@ pub mod types;
 
 pub use errors::{EvaluationError, EvaluationResult};
 pub use factory::EvaluationProviderFactory;
-pub use providers::{CloudflareEvaluationProvider, TypeSafeEvaluationProvider};
+pub use providers::{
+    CloudflareEvaluationProvider, OctoHubEvaluationProvider, TypeSafeEvaluationProvider,
+};
 pub use traits::EvaluationProvider;
 pub use types::{
     Answer, EvaluationPricing, EvaluationRequest, EvaluationResponse, EvaluationUsage,

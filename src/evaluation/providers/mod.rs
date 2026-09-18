@@ -13,8 +13,10 @@
 // limitations under the License.
 
 pub mod cloudflare;
+pub mod octohub;
 pub(crate) mod shared;
 pub mod typesafe;
 
 pub use cloudflare::CloudflareEvaluationProvider;
+pub use octohub::OctoHubEvaluationProvider;
 pub use typesafe::TypeSafeEvaluationProvider;

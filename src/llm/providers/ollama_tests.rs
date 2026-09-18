@@ -61,15 +61,13 @@ fn test_structured_output_model_specific() {
 }
 
 #[test]
-fn test_schema_enforcement_proxy_policy() {
+fn test_schema_is_never_enforced() {
     let provider = OllamaProvider::new();
-    assert!(provider.enforces_response_schema("deepseek-v4-pro"));
-    assert!(provider.enforces_response_schema("ollama:deepseek-v4-pro"));
-    assert!(provider.enforces_response_schema("gemma4:31b-cloud"));
-    assert!(!provider.enforces_response_schema("minimax-m3"));
-    assert!(!provider.enforces_response_schema("mistral:7b"));
-    assert!(provider.enforces_response_schema("llama3.1:8b"));
-    assert!(!provider.enforces_response_schema("unknown-cloud-model"));
+    // Structured output still works (forced tool), but nothing guarantees the shape.
+    assert!(provider.supports_structured_output("llama3.1:8b"));
+    assert!(!provider.enforces_response_schema("llama3.1:8b"));
+    assert!(!provider.enforces_response_schema("deepseek-v4-pro"));
+    assert!(!provider.enforces_response_schema("glm-5.3-flash"));
 }
 
 #[test]

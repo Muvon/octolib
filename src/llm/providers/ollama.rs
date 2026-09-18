@@ -74,10 +74,11 @@ impl AiProvider for OllamaProvider {
     // supports_vision, supports_video, supports_structured_output, get_max_input_tokens
     // are resolved via reference capabilities (trait defaults)
 
-    fn enforces_response_schema(&self, model: &str) -> bool {
-        // Cloud does not constrain decoding, but the shared OpenAI-compatible
-        // path forces a tool call, validates locally, and fails closed.
-        self.supports_structured_output(model)
+    /// Ollama Cloud does not constrain decoding: a schema reaches the model only
+    /// as a forced tool call, which it may answer with the wrong shape. Routers
+    /// read this flag to send structured requests to a lane that guarantees it.
+    fn enforces_response_schema(&self, _model: &str) -> bool {
+        false
     }
 
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {

@@ -104,26 +104,6 @@ fn response_with_content(content: &str) -> ProviderResponse {
     }
 }
 
-fn with_usage(
-    mut response: ProviderResponse,
-    input_tokens: u64,
-    output_tokens: u64,
-    cost: f64,
-    request_time_ms: u64,
-) -> ProviderResponse {
-    response.exchange.usage = Some(TokenUsage {
-        input_tokens,
-        cache_read_tokens: 0,
-        cache_write_tokens: 0,
-        output_tokens,
-        reasoning_tokens: 0,
-        total_tokens: input_tokens + output_tokens,
-        cost: Some(cost),
-        request_time_ms: Some(request_time_ms),
-    });
-    response
-}
-
 fn schema() -> serde_json::Value {
     serde_json::json!({
         "type": "object",
@@ -150,47 +130,13 @@ async fn accepts_valid_native_schema_response() {
 }
 
 #[tokio::test]
-async fn falls_back_when_native_enforcer_returns_unparseable_output() {
-    let provider = ScriptedProvider::new(
-        vec![
-            response_with_content("not json"),
-            response_with_tool_call(SYNTHETIC_TOOL_NAME, serde_json::json!({"answer": 4})),
-        ],
-        true,
-    );
-    let params = params_with_schema("model");
-    let response = chat_completion_enforced(&provider, params).await.unwrap();
-    assert_eq!(
-        response.structured_output,
-        Some(serde_json::json!({"answer": 4}))
-    );
-    assert_eq!(response.content, r#"{"answer":4}"#);
-}
-
-#[tokio::test]
-async fn successful_fallback_aggregates_all_attempt_usage() {
-    let provider = ScriptedProvider::new(
-        vec![
-            with_usage(response_with_content("not json"), 10, 5, 0.10, 100),
-            with_usage(
-                response_with_tool_call(SYNTHETIC_TOOL_NAME, serde_json::json!({"answer": 4})),
-                20,
-                7,
-                0.20,
-                200,
-            ),
-        ],
-        true,
-    );
-    let response = chat_completion_enforced(&provider, params_with_schema("model"))
+async fn native_enforcer_unparseable_output_fails_without_a_second_call() {
+    let provider = ScriptedProvider::new(vec![response_with_content("not json")], true);
+    let err = chat_completion_enforced(&provider, params_with_schema("model"))
         .await
-        .unwrap();
-    let usage = response.exchange.usage.unwrap();
-    assert_eq!(usage.input_tokens, 30);
-    assert_eq!(usage.output_tokens, 12);
-    assert_eq!(usage.total_tokens, 42);
-    assert_eq!(usage.request_time_ms, Some(300));
-    assert!((usage.cost.unwrap() - 0.30).abs() < f64::EPSILON);
+        .unwrap_err();
+    assert!(err.to_string().contains("no parseable structured output"));
+    assert_eq!(provider.requests().len(), 1);
 }
 
 #[tokio::test]
@@ -215,45 +161,29 @@ async fn extracts_and_validates_forced_tool_call_on_first_try() {
 }
 
 #[tokio::test]
-async fn retries_on_schema_mismatch_then_succeeds() {
+async fn schema_mismatch_fails_without_a_second_call() {
     let provider = ScriptedProvider::new(
-        vec![
-            response_with_tool_call(SYNTHETIC_TOOL_NAME, serde_json::json!({"answer": "four"})),
-            response_with_tool_call(SYNTHETIC_TOOL_NAME, serde_json::json!({"answer": 4})),
-        ],
+        vec![response_with_tool_call(
+            SYNTHETIC_TOOL_NAME,
+            serde_json::json!({"answer": "four"}),
+        )],
         false,
     );
-    let params = params_with_schema("model");
-    let response = chat_completion_enforced(&provider, params).await.unwrap();
-    assert_eq!(
-        response.structured_output,
-        Some(serde_json::json!({"answer": 4}))
-    );
+    let err = chat_completion_enforced(&provider, params_with_schema("model"))
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("does not match the schema"));
+    assert_eq!(provider.requests().len(), 1);
 }
 
 #[tokio::test]
-async fn gives_up_after_max_attempts_with_validation_error() {
-    let bad =
-        || response_with_tool_call(SYNTHETIC_TOOL_NAME, serde_json::json!({"answer": "nope"}));
-    let provider = ScriptedProvider::new(vec![bad(), bad(), bad()], false);
-    let params = params_with_schema("model");
-    let err = chat_completion_enforced(&provider, params)
+async fn empty_output_fails_without_a_second_call() {
+    let provider = ScriptedProvider::new(vec![response_with_content("")], false);
+    let err = chat_completion_enforced(&provider, params_with_schema("model"))
         .await
         .unwrap_err();
-    assert!(err
-        .to_string()
-        .contains("exhausted 3 structured-output attempts"));
-}
-
-#[tokio::test]
-async fn gives_up_after_empty_attempts_with_parsing_error() {
-    let empty = || response_with_content("");
-    let provider = ScriptedProvider::new(vec![empty(), empty(), empty()], false);
-    let params = params_with_schema("model");
-    let err = chat_completion_enforced(&provider, params)
-        .await
-        .unwrap_err();
-    assert!(err.to_string().contains("without parseable output"));
+    assert!(err.to_string().contains("no parseable structured output"));
+    assert_eq!(provider.requests().len(), 1);
 }
 
 #[tokio::test]
@@ -277,14 +207,8 @@ async fn passthrough_when_client_already_supplies_tools() {
 }
 
 #[tokio::test]
-async fn client_tools_invalid_final_falls_back_to_synthetic_schema_tool() {
-    let provider = ScriptedProvider::new(
-        vec![
-            response_with_content("not json"),
-            response_with_tool_call(SYNTHETIC_TOOL_NAME, serde_json::json!({"answer": 4})),
-        ],
-        false,
-    );
+async fn client_tools_invalid_final_fails_without_a_second_call() {
+    let provider = ScriptedProvider::new(vec![response_with_content("not json")], false);
     let mut params = params_with_schema("model");
     params.tools = Some(vec![FunctionDefinition {
         name: "client_tool".to_string(),
@@ -292,20 +216,14 @@ async fn client_tools_invalid_final_falls_back_to_synthetic_schema_tool() {
         parameters: serde_json::json!({}),
         cache_control: None,
     }]);
-    let response = chat_completion_enforced(&provider, params).await.unwrap();
-    assert_eq!(
-        response.structured_output,
-        Some(serde_json::json!({"answer": 4}))
-    );
+    let err = chat_completion_enforced(&provider, params)
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("no parseable structured output"));
 
     let requests = provider.requests();
-    assert_eq!(requests.len(), 2);
+    assert_eq!(requests.len(), 1);
     assert_eq!(requests[0].tools.as_ref().unwrap()[0].name, "client_tool");
-    assert_eq!(
-        requests[1].tools.as_ref().unwrap()[0].name,
-        SYNTHETIC_TOOL_NAME
-    );
-    assert!(requests[1].response_format.is_none());
 }
 
 #[test]

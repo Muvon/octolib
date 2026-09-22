@@ -959,6 +959,11 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(2.00, 6.00, 2.00, 0.30),
     },
     ReferenceModelEntry {
+        pattern: "grok-4.7",
+        capabilities: caps(true, false, true, 500_000),
+        pricing: pricing(2.00, 6.00, 2.00, 0.50),
+    },
+    ReferenceModelEntry {
         pattern: "grok-4.6",
         capabilities: caps(true, false, true, 500_000),
         pricing: pricing(2.00, 6.00, 2.00, 0.50),

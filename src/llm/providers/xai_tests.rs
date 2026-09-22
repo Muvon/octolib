@@ -21,6 +21,8 @@ use std::path::PathBuf;
 fn supports_current_models_aliases_and_redirects() {
     let provider = XaiProvider::new();
     for model in [
+        "grok-4.7",
+        "grok-4.7-latest",
         "grok-4.5",
         "grok-4.5-latest",
         "grok-build-latest",
@@ -73,6 +75,7 @@ fn supports_current_models_aliases_and_redirects() {
 #[test]
 fn capabilities_and_pricing_follow_model_family() {
     let provider = XaiProvider::new();
+    assert_eq!(provider.get_max_input_tokens("grok-4.7"), 500_000);
     assert_eq!(provider.get_max_input_tokens("grok-4.5"), 500_000);
     assert_eq!(provider.get_max_input_tokens("grok-build-0.1"), 256_000);
     assert_eq!(
@@ -84,6 +87,10 @@ fn capabilities_and_pricing_follow_model_family() {
     let pricing = provider.get_model_pricing("grok-4.5-latest").unwrap();
     assert_eq!(pricing.input_price_per_1m, 2.0);
     assert_eq!(pricing.cache_read_price_per_1m, 0.3);
+    assert_eq!(pricing.output_price_per_1m, 6.0);
+    let pricing = provider.get_model_pricing("grok-4.7-latest").unwrap();
+    assert_eq!(pricing.input_price_per_1m, 2.0);
+    assert_eq!(pricing.cache_read_price_per_1m, 0.5);
     assert_eq!(pricing.output_price_per_1m, 6.0);
 }
 

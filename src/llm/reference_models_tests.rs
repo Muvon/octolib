@@ -78,6 +78,7 @@ fn reference_pricing_matches_first_party_provider_tables() {
     let anthropic = AnthropicProvider::new();
     for model in [
         "claude-fable-5",
+        "claude-opus-5-5",
         "claude-opus-5",
         "claude-sonnet-5",
         "claude-opus-4-8",

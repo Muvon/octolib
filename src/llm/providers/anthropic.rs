@@ -35,7 +35,7 @@ use std::env;
 /// Format: (model, input, output, cache_write, cache_read)
 const PRICING: &[PricingTuple] = &[
     // Mythos-class (Fable/Mythos 5.1): $10/$50, cache write 1.25x, but cache
-    // read is 0.025x ($0.25) — the only Claude models off the 0.1x multiplier.
+    // read is 0.025x ($0.25); Opus 5.5 below is the other model off 0.1x.
     // Must precede the 5 entries: lookup is a first-match substring scan.
     ("claude-fable-5-1", 10.00, 50.00, 12.50, 0.25),
     ("claude-mythos-5-1", 10.00, 50.00, 12.50, 0.25),
@@ -43,6 +43,8 @@ const PRICING: &[PricingTuple] = &[
     ("claude-fable-5", 10.00, 50.00, 12.50, 1.00),
     // Claude Mythos 5 (Project Glasswing only): same pricing/capabilities as Fable 5
     ("claude-mythos-5", 10.00, 50.00, 12.50, 1.00),
+    // Claude Opus 5.5: cache read is 0.05x ($0.20). Must precede the Opus 5 row.
+    ("claude-opus-5-5", 4.00, 20.00, 5.00, 0.20),
     // Claude Opus 5
     ("claude-opus-5", 5.00, 25.00, 6.25, 0.50),
     // Claude 4.8

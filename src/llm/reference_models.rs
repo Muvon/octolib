@@ -981,6 +981,11 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(10.00, 50.00, 12.50, 1.00),
     },
     ReferenceModelEntry {
+        pattern: "claude-opus-5-5",
+        capabilities: caps(true, false, false, 1_000_000),
+        pricing: pricing(4.00, 20.00, 5.00, 0.20),
+    },
+    ReferenceModelEntry {
         pattern: "claude-opus-5",
         capabilities: caps(true, false, false, 1_000_000),
         pricing: pricing(5.00, 25.00, 6.25, 0.50),

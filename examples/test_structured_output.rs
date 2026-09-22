@@ -1,4 +1,4 @@
-// Copyright 2025 Muvon Un Limited
+// Copyright 2026 Muvon Un Limited
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ async fn main() -> anyhow::Result<()> {
         "openai:gpt-4o",
         "openrouter:openai/gpt-4o",
         "deepseek:deepseek-chat",
-        "anthropic:claude-3-5-sonnet",
+        "anthropic:claude-sonnet-4-6",
     ];
 
     for model_spec in providers_to_test {

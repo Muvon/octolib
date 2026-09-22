@@ -34,22 +34,32 @@ use std::env;
 const TOGETHER_API_KEY_ENV: &str = "TOGETHER_API_KEY";
 const TOGETHER_API_URL: &str = "https://api.together.xyz/v1/chat/completions";
 
-/// Together serverless prices per 1M tokens, verified Aug 26, 2026.
+/// Together serverless prices per 1M tokens, verified Sep 22, 2026.
 /// Format: (model pattern, input, output, cache write, cached input).
 /// Models without a listed cache discount use the normal input rate.
 const PRICING: &[PricingTuple] = &[
-    ("thinkingmachines/Inkling-Small", 0.50, 1.20, 0.50, 0.50),
-    ("Qwen/Qwen3.8-2.4T-A95B", 2.50, 6.25, 2.50, 0.50),
-    ("Qwen/Qwen3.7-Max", 1.25, 3.75, 1.25, 1.25),
+    ("Qwen/Qwen3.8-2.4T-A95B", 2.00, 6.00, 2.00, 0.25),
+    ("Qwen/Qwen3.8-Flash", 0.15, 0.47, 0.15, 0.15),
+    ("Qwen/Qwen3.7-Max", 2.50, 7.50, 2.50, 0.25),
     ("Qwen/Qwen3.7-Plus", 0.32, 1.28, 0.32, 0.32),
     ("Qwen/Qwen3.6-Plus", 0.50, 3.00, 0.50, 0.50),
+    ("Qwen/Qwen3.5-9B", 0.17, 0.25, 0.17, 0.17),
     ("MiniMaxAI/MiniMax-M3", 0.30, 1.20, 0.30, 0.06),
     ("moonshotai/Kimi-K3", 3.00, 15.00, 3.00, 0.30),
-    ("moonshotai/Kimi-K2.7-Code", 0.95, 4.00, 0.95, 0.19),
+    ("zai-org/GLM-5.3-Flash", 0.15, 0.50, 0.15, 0.03),
+    ("zai-org/GLM-5.3", 1.40, 4.40, 1.40, 0.26),
     ("zai-org/GLM-5.2", 1.40, 4.40, 1.40, 0.26),
+    ("deepseek-ai/DeepSeek-V4.1-Flash", 0.30, 1.20, 0.30, 0.006),
     ("deepseek-ai/DeepSeek-V4-Pro-0813", 1.32, 3.96, 1.32, 0.13),
     ("deepseek-ai/DeepSeek-V4-Flash-0731", 0.14, 0.28, 0.14, 0.03),
-    ("deepseek-ai/DeepSeek-V4-Pro", 1.74, 3.48, 1.74, 0.20),
+    ("openai/gpt-oss-120b", 0.15, 0.60, 0.15, 0.15),
+    (
+        "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+        1.04,
+        1.04,
+        1.04,
+        1.04,
+    ),
     ("google/gemma-4-31B-it", 0.39, 0.97, 0.39, 0.39),
     ("thinkingmachines/Inkling", 1.00, 4.05, 1.00, 0.17),
 ];
@@ -66,8 +76,7 @@ fn together_model_pricing(model: &str) -> Option<crate::llm::types::ModelPricing
 
 fn together_model_context(model: &str) -> Option<usize> {
     let normalized = model.to_ascii_lowercase();
-    if normalized.contains("thinkingmachines/inkling-small")
-        || normalized.contains("thinkingmachines/inkling")
+    if normalized.contains("thinkingmachines/inkling")
         || normalized.contains("minimaxai/minimax-m3")
     {
         Some(524_288)
@@ -75,18 +84,23 @@ fn together_model_context(model: &str) -> Option<usize> {
         || normalized.contains("deepseek-ai/deepseek-v4-pro-0813")
     {
         Some(1_048_576)
-    } else if normalized.contains("moonshotai/kimi-k2.7-code")
-        || normalized.contains("google/gemma-4-31b-it")
+    } else if normalized.contains("zai-org/glm-5.3") {
+        Some(1_048_575)
+    } else if normalized.contains("google/gemma-4-31b-it") || normalized.contains("qwen/qwen3.5-9b")
     {
         Some(262_144)
-    } else if normalized.contains("qwen/qwen3.7-plus")
+    } else if normalized.contains("qwen/qwen3.8-flash")
+        || normalized.contains("qwen/qwen3.7-plus")
         || normalized.contains("qwen/qwen3.6-plus")
         || normalized.contains("zai-org/glm-5.2")
+        || normalized.contains("deepseek-ai/deepseek-v4.1-flash")
         || normalized.contains("deepseek-ai/deepseek-v4-flash-0731")
     {
         Some(1_000_000)
-    } else if normalized.contains("deepseek-ai/deepseek-v4-pro") {
-        Some(512_000)
+    } else if normalized.contains("openai/gpt-oss-120b")
+        || normalized.contains("meta-llama/llama-3.3-70b-instruct-turbo")
+    {
+        Some(131_072)
     } else {
         None
     }

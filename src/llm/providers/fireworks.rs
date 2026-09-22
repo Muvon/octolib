@@ -63,18 +63,24 @@ const FIREWORKS_API_KEY_ENV: &str = "FIREWORKS_API_KEY";
 const FIREWORKS_API_URL_ENV: &str = "FIREWORKS_API_URL";
 const FIREWORKS_API_URL: &str = "https://api.fireworks.ai/inference/v1/chat/completions";
 
-/// Fireworks Standard serverless prices per 1M tokens, verified Aug 26, 2026.
+/// Fireworks Standard serverless prices per 1M tokens, verified Sep 22, 2026.
 /// Format: (model path pattern, input, output, cache write, cached input).
 const PRICING: &[PricingTuple] = &[
     ("qwen3p8-2p4t-a95b", 2.00, 6.00, 2.00, 0.25),
-    ("qwen3p7-plus", 0.40, 1.60, 0.40, 0.08),
+    ("qwen3p8-max", 2.00, 6.00, 2.00, 0.25),
     ("deepseek-v4-pro-0813", 1.32, 3.96, 1.32, 0.044),
     ("deepseek-v4-pro", 1.74, 3.48, 1.74, 0.145),
     ("deepseek-v4-flash", 0.22, 0.66, 0.22, 0.007),
     ("kimi-k2p7-code", 0.95, 4.00, 0.95, 0.19),
+    ("kimi-k2p6", 0.95, 4.00, 0.95, 0.16),
     ("kimi-k3", 3.00, 15.00, 3.00, 0.30),
     ("minimax-m3", 0.30, 1.20, 0.30, 0.06),
+    ("glm-5p3-flash", 0.15, 0.50, 0.15, 0.03),
+    ("glm-5p3", 1.40, 4.40, 1.40, 0.26),
     ("glm-5p2", 1.40, 4.40, 1.40, 0.14),
+    ("gpt-oss-120b", 0.15, 0.60, 0.15, 0.015),
+    ("nemotron-lightning-3p5-30b-a3b", 0.05, 0.20, 0.05, 0.01),
+    ("muse-glimmer-30b", 0.35, 1.50, 0.35, 0.04),
 ];
 
 fn fireworks_model_pricing(model: &str) -> Option<crate::llm::types::ModelPricing> {
@@ -121,13 +127,17 @@ impl AiProvider for FireworksProvider {
     fn get_max_input_tokens(&self, model: &str) -> usize {
         let normalized = normalize_model_name(model);
         if normalized.contains("qwen3p8-2p4t-a95b")
-            || normalized.contains("qwen3p7-plus")
             || normalized.contains("kimi-k2p7-code")
+            || normalized.contains("kimi-k2p6")
+            || normalized.contains("nemotron-lightning-3p5-30b-a3b")
         {
             262_144
+        } else if normalized.contains("gpt-oss-120b") || normalized.contains("muse-glimmer-30b") {
+            131_072
         } else if normalized.contains("minimax-m3") {
             512_000
         } else if normalized.contains("kimi-k3")
+            || normalized.contains("glm-5p3")
             || normalized.contains("glm-5p2")
             || normalized.contains("deepseek-v4")
         {

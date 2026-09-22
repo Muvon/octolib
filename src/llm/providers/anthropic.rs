@@ -31,7 +31,7 @@ use std::env;
 
 /// Anthropic pricing constants (per 1M tokens in USD)
 /// Model IDs sourced from Anthropic model docs / models API.
-/// Prices sourced from Anthropic pricing docs (verified Aug 26, 2026).
+/// Prices sourced from Anthropic pricing docs (verified Sep 22, 2026).
 /// Format: (model, input, output, cache_write, cache_read)
 const PRICING: &[PricingTuple] = &[
     // Mythos-class (Fable/Mythos 5.1): $10/$50, cache write 1.25x, but cache
@@ -71,25 +71,13 @@ const PRICING: &[PricingTuple] = &[
     ("claude-opus-4-20250514", 15.00, 75.00, 18.75, 1.50),
     ("claude-sonnet-4-20250514", 3.00, 15.00, 3.75, 0.30),
     ("claude-opus-4-1", 15.00, 75.00, 18.75, 1.50),
-    ("claude-opus-4-0", 15.00, 75.00, 18.75, 1.50),
     ("claude-opus-4", 15.00, 75.00, 18.75, 1.50),
-    ("claude-sonnet-4-0", 3.00, 15.00, 3.75, 0.30),
     ("claude-sonnet-4", 3.00, 15.00, 3.75, 0.30),
-    // Claude 3.7
-    ("claude-3-7-sonnet-20250219", 3.00, 15.00, 3.75, 0.30),
-    ("claude-3-7-sonnet", 3.00, 15.00, 3.75, 0.30),
     // Claude 3.5 (hyphenated format)
-    ("claude-3-5-sonnet", 3.00, 15.00, 3.75, 0.30),
     ("claude-3-5-haiku-20241022", 0.80, 4.00, 1.00, 0.08),
     ("claude-3-5-haiku", 0.80, 4.00, 1.00, 0.08),
-    // Claude 3.5 (dot notation aliases - common user format)
-    ("claude-3.5-sonnet", 3.00, 15.00, 3.75, 0.30),
+    // Claude 3.5 (dot notation alias - common user format)
     ("claude-3.5-haiku", 0.80, 4.00, 1.00, 0.08),
-    // Claude 3
-    ("claude-3-opus", 15.00, 75.00, 18.75, 1.50),
-    ("claude-3-sonnet", 3.00, 15.00, 3.75, 0.30),
-    ("claude-3-haiku-20240307", 0.25, 1.25, 0.30, 0.03),
-    ("claude-3-haiku", 0.25, 1.25, 0.30, 0.03),
 ];
 
 /// Token usage breakdown for cache-aware pricing
@@ -119,12 +107,10 @@ const THINKING_MODELS: &[&str] = &[
     "opus-4-1",
     "opus-4",
     "sonnet-5",
-    "sonnet-4-7",
     "sonnet-4-6",
     "sonnet-4-5",
     "sonnet-4",
     "haiku-4-5",
-    "3-7-sonnet",
 ];
 
 /// Models that support (or require) adaptive thinking via `thinking.type: "adaptive"`.
@@ -360,9 +346,6 @@ impl AiProvider for AnthropicProvider {
         {
             // Claude 4 and 4.5 models have 200k context
             200_000
-        } else if model_lower.contains("claude-3-7") {
-            // Claude 3.7 has 200k context
-            200_000
         } else if model_lower.contains("claude-3-5") {
             // Claude 3.5 models have 200k context
             200_000
@@ -525,7 +508,7 @@ impl AiProvider for AnthropicProvider {
         //   - Opus 4.7 only accepts `thinking.type: "adaptive"` (manual is 400).
         //   - Opus 4.6 / Sonnet 4.6 accept adaptive (recommended) or manual; manual deprecated.
         //   - Opus 4.5 keeps manual `budget_tokens` but also supports `output_config.effort`.
-        //   - Older Claude 4 / 3.7 keep manual `budget_tokens` only.
+        //   - Older Claude 4 keeps manual `budget_tokens` only.
         if let Some(effort) = params.reasoning_effort {
             if thinking_enabled {
                 let supports_adaptive = ADAPTIVE_THINKING_MODELS

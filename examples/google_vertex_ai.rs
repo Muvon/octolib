@@ -122,7 +122,7 @@ async fn main() -> anyhow::Result<()> {
     // Example 3: Chat completion with Gemini 2.0 Flash
     println!("\n📝 Example 3: Gemini 2.0 Flash");
     let (provider, model) =
-        ProviderFactory::get_provider_for_model("google-vertex:gemini-2.0-flash")?;
+        ProviderFactory::get_provider_for_model("google-vertex:gemini-2.5-flash")?;
     println!("Provider: {}", provider.name());
     println!("Model: {}", model);
 

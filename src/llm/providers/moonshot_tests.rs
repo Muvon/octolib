@@ -20,22 +20,23 @@ fn test_supports_model() {
     // Kimi K3
     assert!(provider.supports_model("kimi-k3"));
     // Kimi K2 series
-    assert!(provider.supports_model("kimi-k2"));
-    assert!(provider.supports_model("kimi-k2-thinking"));
-    assert!(provider.supports_model("kimi-k2-thinking-turbo"));
-    assert!(provider.supports_model("kimi-k2-turbo-preview"));
-    assert!(provider.supports_model("kimi-k2.5"));
     assert!(provider.supports_model("kimi-k2.6"));
     assert!(provider.supports_model("kimi-k2.7-code"));
     assert!(provider.supports_model("kimi-k2.7-code-highspeed"));
-    assert!(provider.supports_model("kimi-k2-0711-preview"));
-    assert!(provider.supports_model("kimi-k2-0905-preview"));
-    assert!(provider.supports_model("KIMI-K2"));
-    // Moonshot V1 series
-    assert!(provider.supports_model("moonshot-v1-8k"));
-    assert!(provider.supports_model("moonshot-v1-32k"));
-    assert!(provider.supports_model("moonshot-v1-128k"));
-    assert!(provider.supports_model("moonshot-v1-8k-vision-preview"));
+    assert!(provider.supports_model("KIMI-K2.6"));
+    // Discontinued by Moonshot (models page): K2.5 and V1 on 2026-08-31,
+    // the K2 preview/turbo/thinking routes on 2026-05-25
+    assert!(!provider.supports_model("kimi-k2.5"));
+    assert!(!provider.supports_model("kimi-k2"));
+    assert!(!provider.supports_model("kimi-k2-0905-preview"));
+    assert!(!provider.supports_model("kimi-k2-0711-preview"));
+    assert!(!provider.supports_model("kimi-k2-turbo-preview"));
+    assert!(!provider.supports_model("kimi-k2-thinking"));
+    assert!(!provider.supports_model("kimi-k2-thinking-turbo"));
+    assert!(!provider.supports_model("moonshot-v1-8k"));
+    assert!(!provider.supports_model("moonshot-v1-32k"));
+    assert!(!provider.supports_model("moonshot-v1-128k"));
+    assert!(!provider.supports_model("moonshot-v1-8k-vision-preview"));
     // Not supported
     assert!(!provider.supports_model("gpt-4"));
 }
@@ -44,10 +45,8 @@ fn test_supports_model() {
 fn test_supports_vision() {
     let provider = MoonshotProvider::new();
     assert!(provider.supports_vision("kimi-k3"));
-    assert!(provider.supports_vision("kimi-k2.5"));
     assert!(provider.supports_vision("kimi-k2.6"));
     assert!(provider.supports_vision("kimi-k2.7-code"));
-    assert!(!provider.supports_vision("kimi-k2"));
 }
 
 #[test]
@@ -55,49 +54,26 @@ fn test_supports_caching() {
     let provider = MoonshotProvider::new();
     // K2/K3 families support automatic context caching
     assert!(provider.supports_caching("kimi-k3"));
-    assert!(provider.supports_caching("kimi-k2"));
-    assert!(provider.supports_caching("kimi-k2.5"));
     assert!(provider.supports_caching("kimi-k2.6"));
     assert!(provider.supports_caching("kimi-k2.7-code"));
-    assert!(provider.supports_caching("kimi-k2-thinking"));
-    // V1 legacy models do NOT support caching
-    assert!(!provider.supports_caching("moonshot-v1-8k"));
-    assert!(!provider.supports_caching("moonshot-v1-32k"));
-    assert!(!provider.supports_caching("moonshot-v1-128k"));
 }
 
 #[test]
-fn test_calculate_cost() {
-    // kimi-k2: Input: $0.60/1M, Output: $2.50/1M
-    let cost = calculate_cost("kimi-k2", 1_000_000, 500_000);
-    assert!(cost.is_some());
-    let expected = 0.60 + (0.5 * 2.50);
-    assert!((cost.unwrap() - expected).abs() < 0.01);
-}
-
-#[test]
-fn test_calculate_cost_with_cache() {
-    // kimi-k2: Cache hit: $0.15/1M, Cache miss: $0.60/1M, Output: $2.50/1M
-    let cost = calculate_cost_with_cache("kimi-k2", 500_000, 500_000, 250_000);
-    assert!(cost.is_some());
-    let expected = (0.5 * 0.60) + (0.5 * 0.15) + (0.25 * 2.50);
-    assert!((cost.unwrap() - expected).abs() < 0.01);
-
-    // Cost with cache should be less
-    let cost_no_cache = calculate_cost("kimi-k2", 1_000_000, 250_000);
-    assert!(cost.unwrap() < cost_no_cache.unwrap());
-
-    // kimi-k2.5: Cache hit: $0.10/1M, Cache miss: $0.60/1M, Output: $3.00/1M
-    let cost_k25 = calculate_cost_with_cache("kimi-k2.5", 400_000, 600_000, 500_000);
-    assert!(cost_k25.is_some());
-    let expected_k25 = (0.4 * 0.60) + (0.6 * 0.10) + (0.5 * 3.00);
-    assert!((cost_k25.unwrap() - expected_k25).abs() < 0.01);
-
-    // kimi-k2-thinking-turbo: Cache hit: $0.15/1M, Cache miss: $1.15/1M, Output: $8.00/1M
-    let cost_turbo = calculate_cost_with_cache("kimi-k2-thinking-turbo", 500_000, 500_000, 250_000);
-    assert!(cost_turbo.is_some());
-    let expected_turbo = (0.5 * 1.15) + (0.5 * 0.15) + (0.25 * 8.00);
-    assert!((cost_turbo.unwrap() - expected_turbo).abs() < 0.01);
+fn test_discontinued_models_have_no_pricing() {
+    for model in [
+        "kimi-k2",
+        "kimi-k2.5",
+        "kimi-k2-0905-preview",
+        "kimi-k2-0711-preview",
+        "kimi-k2-turbo-preview",
+        "kimi-k2-thinking",
+        "kimi-k2-thinking-turbo",
+        "moonshot-v1-8k",
+        "moonshot-v1-32k",
+        "moonshot-v1-128k",
+    ] {
+        assert_eq!(calculate_cost(model, 1_000_000, 500_000), None, "{}", model);
+    }
 }
 
 #[test]
@@ -105,28 +81,13 @@ fn test_get_max_input_tokens() {
     let provider = MoonshotProvider::new();
     // Kimi K3 — 1M = 1_048_576
     assert_eq!(provider.get_max_input_tokens("kimi-k3"), 1_048_576);
-    // Kimi K2 family — 256K = 262_144 (kimi-k2-0711 is 128K = 131_072)
-    assert_eq!(provider.get_max_input_tokens("kimi-k2"), 262_144);
-    assert_eq!(provider.get_max_input_tokens("kimi-k2.5"), 262_144);
+    // Kimi K2 family — 256K = 262_144
     assert_eq!(provider.get_max_input_tokens("kimi-k2.6"), 262_144);
     assert_eq!(provider.get_max_input_tokens("kimi-k2.7-code"), 262_144);
     assert_eq!(
-        provider.get_max_input_tokens("kimi-k2-0905-preview"),
+        provider.get_max_input_tokens("kimi-k2.7-code-highspeed"),
         262_144
     );
-    assert_eq!(provider.get_max_input_tokens("kimi-k2-thinking"), 262_144);
-    assert_eq!(
-        provider.get_max_input_tokens("kimi-k2-thinking-turbo"),
-        262_144
-    );
-    assert_eq!(
-        provider.get_max_input_tokens("kimi-k2-0711-preview"),
-        131_072
-    );
-    // Moonshot V1 series
-    assert_eq!(provider.get_max_input_tokens("moonshot-v1-128k"), 131_072);
-    assert_eq!(provider.get_max_input_tokens("moonshot-v1-32k"), 32_768);
-    assert_eq!(provider.get_max_input_tokens("moonshot-v1-8k"), 8_192);
     // Unknown
     assert_eq!(provider.get_max_input_tokens("unknown"), 128_000);
 }
@@ -184,27 +145,6 @@ fn test_calculate_cost_k3() {
     assert!(cost_cached.is_some());
     let expected_cached = (0.5 * 3.00) + (0.5 * 0.30) + (0.25 * 15.00);
     assert!((cost_cached.unwrap() - expected_cached).abs() < 0.01);
-}
-
-#[test]
-fn test_moonshot_v1_pricing() {
-    // moonshot-v1-8k: Input: $0.20/1M, Output: $2.00/1M (no cache)
-    let cost = calculate_cost("moonshot-v1-8k", 1_000_000, 500_000);
-    assert!(cost.is_some());
-    let expected = 0.20 + (0.5 * 2.00);
-    assert!((cost.unwrap() - expected).abs() < 0.01);
-
-    // moonshot-v1-32k: Input: $1.00/1M, Output: $3.00/1M
-    let cost_32k = calculate_cost("moonshot-v1-32k", 1_000_000, 500_000);
-    assert!(cost_32k.is_some());
-    let expected_32k = 1.00 + (0.5 * 3.00);
-    assert!((cost_32k.unwrap() - expected_32k).abs() < 0.01);
-
-    // moonshot-v1-128k: Input: $2.00/1M, Output: $5.00/1M
-    let cost_128k = calculate_cost("moonshot-v1-128k", 1_000_000, 500_000);
-    assert!(cost_128k.is_some());
-    let expected_128k = 2.00 + (0.5 * 5.00);
-    assert!((cost_128k.unwrap() - expected_128k).abs() < 0.01);
 }
 
 #[test]
@@ -288,7 +228,7 @@ fn test_reasoning_content_serialization() {
     };
 
     // For thinking models, reasoning_content should be present
-    let converted = convert_messages(std::slice::from_ref(&msg_with_thinking), "kimi-k2-thinking");
+    let converted = convert_messages(std::slice::from_ref(&msg_with_thinking), "kimi-k2.7-code");
     assert_eq!(converted.len(), 1);
     assert!(converted[0].reasoning_content.is_some());
     assert_eq!(
@@ -297,7 +237,7 @@ fn test_reasoning_content_serialization() {
     );
 
     // For Kimi K2 models, reasoning_content should be present
-    let converted = convert_messages(std::slice::from_ref(&msg_with_thinking), "kimi-k2");
+    let converted = convert_messages(std::slice::from_ref(&msg_with_thinking), "kimi-k2.6");
     assert_eq!(converted.len(), 1);
     assert!(converted[0].reasoning_content.is_some());
 
@@ -322,13 +262,13 @@ fn test_reasoning_content_serialization() {
     };
 
     // For thinking models, should have Some("") for tool calls even without thinking
-    let converted = convert_messages(std::slice::from_ref(&msg_no_thinking), "kimi-k2.5");
+    let converted = convert_messages(std::slice::from_ref(&msg_no_thinking), "kimi-k3");
     assert_eq!(converted.len(), 1);
     assert!(converted[0].reasoning_content.is_some());
     assert_eq!(converted[0].reasoning_content.as_ref().unwrap(), "");
 
     // For Kimi K2 models, should be Some("") even without thinking
-    let converted = convert_messages(std::slice::from_ref(&msg_no_thinking), "kimi-k2");
+    let converted = convert_messages(std::slice::from_ref(&msg_no_thinking), "kimi-k2.6");
     assert_eq!(converted.len(), 1);
     assert!(converted[0].reasoning_content.is_some());
     assert_eq!(converted[0].reasoning_content.as_ref().unwrap(), "");
@@ -350,11 +290,11 @@ fn test_reasoning_content_serialization() {
     };
 
     // Regular assistant messages without tool calls: no reasoning_content
-    let converted = convert_messages(std::slice::from_ref(&regular_msg), "kimi-k2-thinking");
+    let converted = convert_messages(std::slice::from_ref(&regular_msg), "kimi-k2.7-code");
     assert_eq!(converted.len(), 1);
     assert!(converted[0].reasoning_content.is_none());
 
-    let converted = convert_messages(std::slice::from_ref(&regular_msg), "kimi-k2");
+    let converted = convert_messages(std::slice::from_ref(&regular_msg), "kimi-k2.6");
     assert_eq!(converted.len(), 1);
     assert!(converted[0].reasoning_content.is_none());
 
@@ -372,16 +312,6 @@ fn test_reasoning_content_serialization() {
         Some("I chose the first three numbers and retained two.")
     );
 
-    let k25_plain_with_thinking = crate::llm::types::Message {
-        thinking: Some(ThinkingBlock {
-            content: "K2.5 trace".to_string(),
-            tokens: 3,
-        }),
-        ..crate::llm::types::Message::assistant("answer")
-    };
-    let converted = convert_messages(&[k25_plain_with_thinking], "kimi-k2.5");
-    assert!(converted[0].reasoning_content.is_none());
-
     // Test 5: Tool response message (no reasoning_content)
     let tool_msg = crate::llm::types::Message {
         role: "tool".to_string(),
@@ -398,7 +328,7 @@ fn test_reasoning_content_serialization() {
         id: None,
     };
 
-    let converted = convert_messages(&[tool_msg], "kimi-k2-thinking");
+    let converted = convert_messages(&[tool_msg], "kimi-k3");
     assert_eq!(converted.len(), 1);
     assert!(converted[0].reasoning_content.is_none());
 
@@ -470,14 +400,12 @@ fn test_preserved_thinking_model_contract() {
     assert!(preserves_historical_thinking("kimi-k2.6"));
     assert!(preserves_historical_thinking("kimi-k2.7-code"));
     assert!(preserves_historical_thinking("kimi-k3"));
-    assert!(!preserves_historical_thinking("kimi-k2.5"));
 
     assert_eq!(
         thinking_config("kimi-k2.6"),
         Some(serde_json::json!({"type": "enabled", "keep": "all"}))
     );
     assert!(thinking_config("kimi-k2.7-code").is_none());
-    assert!(thinking_config("kimi-k2.5").is_none());
     assert!(thinking_config("kimi-k3").is_none());
 }
 

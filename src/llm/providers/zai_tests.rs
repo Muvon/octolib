@@ -60,6 +60,7 @@ fn test_model_support() {
     assert!(provider.supports_model("glm-5.1"));
     assert!(provider.supports_model("glm-5.3"));
     assert!(provider.supports_model("glm-5.3-flash"));
+    assert!(provider.supports_model("glm-5.3-flashx"));
     assert!(provider.supports_model("glm-5.1-turbo"));
     assert!(provider.supports_model("glm-5"));
     assert!(provider.supports_model("glm-5-turbo"));
@@ -71,11 +72,6 @@ fn test_model_support() {
     // Near-miss rejections: invalid models that contain no pricing entry as a substring
     assert!(!provider.supports_model("glm5.3-flash"));
     assert!(!provider.supports_model("glmm-5.3-flash"));
-    // Substring convention: a variant of a known family matches its base entry
-    // (same mechanism that bills glm-4.7-flashx via its own specific-first entry),
-    // so a hypothetical glm-5.3-flashx is accepted at flash pricing until z.ai
-    // ships it with distinct prices and it gets its own entry.
-    assert!(provider.supports_model("glm-5.3-flashx"));
     // Deprecated models
     assert!(!provider.supports_model("glm-4"));
     assert!(!provider.supports_model("glm-4-flash"));
@@ -107,6 +103,14 @@ fn test_cost_calculation() {
     let cost = calculate_cost("glm-5.3", 1_000_000, 0, 1_000_000);
     assert!((cost.unwrap() - 5.80).abs() < 0.01); // 1.40 + 4.40
 
+    // Test GLM-5.3-FlashX: $0.37 input, $1.25 output — must resolve to its own
+    // entry, not the glm-5.3-flash substring match
+    let cost = calculate_cost("glm-5.3-flashx", 1_000_000, 0, 1_000_000);
+    assert!((cost.unwrap() - 1.62).abs() < 0.01); // 0.37 + 1.25
+                                                  // GLM-5.3-FlashX cached input: $0.075
+    let cost = calculate_cost("glm-5.3-flashx", 0, 1_000_000, 0);
+    assert!((cost.unwrap() - 0.075).abs() < 0.0001);
+
     // Test GLM-4.5: $0.60 input, $2.20 output
     let cost = calculate_cost("glm-4.5", 1_000_000, 0, 1_000_000);
     assert!((cost.unwrap() - 2.80).abs() < 0.01); // 0.60 + 2.20
@@ -132,6 +136,10 @@ fn glm_5_3_flash_promo_switches_to_list_price_at_documented_cutoff() {
     let cutoff = SystemTime::UNIX_EPOCH + Duration::from_secs(GLM_5_3_FLASH_PROMO_END_UNIX_SECS);
     let list = calculate_cost_at("glm-5.3-flash", 1_000_000, 0, 1_000_000, cutoff).unwrap();
     assert!((list - 0.65).abs() < 0.0001);
+
+    // FlashX was never part of the Flash promo: list price even before the cutoff
+    let flashx = calculate_cost_at("glm-5.3-flashx", 1_000_000, 0, 1_000_000, before).unwrap();
+    assert!((flashx - 1.62).abs() < 0.0001);
 }
 
 #[test]
@@ -285,6 +293,13 @@ fn test_provider_capabilities() {
     assert!(provider.supports_video("glm-5.3-flash"));
     assert_eq!(provider.get_max_input_tokens("glm-5.3-flash"), 1_000_000);
     assert_eq!(provider.get_max_input_tokens("glm-5.3"), 1_000_000);
+    // GLM-5.3-FlashX shares Flash's modalities and 1M context
+    assert!(provider.supports_vision("glm-5.3-flashx"));
+    assert!(provider.supports_video("glm-5.3-flashx"));
+    assert_eq!(provider.get_max_input_tokens("glm-5.3-flashx"), 1_000_000);
+    // GLM-5 / GLM-5-Turbo: 200K per the model pages
+    assert_eq!(provider.get_max_input_tokens("glm-5"), 200_000);
+    assert_eq!(provider.get_max_input_tokens("glm-5-turbo"), 200_000);
     // Non-vision models
     assert!(!provider.supports_vision("glm-5.1"));
     assert!(!provider.supports_vision("glm-5-turbo"));

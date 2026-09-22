@@ -27,9 +27,7 @@
 //!
 //! **Supported Models:**
 //! - MiniMax-M3: Frontier coding, 1M context, natively multimodal ($0.6/$2.4 per 1M tokens)
-//! - MiniMax-M3-highspeed: Same quality, faster inference ($0.6/$2.4 per 1M tokens)
 //! - MiniMax-M2.1: Powerful multi-language programming capabilities ($0.3/$1.2 per 1M tokens)
-//! - MiniMax-M2.1-lightning: Faster and more agile ($0.3/$2.4 per 1M tokens)
 //! - MiniMax-M2: Agentic capabilities, advanced reasoning ($0.3/$1.2 per 1M tokens)
 //!
 //! **Features:**
@@ -66,11 +64,9 @@ async fn main() -> anyhow::Result<()> {
             eprintln!("   export MINIMAX_API_KEY=\"your-api-key-here\"");
             eprintln!("\nSupported models:");
             eprintln!("   - minimax:MiniMax-M3 (recommended - latest, multimodal)");
-            eprintln!("   - minimax:MiniMax-M3-highspeed (faster)");
             eprintln!("   - minimax:MiniMax-M2.5");
-            eprintln!("   - minimax:MiniMax-M2.5-lightning (faster)");
+            eprintln!("   - minimax:MiniMax-M2.5-highspeed (faster)");
             eprintln!("   - minimax:MiniMax-M2.1");
-            eprintln!("   - minimax:MiniMax-M2.1-lightning (faster)");
             eprintln!("   - minimax:MiniMax-M2");
             std::process::exit(1);
         }
@@ -216,7 +212,7 @@ async fn main() -> anyhow::Result<()> {
     println!("\n✨ MiniMax example completed successfully!");
     println!("\n💡 Tips:");
     println!("   - MiniMax shows thinking process in [Thinking] blocks");
-    println!("   - Use MiniMax-M2.1-lightning for faster responses");
+    println!("   - Use MiniMax-M2.5-highspeed for faster responses");
     println!("   - Temperature must be in range (0.0, 1.0]");
     println!("   - Supports prompt caching to reduce costs");
     println!("   - 1M token context window for long conversations");

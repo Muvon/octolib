@@ -30,7 +30,7 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
 
     // Fireworks model IDs use the `accounts/fireworks/models/<name>` namespace.
-    let model_spec = "fireworks:accounts/fireworks/models/kimi-k2-instruct-0905";
+    let model_spec = "fireworks:accounts/fireworks/models/kimi-k2p6";
     let (provider, model) = ProviderFactory::get_provider_for_model(model_spec)?;
 
     println!("Provider: {}", provider.name());

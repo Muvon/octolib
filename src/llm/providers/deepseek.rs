@@ -14,7 +14,7 @@
 
 //! DeepSeek provider implementation
 //!
-//! PRICING VERIFIED: September 2026 — peak/off-peak billing (peak windows
+//! PRICING VERIFIED: 2026-09-22 — peak/off-peak billing (peak windows
 //! 01:00-04:00 and 06:00-10:00 UTC Monday-Friday, off-peak rates are half of peak).
 //! Source: <https://api-docs.deepseek.com/quick_start/pricing>
 //!
@@ -24,11 +24,17 @@
 //! - Cache Miss (Input): $0.3 / $0.15
 //! - Output: $1.2 / $0.6
 //!
-//! Retired native routes: deepseek-chat / deepseek-reasoner (2026-07-24),
-//! deepseek-v4-flash / deepseek-v4-flash-vision-exp (2026-09-10) and
-//! deepseek-v4-pro (2026-09-14) — all discontinued, their requests routed to
-//! V4.1 Flash and billed at Flash price. They are no longer priced here; the
-//! same weights served by third-party lanes keep their `reference_models` entries.
+//! deepseek-v4-pro — DeepSeek-V4-Pro (1M context, 384K max output, no vision,
+//! thinking by default), peak/off-peak:
+//! - Cache Hit: $0.044 / $0.022
+//! - Cache Miss (Input): $1.32 / $0.66
+//! - Output: $3.96 / $1.98
+//!
+//! Retired native routes: deepseek-chat / deepseek-reasoner (2026-07-24) and
+//! deepseek-v4-flash / deepseek-v4-flash-vision-exp (2026-09-10) — discontinued,
+//! their requests routed to V4.1 Flash and billed at Flash price. They are no
+//! longer priced here; the same weights served by third-party lanes keep their
+//! `reference_models` entries.
 //!
 //! Thinking is enabled by default (effort "high"); effort is controlled via
 //! the top-level `reasoning_effort` field: "low" | "high" | "max"
@@ -41,7 +47,7 @@ use crate::llm::traits::AiProvider;
 use crate::llm::types::{
     ChatCompletionParams, ProviderExchange, ProviderResponse, SamplingSupport, TokenUsage,
 };
-use crate::llm::utils::{is_model_in_pricing_table, PricingTuple};
+use crate::llm::utils::{contains_ignore_ascii_case, is_model_in_pricing_table, PricingTuple};
 use anyhow::Result;
 
 use serde::{Deserialize, Serialize};
@@ -54,13 +60,17 @@ use std::env;
 /// DeepSeek bills peak / off-peak: peak windows are 01:00-04:00 and 06:00-10:00
 /// UTC Monday-Friday; off-peak is half of peak.
 const PRICING_PEAK: &[PricingTuple] = &[
-    // V4.1 Flash (1M context), peak-hour rates — the only live native route
+    // V4.1 Flash (1M context), peak-hour rates
     ("deepseek-flash", 0.3, 1.2, 0.3, 0.006),
+    // V4 Pro (1M context, text-only), peak-hour rates
+    ("deepseek-v4-pro", 1.32, 3.96, 1.32, 0.044),
 ];
 
 const PRICING_OFF_PEAK: &[PricingTuple] = &[
     // V4.1 Flash (1M context), off-peak rates (half of peak)
     ("deepseek-flash", 0.15, 0.6, 0.15, 0.003),
+    // V4 Pro (1M context, text-only), off-peak rates (half of peak)
+    ("deepseek-v4-pro", 0.66, 1.98, 0.66, 0.022),
 ];
 
 /// Peak billing windows: Monday-Friday, 01:00-04:00 and 06:00-10:00 UTC.
@@ -413,8 +423,9 @@ impl AiProvider for DeepSeekProvider {
         true // DeepSeek supports caching
     }
 
-    fn supports_vision(&self, _model: &str) -> bool {
-        true // V4.1 Flash, the only live route, is natively multimodal
+    fn supports_vision(&self, model: &str) -> bool {
+        // V4.1 Flash is natively multimodal; V4 Pro is text-only
+        !contains_ignore_ascii_case(model, "deepseek-v4-pro")
     }
 
     fn supports_structured_output(&self, _model: &str) -> bool {
@@ -446,12 +457,13 @@ impl AiProvider for DeepSeekProvider {
     }
 
     fn get_max_input_tokens(&self, _model: &str) -> usize {
-        1_000_000 // V4.1 Flash: 1M context
+        1_000_000 // V4.1 Flash and V4 Pro: 1M context
     }
 
     fn supported_sampling_params(&self, _model: &str) -> SamplingSupport {
-        // The only active native route is a V4.1 thinking model. DeepSeek documents
-        // sampling controls as unsupported in thinking mode (accepted but ignored).
+        // Both native routes (V4.1 Flash, V4 Pro) run in thinking mode. DeepSeek
+        // documents sampling controls as unsupported in thinking mode (accepted
+        // but ignored).
         SamplingSupport::NONE
     }
 

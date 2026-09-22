@@ -56,7 +56,7 @@ impl GoogleVertexProvider {
 /// Gemini model pricing (per 1M tokens in USD), shared with the google-studio
 /// provider — both APIs bill Gemini models at the same rates.
 /// Sources: https://ai.google.dev/gemini-api/docs/pricing and
-/// https://cloud.google.com/vertex-ai/generative-ai/pricing (verified Aug 14, 2026)
+/// https://cloud.google.com/vertex-ai/generative-ai/pricing (verified Sep 22, 2026)
 /// Using ≤200K context tier prices. Format: (model, input, output, cache_write, cache_read)
 /// Matching is substring-based and first-match-wins: keep "-lite"/"-pro" variants
 /// before their shorter prefixes.
@@ -72,15 +72,11 @@ pub(super) const PRICING: &[PricingTuple] = &[
     // Gemini 3.x series
     ("gemini-3.1-pro", 2.00, 12.00, 2.00, 0.20),
     ("gemini-3.1-flash-lite", 0.25, 1.50, 0.25, 0.025),
-    ("gemini-3.1-flash", 0.50, 3.00, 0.50, 0.05),
-    ("gemini-3-pro", 2.00, 12.00, 2.00, 0.20),
     ("gemini-3-flash", 0.50, 3.00, 0.50, 0.05),
     // Gemini 2.5 series
     ("gemini-2.5-flash-lite", 0.10, 0.40, 0.10, 0.01),
     ("gemini-2.5-flash", 0.30, 2.50, 0.30, 0.03),
     ("gemini-2.5-pro", 1.25, 10.00, 1.25, 0.125),
-    // Gemini 2.0 series
-    ("gemini-2.0-flash", 0.15, 0.60, 0.10, 0.025),
 ];
 
 /// Gemini Pro models bill a long-context tier above this many input tokens:

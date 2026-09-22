@@ -22,7 +22,7 @@
 //! workspace deployments use a different host — override `ALIBABA_API_URL`
 //! with the full endpoint including `/chat/completions`.
 //!
-//! PRICING UPDATE: August 2026
+//! PRICING UPDATE: September 2026
 //! Source: <https://www.alibabacloud.com/help/en/model-studio/model-pricing>
 //!
 //! Configuration:
@@ -59,40 +59,58 @@ const ALIBABA_API_URL_ENV: &str = "ALIBABA_API_URL";
 const ALIBABA_API_URL: &str =
     "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions";
 
-// Model Studio international pricing (per 1M tokens in USD) - Aug 2026
-// Source: https://www.alibabacloud.com/help/en/model-studio/model-pricing
+// Model Studio international pricing (per 1M tokens in USD) - Sep 2026
+// Source: https://www.alibabacloud.com/help/en/model-studio/model-pricing plus the
+// per-model pages linked from https://www.alibabacloud.com/help/en/model-studio/models
 // Format: (model, input, output, cache_write, cache_read)
-// Context caching is implicit: writes bill at the input rate, hits at cache_read.
-// Tiered models are priced at the 0-256K tier; longer contexts bill up to 4x more.
-// Except for qwen3.8-max's separately published $0.25 rate and DeepSeek V4 Pro,
-// implicit cache hits cost 20% of uncached input.
+// List prices only; limited-time promotions are not tracked.
+// Context caching is implicit: writes bill at the input rate, hits at cache_read
+// (the published implicit cache-hit rate, or the explicit cache-read rate when
+// that is the only one published). Models without context caching bill hits at
+// the input rate.
+// Tiered models are priced at their lowest tier; longer prompts bill up to 4x more.
+// Busy/idle models are priced at the busy rate (idle is half).
 const PRICING: &[PricingTuple] = &[
     ("qwen3.8-max", 2.00, 6.00, 2.00, 0.25),
-    ("qwen3.8-flash", 0.113, 0.382, 0.113, 0.0226),
-    // Dated Qwen 3.7 snapshots retain list price; moving aliases have current promos.
-    ("qwen3.7-max-2026-06-08", 2.50, 7.50, 2.50, 0.50),
-    ("qwen3.7-max-2026-05-20", 2.50, 7.50, 2.50, 0.50),
-    ("qwen3.7-max-2026-05-17", 2.50, 7.50, 2.50, 0.50),
-    ("qwen3.7-max-preview", 2.50, 7.50, 2.50, 0.50),
-    ("qwen3.7-max", 1.25, 3.75, 1.25, 0.25),
-    ("qwen3.7-plus-2026-05-26", 0.40, 1.60, 0.40, 0.08),
-    ("qwen3.7-plus", 0.32, 1.28, 0.32, 0.064),
+    ("qwen3.8-flash", 0.15, 0.47, 0.15, 0.016),
+    ("qwen3.7-max", 2.50, 7.50, 2.50, 0.50),
+    ("qwen3.7-plus", 0.40, 1.60, 0.40, 0.08),
+    ("qwen3.7-flash", 0.03, 0.13, 0.03, 0.006),
+    ("qwen3.6-max-preview", 1.30, 7.80, 1.30, 0.13),
     ("qwen3.6-plus", 0.50, 3.00, 0.50, 0.10),
     ("qwen3.6-flash", 0.25, 1.50, 0.25, 0.05),
+    ("qwen3.5-plus", 0.40, 2.40, 0.40, 0.04),
     ("qwen3.5-flash", 0.10, 0.40, 0.10, 0.02),
     ("qwen3-coder-plus", 1.00, 5.00, 1.00, 0.20),
     ("qwen3-coder-flash", 0.30, 1.50, 0.30, 0.06),
     ("qwen3-vl-plus", 0.20, 1.60, 0.20, 0.04),
+    ("qwen3-vl-flash", 0.05, 0.40, 0.05, 0.01),
+    ("qwen3-max", 1.20, 6.00, 1.20, 0.24),
+    ("qwen-vl-max", 0.80, 3.20, 0.80, 0.16),
     ("qwen-max", 1.60, 6.40, 1.60, 0.32),
     ("qwen-plus", 0.40, 1.20, 0.40, 0.08),
+    ("qwen-flash", 0.05, 0.40, 0.05, 0.01),
     ("qwen-turbo", 0.05, 0.20, 0.05, 0.01),
-    // Third-party models resold by Model Studio at Alibaba's own rates
-    // V4.1 Flash bills busy/idle (idle is half; busy is the baseline here) and its
-    // implicit cache hits are 10% of input, not 20%.
+    // Open-weight Qwen checkpoints; the 3.5/3.6 ones have no context caching.
+    ("qwen3.8-2.4t-a95b", 2.00, 6.00, 2.00, 0.25),
+    ("qwen3.8-27b", 0.50, 3.00, 0.50, 0.10),
+    ("qwen3.6-35b-a3b", 0.375, 2.25, 0.375, 0.375),
+    ("qwen3.6-27b", 0.60, 3.60, 0.60, 0.60),
+    ("qwen3.5-397b-a17b", 0.60, 3.60, 0.60, 0.60),
+    ("qwen3.5-122b-a10b", 0.40, 3.20, 0.40, 0.40),
+    ("qwen3.5-35b-a3b", 0.25, 2.00, 0.25, 0.25),
+    ("qwen3.5-27b", 0.30, 2.40, 0.30, 0.30),
+    // Third-party models resold by Model Studio at Alibaba's own rates.
+    // V4.1 Flash and the dated V4 snapshots bill busy/idle; the moving V4
+    // aliases have flat rates.
     ("deepseek-v4.1-flash", 0.30, 1.20, 0.30, 0.03),
-    ("deepseek-v4-pro", 2.40, 4.80, 2.40, 0.24),
+    ("deepseek-v4-pro-0813", 1.32, 3.96, 1.32, 0.132),
+    ("deepseek-v4-pro", 2.40, 4.80, 2.40, 0.20),
+    ("deepseek-v4-flash-0731", 0.44, 1.32, 0.44, 0.044),
     ("deepseek-v4-flash", 0.20, 0.40, 0.20, 0.04),
+    ("glm-5.3", 1.40, 4.40, 1.40, 0.28),
     ("glm-5.2", 1.40, 4.40, 1.40, 0.28),
+    ("kimi-k3", 3.00, 15.00, 3.00, 0.30),
 ];
 
 const QWEN_PLUS_LONG_CONTEXT_THRESHOLD: u64 = 256_000;
@@ -113,19 +131,11 @@ fn calculate_local_usage_cost(
     if normalize_model_name(model).contains("qwen3.7-plus")
         && total_input_tokens > QWEN_PLUS_LONG_CONTEXT_THRESHOLD
     {
-        if normalize_model_name(model).contains("qwen3.7-plus-2026-05-26") {
-            // Dated snapshot list-price tier for prompts in (256K, 1M].
-            input = 1.20;
-            output = 4.80;
-            cache_write = 1.20;
-            cache_read = 0.24;
-        } else {
-            // Moving alias: current 20%-off tier for prompts in (256K, 1M].
-            input = 0.96;
-            output = 3.84;
-            cache_write = 0.96;
-            cache_read = 0.192;
-        }
+        // List-price tier for prompts in (256K, 1M].
+        input = 1.20;
+        output = 4.80;
+        cache_write = 1.20;
+        cache_read = 0.24;
     }
 
     Some(

@@ -29,13 +29,13 @@ pub fn normalize_model_name(model: &str) -> String {
 /// for matching against reference patterns.
 ///
 /// Handles:
-/// - Ollama format: `llama3.3:70b` → `llama-3.3-70b`
-/// - HuggingFace/Together: `meta-llama/llama-3.3-70b-instruct` → strips org prefix irrelevant to matching
-/// - Version dots without dashes: `qwen2.5` → `qwen-2.5`
+/// - Ollama format: `llama3.3:70b` → `llama-3-3-70-b`
+/// - Version dots: `qwen2.5` → `qwen-2-5`, so dashed and dotted spellings of one
+///   version match the same pattern
 pub(crate) fn sanitize_model_name(name: &str) -> String {
     let mut s = name.to_string();
-    // Replace colons with dashes (Ollama uses `model:size`)
-    s = s.replace(':', "-");
+    // Colons (Ollama `model:size`) and version dots both become dashes
+    s = s.replace([':', '.'], "-");
     // Insert dashes between letters and digits where missing (e.g., `llama3` → `llama-3`)
     let mut result = String::with_capacity(s.len() + 4);
     let chars: Vec<char> = s.chars().collect();
@@ -44,12 +44,12 @@ pub(crate) fn sanitize_model_name(name: &str) -> String {
         if i + 1 < chars.len() {
             let curr = chars[i];
             let next = chars[i + 1];
-            // letter→digit or digit→letter boundary, but NOT around dots/dashes
+            // letter→digit or digit→letter boundary, but NOT around dashes
             if (curr.is_ascii_alphabetic() && next.is_ascii_digit())
                 || (curr.is_ascii_digit() && next.is_ascii_alphabetic())
             {
                 // Only insert dash if there isn't already a separator
-                if curr != '-' && curr != '.' && next != '-' && next != '.' {
+                if curr != '-' && next != '-' {
                     result.push('-');
                 }
             }

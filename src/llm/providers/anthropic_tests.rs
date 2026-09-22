@@ -76,19 +76,63 @@ fn test_supports_model_case_insensitive() {
     let provider = AnthropicProvider::new();
 
     // Test lowercase (already working)
-    assert!(provider.supports_model("claude-3-haiku"));
-    assert!(provider.supports_model("claude-3-5-sonnet"));
+    assert!(provider.supports_model("claude-3-5-haiku"));
+    assert!(provider.supports_model("claude-haiku-4-5"));
     assert!(provider.supports_model("claude-sonnet-4-6"));
     assert!(provider.supports_model("claude-opus-4-7"));
 
     // Test uppercase
-    assert!(provider.supports_model("CLAUDE-3-HAIKU"));
-    assert!(provider.supports_model("CLAUDE-3-5-SONNET"));
+    assert!(provider.supports_model("CLAUDE-3-5-HAIKU"));
+    assert!(provider.supports_model("CLAUDE-HAIKU-4-5"));
     assert!(provider.supports_model("CLAUDE-SONNET-4-6"));
     assert!(provider.supports_model("CLAUDE-OPUS-4-7"));
     // Test mixed case
-    assert!(provider.supports_model("ClaUde-3-Haiku"));
-    assert!(provider.supports_model("CLAUDE-3-7-sonnet"));
+    assert!(provider.supports_model("ClaUde-3-5-Haiku"));
+    assert!(provider.supports_model("CLAUDE-Sonnet-4-5"));
+}
+
+#[test]
+fn test_retired_models_unsupported() {
+    let provider = AnthropicProvider::new();
+
+    // Absent from the live pricing page: the strict table lookup rejects them
+    for model in [
+        "claude-3-7-sonnet-20250219",
+        "claude-3-7-sonnet",
+        "claude-3-5-sonnet",
+        "claude-3.5-sonnet",
+        "claude-3-opus",
+        "claude-3-sonnet",
+        "claude-3-haiku-20240307",
+        "claude-3-haiku",
+    ] {
+        assert!(
+            !provider.supports_model(model),
+            "{model} should be unsupported"
+        );
+        assert!(
+            provider.get_model_pricing(model).is_none(),
+            "{model} should have no pricing"
+        );
+    }
+    // No such model exists; thinking must not be enabled for it
+    assert!(!THINKING_MODELS.contains(&"sonnet-4-7"));
+    assert!(!THINKING_MODELS.contains(&"3-7-sonnet"));
+
+    // Retired on the first-party API but still priced (Bedrock / Google Cloud)
+    assert!(provider.supports_model("claude-opus-4-1"));
+    assert!(provider.supports_model("claude-opus-4"));
+    assert!(provider.supports_model("claude-sonnet-4"));
+    assert!(provider.supports_model("claude-3-5-haiku"));
+    assert!(provider.supports_model("claude-3.5-haiku"));
+
+    // The "-4-0" aliases resolve through the bare Claude 4 rows
+    let pricing = provider.get_model_pricing("claude-opus-4-0").unwrap();
+    assert_eq!(pricing.input_price_per_1m, 15.0);
+    assert_eq!(pricing.output_price_per_1m, 75.0);
+    let pricing = provider.get_model_pricing("claude-sonnet-4-0").unwrap();
+    assert_eq!(pricing.input_price_per_1m, 3.0);
+    assert_eq!(pricing.output_price_per_1m, 15.0);
 }
 
 #[test]
@@ -101,14 +145,14 @@ fn test_supports_vision_case_insensitive() {
     assert!(provider.supports_vision("claude-haiku-4-5"));
 
     // Test lowercase
-    assert!(provider.supports_vision("claude-3-haiku"));
-    assert!(provider.supports_vision("claude-3-5-sonnet"));
+    assert!(provider.supports_vision("claude-3-5-haiku"));
+    assert!(provider.supports_vision("claude-opus-4-7"));
 
     // Test uppercase
-    assert!(provider.supports_vision("CLAUDE-3-HAIKU"));
-    assert!(provider.supports_vision("CLAUDE-3-5-SONNET"));
+    assert!(provider.supports_vision("CLAUDE-3-5-HAIKU"));
+    assert!(provider.supports_vision("CLAUDE-OPUS-4-7"));
     // Test mixed case
-    assert!(provider.supports_vision("ClaUde-3-7"));
+    assert!(provider.supports_vision("ClaUde-3-5-HaiKu"));
 }
 
 #[test]
@@ -142,8 +186,8 @@ fn test_get_model_pricing() {
     assert!(!sp.top_p);
     assert!(sp.top_k);
 
-    // Test older Claude 3 supports all sampling params
-    let sp = provider.supported_sampling_params("claude-3-haiku");
+    // Test Haiku 3.5 supports all sampling params
+    let sp = provider.supported_sampling_params("claude-3-5-haiku");
     assert!(sp.temperature);
     assert!(sp.top_p);
     assert!(sp.top_k);
@@ -155,12 +199,12 @@ fn test_get_model_pricing() {
     assert_eq!(pricing.cache_write_price_per_1m, 3.75); // from pricing table
     assert_eq!(pricing.cache_read_price_per_1m, 0.30); // from pricing table
 
-    // Test Haiku 3 pricing
-    let pricing = provider.get_model_pricing("claude-3-haiku").unwrap();
-    assert_eq!(pricing.input_price_per_1m, 0.25);
-    assert_eq!(pricing.output_price_per_1m, 1.25);
-    assert_eq!(pricing.cache_write_price_per_1m, 0.30); // from pricing table
-    assert_eq!(pricing.cache_read_price_per_1m, 0.03); // from pricing table
+    // Test Haiku 3.5 pricing
+    let pricing = provider.get_model_pricing("claude-3-5-haiku").unwrap();
+    assert_eq!(pricing.input_price_per_1m, 0.80);
+    assert_eq!(pricing.output_price_per_1m, 4.00);
+    assert_eq!(pricing.cache_write_price_per_1m, 1.00); // from pricing table
+    assert_eq!(pricing.cache_read_price_per_1m, 0.08); // from pricing table
 
     // Test case insensitive
     let pricing = provider.get_model_pricing("CLAUDE-SONNET-4").unwrap();

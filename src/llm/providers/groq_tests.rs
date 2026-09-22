@@ -18,9 +18,8 @@ use crate::llm::utils::is_model_in_pricing_table;
 #[test]
 fn test_supports_model() {
     let provider = GroqProvider::new();
-    assert!(provider.supports_model("llama-3.3-70b-versatile"));
     assert!(provider.supports_model("openai/gpt-oss-120b"));
-    assert!(provider.supports_model("moonshotai/kimi-k2-instruct-0905"));
+    assert!(provider.supports_model("qwen/qwen3.8-27b"));
     assert!(provider.supports_model("any-future-model"));
     assert!(!provider.supports_model(""));
 }
@@ -33,13 +32,9 @@ fn test_default_capabilities() {
     // Cached-input models
     assert!(provider.supports_caching("openai/gpt-oss-120b"));
     assert!(provider.supports_caching("openai/gpt-oss-20b"));
-    assert!(provider.supports_caching("moonshotai/kimi-k2-instruct-0905"));
+    assert!(provider.supports_caching("openai/gpt-oss-safeguard-20b"));
     // Non-cached models
-    assert!(!provider.supports_caching("llama-3.3-70b-versatile"));
-    assert!(!provider.supports_caching("llama-3.1-8b-instant"));
-    assert!(!provider.supports_caching("qwen/qwen3-32b"));
-    assert!(provider.supports_vision("qwen/qwen3.6-27b"));
-    assert_eq!(provider.get_max_input_tokens("qwen/qwen3.6-27b"), 131_072);
+    assert!(!provider.supports_caching("qwen/qwen3.8-27b"));
 }
 
 #[test]
@@ -55,35 +50,18 @@ fn test_pricing_gpt_oss() {
     assert_eq!(p.input_price_per_1m, 0.075);
     assert_eq!(p.output_price_per_1m, 0.30);
     assert_eq!(p.cache_read_price_per_1m, 0.0375);
+
+    let p = provider
+        .get_model_pricing("openai/gpt-oss-safeguard-20b")
+        .unwrap();
+    assert_eq!(p.input_price_per_1m, 0.075);
+    assert_eq!(p.output_price_per_1m, 0.30);
+    assert_eq!(p.cache_read_price_per_1m, 0.0375);
 }
 
 #[test]
-fn test_pricing_llama_and_qwen() {
+fn test_pricing_qwen() {
     let provider = GroqProvider::new();
-
-    let p = provider
-        .get_model_pricing("llama-3.3-70b-versatile")
-        .unwrap();
-    assert_eq!(p.input_price_per_1m, 0.59);
-    assert_eq!(p.output_price_per_1m, 0.79);
-
-    let p = provider.get_model_pricing("llama-3.1-8b-instant").unwrap();
-    assert_eq!(p.input_price_per_1m, 0.05);
-    assert_eq!(p.output_price_per_1m, 0.08);
-
-    let p = provider
-        .get_model_pricing("meta-llama/llama-4-scout-17b-16e-instruct")
-        .unwrap();
-    assert_eq!(p.input_price_per_1m, 0.11);
-    assert_eq!(p.output_price_per_1m, 0.34);
-
-    let p = provider.get_model_pricing("qwen/qwen3-32b").unwrap();
-    assert_eq!(p.input_price_per_1m, 0.29);
-    assert_eq!(p.output_price_per_1m, 0.59);
-
-    let p = provider.get_model_pricing("qwen/qwen3.6-27b").unwrap();
-    assert_eq!(p.input_price_per_1m, 0.60);
-    assert_eq!(p.output_price_per_1m, 3.00);
 
     let p = provider.get_model_pricing("qwen/qwen3.8-27b").unwrap();
     assert_eq!(p.input_price_per_1m, 0.80);
@@ -93,14 +71,19 @@ fn test_pricing_llama_and_qwen() {
 }
 
 #[test]
-fn test_pricing_kimi() {
+fn test_retired_models_removed() {
     let provider = GroqProvider::new();
-    let p = provider
-        .get_model_pricing("moonshotai/kimi-k2-instruct-0905")
-        .unwrap();
-    assert_eq!(p.input_price_per_1m, 1.00);
-    assert_eq!(p.output_price_per_1m, 3.00);
-    assert_eq!(p.cache_read_price_per_1m, 0.50);
+    for model in [
+        "qwen/qwen3.6-27b",
+        "qwen/qwen3-32b",
+        "meta-llama/llama-4-scout-17b-16e-instruct",
+        "moonshotai/kimi-k2-instruct-0905",
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant",
+    ] {
+        assert!(!is_model_in_pricing_table(model, PRICING), "{model}");
+        assert!(!provider.supports_caching(model), "{model}");
+    }
 }
 
 #[test]

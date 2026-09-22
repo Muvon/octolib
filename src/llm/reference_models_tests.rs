@@ -97,9 +97,7 @@ fn reference_pricing_matches_first_party_provider_tables() {
         "gemini-3.5-flash",
         "gemini-3.5-flash-lite",
         "gemini-3.1-pro",
-        "gemini-3.1-flash",
         "gemini-3.1-flash-lite",
-        "gemini-3-pro",
         "gemini-3-flash",
     ] {
         assert_same_pricing(
@@ -336,4 +334,160 @@ fn september_2026_additions_resolve() {
         assert_eq!(pricing.input_price_per_1m, input);
         assert_eq!(pricing.output_price_per_1m, output);
     }
+}
+
+/// Dotted and dashed version spellings sanitize identically, so both must land
+/// on the versioned row rather than the family fallback.
+#[test]
+fn dotted_versions_resolve_to_the_dashed_entry() {
+    for (model, pattern) in [
+        ("anthropic/claude-opus-4.8", "claude-opus-4-8"),
+        ("anthropic/claude-haiku-4.5", "claude-haiku-4-5"),
+        ("bytedance-seed/seed-2.0-code", "seed-2-0-code"),
+        ("o3", "o3"),
+        ("openai/o3-2025-04-16", "o3"),
+    ] {
+        let props = get_reference_model_properties(model)
+            .unwrap_or_else(|| panic!("{model} must resolve to a reference entry"));
+        assert_eq!(props.pricing_pattern, Some(pattern), "{model}");
+        assert_eq!(props.capability_pattern, Some(pattern), "{model}");
+    }
+}
+
+/// Bare patterns such as `o3` and `o1` only match on separator boundaries,
+/// so they no longer fire inside `nano-3-30b` or `unslopnemo-12b`.
+#[test]
+fn bare_patterns_do_not_match_inside_unrelated_names() {
+    for (model, bare) in [
+        ("nvidia/nemotron-3-nano-30b-a3b", "o3"),
+        ("upstage/solar-pro-3", "o3"),
+        ("thedrummer/unslopnemo-12b", "o1"),
+        ("sao10k/l3.3-euryale-70b", "o1"),
+    ] {
+        let props = get_reference_model_properties(model);
+        assert_ne!(props.and_then(|p| p.pricing_pattern), Some(bare), "{model}");
+        assert_ne!(
+            props.and_then(|p| p.capability_pattern),
+            Some(bare),
+            "{model}"
+        );
+    }
+}
+
+/// Families confirmed on the live OpenRouter, Mistral and Bedrock catalogs in
+/// late Sep 2026. Bedrock spells several IDs differently from the aggregator
+/// routes (`nemotron-super-3-120b`, `ministral-3-14b-instruct`), so those
+/// resolve through their own rows.
+#[test]
+fn late_september_2026_additions_resolve() {
+    for (model, input, output) in [
+        ("amazon.nova-2-pro-v1:0", 1.25, 10.00),
+        ("amazon.nova-2-omni-v1:0", 0.30, 2.50),
+        ("amazon.nova-2-sonic-v1:0", 0.33, 2.75),
+        ("qwen.qwen3-next-80b-a3b", 0.15, 1.20),
+        ("qwen.qwen3-vl-235b-a22b-instruct", 0.53, 2.66),
+        ("qwen.qwen3-coder-30b-a3b-v1:0", 0.15, 0.60),
+        ("mistral.devstral-2-123b", 0.40, 2.00),
+        ("mistral.magistral-small-2509", 0.50, 1.50),
+        ("mistral.ministral-3-14b-instruct", 0.20, 0.20),
+        ("mistral.ministral-3-8b-instruct", 0.15, 0.15),
+        ("mistral.ministral-3-3b-instruct", 0.10, 0.10),
+        ("mistralai/ministral-14b-2512", 0.20, 0.20),
+        ("ministral-8b-2512", 0.15, 0.15),
+        ("ministral-3b-2512", 0.10, 0.10),
+        ("mistral-small-2603", 0.15, 0.60),
+        ("mistral-small-4", 0.15, 0.60),
+        ("nvidia.nemotron-super-3-120b", 0.15, 0.65),
+        ("openai.gpt-oss-safeguard-120b", 0.15, 0.60),
+        ("openai.gpt-oss-safeguard-20b", 0.07, 0.20),
+        ("writer.palmyra-vision-7b", 0.15, 0.60),
+        ("ai21.jamba-1-5-large-v1:0", 2.00, 8.00),
+        ("nvidia/nemotron-3.5-content-safety", 0.20, 0.20),
+        ("xiaomi/mimo-v2.6-pro-ultraspeed", 4.35, 8.70),
+        ("xiaomi/mimo-v2.6-pro", 0.435, 0.87),
+        ("xiaomi/mimo-v2.6-flash", 0.14, 0.28),
+        ("sakana/fugu-max", 2.00, 6.00),
+        ("sakana/fugu-ultra", 5.00, 30.00),
+        ("sakana/fugu-ultra-v2", 5.00, 30.00),
+        ("tencent/hy3", 0.132, 0.528),
+        ("tencent/hy3-preview", 0.18, 0.60),
+        ("tencent/hy-mt2-1.8b", 0.044, 0.177),
+        ("tencent/hy-mt2-7b", 0.074, 0.295),
+        ("tencent/hy-mt2-30b-a3b", 0.074, 0.295),
+        ("nex-agi/nex-n2.5-pro", 0.075, 0.25),
+        ("nex-agi/nex-n2.5-mini", 0.025, 0.10),
+        ("stepfun/step-3.7-flash", 0.20, 1.15),
+        ("aion-labs/aion-3.0", 3.00, 6.00),
+        ("aion-labs/aion-3.0-mini", 0.70, 1.40),
+        ("unbiased/pareto", 2.50, 7.50),
+        ("prism-ml/ternary-bonsai-2-27b", 0.075, 0.50),
+        ("inference-net/schematron-v2-small", 0.05, 0.23),
+        ("inference-net/schematron-v2-turbo", 0.03, 0.15),
+        ("perceptron/perceptron-mk1", 0.15, 1.50),
+        ("nvidia/nemotron-3-nano-30b-a3b", 0.05, 0.20),
+        ("stepfun/step-3.5-flash", 0.10, 0.30),
+        ("aion-labs/aion-2.0", 0.80, 1.60),
+        ("mistralai/devstral-2512", 0.40, 2.00),
+    ] {
+        let pricing = get_reference_pricing(model)
+            .unwrap_or_else(|| panic!("{model} must resolve to reference pricing"));
+        assert_eq!(pricing.input_price_per_1m, input, "{model}");
+        assert_eq!(pricing.output_price_per_1m, output, "{model}");
+    }
+
+    // Preview Nova 2 models publish a rate but no context window.
+    assert!(get_reference_capabilities("amazon.nova-2-pro-v1:0").is_none());
+    assert!(get_reference_capabilities("amazon.nova-2-omni-v1:0").is_none());
+    assert_eq!(
+        get_reference_capabilities("amazon.nova-2-sonic-v1:0")
+            .unwrap()
+            .max_input_tokens,
+        1_000_000
+    );
+
+    // Nemotron 3 Nano Omni only has a free route, so it carries capabilities
+    // but no rate.
+    let omni = get_reference_model_properties("nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free")
+        .unwrap();
+    assert_eq!(
+        omni.capability_pattern,
+        Some("nemotron-3-nano-omni-30b-a3b")
+    );
+    assert!(omni.capabilities.unwrap().video);
+    assert!(omni.pricing.is_none());
+
+    // Bedrock serves Ministral 3 at 128K while the Mistral API serves 256K.
+    assert_eq!(
+        get_reference_capabilities("mistral.ministral-3-14b-instruct")
+            .unwrap()
+            .max_input_tokens,
+        131_072
+    );
+    assert_eq!(
+        get_reference_capabilities("ministral-14b-2512")
+            .unwrap()
+            .max_input_tokens,
+        262_144
+    );
+    assert_eq!(
+        get_reference_pricing("ministral-14b-2512")
+            .unwrap()
+            .cache_read_price_per_1m,
+        0.02
+    );
+
+    let mimo = get_reference_capabilities("xiaomi/mimo-v2.6-pro").unwrap();
+    assert!(mimo.vision);
+    assert!(mimo.video);
+    assert!(proxy_route_enforces_response_schema("tencent/hy3"));
+    assert!(!proxy_route_enforces_response_schema("tencent/hy3-preview"));
+    let palmyra = get_reference_capabilities("writer.palmyra-vision-7b").unwrap();
+    assert!(palmyra.vision);
+    assert_eq!(palmyra.max_input_tokens, 4_096);
+
+    // Existing rows keep their own routes.
+    let p = get_reference_pricing("nvidia/nemotron-3-super-120b-a12b").unwrap();
+    assert_eq!(p.input_price_per_1m, 0.085);
+    let p = get_reference_pricing("mistralai/mistral-small-3.2-24b-instruct").unwrap();
+    assert_eq!(p.input_price_per_1m, 0.10);
 }

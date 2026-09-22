@@ -58,7 +58,7 @@ async fn main() -> anyhow::Result<()> {
         let message = Message::user("Please describe what you see in this image.")
             .with_images(vec![image_attachment]);
 
-        let (provider, model) = ProviderFactory::get_provider_for_model("moonshot:kimi-k2.5")?;
+        let (provider, model) = ProviderFactory::get_provider_for_model("moonshot:kimi-k3")?;
 
         let params = ChatCompletionParams::new(&[message], &model, 0.7, 1.0, 50, 4000);
 
@@ -98,7 +98,7 @@ async fn main() -> anyhow::Result<()> {
         let message = Message::user("Please describe the content of this video.")
             .with_videos(vec![video_attachment]);
 
-        let (provider, model) = ProviderFactory::get_provider_for_model("moonshot:kimi-k2.5")?;
+        let (provider, model) = ProviderFactory::get_provider_for_model("moonshot:kimi-k3")?;
 
         let params = ChatCompletionParams::new(&[message], &model, 0.7, 1.0, 50, 4000);
 

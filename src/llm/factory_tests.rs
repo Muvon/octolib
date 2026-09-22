@@ -17,11 +17,11 @@ use super::*;
 #[test]
 fn test_parse_model() {
     // Test with provider prefix
-    let result = ProviderFactory::parse_model("openrouter:anthropic/claude-3.5-sonnet");
+    let result = ProviderFactory::parse_model("openrouter:anthropic/claude-sonnet-4-6");
     assert!(result.is_ok());
     let (provider, model) = result.unwrap();
     assert_eq!(provider, "openrouter");
-    assert_eq!(model, "anthropic/claude-3.5-sonnet");
+    assert_eq!(model, "anthropic/claude-sonnet-4-6");
 
     // Test with different provider
     let result = ProviderFactory::parse_model("openai:gpt-4o");
@@ -83,7 +83,7 @@ fn test_supported_providers() {
 #[test]
 fn test_validate_model_format() {
     assert!(ProviderFactory::validate_model_format("openai:gpt-4o").is_ok());
-    assert!(ProviderFactory::validate_model_format("anthropic:claude-3.5-sonnet").is_ok());
+    assert!(ProviderFactory::validate_model_format("anthropic:claude-sonnet-4-6").is_ok());
     assert!(ProviderFactory::validate_model_format("gpt-4o").is_err());
     assert!(ProviderFactory::validate_model_format(":model").is_err());
     assert!(ProviderFactory::validate_model_format("provider:").is_err());
@@ -138,15 +138,15 @@ fn test_provider_capabilities() {
 
     let anthropic = ProviderFactory::create_provider("anthropic").unwrap();
     assert_eq!(anthropic.name(), "anthropic");
-    assert!(anthropic.supports_model("claude-3.5-sonnet"));
-    assert!(anthropic.supports_vision("claude-3.5-sonnet"));
-    assert!(anthropic.supports_caching("claude-3.5-sonnet"));
+    assert!(anthropic.supports_model("claude-sonnet-4-6"));
+    assert!(anthropic.supports_vision("claude-sonnet-4-6"));
+    assert!(anthropic.supports_caching("claude-sonnet-4-6"));
 
     let openrouter = ProviderFactory::create_provider("openrouter").unwrap();
     assert_eq!(openrouter.name(), "openrouter");
     assert!(openrouter.supports_model("any-model"));
-    assert!(openrouter.supports_vision("claude-3.5-sonnet"));
-    assert!(openrouter.supports_caching("claude-3.5-sonnet"));
+    assert!(openrouter.supports_vision("claude-sonnet-4-6"));
+    assert!(openrouter.supports_caching("claude-sonnet-4-6"));
 
     let ollama = ProviderFactory::create_provider("ollama").unwrap();
     assert_eq!(ollama.name(), "ollama");
@@ -173,11 +173,11 @@ fn test_get_provider_for_model() {
     assert_eq!(provider.name(), "openai");
     assert_eq!(model, "gpt-4o");
 
-    let result = ProviderFactory::get_provider_for_model("anthropic:claude-3.5-sonnet");
+    let result = ProviderFactory::get_provider_for_model("anthropic:claude-sonnet-4-6");
     assert!(result.is_ok());
     let (provider, model) = result.unwrap();
     assert_eq!(provider.name(), "anthropic");
-    assert_eq!(model, "claude-3.5-sonnet");
+    assert_eq!(model, "claude-sonnet-4-6");
 
     // Test MiniMax provider
     let result = ProviderFactory::get_provider_for_model("minimax:MiniMax-M2.1");
@@ -189,11 +189,11 @@ fn test_get_provider_for_model() {
     assert!(provider.supports_model(&model));
 
     // Test Moonshot provider
-    let result = ProviderFactory::get_provider_for_model("moonshot:kimi-k2");
+    let result = ProviderFactory::get_provider_for_model("moonshot:kimi-k3");
     assert!(result.is_ok());
     let (provider, model) = result.unwrap();
     assert_eq!(provider.name(), "moonshot");
-    assert_eq!(model, "kimi-k2");
+    assert_eq!(model, "kimi-k3");
 
     // Generic multi-model providers should accept arbitrary non-empty model IDs
     let result = ProviderFactory::get_provider_for_model("google-vertex:any-gemini-variant");
@@ -320,11 +320,11 @@ fn test_get_provider_for_model_case_insensitive() {
     assert_eq!(provider.name(), "openai");
     assert_eq!(model, "gpt-4o");
 
-    let result = ProviderFactory::get_provider_for_model("Anthropic:claude-3.5-sonnet");
+    let result = ProviderFactory::get_provider_for_model("Anthropic:claude-sonnet-4-6");
     assert!(result.is_ok());
     let (provider, model) = result.unwrap();
     assert_eq!(provider.name(), "anthropic");
-    assert_eq!(model, "claude-3.5-sonnet");
+    assert_eq!(model, "claude-sonnet-4-6");
 
     let result = ProviderFactory::get_provider_for_model("openai:GPT-4O");
     assert!(result.is_ok());

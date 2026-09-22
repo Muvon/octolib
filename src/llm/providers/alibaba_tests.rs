@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::*;
+use crate::llm::utils::is_model_in_pricing_table;
 
 #[test]
 fn test_supports_model() {
@@ -52,27 +53,49 @@ fn test_pricing_qwen() {
     assert_eq!(p.output_price_per_1m, 6.00);
     assert_eq!(p.cache_read_price_per_1m, 0.25);
 
-    // Moving alias currently has a 50% promotion.
+    // Moving alias and dated snapshots share the list price.
     let p = provider.get_model_pricing("qwen3.7-max").unwrap();
-    assert_eq!(p.input_price_per_1m, 1.25);
-    assert_eq!(p.output_price_per_1m, 3.75);
+    assert_eq!(p.input_price_per_1m, 2.50);
+    assert_eq!(p.output_price_per_1m, 7.50);
+    assert_eq!(p.cache_read_price_per_1m, 0.50);
 
-    // Dated snapshots retain list price.
     let p = provider
         .get_model_pricing("qwen3.7-max-2026-06-08")
         .unwrap();
     assert_eq!(p.input_price_per_1m, 2.50);
     assert_eq!(p.output_price_per_1m, 7.50);
 
+    let p = provider.get_model_pricing("qwen3.7-plus").unwrap();
+    assert_eq!(p.input_price_per_1m, 0.40);
+    assert_eq!(p.output_price_per_1m, 1.60);
+    assert_eq!(p.cache_read_price_per_1m, 0.08);
+
     let p = provider.get_model_pricing("qwen3.6-flash").unwrap();
     assert_eq!(p.input_price_per_1m, 0.25);
     assert_eq!(p.cache_read_price_per_1m, 0.05);
 
-    // Dated aliases must resolve to their family
+    // Dated DeepSeek V4 snapshots carry their own busy-hour rate card; the
+    // moving aliases keep the flat rate.
     let p = provider
         .get_model_pricing("deepseek-v4-flash-0731")
         .unwrap();
+    assert_eq!(p.input_price_per_1m, 0.44);
+    assert_eq!(p.output_price_per_1m, 1.32);
+    assert_eq!(p.cache_read_price_per_1m, 0.044);
+
+    let p = provider.get_model_pricing("deepseek-v4-flash").unwrap();
     assert_eq!(p.input_price_per_1m, 0.20);
+    assert_eq!(p.cache_read_price_per_1m, 0.04);
+
+    let p = provider.get_model_pricing("deepseek-v4-pro-0813").unwrap();
+    assert_eq!(p.input_price_per_1m, 1.32);
+    assert_eq!(p.output_price_per_1m, 3.96);
+    assert_eq!(p.cache_read_price_per_1m, 0.132);
+
+    let p = provider.get_model_pricing("deepseek-v4-pro").unwrap();
+    assert_eq!(p.input_price_per_1m, 2.40);
+    assert_eq!(p.output_price_per_1m, 4.80);
+    assert_eq!(p.cache_read_price_per_1m, 0.20);
 
     // V4.1 Flash: busy rate, and the 10% cache-hit exception
     let p = provider.get_model_pricing("deepseek-v4.1-flash").unwrap();
@@ -87,9 +110,102 @@ fn test_pricing_qwen() {
 }
 
 #[test]
+fn test_pricing_added_models() {
+    let provider = AlibabaProvider::new();
+
+    // Tiered models resolve to their lowest tier.
+    let p = provider.get_model_pricing("qwen3.7-flash").unwrap();
+    assert_eq!(p.input_price_per_1m, 0.03);
+    assert_eq!(p.output_price_per_1m, 0.13);
+    assert_eq!(p.cache_read_price_per_1m, 0.006);
+
+    let p = provider.get_model_pricing("qwen3.6-max-preview").unwrap();
+    assert_eq!(p.input_price_per_1m, 1.30);
+    assert_eq!(p.output_price_per_1m, 7.80);
+    assert_eq!(p.cache_read_price_per_1m, 0.13);
+
+    let p = provider.get_model_pricing("qwen3.5-plus").unwrap();
+    assert_eq!(p.input_price_per_1m, 0.40);
+    assert_eq!(p.output_price_per_1m, 2.40);
+    assert_eq!(p.cache_read_price_per_1m, 0.04);
+
+    let p = provider.get_model_pricing("qwen3-vl-flash").unwrap();
+    assert_eq!(p.input_price_per_1m, 0.05);
+    assert_eq!(p.output_price_per_1m, 0.40);
+    assert_eq!(p.cache_read_price_per_1m, 0.01);
+
+    let p = provider.get_model_pricing("qwen-flash").unwrap();
+    assert_eq!(p.input_price_per_1m, 0.05);
+    assert_eq!(p.output_price_per_1m, 0.40);
+    assert_eq!(p.cache_read_price_per_1m, 0.01);
+
+    // Families that share a suffix with the legacy qwen-max/qwen-plus aliases
+    // must resolve to their own row.
+    let p = provider.get_model_pricing("qwen3-max-2026-01-23").unwrap();
+    assert_eq!(p.input_price_per_1m, 1.20);
+    assert_eq!(p.output_price_per_1m, 6.00);
+    assert_eq!(p.cache_read_price_per_1m, 0.24);
+
+    let p = provider.get_model_pricing("qwen-vl-max").unwrap();
+    assert_eq!(p.input_price_per_1m, 0.80);
+    assert_eq!(p.output_price_per_1m, 3.20);
+    assert_eq!(p.cache_read_price_per_1m, 0.16);
+
+    // Open-weight checkpoints
+    let p = provider.get_model_pricing("qwen3.8-2.4t-a95b").unwrap();
+    assert_eq!(p.input_price_per_1m, 2.00);
+    assert_eq!(p.output_price_per_1m, 6.00);
+    assert_eq!(p.cache_read_price_per_1m, 0.25);
+
+    let p = provider.get_model_pricing("qwen3.8-27b").unwrap();
+    assert_eq!(p.input_price_per_1m, 0.50);
+    assert_eq!(p.output_price_per_1m, 3.00);
+    assert_eq!(p.cache_read_price_per_1m, 0.10);
+
+    // No context caching: hits bill at the input rate.
+    let p = provider.get_model_pricing("qwen3.6-27b").unwrap();
+    assert_eq!(p.input_price_per_1m, 0.60);
+    assert_eq!(p.output_price_per_1m, 3.60);
+    assert_eq!(p.cache_read_price_per_1m, 0.60);
+
+    let p = provider.get_model_pricing("qwen3.6-35b-a3b").unwrap();
+    assert_eq!(p.input_price_per_1m, 0.375);
+    assert_eq!(p.output_price_per_1m, 2.25);
+    assert_eq!(p.cache_read_price_per_1m, 0.375);
+
+    let p = provider.get_model_pricing("qwen3.5-397b-a17b").unwrap();
+    assert_eq!(p.input_price_per_1m, 0.60);
+    assert_eq!(p.output_price_per_1m, 3.60);
+
+    let p = provider.get_model_pricing("qwen3.5-122b-a10b").unwrap();
+    assert_eq!(p.input_price_per_1m, 0.40);
+    assert_eq!(p.output_price_per_1m, 3.20);
+
+    let p = provider.get_model_pricing("qwen3.5-35b-a3b").unwrap();
+    assert_eq!(p.input_price_per_1m, 0.25);
+    assert_eq!(p.output_price_per_1m, 2.00);
+
+    let p = provider.get_model_pricing("qwen3.5-27b").unwrap();
+    assert_eq!(p.input_price_per_1m, 0.30);
+    assert_eq!(p.output_price_per_1m, 2.40);
+
+    // Third-party
+    let p = provider.get_model_pricing("glm-5.3").unwrap();
+    assert_eq!(p.input_price_per_1m, 1.40);
+    assert_eq!(p.output_price_per_1m, 4.40);
+    assert_eq!(p.cache_read_price_per_1m, 0.28);
+
+    let p = provider.get_model_pricing("kimi-k3").unwrap();
+    assert_eq!(p.input_price_per_1m, 3.00);
+    assert_eq!(p.output_price_per_1m, 15.00);
+    assert_eq!(p.cache_read_price_per_1m, 0.30);
+}
+
+#[test]
 fn test_pricing_falls_back_to_reference() {
     let provider = AlibabaProvider::new();
-    let p = provider.get_model_pricing("qwen3-max-2026-01-25").unwrap();
+    assert!(!is_model_in_pricing_table("kimi-k2.5", PRICING));
+    let p = provider.get_model_pricing("kimi-k2.5").unwrap();
     assert!(p.input_price_per_1m > 0.0);
 }
 
@@ -97,10 +213,10 @@ fn test_pricing_falls_back_to_reference() {
 fn test_qwen3_8_flash_pricing() {
     let provider = AlibabaProvider::new();
     let p = provider.get_model_pricing("qwen3.8-flash").unwrap();
-    assert_eq!(p.input_price_per_1m, 0.113);
-    assert_eq!(p.output_price_per_1m, 0.382);
-    assert_eq!(p.cache_write_price_per_1m, 0.113);
-    assert_eq!(p.cache_read_price_per_1m, 0.0226);
+    assert_eq!(p.input_price_per_1m, 0.15);
+    assert_eq!(p.output_price_per_1m, 0.47);
+    assert_eq!(p.cache_write_price_per_1m, 0.15);
+    assert_eq!(p.cache_read_price_per_1m, 0.016);
 }
 
 #[test]
@@ -118,17 +234,17 @@ fn test_cost_calculation() {
     assert!(cost_cached < cost);
 
     let long = calculate_local_usage_cost("qwen3.7-plus", 256_001, 0, 0, 100_000).unwrap();
-    let expected_long = 256_001.0 / 1_000_000.0 * 0.96 + 0.1 * 3.84;
+    let expected_long = 256_001.0 / 1_000_000.0 * 1.20 + 0.1 * 4.80;
     assert!((long - expected_long).abs() < 0.001);
 
     let boundary = calculate_local_usage_cost("qwen3.7-plus", 256_000, 0, 0, 100_000).unwrap();
-    let expected_boundary = 0.256 * 0.32 + 0.1 * 1.28;
+    let expected_boundary = 0.256 * 0.40 + 0.1 * 1.60;
     assert!((boundary - expected_boundary).abs() < 0.001);
 
+    // Dated snapshots follow the same list-price tiers as the moving alias.
     let snapshot_long =
         calculate_local_usage_cost("qwen3.7-plus-2026-05-26", 256_001, 0, 0, 100_000).unwrap();
-    let expected_snapshot = 256_001.0 / 1_000_000.0 * 1.20 + 0.1 * 4.80;
-    assert!((snapshot_long - expected_snapshot).abs() < 0.001);
+    assert!((snapshot_long - expected_long).abs() < 0.001);
 }
 
 #[test]
@@ -138,6 +254,7 @@ fn test_native_schema_capability_is_model_specific() {
         "qwen3.8-flash-2026-08-26"
     ));
     assert!(natively_enforces_response_schema("qwen3.7-plus"));
+    assert!(natively_enforces_response_schema("qwen3.7-flash"));
     assert!(!natively_enforces_response_schema("deepseek-v4-flash-0731"));
     assert!(!natively_enforces_response_schema("qwen3.6-flash"));
 }

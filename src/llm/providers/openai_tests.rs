@@ -81,7 +81,13 @@ fn test_supports_model_gpt5() {
     assert!(provider.supports_model("gpt-5.2-codex"));
     assert!(provider.supports_model("gpt-5.3-codex"));
     assert!(provider.supports_model("gpt-5.2-chat-latest"));
-    assert!(provider.supports_model("codex-mini-latest"));
+    assert!(provider.supports_model("gpt-5-search-api"));
+
+    // Specialized and alias models
+    assert!(provider.supports_model("chat-latest"));
+    assert!(provider.supports_model("gpt-rosalind-research"));
+    assert!(provider.supports_model("gpt-daybreak-blue-latest"));
+    assert!(provider.supports_model("gpt-daybreak-red-latest"));
 
     // Other models should still be supported
     assert!(provider.supports_model("gpt-4o"));
@@ -89,10 +95,16 @@ fn test_supports_model_gpt5() {
     assert!(provider.supports_model("gpt-4"));
     assert!(provider.supports_model("gpt-3.5-turbo"));
     assert!(provider.supports_model("o1"));
+    assert!(provider.supports_model("o4-mini"));
 
     // Unsupported models
     assert!(!provider.supports_model("claude-3"));
     assert!(!provider.supports_model("llama-2"));
+    // Open-weight models are not served by the OpenAI API
+    assert!(!provider.supports_model("gpt-oss-120b"));
+    assert!(!provider.supports_model("gpt-oss-20b"));
+    // Shut down 2026-02-12
+    assert!(!provider.supports_model("codex-mini-latest"));
 }
 
 #[test]
@@ -125,6 +137,12 @@ fn test_get_max_input_tokens_gpt5() {
     assert_eq!(provider.get_max_input_tokens("gpt-5.5-pro"), 1_050_000);
     assert_eq!(provider.get_max_input_tokens("gpt-5.6-cyber"), 400_000);
 
+    // GPT-5.4 and GPT-5.4 Pro have a 1.05M context window; mini/nano stay at 400K.
+    assert_eq!(provider.get_max_input_tokens("gpt-5.4"), 1_050_000);
+    assert_eq!(provider.get_max_input_tokens("gpt-5.4-pro"), 1_050_000);
+    assert_eq!(provider.get_max_input_tokens("gpt-5.4-mini"), 400_000);
+    assert_eq!(provider.get_max_input_tokens("gpt-5.4-nano"), 400_000);
+
     // GPT-5 models should have 400K context window
     assert_eq!(provider.get_max_input_tokens("gpt-5"), 400_000);
     assert_eq!(provider.get_max_input_tokens("gpt-5-2025-08-07"), 400_000);
@@ -132,7 +150,46 @@ fn test_get_max_input_tokens_gpt5() {
     assert_eq!(provider.get_max_input_tokens("gpt-5-nano"), 400_000);
     assert_eq!(provider.get_max_input_tokens("gpt-5.2-codex"), 400_000);
     assert_eq!(provider.get_max_input_tokens("gpt-5.3-codex"), 400_000);
-    assert_eq!(provider.get_max_input_tokens("codex-mini-latest"), 200_000);
+
+    // GPT-5.x chat-latest snapshots are 128K
+    assert_eq!(
+        provider.get_max_input_tokens("gpt-5.3-chat-latest"),
+        128_000
+    );
+    assert_eq!(
+        provider.get_max_input_tokens("gpt-5.2-chat-latest"),
+        128_000
+    );
+    assert_eq!(
+        provider.get_max_input_tokens("gpt-5.1-chat-latest"),
+        128_000
+    );
+    assert_eq!(provider.get_max_input_tokens("gpt-5-chat-latest"), 128_000);
+
+    // Specialized and alias models
+    assert_eq!(provider.get_max_input_tokens("chat-latest"), 400_000);
+    assert_eq!(
+        provider.get_max_input_tokens("gpt-daybreak-blue-latest"),
+        1_050_000
+    );
+    assert_eq!(
+        provider.get_max_input_tokens("gpt-daybreak-red-latest"),
+        400_000
+    );
+
+    // GPT-4.1 family is 1,047,576
+    assert_eq!(provider.get_max_input_tokens("gpt-4.1"), 1_047_576);
+    assert_eq!(provider.get_max_input_tokens("gpt-4.1-mini"), 1_047_576);
+    assert_eq!(provider.get_max_input_tokens("gpt-4.1-nano"), 1_047_576);
+    assert_eq!(provider.get_max_input_tokens("gpt-4-turbo"), 128_000);
+
+    // O-series models are 200K
+    assert_eq!(provider.get_max_input_tokens("o1"), 200_000);
+    assert_eq!(provider.get_max_input_tokens("o1-pro"), 200_000);
+    assert_eq!(provider.get_max_input_tokens("o3"), 200_000);
+    assert_eq!(provider.get_max_input_tokens("o3-mini"), 200_000);
+    assert_eq!(provider.get_max_input_tokens("o3-pro"), 200_000);
+    assert_eq!(provider.get_max_input_tokens("o4-mini"), 200_000);
 
     // Other models should maintain their existing limits
     assert_eq!(provider.get_max_input_tokens("gpt-4o"), 128_000);
@@ -154,15 +211,18 @@ fn test_supports_vision() {
     assert!(provider.supports_vision("gpt-5-mini"));
     assert!(provider.supports_vision("gpt-5.2-codex"));
     assert!(provider.supports_vision("gpt-5.3-codex"));
-    assert!(provider.supports_vision("codex-mini-latest"));
     assert!(provider.supports_vision("gpt-realtime"));
+    assert!(provider.supports_vision("chat-latest"));
+    assert!(provider.supports_vision("gpt-daybreak-blue-latest"));
+    assert!(provider.supports_vision("gpt-daybreak-red-latest"));
 
     // Models that should NOT support vision
     assert!(!provider.supports_vision("gpt-3.5-turbo"));
     assert!(!provider.supports_vision("gpt-4"));
     assert!(!provider.supports_vision("o1-preview"));
-    assert!(!provider.supports_vision("o1-mini"));
     assert!(!provider.supports_vision("text-davinci-003"));
+    // Rosalind has no model page; image input is unconfirmed.
+    assert!(!provider.supports_vision("gpt-rosalind-research"));
 }
 
 #[test]
@@ -747,6 +807,113 @@ fn test_gpt_5_6_pricing_and_alias() {
             pricing.cache_read_price_per_1m
         );
     }
+}
+
+#[test]
+fn test_specialized_model_pricing() {
+    let provider = OpenAiProvider::new();
+    let cases = [
+        ("chat-latest", 5.00, 30.00, 5.00, 0.50),
+        ("gpt-rosalind-research", 5.00, 25.00, 5.00, 0.50),
+        ("gpt-5-search-api", 1.25, 10.00, 1.25, 0.125),
+        // Daybreak aliases follow gpt-5.6-sol and gpt-5.6-cyber.
+        ("gpt-daybreak-blue-latest", 4.00, 20.00, 5.00, 0.40),
+        ("gpt-daybreak-red-latest", 12.50, 75.00, 15.625, 1.25),
+        // `chat-latest` must not shadow the versioned chat snapshots.
+        ("gpt-5.3-chat-latest", 1.75, 14.00, 1.75, 0.175),
+        ("gpt-5-chat-latest", 1.25, 10.00, 1.25, 0.125),
+    ];
+
+    for (model, input, output, cache_write, cache_read) in cases {
+        let pricing = provider.get_model_pricing(model).unwrap();
+        assert_eq!(pricing.input_price_per_1m, input, "{model}");
+        assert_eq!(pricing.output_price_per_1m, output, "{model}");
+        assert_eq!(pricing.cache_write_price_per_1m, cache_write, "{model}");
+        assert_eq!(pricing.cache_read_price_per_1m, cache_read, "{model}");
+    }
+}
+
+#[test]
+fn test_o_series_pricing_specific_first() {
+    let provider = OpenAiProvider::new();
+    // Variant rows must win over their base name in the substring lookup.
+    let cases = [
+        ("o1-pro", 150.00, 600.00, 150.00),
+        ("o1", 15.00, 60.00, 7.50),
+        ("o3-pro", 20.00, 80.00, 20.00),
+        ("o3-mini", 1.10, 4.40, 0.55),
+        ("o3", 2.00, 8.00, 0.50),
+        ("o4-mini", 1.10, 4.40, 0.275),
+    ];
+
+    for (model, input, output, cache_read) in cases {
+        let pricing = provider.get_model_pricing(model).unwrap();
+        assert_eq!(pricing.input_price_per_1m, input, "{model}");
+        assert_eq!(pricing.output_price_per_1m, output, "{model}");
+        assert_eq!(pricing.cache_read_price_per_1m, cache_read, "{model}");
+    }
+}
+
+#[test]
+fn test_alias_capabilities_follow_underlying_model() {
+    let provider = OpenAiProvider::new();
+
+    // All four have a cached-input price on the pricing page.
+    for model in [
+        "chat-latest",
+        "gpt-daybreak-blue-latest",
+        "gpt-daybreak-red-latest",
+        "gpt-rosalind-research",
+    ] {
+        assert!(provider.supports_caching(model), "{model}");
+    }
+
+    // Daybreak aliases resolve to gpt-5.6 snapshots: explicit cache breakpoints,
+    // `max` effort, and no sampling params.
+    assert!(is_gpt_5_6_or_later("gpt-daybreak-blue-latest"));
+    assert!(is_gpt_5_6_or_later("gpt-daybreak-red-latest"));
+    assert!(!is_gpt_5_6_or_later("chat-latest"));
+    assert!(
+        !provider
+            .supported_sampling_params("gpt-daybreak-blue-latest")
+            .temperature
+    );
+    assert!(
+        provider
+            .supported_sampling_params("chat-latest")
+            .temperature
+    );
+
+    // Long-context tier: sol and daybreak-blue are tiered; cyber and daybreak-red are not.
+    let sol = calculate_cost("gpt-5.6-sol", 300_000, 10_000).unwrap();
+    let blue = calculate_cost("gpt-daybreak-blue-latest", 300_000, 10_000).unwrap();
+    assert!((sol - 2.7).abs() < 0.0000001);
+    assert!((blue - 2.7).abs() < 0.0000001);
+    let cyber = calculate_cost("gpt-5.6-cyber", 300_000, 10_000).unwrap();
+    let red = calculate_cost("gpt-daybreak-red-latest", 300_000, 10_000).unwrap();
+    assert!((cyber - 4.5).abs() < 0.0000001);
+    assert!((red - 4.5).abs() < 0.0000001);
+}
+
+#[test]
+fn test_gpt_5_4_and_pro_long_context_pricing() {
+    // Below 272K input: standard rates.
+    let standard = calculate_cost("gpt-5.4", 200_000, 10_000).unwrap();
+    assert!((standard - 0.65).abs() < 0.0000001);
+
+    // Above 272K input: 2x input and 1.5x output for gpt-5.4, gpt-5.4-pro, gpt-5.5-pro.
+    let long = calculate_cost("gpt-5.4", 300_000, 10_000).unwrap();
+    assert!((long - 1.725).abs() < 0.0000001);
+    let long_pro = calculate_cost("gpt-5.4-pro", 300_000, 10_000).unwrap();
+    assert!((long_pro - 20.7).abs() < 0.0000001);
+    let long_55_pro = calculate_cost("gpt-5.5-pro", 300_000, 10_000).unwrap();
+    assert!((long_55_pro - 20.7).abs() < 0.0000001);
+
+    // gpt-5.4-mini and gpt-5.4-nano have no long-context tier.
+    let mini = calculate_cost("gpt-5.4-mini", 300_000, 10_000).unwrap();
+    assert!((mini - 0.27).abs() < 0.0000001);
+    let nano = calculate_cost("gpt-5.4-nano", 300_000, 10_000).unwrap();
+    assert!((nano - 0.0725).abs() < 0.0000001);
 }
 
 #[test]

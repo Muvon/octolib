@@ -69,7 +69,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Create provider - it will automatically use OAuth token
-    let (provider, model) = ProviderFactory::get_provider_for_model("anthropic:claude-3-5-sonnet")?;
+    let (provider, model) = ProviderFactory::get_provider_for_model("anthropic:claude-sonnet-4-6")?;
 
     println!("📝 Sending test message to Claude...\n");
 

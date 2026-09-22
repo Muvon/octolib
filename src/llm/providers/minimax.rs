@@ -31,36 +31,32 @@ use serde::{Deserialize, Serialize};
 use std::env;
 
 /// MiniMax pricing constants (per 1M tokens in USD)
-/// Source: https://www.minimax.io/platform/price (M3 verified Jun 1, 2026)
+/// Source: https://platform.minimax.io/docs/guides/pricing-paygo (verified Sep 22, 2026)
 /// Format: (model, input, output, cache_write, cache_read)
 const PRICING: &[PricingTuple] = &[
     // MiniMax M3 (latest generation, natively multimodal — image + video input)
-    // Standard rate; a permanent 50% off applies to ≤512K input tokens (0.30/1.20).
+    // ≤512k input tokens: 0.30 / 1.20 / cache read 0.06; >512k input tokens:
+    // 0.60 / 2.40 / cache read 0.12 (tier applied in `calculate_cost_with_cache`).
     // Cache writes are free (no cache-write column in official pricing).
-    ("MiniMax-M3-highspeed", 0.30, 1.20, 0.0, 0.06),
     ("MiniMax-M3", 0.30, 1.20, 0.0, 0.06),
     // MiniMax M2.7
     ("MiniMax-M2.7-highspeed", 0.60, 2.40, 0.375, 0.06),
     ("MiniMax-M2.7", 0.30, 1.20, 0.375, 0.06),
-    // MiniMax M2.5
+    // Legacy models (still listed and priced on the official page)
     ("MiniMax-M2.5-highspeed", 0.60, 2.40, 0.375, 0.03),
-    ("MiniMax-M2.5-lightning", 0.60, 2.40, 0.375, 0.03), // backward-compatible alias
     ("MiniMax-M2.5", 0.30, 1.20, 0.375, 0.03),
-    // M2-her (no caching)
-    ("M2-her", 0.30, 1.20, 0.0, 0.0),
-    // Legacy entries kept for compatibility
-    ("MiniMax-M2.1-lightning", 0.60, 2.40, 0.375, 0.03),
+    // highspeed must precede the base M2.1 entry (substring match, first wins)
+    ("MiniMax-M2.1-highspeed", 0.60, 2.40, 0.375, 0.03),
     ("MiniMax-M2.1", 0.30, 1.20, 0.375, 0.03),
     ("MiniMax-M2", 0.30, 1.20, 0.375, 0.03),
 ];
 
-/// MiniMax M3: the permanent 50% discount applies only to ≤512K input tokens.
-/// Above 512K, the standard (2x) rate applies to input, output, and cache read.
+/// MiniMax M3: the permanent 50% discount applies only to ≤512k input tokens.
+/// Above 512k, the standard (2x) rate applies to input, output, and cache read.
 const M3_DISCOUNT_MAX_INPUT: u64 = 512_000;
 
 fn is_m3_model(model: &str) -> bool {
-    let m = normalize_model_name(model);
-    m == "minimax-m3" || m == "minimax-m3-highspeed"
+    normalize_model_name(model) == "minimax-m3"
 }
 
 /// Token usage breakdown for cache-aware pricing
@@ -80,7 +76,7 @@ fn calculate_cost_with_cache(model: &str, usage: CacheTokenUsage) -> Option<f64>
     let (mut input_price, mut output_price, cache_write_price, mut cache_read_price) =
         get_model_pricing(model, PRICING)?;
 
-    // MiniMax M3: the 50% discount applies only to ≤512K input tokens.
+    // MiniMax M3: the 50% discount applies only to ≤512k input tokens.
     // Above that, the standard (2x) rate applies to input, output, and cache read.
     if is_m3_model(model) {
         let total_input = usage

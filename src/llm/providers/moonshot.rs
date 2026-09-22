@@ -14,32 +14,28 @@
 
 //! Moonshot AI (Kimi) provider implementation
 //!
-//! PRICING UPDATE: July 2026 (verified July 17, 2026)
-//! Source: <https://platform.kimi.ai/docs/pricing/chat-k3.md>,
-//!         <https://platform.kimi.ai/docs/pricing/chat-k27-code.md>,
-//!         <https://platform.kimi.ai/docs/pricing/chat-k26.md>,
-//!         <https://platform.kimi.ai/docs/pricing/chat-k25.md>,
-//!         <https://platform.kimi.ai/docs/pricing/chat-k2.md>,
-//!         <https://platform.kimi.ai/docs/pricing/chat-v1.md>
+//! PRICING VERIFIED: September 22, 2026
+//! Source: <https://platform.kimi.ai/docs/pricing/chat>,
+//!         <https://platform.kimi.ai/docs/models>
 //!
 //! Per 1M tokens (USD): (cache_hit, cache_miss_input, output)
 //! - kimi-k3:                    $0.30 / $3.00 / $15.00
 //! - kimi-k2.7-code:             $0.19 / $0.95 / $4.00
 //! - kimi-k2.7-code-highspeed:   $0.38 / $1.90 / $8.00
 //! - kimi-k2.6:                  $0.16 / $0.95 / $4.00
-//! - kimi-k2.5:                  $0.10 / $0.60 / $3.00
-//! - kimi-k2-0905-preview:       $0.15 / $0.60 / $2.50
-//! - kimi-k2-0711-preview:       $0.15 / $0.60 / $2.50
-//! - kimi-k2-turbo-preview:      $0.15 / $1.15 / $8.00
-//! - kimi-k2-thinking:           $0.15 / $0.60 / $2.50
-//! - kimi-k2-thinking-turbo:     $0.15 / $1.15 / $8.00
-//! - moonshot-v1-{8k,32k,128k}:  no caching; (input, output) only
+//!
+//! Discontinued per the models page (no longer served): kimi-k2.5 and
+//! moonshot-v1-{8k,32k,128k} (2026-08-31); kimi-k2-0905-preview,
+//! kimi-k2-0711-preview, kimi-k2-turbo-preview, kimi-k2-thinking and
+//! kimi-k2-thinking-turbo (2026-05-25).
 //!
 //! Caching: Kimi uses AUTOMATIC context caching (no `cache_control` markers).
 //! Response usage carries `cached_tokens` (top-level) and/or
 //! `prompt_tokens_details.cached_tokens`. `prompt_tokens` is the TOTAL prompt
 //! including cached portion, so clean input = prompt_tokens - cached_tokens.
-//! Cache writes are NOT separately billed by Moonshot — only hits are discounted.
+//! K2.x bill no separate cache write. K3 lists cache write at $3.00 (5-minute
+//! TTL, the default) and $6.00 (1-hour TTL); the API exposes no TTL knob and
+//! no cache-write token count, so writes are billed at the input rate here.
 //!
 //! Kimi K3 specifics (<https://platform.kimi.ai/docs/api/chat>):
 //! - K3 always reasons; effort is set via top-level `reasoning_effort`
@@ -61,13 +57,13 @@ use serde::{Deserialize, Serialize};
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-// Model pricing (per 1M tokens in USD) - Updated June 2026 (verified against official docs)
+// Model pricing (per 1M tokens in USD) - verified Sep 22, 2026 against official docs
 /// Format: (model, input, output, cache_write, cache_read)
 ///
 /// Notes:
 /// - `input` = cache miss price; `cache_read` = cache hit price.
-/// - Moonshot does NOT bill cache writes separately, so `cache_write` = `input`.
-/// - V1 legacy models have no cache support → `cache_write` = `cache_read` = `input`.
+/// - `cache_write` = `input`: K2.x bill no separate cache write and K3's
+///   default 5-minute tier equals its input price (1-hour tier not modeled).
 /// - Order matters: more specific patterns first (substring matching).
 const PRICING: &[PricingTuple] = &[
     // Kimi K3 (1M-context multimodal reasoning flagship)
@@ -79,20 +75,6 @@ const PRICING: &[PricingTuple] = &[
     ("kimi-k2.7", 0.95, 4.00, 0.95, 0.19),
     // Kimi K2.6 (multimodal)
     ("kimi-k2.6", 0.95, 4.00, 0.95, 0.16),
-    // Kimi K2.5 (multimodal)
-    ("kimi-k2.5", 0.60, 3.00, 0.60, 0.10),
-    // Kimi K2 turbo variants (high-speed)
-    ("kimi-k2-thinking-turbo", 1.15, 8.00, 1.15, 0.15),
-    ("kimi-k2-turbo", 1.15, 8.00, 1.15, 0.15),
-    // Kimi K2 standard variants
-    ("kimi-k2-thinking", 0.60, 2.50, 0.60, 0.15),
-    ("kimi-k2-0905", 0.60, 2.50, 0.60, 0.15),
-    ("kimi-k2-0711", 0.60, 2.50, 0.60, 0.15),
-    ("kimi-k2", 0.60, 2.50, 0.60, 0.15),
-    // Moonshot V1 series (legacy, no cache support)
-    ("moonshot-v1-128k", 2.00, 5.00, 2.00, 2.00),
-    ("moonshot-v1-32k", 1.00, 3.00, 1.00, 1.00),
-    ("moonshot-v1-8k", 0.20, 2.00, 0.20, 0.20),
 ];
 
 /// Get pricing tuple for a specific model (case-insensitive)
@@ -174,7 +156,7 @@ struct MoonshotMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<String>,
     /// Kimi reasoning state. K2.7 requires it to be preserved across all
-    /// assistant turns; K2.5/K2.6 also require it on tool-call turns.
+    /// assistant turns; K2.6 also requires it on tool-call turns.
     /// - Some("") = empty reasoning (required for tool calls)
     /// - Some(content) = actual reasoning content
     /// - None = omit field (backward compatible for non-thinking models)
@@ -586,14 +568,12 @@ impl AiProvider for MoonshotProvider {
 
     fn supports_caching(&self, model: &str) -> bool {
         // Kimi K2.x and K3 series support automatic context caching.
-        // Moonshot V1 legacy models have no caching (no cache-hit pricing).
         contains_ignore_ascii_case(model, "kimi-k2") || contains_ignore_ascii_case(model, "kimi-k3")
     }
 
     fn supports_vision(&self, model: &str) -> bool {
-        // Kimi K2.5, K2.6, K2.7 and K3 support vision/multimodal
-        contains_ignore_ascii_case(model, "kimi-k2.5")
-            || contains_ignore_ascii_case(model, "kimi-k2.6")
+        // Kimi K2.6, K2.7 and K3 support vision/multimodal
+        contains_ignore_ascii_case(model, "kimi-k2.6")
             || contains_ignore_ascii_case(model, "kimi-k2.7")
             || contains_ignore_ascii_case(model, "kimi-k3")
     }
@@ -622,35 +602,20 @@ impl AiProvider for MoonshotProvider {
         if contains_ignore_ascii_case(model, "kimi-k3") {
             return 1_048_576;
         }
-        // Kimi K2 family — context windows per official model spec
-        // (kimi-k2.6/k2.5/k2-0905/turbo/thinking → 256K = 262_144;
-        //  kimi-k2-0711 → 128K = 131_072).
-        if contains_ignore_ascii_case(model, "kimi-k2-0711") {
-            return 131_072;
-        }
+        // Kimi K2 family (k2.6 / k2.7-code / k2.7-code-highspeed) — 256K = 262_144
+        // per official model spec.
         if contains_ignore_ascii_case(model, "kimi-k2") {
             return 262_144;
-        }
-        // Moonshot V1 series — context window matches the variant name.
-        if contains_ignore_ascii_case(model, "moonshot-v1-128k") {
-            return 131_072;
-        }
-        if contains_ignore_ascii_case(model, "moonshot-v1-32k") {
-            return 32_768;
-        }
-        if contains_ignore_ascii_case(model, "moonshot-v1-8k") {
-            return 8_192;
         }
         // Default fallback for unknown variants
         128_000
     }
 
     fn supported_sampling_params(&self, model: &str) -> SamplingSupport {
-        // Kimi K2.5, K2.6 and K2.7 do not expose a modifiable temperature.
+        // Kimi K2.6 and K2.7 do not expose a modifiable temperature.
         // Kimi K3 has no temperature parameter at all (always-reasoning model).
-        // Other Moonshot models support temperature. None support top_p or top_k.
-        let fixed_temp = contains_ignore_ascii_case(model, "kimi-k2.5")
-            || contains_ignore_ascii_case(model, "kimi-k2.6")
+        // No Kimi model supports top_p or top_k.
+        let fixed_temp = contains_ignore_ascii_case(model, "kimi-k2.6")
             || contains_ignore_ascii_case(model, "kimi-k2.7")
             || contains_ignore_ascii_case(model, "kimi-k3");
         SamplingSupport {
@@ -668,7 +633,7 @@ impl AiProvider for MoonshotProvider {
         // Manual caching via /v1/caching endpoint is deprecated (returns "model family is invalid")
         let messages = convert_messages(&params.messages, &params.model);
 
-        // Kimi K2.5, K2.6, K2.7 and K3 do not expose a modifiable temperature,
+        // Kimi K2.6, K2.7 and K3 do not expose a modifiable temperature,
         // so effective sampling support omits it from the request.
         let sampling = self.effective_sampling_params(&params);
         let temperature = sampling.temperature;

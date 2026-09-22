@@ -20,7 +20,7 @@ fn test_supports_model_before_cache() {
 
     // Before cache is populated, accept any non-empty model
     assert!(provider.supports_model("gemini-1.5-pro"));
-    assert!(provider.supports_model("gemini-2.0-flash"));
+    assert!(provider.supports_model("gemini-3.5-flash"));
     assert!(provider.supports_model("anything-goes"));
     assert!(!provider.supports_model(""));
 }
@@ -31,7 +31,6 @@ fn test_supports_caching() {
     assert!(provider.supports_caching("gemini-3-flash"));
     assert!(provider.supports_caching("gemini-2.5-pro"));
     assert!(provider.supports_caching("gemini-2.5-flash"));
-    assert!(!provider.supports_caching("gemini-2.0-flash"));
     assert!(!provider.supports_caching("gemini-1.5-pro"));
 }
 
@@ -72,6 +71,16 @@ fn test_model_pricing() {
     let p = provider.get_model_pricing("gemini-3.5-flash-lite").unwrap();
     assert_eq!(p.input_price_per_1m, 0.30);
     assert_eq!(p.output_price_per_1m, 2.50);
+
+    let p = provider.get_model_pricing("gemini-3-flash").unwrap();
+    assert_eq!(p.input_price_per_1m, 0.50);
+    assert_eq!(p.output_price_per_1m, 3.00);
+
+    // Removed from the live pricing page; must not fall through to a neighbouring row
+    assert!(provider.get_model_pricing("gemini-3.1-flash").is_none());
+    assert!(provider.get_model_pricing("gemini-3-pro").is_none());
+    assert!(provider.get_model_pricing("gemini-3-pro-preview").is_none());
+    assert!(provider.get_model_pricing("gemini-2.0-flash").is_none());
 
     // Unknown models return None (no fallback to zero)
     assert!(provider.get_model_pricing("gemma-3-27b").is_none());

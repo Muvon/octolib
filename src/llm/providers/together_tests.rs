@@ -30,9 +30,14 @@ fn current_serverless_pricing_uses_together_rates() {
     let qwen = provider
         .get_model_pricing("Qwen/Qwen3.8-2.4T-A95B")
         .unwrap();
-    assert_eq!(qwen.input_price_per_1m, 2.50);
-    assert_eq!(qwen.cache_read_price_per_1m, 0.50);
-    assert_eq!(qwen.output_price_per_1m, 6.25);
+    assert_eq!(qwen.input_price_per_1m, 2.00);
+    assert_eq!(qwen.cache_read_price_per_1m, 0.25);
+    assert_eq!(qwen.output_price_per_1m, 6.00);
+
+    let qwen_max = provider.get_model_pricing("Qwen/Qwen3.7-Max").unwrap();
+    assert_eq!(qwen_max.input_price_per_1m, 2.50);
+    assert_eq!(qwen_max.cache_read_price_per_1m, 0.25);
+    assert_eq!(qwen_max.output_price_per_1m, 7.50);
 
     let deepseek = provider
         .get_model_pricing("deepseek-ai/DeepSeek-V4-Flash-0731")
@@ -52,6 +57,77 @@ fn current_serverless_pricing_uses_together_rates() {
         provider.get_max_input_tokens("google/gemma-4-31B-it"),
         262_144
     );
+}
+
+#[test]
+fn newly_listed_serverless_models_use_together_rates() {
+    let provider = TogetherProvider::new();
+
+    let glm = provider.get_model_pricing("zai-org/GLM-5.3").unwrap();
+    assert_eq!(glm.input_price_per_1m, 1.40);
+    assert_eq!(glm.cache_read_price_per_1m, 0.26);
+    assert_eq!(glm.output_price_per_1m, 4.40);
+    assert_eq!(provider.get_max_input_tokens("zai-org/GLM-5.3"), 1_048_575);
+
+    let glm_flash = provider.get_model_pricing("zai-org/GLM-5.3-Flash").unwrap();
+    assert_eq!(glm_flash.input_price_per_1m, 0.15);
+    assert_eq!(glm_flash.cache_read_price_per_1m, 0.03);
+    assert_eq!(glm_flash.output_price_per_1m, 0.50);
+    assert_eq!(
+        provider.get_max_input_tokens("zai-org/GLM-5.3-Flash"),
+        1_048_575
+    );
+
+    let qwen_flash = provider.get_model_pricing("Qwen/Qwen3.8-Flash").unwrap();
+    assert_eq!(qwen_flash.input_price_per_1m, 0.15);
+    assert_eq!(qwen_flash.output_price_per_1m, 0.47);
+    assert_eq!(
+        provider.get_max_input_tokens("Qwen/Qwen3.8-Flash"),
+        1_000_000
+    );
+
+    let deepseek = provider
+        .get_model_pricing("deepseek-ai/DeepSeek-V4.1-Flash")
+        .unwrap();
+    assert_eq!(deepseek.input_price_per_1m, 0.30);
+    assert_eq!(deepseek.cache_read_price_per_1m, 0.006);
+    assert_eq!(deepseek.output_price_per_1m, 1.20);
+    assert_eq!(
+        provider.get_max_input_tokens("deepseek-ai/DeepSeek-V4.1-Flash"),
+        1_000_000
+    );
+
+    let gpt_oss = provider.get_model_pricing("openai/gpt-oss-120b").unwrap();
+    assert_eq!(gpt_oss.input_price_per_1m, 0.15);
+    assert_eq!(gpt_oss.output_price_per_1m, 0.60);
+    assert_eq!(
+        provider.get_max_input_tokens("openai/gpt-oss-120b"),
+        131_072
+    );
+
+    let qwen_9b = provider.get_model_pricing("Qwen/Qwen3.5-9B").unwrap();
+    assert_eq!(qwen_9b.input_price_per_1m, 0.17);
+    assert_eq!(qwen_9b.output_price_per_1m, 0.25);
+    assert_eq!(provider.get_max_input_tokens("Qwen/Qwen3.5-9B"), 262_144);
+
+    let llama = provider
+        .get_model_pricing("meta-llama/Llama-3.3-70B-Instruct-Turbo")
+        .unwrap();
+    assert_eq!(llama.input_price_per_1m, 1.04);
+    assert_eq!(llama.output_price_per_1m, 1.04);
+    assert_eq!(
+        provider.get_max_input_tokens("meta-llama/Llama-3.3-70B-Instruct-Turbo"),
+        131_072
+    );
+}
+
+#[test]
+fn retired_serverless_models_leave_together_table() {
+    assert!(together_model_pricing("moonshotai/Kimi-K2.7-Code").is_none());
+    assert!(together_model_context("moonshotai/Kimi-K2.7-Code").is_none());
+    assert!(together_model_pricing("deepseek-ai/DeepSeek-V4-Pro").is_none());
+    assert!(together_model_context("deepseek-ai/DeepSeek-V4-Pro").is_none());
+    assert!(together_model_pricing("deepseek-ai/DeepSeek-V4-Pro-0813").is_some());
 }
 
 #[test]

@@ -17,12 +17,11 @@
 //! Uses Groq's OpenAI-compatible endpoint at:
 //! `https://api.groq.com/openai/v1/chat/completions`
 //!
-//! Hosts open-weight models (Llama, GPT-OSS, Qwen3, Kimi K2) on custom LPU
-//! hardware. Cached input pricing is offered for selected GPT-OSS and Kimi
-//! models.
+//! Hosts open-weight models (GPT-OSS, Qwen) on custom LPU hardware.
+//! Cached input pricing is offered for the GPT-OSS models.
 //!
-//! PRICING UPDATE: April 2026
-//! Source: <https://groq.com/pricing>
+//! PRICING UPDATE: September 2026
+//! Source: <https://console.groq.com/docs/models>
 //!
 //! Configuration:
 //! - `GROQ_API_KEY`: Required API key
@@ -57,40 +56,25 @@ const GROQ_API_KEY_ENV: &str = "GROQ_API_KEY";
 const GROQ_API_URL_ENV: &str = "GROQ_API_URL";
 const GROQ_API_URL: &str = "https://api.groq.com/openai/v1/chat/completions";
 
-// Groq pricing (per 1M tokens in USD) - Apr 2026
-// Source: https://groq.com/pricing
+// Groq pricing (per 1M tokens in USD) - Sep 2026
+// Source: https://console.groq.com/docs/models and the per-model pages under it
 // Format: (model, input, output, cache_write, cache_read)
 // cache_write priced at input rate (Groq does not bill a separate write fee)
 const PRICING: &[PricingTuple] = &[
-    // GPT-OSS — cached input pricing available
+    // GPT-OSS — cached input billed at 50% of input
     ("openai/gpt-oss-120b", 0.15, 0.60, 0.15, 0.075),
     ("openai/gpt-oss-20b", 0.075, 0.30, 0.075, 0.0375),
     ("openai/gpt-oss-safeguard-20b", 0.075, 0.30, 0.075, 0.0375),
-    // Qwen3.6 (preview) — replacement for the retired qwen3-32b / llama-4-scout
-    ("qwen/qwen3.6-27b", 0.60, 3.00, 0.60, 0.60),
     // Qwen3.8-27B (Aug 2026) — multimodal; no cached-input discount published
     ("qwen/qwen3.8-27b", 0.80, 4.00, 0.80, 0.80),
-    // Llama
-    ("llama-3.3-70b-versatile", 0.59, 0.79, 0.59, 0.59),
-    ("llama-3.1-8b-instant", 0.05, 0.08, 0.05, 0.05),
-    (
-        "meta-llama/llama-4-scout-17b-16e-instruct",
-        0.11,
-        0.34,
-        0.11,
-        0.11,
-    ),
-    // Qwen3
-    ("qwen/qwen3-32b", 0.29, 0.59, 0.29, 0.29),
-    // Kimi K2 (Moonshot served on Groq) — cached input pricing
-    ("moonshotai/kimi-k2-instruct-0905", 1.00, 3.00, 1.00, 0.50),
 ];
 
 // Models with documented prompt-caching support on Groq.
+// Source: https://console.groq.com/docs/prompt-caching
 const CACHED_INPUT_MODELS: &[&str] = &[
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
-    "moonshotai/kimi-k2-instruct-0905",
+    "openai/gpt-oss-safeguard-20b",
 ];
 
 #[async_trait::async_trait]

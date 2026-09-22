@@ -30,7 +30,7 @@ use serde::Deserialize;
 use std::env;
 
 /// OpenAI pricing constants (per 1M tokens in USD)
-/// Source: https://developers.openai.com/api/docs/pricing (verified Aug 22, 2026)
+/// Source: https://developers.openai.com/api/docs/pricing (verified Sep 22, 2026)
 /// Format: (model, input, output, cache_write, cache_read)
 /// Note: For models without caching, cache_write = input and cache_read = input
 const PRICING: &[PricingTuple] = &[
@@ -44,16 +44,19 @@ const PRICING: &[PricingTuple] = &[
     ("gpt-5.6-luna", 0.20, 1.20, 0.25, 0.02),
     ("gpt-5.6-cyber", 12.50, 75.00, 15.625, 1.25),
     ("gpt-5.6", 4.00, 20.00, 5.00, 0.40),
+    // Daybreak aliases currently point to gpt-5.6-sol (blue) and gpt-5.6-cyber (red);
+    // pricing follows the underlying model.
+    ("gpt-daybreak-blue-latest", 4.00, 20.00, 5.00, 0.40),
+    ("gpt-daybreak-red-latest", 12.50, 75.00, 15.625, 1.25),
     // GPT-5.5 family
     ("gpt-5.5-pro", 30.00, 180.00, 30.00, 30.00),
     ("gpt-5.5", 5.00, 30.00, 5.00, 0.50),
     // GPT-5.4 family
     ("gpt-5.4-pro", 30.00, 180.00, 30.00, 30.00),
-    ("gpt-5.4", 2.50, 15.00, 2.50, 0.25),
     ("gpt-5.4-mini", 0.75, 4.50, 0.75, 0.075),
     ("gpt-5.4-nano", 0.20, 1.25, 0.20, 0.02),
+    ("gpt-5.4", 2.50, 15.00, 2.50, 0.25),
     // GPT-5.3 family
-    ("gpt-5.3-instant", 1.75, 14.00, 0.175, 0.175),
     ("gpt-5.3-codex", 1.75, 14.00, 1.75, 0.175),
     ("gpt-5.3-chat-latest", 1.75, 14.00, 1.75, 0.175),
     // GPT-5.2 family
@@ -73,16 +76,17 @@ const PRICING: &[PricingTuple] = &[
     ("gpt-5-chat-latest", 1.25, 10.00, 1.25, 0.125),
     ("gpt-5-mini", 0.25, 2.00, 0.25, 0.025),
     ("gpt-5-nano", 0.05, 0.40, 0.05, 0.005),
+    ("gpt-5-search-api", 1.25, 10.00, 1.25, 0.125),
     ("gpt-5", 1.25, 10.00, 1.25, 0.125),
-    // Codex CLI optimized model
-    ("codex-mini-latest", 1.50, 6.00, 1.50, 0.375),
+    // Specialized models. `chat-latest` must stay below every `gpt-5.x-chat-latest`
+    // row because lookups are substring matches in table order.
+    ("chat-latest", 5.00, 30.00, 5.00, 0.50),
+    // Billing starts Oct 5, 2026; cache-write pricing does not apply.
+    ("gpt-rosalind-research", 5.00, 25.00, 5.00, 0.50),
     // GPT-4.1 family
     ("gpt-4.1-mini", 0.40, 1.60, 0.40, 0.10),
     ("gpt-4.1-nano", 0.10, 0.40, 0.10, 0.025),
     ("gpt-4.1", 2.00, 8.00, 2.00, 0.50),
-    // Open-weight models
-    ("gpt-oss-120b", 0.039, 0.10, 0.039, 0.039),
-    ("gpt-oss-20b", 0.03, 0.10, 0.03, 0.03),
     // GPT-4o / realtime / audio
     ("gpt-realtime-2.1-mini", 0.60, 2.40, 0.60, 0.06),
     ("gpt-realtime-2.1", 4.00, 24.00, 4.00, 0.40),
@@ -97,22 +101,17 @@ const PRICING: &[PricingTuple] = &[
     ("gpt-4o-mini", 0.15, 0.60, 0.15, 0.075),
     ("gpt-4o-2024-05-13", 5.00, 15.00, 5.00, 5.00),
     ("gpt-4o", 2.50, 10.00, 2.50, 1.25),
-    // Legacy/long-tail models retained for compatibility
-    ("gpt-4.5-preview", 75.00, 150.00, 75.00, 75.00),
-    ("o1", 15.00, 60.00, 15.00, 7.50),
+    // Legacy/long-tail models retained for compatibility.
+    // Variants stay above their base name so the substring lookup hits them first.
     ("o1-pro", 150.00, 600.00, 150.00, 150.00),
-    ("o1-mini", 1.10, 4.40, 1.10, 0.55),
-    ("o3", 2.00, 8.00, 2.00, 0.50),
+    ("o1", 15.00, 60.00, 15.00, 7.50),
     ("o3-pro", 20.00, 80.00, 20.00, 20.00),
     ("o3-mini", 1.10, 4.40, 1.10, 0.55),
-    ("o3-deep-research", 5.00, 20.00, 5.00, 1.25),
+    ("o3", 2.00, 8.00, 2.00, 0.50),
     ("o4-mini", 1.10, 4.40, 1.10, 0.275),
-    ("o4-mini-deep-research", 1.00, 4.00, 1.00, 0.25),
     ("gpt-4-turbo", 10.00, 30.00, 10.00, 10.00),
     ("gpt-4", 30.00, 60.00, 30.00, 30.00),
-    ("gpt-4-32k", 60.00, 120.00, 60.00, 60.00),
     ("gpt-3.5-turbo-instruct", 1.50, 2.00, 1.50, 1.50),
-    ("gpt-3.5-turbo-16k-0613", 3.00, 4.00, 3.00, 3.00),
     ("gpt-3.5-turbo", 0.50, 1.50, 0.50, 0.50),
 ];
 
@@ -120,10 +119,13 @@ const PRICING: &[PricingTuple] = &[
 /// for the entire request: 2x input/cache rates and 1.5x output rates.
 const GPT_5_LONG_CONTEXT_THRESHOLD: u64 = 272_000;
 
-/// GPT-5.6 and later share billed cache writes with explicit breakpoints,
-/// `max` reasoning effort, and long-context tiered pricing.
+/// GPT-5.6 and later share billed cache writes with explicit breakpoints and
+/// `max` reasoning effort. The Daybreak aliases resolve to gpt-5.6-sol (blue)
+/// and gpt-5.6-cyber (red).
 fn is_gpt_5_6_or_later(normalized: &str) -> bool {
-    normalized.starts_with("gpt-5.6") || normalized.starts_with("gpt-6")
+    normalized.starts_with("gpt-5.6")
+        || normalized.starts_with("gpt-6")
+        || normalized.starts_with("gpt-daybreak")
 }
 
 fn get_usage_pricing(model: &str, input_tokens: u64) -> Option<(f64, f64, f64, f64)> {
@@ -131,8 +133,14 @@ fn get_usage_pricing(model: &str, input_tokens: u64) -> Option<(f64, f64, f64, f
         get_model_pricing(model, PRICING)?;
 
     let normalized = normalize_model_name(model);
-    let tiered_long_context = is_gpt_5_6_or_later(&normalized)
-        || (normalized.starts_with("gpt-5.5") && !normalized.starts_with("gpt-5.5-pro"));
+    // gpt-5.6-cyber and its daybreak-red alias have no long-context tier.
+    let tiered_long_context = (is_gpt_5_6_or_later(&normalized)
+        && !normalized.starts_with("gpt-5.6-cyber")
+        && !normalized.starts_with("gpt-daybreak-red"))
+        || normalized.starts_with("gpt-5.5")
+        || (normalized.starts_with("gpt-5.4")
+            && !normalized.starts_with("gpt-5.4-mini")
+            && !normalized.starts_with("gpt-5.4-nano"));
     if tiered_long_context && input_tokens > GPT_5_LONG_CONTEXT_THRESHOLD {
         input *= 2.0;
         output *= 1.5;
@@ -178,7 +186,8 @@ fn calculate_cost_with_cache(
 
 /// Models that reject temperature and top_p (reasoning models).
 /// O1, O2, O3, O4 and GPT-5/GPT-6 series use internal reasoning and don't accept sampling params.
-const NO_TEMPERATURE_PREFIXES: &[&str] = &["o1", "o2", "o3", "o4", "gpt-5", "gpt-6"];
+const NO_TEMPERATURE_PREFIXES: &[&str] =
+    &["o1", "o2", "o3", "o4", "gpt-5", "gpt-6", "gpt-daybreak"];
 
 /// Convert messages to Responses API input format
 ///
@@ -446,10 +455,11 @@ impl AiProvider for OpenAiProvider {
                 || model_lower.contains("gpt-4.1")
                 || model_lower.contains("gpt-5")
                 || model_lower.contains("gpt-6")
-                || model_lower.contains("codex-mini")
+                || model_lower.contains("gpt-daybreak")
+                || model_lower.contains("chat-latest")
+                || model_lower.contains("gpt-rosalind")
                 || model_lower.contains("gpt-realtime")
                 || model_lower.contains("o1-preview")
-                || model_lower.contains("o1-mini")
                 || model_lower.contains("o1")
                 || model_lower.contains("o3")
                 || model_lower.contains("o4"))
@@ -465,7 +475,8 @@ impl AiProvider for OpenAiProvider {
             || normalized.starts_with("gpt-4o-")
             || normalized.starts_with("gpt-5")
             || normalized.starts_with("gpt-6")
-            || normalized.starts_with("codex-mini")
+            || normalized.starts_with("gpt-daybreak")
+            || normalized.starts_with("chat-latest")
             || normalized.starts_with("gpt-realtime")
     }
 
@@ -490,17 +501,31 @@ impl AiProvider for OpenAiProvider {
         if normalized.starts_with("gpt-5.5") {
             return 1_050_000;
         }
-        // GPT-5.3 Instant: 128K context window
-        if normalized.starts_with("gpt-5.3-instant") {
+        // GPT-5.x chat-latest snapshots: 128K context window
+        if normalized.starts_with("gpt-5") && normalized.contains("chat-latest") {
             return 128_000;
+        }
+        // GPT-5.4 and GPT-5.4 Pro: 1.05M context window; mini/nano stay at 400K.
+        if normalized.starts_with("gpt-5.4")
+            && !normalized.starts_with("gpt-5.4-mini")
+            && !normalized.starts_with("gpt-5.4-nano")
+        {
+            return 1_050_000;
         }
         // GPT-5 family: 400K context window
         if normalized.starts_with("gpt-5") {
             return 400_000;
         }
-        // codex-mini-latest: 200K context window
-        if normalized.starts_with("codex-mini") {
-            return 200_000;
+        // Daybreak aliases follow their targets: blue = gpt-5.6-sol, red = gpt-5.6-cyber.
+        if normalized.starts_with("gpt-daybreak-blue") {
+            return 1_050_000;
+        }
+        if normalized.starts_with("gpt-daybreak-red") {
+            return 400_000;
+        }
+        // chat-latest: 400K context window
+        if normalized.starts_with("chat-latest") {
+            return 400_000;
         }
         // Realtime models: 32K context window
         if normalized.starts_with("gpt-realtime") {
@@ -514,22 +539,24 @@ impl AiProvider for OpenAiProvider {
         if normalized.starts_with("gpt-4o") {
             return 128_000;
         }
-        // GPT-4 models: varies by version
-        if normalized.starts_with("gpt-4-turbo")
-            || normalized.starts_with("gpt-4.5")
-            || normalized.starts_with("gpt-4.1")
-        {
+        // GPT-4.1 family: 1,047,576 context window
+        if normalized.starts_with("gpt-4.1") {
+            return 1_047_576;
+        }
+        // GPT-4 Turbo: 128K context window
+        if normalized.starts_with("gpt-4-turbo") {
             return 128_000;
         }
         if normalized.starts_with("gpt-4") && !normalized.starts_with("gpt-4o") {
             return 8_192; // Old GPT-4: 8K context window
         }
-        // O-series models: 128K context window
+        // O-series models: 200K context window
         if normalized.starts_with("o1")
             || normalized.starts_with("o2")
             || normalized.starts_with("o3")
+            || normalized.starts_with("o4")
         {
-            return 128_000;
+            return 200_000;
         }
         // GPT-3.5: 16K context window
         if normalized.starts_with("gpt-3.5") {
@@ -629,7 +656,7 @@ impl AiProvider for OpenAiProvider {
             request_body["max_output_tokens"] = serde_json::json!(params.max_tokens);
         }
 
-        // Add reasoning effort for reasoning models (o1/o3/o4/gpt-5/gpt-5.5+).
+        // Add reasoning effort for reasoning models (o1/o3/o4/gpt-5/gpt-6/daybreak).
         // Maps generic ReasoningEffort -> OpenAI Responses API "effort" string.
         // GPT-5.6 and later additionally accept "max".
         // Default when caller omits is "medium" (per OpenAI guidance).
@@ -638,6 +665,7 @@ impl AiProvider for OpenAiProvider {
             || params.model.starts_with("o4")
             || params.model.starts_with("gpt-5")
             || params.model.starts_with("gpt-6")
+            || params.model.starts_with("gpt-daybreak")
         {
             let effort = match params.reasoning_effort {
                 Some(ReasoningEffort::Low) => "low",

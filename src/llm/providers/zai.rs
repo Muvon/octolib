@@ -14,13 +14,15 @@
 
 //! Z.ai (Zhipu AI) provider implementation
 //!
-//! PRICING UPDATE: April 2026 (from <https://docs.z.ai/guides/overview/pricing>)
+//! PRICING VERIFIED: September 22, 2026 (from <https://docs.z.ai/guides/overview/pricing>)
 //!
 //! GLM-5.3 series (added Aug 2026):
 //! - GLM-5.3: Input $1.40/1M, Cached $0.26/1M, Output $4.40/1M (official pricing
 //!   confirmed Aug 2026; previously mirrored from GLM-5.2)
 //! - GLM-5.3-Flash: Input $0.15/1M, Cached $0.03/1M, Output $0.50/1M — list prices;
-//!   50% promo ($0.075/$0.015/$0.25) runs until Sep 9, 2026
+//!   50% promo ($0.075/$0.015/$0.25) ran until Sep 9, 2026
+//! - GLM-5.3-FlashX: Input $0.37/1M, Cached $0.075/1M, Output $1.25/1M (faster
+//!   Flash variant, 200 tokens/s; added Sep 2026)
 //!
 //! GLM-5.2 series:
 //! - GLM-5.2: Input $1.40/1M, Cached $0.26/1M, Output $4.40/1M (pricing mirrors GLM-5.1)
@@ -73,10 +75,13 @@ use serde::{Deserialize, Serialize};
 use std::env;
 
 /// Z.ai pricing constants (per 1M tokens in USD)
-/// Source: https://docs.z.ai/guides/overview/pricing (verified Aug 26, 2026)
+/// Source: https://docs.z.ai/guides/overview/pricing (verified Sep 22, 2026)
 /// Format: (model, input, output, cache_write, cache_read)
 const PRICING: &[PricingTuple] = &[
-    // GLM-5.3-Flash — list prices; 50% promo ($0.075 in / $0.015 cached / $0.25 out) ends Sep 9, 2026
+    // GLM-5.3-FlashX — faster GLM-5.3-Flash variant; must precede glm-5.3-flash
+    // since that pattern is a substring of this name
+    ("glm-5.3-flashx", 0.37, 1.25, 0.00, 0.075),
+    // GLM-5.3-Flash — list prices; 50% promo ($0.075 in / $0.015 cached / $0.25 out) ended Sep 9, 2026
     ("glm-5.3-flash", 0.15, 0.50, 0.00, 0.03),
     // GLM-5.3 — official pricing confirmed Aug 2026 (previously mirrored from GLM-5.2)
     ("glm-5.3", 1.40, 4.40, 0.00, 0.26),
@@ -121,7 +126,10 @@ fn effective_pricing_at(model: &str, time: std::time::SystemTime) -> Option<(f64
         .duration_since(std::time::SystemTime::UNIX_EPOCH)
         .map(|duration| duration.as_secs())
         .unwrap_or(0);
-    if normalize_model_name(model).contains("glm-5.3-flash")
+    let normalized = normalize_model_name(model);
+    // The promo covered GLM-5.3-Flash only, not the later FlashX variant
+    if normalized.contains("glm-5.3-flash")
+        && !normalized.contains("glm-5.3-flashx")
         && secs < GLM_5_3_FLASH_PROMO_END_UNIX_SECS
     {
         Some((0.075, 0.25, 0.00, 0.015))
@@ -313,7 +321,7 @@ impl AiProvider for ZaiProvider {
 
     fn supports_vision(&self, model: &str) -> bool {
         let normalized = normalize_model_name(model);
-        normalized.contains("glm-5.3-flash") // natively multimodal GLM-5
+        normalized.contains("glm-5.3-flash") // GLM-5.3-Flash / FlashX, natively multimodal
             || normalized.contains("glm-5v")
             || normalized.contains("glm-4.6v")
             || normalized.contains("glm-4.5v")
@@ -355,13 +363,9 @@ impl AiProvider for ZaiProvider {
         // Z.ai model context window limits (case-insensitive)
         let model_lower = normalize_model_name(model);
         if model_lower.contains("glm-5.3") {
-            1_000_000 // 1M context window for GLM-5.3 and GLM-5.3-Flash
-        } else if model_lower.contains("glm-5.2") || model_lower.contains("glm-5.1") {
-            200_000 // 200K context window for GLM-5.1/5.2
-        } else if model_lower.contains("glm-5") {
-            128_000 // 128K context window for GLM-5
-        } else if model_lower.contains("glm-4.7") {
-            200_000 // 200K context window for GLM-4.7
+            1_000_000 // 1M context window for GLM-5.3, GLM-5.3-Flash and GLM-5.3-FlashX
+        } else if model_lower.contains("glm-5") || model_lower.contains("glm-4.7") {
+            200_000 // 200K context window for GLM-5 / GLM-5-Turbo, GLM-5.1, GLM-5.2 and GLM-4.7
         } else if model_lower.contains("glm-4.6") {
             128_000 // 128K context window for GLM-4.6
         } else if model_lower.contains("glm-4.5") {

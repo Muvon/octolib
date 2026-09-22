@@ -75,11 +75,15 @@ fn test_contains_ignore_ascii_case_edge_cases() {
 
 #[test]
 fn test_sanitize_model_name() {
-    assert_eq!(sanitize_model_name("llama3.3:70b"), "llama-3.3-70-b");
-    assert_eq!(sanitize_model_name("qwen2.5-72b"), "qwen-2.5-72-b");
+    assert_eq!(sanitize_model_name("llama3.3:70b"), "llama-3-3-70-b");
+    assert_eq!(sanitize_model_name("qwen2.5-72b"), "qwen-2-5-72-b");
     assert_eq!(
         sanitize_model_name("meta-llama/llama-3.3-70b-instruct"),
-        "meta-llama/llama-3.3-70-b-instruct"
+        "meta-llama/llama-3-3-70-b-instruct"
+    );
+    assert_eq!(
+        sanitize_model_name("claude-opus-4.8"),
+        sanitize_model_name("claude-opus-4-8")
     );
     assert_eq!(sanitize_model_name("phi4"), "phi-4");
     assert_eq!(sanitize_model_name("deepseek-r1"), "deepseek-r-1");

@@ -95,6 +95,28 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(0.30, 2.50, 0.00, 0.075),
     },
     ReferenceModelEntry {
+        // Amazon Nova 2 Pro (Preview): text/image/video/audio input on
+        // Bedrock, global cross-region Standard tier (us-east-1). No context
+        // window or cache-read rate is published for the preview.
+        pattern: "nova-2-pro",
+        capabilities: None,
+        pricing: pricing(1.25, 10.00, 1.25, 1.25),
+    },
+    ReferenceModelEntry {
+        // Amazon Nova 2 Omni (Preview): text-token rate; audio input bills
+        // $1.00 and image output $40.00 per 1M. No published context window.
+        pattern: "nova-2-omni",
+        capabilities: None,
+        pricing: pricing(0.30, 2.50, 0.30, 0.30),
+    },
+    ReferenceModelEntry {
+        // Amazon Nova 2 Sonic: speech-to-speech model with 1M context; text
+        // tokens bill at this rate, speech tokens at $3.00/$12.00 per 1M.
+        pattern: "nova-2-sonic",
+        capabilities: caps(false, false, false, 1_000_000),
+        pricing: pricing(0.33, 2.75, 0.33, 0.33),
+    },
+    ReferenceModelEntry {
         // Amazon Nova Premier: 1M-context multimodal reasoning model; legacy
         // lifecycle (EOL 2026-09-14) but still served and billable.
         pattern: "nova-premier",
@@ -123,6 +145,270 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(0.035, 0.14, 0.00, 0.00875),
     },
     ReferenceModelEntry {
+        // NVIDIA Nemotron 3 Nano Omni 30B A3B: text/image/video/audio input,
+        // 256K context; only a free OpenRouter route exists, so no rate.
+        pattern: "nemotron-3-nano-omni-30b-a3b",
+        capabilities: caps(true, true, false, 256_000),
+        pricing: None,
+    },
+    ReferenceModelEntry {
+        // Bedrock spells Nemotron 3 Super as `nvidia.nemotron-super-3-120b`;
+        // us-east-1 on-demand rate, 256K context.
+        pattern: "nemotron-super-3-120b",
+        capabilities: caps(false, false, false, 262_144),
+        pricing: pricing(0.15, 0.65, 0.15, 0.15),
+    },
+    ReferenceModelEntry {
+        // NVIDIA Nemotron 3.5 Content Safety: text+image classifier, 131K context.
+        pattern: "nemotron-3.5-content-safety",
+        capabilities: caps(true, false, false, 131_072),
+        pricing: pricing(0.20, 0.20, 0.20, 0.20),
+    },
+    ReferenceModelEntry {
+        // Bedrock Qwen3 Next 80B A3B (`qwen.qwen3-next-80b-a3b`): us-east-1
+        // Standard tier, 256K context.
+        pattern: "qwen3-next-80b-a3b",
+        capabilities: caps(false, false, true, 262_144),
+        pricing: pricing(0.15, 1.20, 0.15, 0.15),
+    },
+    ReferenceModelEntry {
+        // Bedrock Qwen3 VL 235B A22B: text+image input, 256K context.
+        pattern: "qwen3-vl-235b-a22b",
+        capabilities: caps(true, false, true, 262_144),
+        pricing: pricing(0.53, 2.66, 0.53, 0.53),
+    },
+    ReferenceModelEntry {
+        // Bedrock Qwen3 Coder 30B A3B: us-east-1 Standard tier, 256K context.
+        pattern: "qwen3-coder-30b-a3b",
+        capabilities: caps(false, false, true, 262_144),
+        pricing: pricing(0.15, 0.60, 0.15, 0.15),
+    },
+    ReferenceModelEntry {
+        // Mistral Small 4 (Mar 2026): 256K context, text+image input. The API
+        // names it `mistral-small-2603`, so both spellings precede the generic
+        // `mistral-small` row.
+        pattern: "mistral-small-2603",
+        capabilities: caps(true, false, true, 262_144),
+        pricing: pricing(0.15, 0.60, 0.15, 0.015),
+    },
+    ReferenceModelEntry {
+        pattern: "mistral-small-4",
+        capabilities: caps(true, false, true, 262_144),
+        pricing: pricing(0.15, 0.60, 0.15, 0.015),
+    },
+    ReferenceModelEntry {
+        // Ministral 3 (Dec 2025) on Bedrock (`mistral.ministral-3-<size>-instruct`):
+        // 128K context on that route, same flat rate as the Mistral API.
+        pattern: "ministral-3-14b",
+        capabilities: caps(true, false, true, 131_072),
+        pricing: pricing(0.20, 0.20, 0.20, 0.20),
+    },
+    ReferenceModelEntry {
+        pattern: "ministral-3-8b",
+        capabilities: caps(true, false, true, 131_072),
+        pricing: pricing(0.15, 0.15, 0.15, 0.15),
+    },
+    ReferenceModelEntry {
+        pattern: "ministral-3-3b",
+        capabilities: caps(true, false, true, 131_072),
+        pricing: pricing(0.10, 0.10, 0.10, 0.10),
+    },
+    ReferenceModelEntry {
+        // Ministral 3 on the Mistral API and OpenRouter (`ministral-14b-2512`):
+        // 256K context, cached input at 10% of the flat rate.
+        pattern: "ministral-14b",
+        capabilities: caps(true, false, true, 262_144),
+        pricing: pricing(0.20, 0.20, 0.20, 0.02),
+    },
+    ReferenceModelEntry {
+        pattern: "ministral-8b",
+        capabilities: caps(true, false, true, 262_144),
+        pricing: pricing(0.15, 0.15, 0.15, 0.015),
+    },
+    ReferenceModelEntry {
+        pattern: "ministral-3b",
+        capabilities: caps(true, false, true, 262_144),
+        pricing: pricing(0.10, 0.10, 0.10, 0.01),
+    },
+    ReferenceModelEntry {
+        // Bedrock Devstral 2 123B (`mistral.devstral-2-123b`): us-east-1
+        // on-demand rate, 256K context.
+        pattern: "devstral-2-123b",
+        capabilities: caps(false, false, true, 262_144),
+        pricing: pricing(0.40, 2.00, 0.40, 0.40),
+    },
+    ReferenceModelEntry {
+        // Same Devstral 2 weights under the Mistral API / OpenRouter spelling
+        // (`devstral-2512`), which also publishes a cache-read rate.
+        pattern: "devstral-2512",
+        capabilities: caps(false, false, true, 262_144),
+        pricing: pricing(0.40, 2.00, 0.40, 0.04),
+    },
+    ReferenceModelEntry {
+        // Magistral Small 1.2 (`mistral.magistral-small-2509` on Bedrock):
+        // text+image input, 128K context, no structured outputs.
+        pattern: "magistral-small",
+        capabilities: caps(true, false, false, 131_072),
+        pricing: pricing(0.50, 1.50, 0.50, 0.50),
+    },
+    ReferenceModelEntry {
+        // Bedrock gpt-oss-safeguard (`openai.gpt-oss-safeguard-120b`): safety
+        // reasoning models, us-east-1 on-demand rate, 128K context. Structured
+        // outputs are confirmed only for the 20B route.
+        pattern: "gpt-oss-safeguard-120b",
+        capabilities: caps(false, false, false, 131_072),
+        pricing: pricing(0.15, 0.60, 0.15, 0.15),
+    },
+    ReferenceModelEntry {
+        pattern: "gpt-oss-safeguard-20b",
+        capabilities: caps(false, false, true, 131_072),
+        pricing: pricing(0.07, 0.20, 0.07, 0.07),
+    },
+    ReferenceModelEntry {
+        // Writer Palmyra Vision 7B on Bedrock: text+image input, 4K context.
+        pattern: "palmyra-vision-7b",
+        capabilities: caps(true, false, false, 4_096),
+        pricing: pricing(0.15, 0.60, 0.15, 0.15),
+    },
+    ReferenceModelEntry {
+        // AI21 Jamba 1.5 Large on Bedrock (`ai21.jamba-1-5-large-v1:0`):
+        // text-only, 256K context.
+        pattern: "jamba-1-5-large",
+        capabilities: caps(false, false, false, 262_144),
+        pricing: pricing(2.00, 8.00, 2.00, 2.00),
+    },
+    ReferenceModelEntry {
+        // Xiaomi MiMo v2.6 Pro UltraSpeed bills 10x the Pro rate, so it must
+        // precede it here.
+        pattern: "mimo-v2.6-pro-ultraspeed",
+        capabilities: caps(true, true, true, 1_048_576),
+        pricing: pricing(4.35, 8.70, 4.35, 0.036),
+    },
+    ReferenceModelEntry {
+        // Xiaomi MiMo v2.6 Pro / Flash (Sep 2026): 1M context,
+        // text/image/video/audio input on OpenRouter.
+        pattern: "mimo-v2.6-pro",
+        capabilities: caps(true, true, true, 1_048_576),
+        pricing: pricing(0.435, 0.87, 0.435, 0.0036),
+    },
+    ReferenceModelEntry {
+        pattern: "mimo-v2.6-flash",
+        capabilities: caps(true, true, true, 1_048_576),
+        pricing: pricing(0.14, 0.28, 0.14, 0.0028),
+    },
+    ReferenceModelEntry {
+        // Sakana Fugu Max / Ultra: 1M context, text+image input; Ultra v2
+        // shares the Ultra rate card and resolves through the same row.
+        pattern: "fugu-max",
+        capabilities: caps(true, false, true, 1_000_000),
+        pricing: pricing(2.00, 6.00, 2.00, 0.25),
+    },
+    ReferenceModelEntry {
+        pattern: "fugu-ultra",
+        capabilities: caps(true, false, true, 1_000_000),
+        pricing: pricing(5.00, 30.00, 5.00, 0.50),
+    },
+    ReferenceModelEntry {
+        // Tencent Hunyuan 3 preview is priced above the release, so it must
+        // precede the bare `hy3` row.
+        pattern: "hy3-preview",
+        capabilities: caps(false, false, false, 262_144),
+        pricing: pricing(0.18, 0.60, 0.18, 0.06),
+    },
+    ReferenceModelEntry {
+        // Tencent Hunyuan 3: 262K-context text model.
+        pattern: "hy3",
+        capabilities: caps(false, false, true, 262_144),
+        pricing: pricing(0.132, 0.528, 0.132, 0.033),
+    },
+    ReferenceModelEntry {
+        // Tencent Hunyuan MT2 translation models: 8K context, text-only.
+        pattern: "hy-mt2-1.8b",
+        capabilities: caps(false, false, false, 8_192),
+        pricing: pricing(0.044, 0.177, 0.044, 0.044),
+    },
+    ReferenceModelEntry {
+        pattern: "hy-mt2-7b",
+        capabilities: caps(false, false, true, 8_192),
+        pricing: pricing(0.074, 0.295, 0.074, 0.074),
+    },
+    ReferenceModelEntry {
+        pattern: "hy-mt2-30b-a3b",
+        capabilities: caps(false, false, true, 8_192),
+        pricing: pricing(0.074, 0.295, 0.074, 0.074),
+    },
+    ReferenceModelEntry {
+        // Nex AGI Nex N2.5 Pro / Mini: 262K context, text+image input.
+        pattern: "nex-n2.5-pro",
+        capabilities: caps(true, false, true, 262_144),
+        pricing: pricing(0.075, 0.25, 0.075, 0.015),
+    },
+    ReferenceModelEntry {
+        pattern: "nex-n2.5-mini",
+        capabilities: caps(true, false, true, 262_144),
+        pricing: pricing(0.025, 0.10, 0.025, 0.0025),
+    },
+    ReferenceModelEntry {
+        // StepFun Step 3.7 Flash: 262K context, text/image/video input.
+        pattern: "step-3.7-flash",
+        capabilities: caps(true, true, true, 262_144),
+        pricing: pricing(0.20, 1.15, 0.20, 0.04),
+    },
+    ReferenceModelEntry {
+        // StepFun Step 3.5 Flash: 262K-context text model, no structured outputs.
+        pattern: "step-3.5-flash",
+        capabilities: caps(false, false, false, 262_144),
+        pricing: pricing(0.10, 0.30, 0.10, 0.10),
+    },
+    ReferenceModelEntry {
+        // AionLabs Aion 3.0 Mini is priced below the base model, so it must
+        // precede it here.
+        pattern: "aion-3.0-mini",
+        capabilities: caps(false, false, false, 131_072),
+        pricing: pricing(0.70, 1.40, 0.70, 0.18),
+    },
+    ReferenceModelEntry {
+        // AionLabs Aion 3.0: 131K-context text model, no structured outputs.
+        pattern: "aion-3.0",
+        capabilities: caps(false, false, false, 131_072),
+        pricing: pricing(3.00, 6.00, 3.00, 0.75),
+    },
+    ReferenceModelEntry {
+        pattern: "aion-2.0",
+        capabilities: caps(false, false, false, 131_072),
+        pricing: pricing(0.80, 1.60, 0.80, 0.20),
+    },
+    ReferenceModelEntry {
+        // Unbiased Pareto: vendor-qualified so the variable-priced
+        // `openrouter/pareto-code` route does not inherit this rate.
+        pattern: "unbiased/pareto",
+        capabilities: caps(true, false, false, 262_144),
+        pricing: pricing(2.50, 7.50, 2.50, 0.25),
+    },
+    ReferenceModelEntry {
+        // Prism ML Ternary Bonsai 2 27B: 262K context, text+image input.
+        pattern: "ternary-bonsai-2-27b",
+        capabilities: caps(true, false, true, 262_144),
+        pricing: pricing(0.075, 0.50, 0.075, 0.075),
+    },
+    ReferenceModelEntry {
+        // Inference.net Schematron v2 extraction models: 128K context.
+        pattern: "schematron-v2-small",
+        capabilities: caps(false, false, true, 128_000),
+        pricing: pricing(0.05, 0.23, 0.05, 0.05),
+    },
+    ReferenceModelEntry {
+        pattern: "schematron-v2-turbo",
+        capabilities: caps(false, false, true, 128_000),
+        pricing: pricing(0.03, 0.15, 0.03, 0.03),
+    },
+    ReferenceModelEntry {
+        // Perceptron MK1: 32K context, text/image/video input.
+        pattern: "perceptron-mk1",
+        capabilities: caps(true, true, true, 32_768),
+        pricing: pricing(0.15, 1.50, 0.15, 0.15),
+    },
+    ReferenceModelEntry {
         pattern: "nemotron-3.5-lightning-30b-a3b",
         capabilities: caps(false, false, false, 1_000_000),
         pricing: pricing(0.05, 0.20, 0.05, 0.01),
@@ -146,6 +432,13 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pattern: "nemotron-3.5-lightning",
         capabilities: caps(false, false, true, 262_144),
         pricing: pricing(0.08, 0.20, 0.08, 0.04),
+    },
+    ReferenceModelEntry {
+        // NVIDIA Nemotron 3 Nano 30B A3B on OpenRouter: 262K-context text
+        // model. Sits after every more specific Nemotron row.
+        pattern: "nemotron-3-nano-30b-a3b",
+        capabilities: caps(false, false, true, 262_144),
+        pricing: pricing(0.05, 0.20, 0.05, 0.03),
     },
     ReferenceModelEntry {
         // Contributor tiers trade training rights for a much lower rate, so
@@ -1731,9 +2024,18 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
 ];
 
+// A bare pattern such as `o3` must not match inside `nano-3-30b`, so the hit
+// has to sit on a separator boundary at both ends.
 fn matches_model(normalized: &str, pattern: &str) -> bool {
     let sanitized_pattern = sanitize_model_name(pattern);
-    normalized.contains(&sanitized_pattern)
+    normalized
+        .match_indices(sanitized_pattern.as_str())
+        .any(|(start, hit)| {
+            let before = normalized[..start].chars().next_back();
+            let after = normalized[start + hit.len()..].chars().next();
+            before.is_none_or(|c| !c.is_ascii_alphanumeric())
+                && after.is_none_or(|c| !c.is_ascii_alphanumeric())
+        })
 }
 
 fn normalized_model(model: &str) -> String {

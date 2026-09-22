@@ -20,7 +20,7 @@ fn test_supports_model() {
     assert!(provider.supports_model("seed-2-0-pro-260328"));
     assert!(provider.supports_model("seed-2-0-lite-260228"));
     assert!(provider.supports_model("dola-seed-2.0-pro"));
-    assert!(provider.supports_model("glm-4-7-251222"));
+    assert!(provider.supports_model("glm-5-3-flash-260828"));
     assert!(provider.supports_model("any-model"));
     assert!(!provider.supports_model(""));
 }
@@ -94,6 +94,20 @@ fn test_pricing_third_party_models() {
     assert_eq!(p.input_price_per_1m, 1.40);
     assert_eq!(p.output_price_per_1m, 4.40);
     assert_eq!(p.cache_read_price_per_1m, 0.26);
+
+    let p = provider.get_model_pricing("glm-5-3-flash-260828").unwrap();
+    assert_eq!(p.input_price_per_1m, 0.15);
+    assert_eq!(p.output_price_per_1m, 0.50);
+    assert_eq!(p.cache_read_price_per_1m, 0.03);
+
+    // V4.1 Flash is priced at the peak-hour rate and must not fall through to
+    // the V4 Flash row.
+    let p = provider
+        .get_model_pricing("deepseek-v4-1-flash-260910")
+        .unwrap();
+    assert_eq!(p.input_price_per_1m, 0.30);
+    assert_eq!(p.output_price_per_1m, 1.20);
+    assert_eq!(p.cache_read_price_per_1m, 0.006);
 }
 
 #[test]

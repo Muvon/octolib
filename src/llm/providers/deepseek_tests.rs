@@ -27,13 +27,13 @@ fn calculate_cost(
 fn test_supports_model() {
     let provider = DeepSeekProvider::new();
     assert!(provider.supports_model("deepseek-flash"));
+    assert!(provider.supports_model("deepseek-v4-pro"));
     // Routes retired by DeepSeek: chat/reasoner (2026-07-24), v4-flash and its
-    // vision-exp variant (2026-09-10), v4-pro (2026-09-14)
+    // vision-exp variant (2026-09-10)
     assert!(!provider.supports_model("deepseek-chat"));
     assert!(!provider.supports_model("deepseek-reasoner"));
     assert!(!provider.supports_model("deepseek-v4-flash"));
     assert!(!provider.supports_model("deepseek-v4-flash-vision-exp"));
-    assert!(!provider.supports_model("deepseek-v4-pro"));
     assert!(!provider.supports_model("gpt-4"));
     assert!(!provider.supports_model("deepseek-coder")); // Not in current API
 }
@@ -44,6 +44,7 @@ fn test_vision_route() {
 
     let provider = DeepSeekProvider::new();
     assert!(provider.supports_vision("deepseek-flash"));
+    assert!(!provider.supports_vision("deepseek-v4-pro"));
 
     let msg = Message::user("what is this?").with_images(vec![ImageAttachment {
         data: ImageData::Base64("QUJD".to_string()),
@@ -72,12 +73,14 @@ fn test_supports_model_case_insensitive() {
     let provider = DeepSeekProvider::new();
     assert!(provider.supports_model("DEEPSEEK-FLASH"));
     assert!(provider.supports_model("DeepSeek-Flash"));
+    assert!(provider.supports_model("DeepSeek-V4-Pro"));
 }
 
 #[test]
 fn test_max_input_tokens() {
     let provider = DeepSeekProvider::new();
     assert_eq!(provider.get_max_input_tokens("deepseek-flash"), 1_000_000);
+    assert_eq!(provider.get_max_input_tokens("deepseek-v4-pro"), 1_000_000);
 }
 
 #[test]
@@ -147,6 +150,10 @@ fn test_thinking_models_do_not_advertise_sampling_controls() {
         provider.supported_sampling_params("deepseek-flash"),
         SamplingSupport::NONE
     );
+    assert_eq!(
+        provider.supported_sampling_params("deepseek-v4-pro"),
+        SamplingSupport::NONE
+    );
 }
 
 #[test]
@@ -163,6 +170,16 @@ fn test_tiered_pricing_peak_and_off_peak() {
     let cached =
         calculate_cost_with_cache(PRICING_PEAK, "deepseek-flash", 0, 1_000_000, 0).unwrap();
     assert!((cached - 0.006).abs() < 0.0001);
+
+    // Peak: V4 Pro $1.32 in / $3.96 out per 1M; off-peak is half; cache hit $0.044/1M
+    let pro_peak = calculate_cost(PRICING_PEAK, "deepseek-v4-pro", 1_000_000, 500_000).unwrap();
+    assert!((pro_peak - (1.32 + 0.5 * 3.96)).abs() < 0.01);
+    let pro_off_peak =
+        calculate_cost(PRICING_OFF_PEAK, "deepseek-v4-pro", 1_000_000, 500_000).unwrap();
+    assert!((pro_off_peak - pro_peak / 2.0).abs() < 0.01);
+    let pro_cached =
+        calculate_cost_with_cache(PRICING_PEAK, "deepseek-v4-pro", 0, 1_000_000, 0).unwrap();
+    assert!((pro_cached - 0.044).abs() < 0.0001);
 }
 
 #[test]

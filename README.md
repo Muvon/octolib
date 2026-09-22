@@ -465,7 +465,7 @@ Capabilities marked "Per-model" are resolved per model from the provider's capab
 | **Google Studio** | Gemini API, API-key auth | ✅ JSON + Schema | ✅ | ✅ | ✅ |
 | **Amazon Bedrock** | Cloud AI services | ❌ | ✅ | ✅ | ❌ |
 | **DeepSeek** | Open-source models | ✅ JSON Mode | ❌ | ❌ | ✅ |
-| **Moonshot (Kimi)** | K2/K3 series | ✅ JSON Mode | ✅ kimi-k2.5 | ✅ | ✅ |
+| **Moonshot (Kimi)** | K2/K3 series | ✅ JSON Mode | ✅ kimi-k3 | ✅ | ✅ |
 | **MiniMax** | Anthropic-compatible API | ✅ JSON Mode | ❌ | ✅ | ✅ |
 | **Z.ai** | GLM models | ✅ JSON Mode | ❌ | ✅ | ✅ |
 | **BytePlus** | Seed models | ✅ JSON + Schema | Per-model | ❌ | ✅ |
@@ -502,7 +502,7 @@ Octolib provides first-class support for models that produce thinking/reasoning 
 use octolib::{ProviderFactory, ChatCompletionParams, Message, ThinkingBlock};
 
 async fn thinking_example() -> anyhow::Result<()> {
-    // Thinking-capable models: MiniMax, OpenAI o-series, Moonshot (kimi-k2-thinking*, K3), Z.ai (GLM hybrid thinking), xAI
+    // Thinking-capable models: MiniMax, OpenAI o-series, Moonshot (K3), Z.ai (GLM hybrid thinking), xAI
     let (provider, model) = ProviderFactory::get_provider_for_model("minimax:MiniMax-M2")?;
 
     let messages = vec![
@@ -541,7 +541,7 @@ async fn thinking_example() -> anyhow::Result<()> {
 | **xAI** | Responses API reasoning items | Summary extraction plus encrypted reasoning preservation across tool rounds |
 | **OpenAI o-series** | `reasoning_content` field | o1, o3, o4 models |
 | **OpenRouter** | `reasoning_details` | Gemini and other providers |
-| **Moonshot (Kimi)** | `reasoning_content` field | kimi-k2-thinking models; K3 always reasons |
+| **Moonshot (Kimi)** | `reasoning_content` field | K3 always reasons |
 | **Z.ai** | reasoning_content field with legacy think-tag fallback | GLM hybrid thinking models (4.5/4.6/4.7/5.x) |
 
 #### Token Tracking

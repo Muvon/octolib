@@ -32,7 +32,7 @@ fn test_default_capabilities() {
     assert_eq!(provider.name(), "google-studio");
     assert!(provider.supports_caching("gemini-3.5-flash"));
     assert!(provider.supports_caching("gemini-2.5-pro"));
-    assert!(!provider.supports_caching("gemini-2.0-flash"));
+    assert!(!provider.supports_caching("gemini-1.5-pro"));
     assert!(provider.supports_vision("gemini-3.1-pro"));
     assert!(provider.supports_structured_output("any-model"));
     assert_eq!(provider.get_max_input_tokens("gemini-3.6-flash"), 1_048_576);
@@ -86,6 +86,10 @@ fn test_model_pricing() {
     let p = provider.get_model_pricing("gemini-2.5-flash-lite").unwrap();
     assert_eq!(p.input_price_per_1m, 0.10);
     assert_eq!(p.output_price_per_1m, 0.40);
+
+    // Shut down upstream and removed from the shared table
+    assert!(provider.get_model_pricing("gemini-3-pro-preview").is_none());
+    assert!(provider.get_model_pricing("gemini-2.0-flash").is_none());
 
     assert!(provider.get_model_pricing("gemma-3-27b").is_none());
 }

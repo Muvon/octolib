@@ -59,19 +59,37 @@ const FEATHERLESS_API_KEY_ENV: &str = "FEATHERLESS_API_KEY";
 const FEATHERLESS_API_URL_ENV: &str = "FEATHERLESS_API_URL";
 const FEATHERLESS_API_URL: &str = "https://api.featherless.ai/v1/chat/completions";
 
-/// Feather Developer request prices per 1M tokens, verified Aug 26, 2026.
+/// Feather Developer request prices per 1M tokens, verified Sep 22, 2026.
 /// Format: (model ID pattern, input, output, cache write, cached input).
 const PRICING: &[PricingTuple] = &[
     ("deepseek-ai/DeepSeek-V4-Flash-0731", 0.14, 0.28, 0.14, 0.03),
     ("deepseek-ai/DeepSeek-V4-Flash", 0.14, 0.28, 0.14, 0.03),
     ("deepseek-ai/DeepSeek-V4-Pro", 1.60, 3.20, 1.60, 0.20),
-    ("deepseek-ai/DeepSeek-V3.2", 0.2995, 0.45, 0.2995, 0.06),
-    ("zai-org/GLM-5.2", 0.75, 2.40, 0.75, 0.15),
+    ("deepseek-ai/DeepSeek-V3.2", 0.264, 0.41, 0.264, 0.06),
+    ("zai-org/GLM-5.2", 1.40, 4.40, 1.40, 0.15),
+    ("zai-org/GLM-4.7", 0.55, 2.20, 0.55, 0.11),
+    // Pricing doc lists 3.00/15.00 while the model page still lists 2.00/10.00.
     ("moonshotai/Kimi-K3", 2.00, 10.00, 2.00, 0.30),
+    ("moonshotai/Kimi-K2.5", 0.80, 3.40, 0.80, 0.154),
     ("MiniMaxAI/MiniMax-M3", 0.55, 2.20, 0.55, 0.06),
+    ("Qwen/Qwen3.5-397B-A17B", 0.55, 3.50, 0.55, 0.55),
+    (
+        "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+        0.38,
+        1.55,
+        0.38,
+        0.076,
+    ),
+    (
+        "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16",
+        0.125,
+        1.15,
+        0.125,
+        0.025,
+    ),
     ("google/gemma-4-31B", 0.12, 0.36, 0.12, 0.10),
     ("google/gemma-4-26B", 0.07, 0.34, 0.07, 0.05),
-    ("openai/gpt-oss-120b", 0.10, 0.55, 0.10, 0.02),
+    ("openai/gpt-oss-120b", 0.15, 0.60, 0.15, 0.02),
     ("openai/gpt-oss-20b", 0.04, 0.15, 0.04, 0.04),
 ];
 

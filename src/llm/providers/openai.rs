@@ -36,6 +36,9 @@ use std::env;
 const PRICING: &[PricingTuple] = &[
     // GPT-6 family. Cache writes cost 1.25x uncached input; cache reads 0.1x.
     ("gpt-6-astra", 10.00, 50.00, 12.50, 1.00),
+    // Sol/Luna verified Sep 24, 2026 against the official pricing page above.
+    ("gpt-6-sol", 2.00, 10.00, 2.50, 0.20),
+    ("gpt-6-luna", 0.10, 0.50, 0.125, 0.01),
     // GPT-5.6 family. The gpt-5.6 alias routes to gpt-5.6-sol.
     // Cache writes cost 1.25x uncached input; cache reads cost 0.1x.
     // Sol is on promotional pricing at least through Nov 21, 2026.

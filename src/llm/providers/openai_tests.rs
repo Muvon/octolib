@@ -962,6 +962,57 @@ fn test_gpt_6_astra() {
 }
 
 #[test]
+fn test_gpt_6_sol_and_luna_provider_and_reference_support() {
+    let provider = OpenAiProvider::new();
+    for (model, input, output, cache_write, cache_read) in [
+        ("gpt-6-sol", 2.00, 10.00, 2.50, 0.20),
+        ("gpt-6-luna", 0.10, 0.50, 0.125, 0.01),
+    ] {
+        assert!(provider.supports_model(model));
+        assert!(provider.supports_vision(model));
+        assert!(provider.supports_caching(model));
+        assert!(provider.supports_structured_output(model));
+        assert_eq!(provider.get_max_input_tokens(model), 1_050_000);
+        assert!(is_gpt_5_6_or_later(model));
+
+        let sampling = provider.supported_sampling_params(model);
+        assert!(!sampling.temperature && !sampling.top_p && !sampling.top_k);
+
+        // Check both public reference facades, including aggregator model IDs.
+        let proxy_model = format!("openai/{model}");
+        for pricing in [
+            provider.get_model_pricing(model).unwrap(),
+            crate::llm::reference_pricing::get_reference_pricing(&proxy_model).unwrap(),
+        ] {
+            assert_eq!(pricing.input_price_per_1m, input, "{model}");
+            assert_eq!(pricing.output_price_per_1m, output, "{model}");
+            assert_eq!(pricing.cache_write_price_per_1m, cache_write, "{model}");
+            assert_eq!(pricing.cache_read_price_per_1m, cache_read, "{model}");
+        }
+        let caps =
+            crate::llm::reference_capabilities::get_reference_capabilities(&proxy_model).unwrap();
+        assert!(caps.vision && caps.structured_output && !caps.video);
+        assert_eq!(caps.max_input_tokens, 1_050_000);
+    }
+}
+
+#[test]
+fn test_gpt_6_sol_and_luna_long_context_boundary_includes_cache_tokens() {
+    for (model, standard_cost, long_cost) in [
+        ("gpt-6-sol", 0.5794, 1.1108004),
+        ("gpt-6-luna", 0.02897, 0.05554002),
+    ] {
+        // Exactly 272K total input stays at standard rates, including cache writes/reads.
+        let standard = calculate_cost_with_cache(model, 200_000, 30_000, 42_000, 9_600).unwrap();
+        assert!((standard - standard_cost).abs() < 1e-9, "{model}");
+
+        // One more cache-read token switches the full request to long-context rates.
+        let long = calculate_cost_with_cache(model, 200_000, 30_000, 42_001, 9_600).unwrap();
+        assert!((long - long_cost).abs() < 1e-9, "{model}");
+    }
+}
+
+#[test]
 fn test_gpt_5_6_usage_deserializes_cache_writes() {
     let usage: ResponseUsage = serde_json::from_value(serde_json::json!({
         "input_tokens": 3_000,

@@ -348,7 +348,7 @@ fn k3_reasoning_effort(model: &str, effort: Option<ReasoningEffort>) -> Option<&
         Some(ReasoningEffort::Low) | Some(ReasoningEffort::Medium) => Some("low"),
         Some(ReasoningEffort::High) | Some(ReasoningEffort::XHigh) => Some("high"),
         Some(ReasoningEffort::Max) => Some("max"),
-        None => None,
+        Some(ReasoningEffort::None) | None => None,
     }
 }
 
@@ -564,6 +564,12 @@ impl AiProvider for MoonshotProvider {
                 MOONSHOT_API_KEY_ENV
             )),
         }
+    }
+
+    /// Kimi K2.6+/K3 preserve reasoning across every assistant turn; older
+    /// Kimi models get only the trailing message's reasoning back.
+    fn replays_thinking(&self, model: &str) -> bool {
+        preserves_historical_thinking(model)
     }
 
     fn supports_caching(&self, model: &str) -> bool {

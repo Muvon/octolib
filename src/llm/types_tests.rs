@@ -295,3 +295,13 @@ fn test_effective_sampling_params() {
     assert_eq!(sp.top_p, None);
     assert_eq!(sp.top_k, Some(20));
 }
+
+#[test]
+fn reasoning_effort_none_round_trips_through_serde() {
+    let effort: ReasoningEffort = serde_json::from_str("\"none\"").unwrap();
+    assert_eq!(effort, ReasoningEffort::None);
+    assert_eq!(
+        serde_json::to_string(&ReasoningEffort::None).unwrap(),
+        "\"none\""
+    );
+}

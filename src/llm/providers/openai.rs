@@ -668,6 +668,10 @@ impl AiProvider for OpenAiProvider {
             || params.model.starts_with("gpt-daybreak")
         {
             let effort = match params.reasoning_effort {
+                // GPT-5.x accepts "none" (no reasoning); the o-series does not,
+                // where "low" is the floor.
+                Some(ReasoningEffort::None) if params.model.starts_with("gpt-") => "none",
+                Some(ReasoningEffort::None) => "low",
                 Some(ReasoningEffort::Low) => "low",
                 Some(ReasoningEffort::Medium) => "medium",
                 Some(ReasoningEffort::High) => "high",

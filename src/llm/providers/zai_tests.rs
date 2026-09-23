@@ -333,3 +333,10 @@ fn image_attachments_become_multimodal_content() {
     let plain = convert_messages(&[Message::user("hi")]);
     assert_eq!(plain[0].content, Some(serde_json::json!("hi")));
 }
+
+#[test]
+fn test_zai_replays_thinking_for_every_model() {
+    let provider = ZaiProvider::new();
+    assert!(provider.replays_thinking("glm-5.3"));
+    assert!(provider.replays_thinking("glm-4.7"));
+}

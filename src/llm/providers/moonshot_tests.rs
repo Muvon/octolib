@@ -492,3 +492,20 @@ fn test_sanitize_schema_no_defs_passthrough() {
     let sanitized = sanitize_schema_for_moonshot(&schema);
     assert_eq!(sanitized, schema);
 }
+
+#[test]
+fn test_replays_thinking_follows_the_preserve_thinking_models() {
+    let provider = MoonshotProvider::new();
+    assert!(provider.replays_thinking("kimi-k2.7"));
+    assert!(provider.replays_thinking("kimi-k3"));
+    assert!(!provider.replays_thinking("kimi-k2.5"));
+    assert!(!provider.replays_thinking("kimi-k2-turbo"));
+}
+
+#[test]
+fn test_k3_reasoning_effort_none_sends_no_level() {
+    assert_eq!(
+        k3_reasoning_effort("kimi-k3", Some(ReasoningEffort::None)),
+        None
+    );
+}

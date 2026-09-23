@@ -851,9 +851,15 @@ pub struct EffectiveSamplingParams {
 /// thinking flag, etc.) inside its `chat_completion()` implementation.
 ///
 /// To leave thinking at provider default, keep `ChatCompletionParams::reasoning_effort` as `None`.
+/// `ReasoningEffort::None` is the explicit opposite: no reasoning requested, and
+/// thinking switched off wherever the provider has a switch (Alibaba
+/// `enable_thinking=false`, DeepSeek/Z.AI `thinking.type=disabled`, OpenRouter
+/// `reasoning.enabled=false`, OpenAI `reasoning.effort=none`); providers with
+/// no switch send nothing, as for an unset effort.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ReasoningEffort {
+    None,
     Low,
     Medium,
     High,

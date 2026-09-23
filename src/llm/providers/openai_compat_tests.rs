@@ -508,3 +508,29 @@ fn test_tinker_reasoning_effort_xhigh_ceiling() {
         "xhigh"
     );
 }
+
+#[test]
+fn test_reasoning_effort_value_none_maps_to_the_none_level() {
+    use crate::llm::types::ReasoningEffort;
+    assert_eq!(
+        reasoning_effort_value("alibaba", "deepseek-v4-flash-0731", ReasoningEffort::None),
+        "none"
+    );
+    assert_eq!(
+        reasoning_effort_value("alibaba", "glm-5.3", ReasoningEffort::None),
+        "none"
+    );
+    assert_eq!(
+        reasoning_effort_value("openrouter", "any", ReasoningEffort::None),
+        "none"
+    );
+}
+
+#[test]
+fn test_openai_compat_transport_drops_thinking_by_default() {
+    // The shared transport family (Alibaba, Ollama minus Kimi, OpenRouter,
+    // OctoHub, ...) never replays historical reasoning, so callers must not
+    // count it towards the prompt.
+    let provider = crate::llm::providers::alibaba::AlibabaProvider::new();
+    assert!(!provider.replays_thinking("deepseek-v4-flash-0731"));
+}

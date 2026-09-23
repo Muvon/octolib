@@ -107,7 +107,8 @@ fn map_reasoning_effort(
         Some(ReasoningEffort::Low) | Some(ReasoningEffort::Medium) => Some("low"),
         Some(ReasoningEffort::High) | Some(ReasoningEffort::XHigh) => Some("high"),
         Some(ReasoningEffort::Max) => Some("max"),
-        None => None,
+        // Thinking is switched off through `thinking.type` instead.
+        Some(ReasoningEffort::None) | None => None,
     }
 }
 
@@ -392,7 +393,13 @@ fn build_request(params: &ChatCompletionParams) -> DeepSeekRequest {
         tools,
         reasoning_effort: map_reasoning_effort(params.reasoning_effort),
         thinking: DeepSeekThinking {
-            thinking_type: "enabled",
+            thinking_type: if params.reasoning_effort
+                == Some(crate::llm::types::ReasoningEffort::None)
+            {
+                "disabled"
+            } else {
+                "enabled"
+            },
         },
     }
 }
@@ -417,6 +424,13 @@ impl AiProvider for DeepSeekProvider {
                 DEEPSEEK_API_KEY_ENV
             )),
         }
+    }
+
+    /// DeepSeek's thinking-mode rule replays every prior turn's reasoning on
+    /// tool-carrying requests (see `convert_messages`); agent sessions are
+    /// tool-carrying, so the stored reasoning is context the model reads.
+    fn replays_thinking(&self, _model: &str) -> bool {
+        true
     }
 
     fn supports_caching(&self, _model: &str) -> bool {

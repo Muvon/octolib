@@ -255,14 +255,21 @@ impl AiProvider for OpenRouterProvider {
 
         // Pass-through reasoning_effort (OpenRouter forwards it to the underlying provider).
         if let Some(effort) = params.reasoning_effort {
-            let s = match effort {
-                crate::llm::types::ReasoningEffort::Low => "low",
-                crate::llm::types::ReasoningEffort::Medium => "medium",
-                crate::llm::types::ReasoningEffort::High => "high",
-                crate::llm::types::ReasoningEffort::XHigh => "high",
-                crate::llm::types::ReasoningEffort::Max => "high",
-            };
-            request_body["reasoning_effort"] = serde_json::json!(s);
+            if effort == crate::llm::types::ReasoningEffort::None {
+                // OpenRouter's unified reasoning switch; forwarded to the
+                // underlying provider as its own "thinking off".
+                request_body["reasoning"] = serde_json::json!({ "enabled": false });
+            } else {
+                let s = match effort {
+                    crate::llm::types::ReasoningEffort::None => unreachable!("handled above"),
+                    crate::llm::types::ReasoningEffort::Low => "low",
+                    crate::llm::types::ReasoningEffort::Medium => "medium",
+                    crate::llm::types::ReasoningEffort::High => "high",
+                    crate::llm::types::ReasoningEffort::XHigh => "high",
+                    crate::llm::types::ReasoningEffort::Max => "high",
+                };
+                request_body["reasoning_effort"] = serde_json::json!(s);
+            }
         }
 
         // Add tools if available (OpenRouter supports OpenAI-compatible tools)

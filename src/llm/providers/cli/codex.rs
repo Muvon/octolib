@@ -31,7 +31,7 @@ pub(crate) fn build_args(
     // Per-call effort takes precedence over the provider's env-configured default.
     // codex CLI accepts: low | medium | high (no "none"/"xhigh").
     let effort_str: String = match effort_override {
-        Some(ReasoningEffort::Low) => "low".to_string(),
+        Some(ReasoningEffort::None) | Some(ReasoningEffort::Low) => "low".to_string(),
         Some(ReasoningEffort::Medium) => "medium".to_string(),
         Some(ReasoningEffort::High) => "high".to_string(),
         Some(ReasoningEffort::XHigh) => "high".to_string(),

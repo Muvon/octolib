@@ -108,6 +108,16 @@ pub trait AiProvider: Send + Sync {
         false
     }
 
+    /// Whether this provider sends stored assistant `thinking` back to the
+    /// model on later requests for `model`, so it occupies context the model
+    /// reads and bills. Most providers drop historical reasoning on the wire;
+    /// the ones that replay it (Z.AI Preserved Thinking, DeepSeek on tool
+    /// requests, Kimi K2.6+/K3 on Moonshot and Ollama) say so here, so callers
+    /// sizing a prompt can count reasoning only where it is actually sent.
+    fn replays_thinking(&self, _model: &str) -> bool {
+        false
+    }
+
     /// How often (and whether) to ping this provider to keep its prompt cache warm.
     ///
     /// `use_long_cache` mirrors octomind's `use_long_system_cache` flag — providers

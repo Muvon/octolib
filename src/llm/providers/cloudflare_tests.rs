@@ -334,3 +334,13 @@ fn catalog_effort_prefers_supported_then_documented_normalization_then_floor() {
         Some("high")
     );
 }
+
+#[test]
+fn catalog_effort_none_is_sent_only_where_the_model_lists_it() {
+    use crate::llm::types::ReasoningEffort;
+    let catalog = parse_catalog(catalog_fixture());
+    // GLM-5.3 lists max|high|low: "none" is not an effort there, and it must
+    // not floor to "low" — no reasoning means no effort field at all.
+    let glm = catalog_model(&catalog, "@cf/zai-org/glm-5.3").unwrap();
+    assert_eq!(select_effort(glm, ReasoningEffort::None), None);
+}

@@ -197,8 +197,13 @@ impl AiProvider for TogetherProvider {
 
         // Pass-through reasoning_effort for Together's OpenAI-compatible thinking models
         // (e.g. DeepSeek-R1, Qwen3-Thinking). Models without it ignore the field.
-        if let Some(effort) = params.reasoning_effort {
+        // None has no Together-side switch: the field is omitted, as when unset.
+        if let Some(effort) = params
+            .reasoning_effort
+            .filter(|effort| *effort != crate::llm::types::ReasoningEffort::None)
+        {
             let s = match effort {
+                crate::llm::types::ReasoningEffort::None => unreachable!("filtered above"),
                 crate::llm::types::ReasoningEffort::Low => "low",
                 crate::llm::types::ReasoningEffort::Medium => "medium",
                 crate::llm::types::ReasoningEffort::High => "high",

@@ -315,6 +315,12 @@ impl AiProvider for ZaiProvider {
         env::var(ZAI_API_KEY_ENV)
             .map_err(|_| anyhow::anyhow!("{} not found in environment", ZAI_API_KEY_ENV))
     }
+    /// Z.AI documents that historical `reasoning_content` must be returned
+    /// unmodified (Preserved Thinking); `convert_messages` replays every turn.
+    fn replays_thinking(&self, _model: &str) -> bool {
+        true
+    }
+
     fn supports_caching(&self, _model: &str) -> bool {
         true // Z.ai supports prompt caching
     }
@@ -420,11 +426,20 @@ impl AiProvider for ZaiProvider {
             // (e.g. glm-4-32b, glm-ocr) ignore the field. GLM-5.3 requires
             // thinking ("disabled" is rejected); omitting the field uses the
             // API default, which is enabled.
-            thinking: params
-                .reasoning_effort
-                .map(|_| serde_json::json!({ "type": "enabled" })),
+            thinking: match params.reasoning_effort {
+                // GLM-5.3 rejects "disabled": leave the field to the API default.
+                Some(ReasoningEffort::None)
+                    if normalize_model_name(&params.model).contains("glm-5.3") =>
+                {
+                    None
+                }
+                Some(ReasoningEffort::None) => Some(serde_json::json!({ "type": "disabled" })),
+                Some(_) => Some(serde_json::json!({ "type": "enabled" })),
+                None => None,
+            },
             reasoning_effort: params
                 .reasoning_effort
+                .filter(|effort| *effort != ReasoningEffort::None)
                 .map(|effort| reasoning_effort_value(&params.model, effort)),
         };
 
@@ -793,7 +808,8 @@ fn extract_structured_output(response: &serde_json::Value) -> Option<serde_json:
 fn reasoning_effort_value(model: &str, effort: ReasoningEffort) -> &'static str {
     let glm_5_3 = normalize_model_name(model).contains("glm-5.3");
     match effort {
-        ReasoningEffort::Low => "low",
+        // Callers filter None out before asking for a level.
+        ReasoningEffort::None | ReasoningEffort::Low => "low",
         ReasoningEffort::Medium if glm_5_3 => "low",
         ReasoningEffort::Medium => "medium",
         ReasoningEffort::High => "high",

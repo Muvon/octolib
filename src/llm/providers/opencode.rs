@@ -122,7 +122,7 @@ fn adjust_reasoning_effort(
         Some(ReasoningEffort::Low) | Some(ReasoningEffort::Medium) => Some(ReasoningEffort::Low),
         Some(ReasoningEffort::High) | Some(ReasoningEffort::XHigh) => Some(ReasoningEffort::High),
         Some(ReasoningEffort::Max) => Some(ReasoningEffort::Max),
-        None => None,
+        Some(ReasoningEffort::None) | None => None,
     }
 }
 

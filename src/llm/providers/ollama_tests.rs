@@ -78,3 +78,11 @@ fn test_context_window_model_specific() {
     // Unknown models get reference-capabilities fallback default
     assert_eq!(provider.get_max_input_tokens("unknown-model"), 262_144);
 }
+
+#[test]
+fn test_ollama_replays_thinking_only_for_preserve_thinking_kimi() {
+    let provider = OllamaProvider::new();
+    assert!(provider.replays_thinking("kimi-k2.6"));
+    assert!(!provider.replays_thinking("minimax-m3"));
+    assert!(!provider.replays_thinking("qwen3"));
+}

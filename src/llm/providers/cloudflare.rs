@@ -574,7 +574,8 @@ fn default_cloudflare_api_url(account_id: &str) -> String {
     )
 }
 
-const EFFORT_LADDER: [(ReasoningEffort, &str); 5] = [
+const EFFORT_LADDER: [(ReasoningEffort, &str); 6] = [
+    (ReasoningEffort::None, "none"),
     (ReasoningEffort::Low, "low"),
     (ReasoningEffort::Medium, "medium"),
     (ReasoningEffort::High, "high"),
@@ -597,6 +598,13 @@ fn select_effort(entry: &CatalogModel, effort: ReasoningEffort) -> Option<&'stat
         .iter()
         .position(|(level, _)| *level == effort)?;
     let requested = EFFORT_LADDER[index].1;
+    // "none" means no reasoning. Only a model that lists it as a level gets it;
+    // a documented normalization does not count (GLM-5.3 normalizes "none" to
+    // "max"), and neither does flooring to the lowest supported level — no
+    // effort field at all is the honest translation.
+    if effort == ReasoningEffort::None {
+        return supported(requested).then_some(requested);
+    }
     if supported(requested) || entry.normalized_efforts.iter().any(|s| s == requested) {
         return Some(requested);
     }

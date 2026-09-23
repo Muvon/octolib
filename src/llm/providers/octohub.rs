@@ -185,6 +185,7 @@ impl AiProvider for OctoHubProvider {
         // forward `reasoning_effort` as a plain string and let the server map it.
         if let Some(effort) = params.reasoning_effort {
             let s = match effort {
+                crate::llm::types::ReasoningEffort::None => "none",
                 crate::llm::types::ReasoningEffort::Low => "low",
                 crate::llm::types::ReasoningEffort::Medium => "medium",
                 crate::llm::types::ReasoningEffort::High => "high",

@@ -52,6 +52,7 @@ fn reasoning_effort_value(
         // and owns the model-specific collapse between them. Preserve the
         // caller's level verbatim instead of applying the generic high ceiling.
         return match effort {
+            ReasoningEffort::None => "none",
             ReasoningEffort::Low => "low",
             ReasoningEffort::Medium => "medium",
             ReasoningEffort::High => "high",
@@ -75,6 +76,7 @@ fn reasoning_effort_value(
     }
 
     match effort {
+        crate::llm::types::ReasoningEffort::None => "none",
         crate::llm::types::ReasoningEffort::Low => "low",
         crate::llm::types::ReasoningEffort::Medium => "medium",
         crate::llm::types::ReasoningEffort::High => "high",
@@ -143,6 +145,7 @@ fn glm_reasoning_effort(
     use crate::llm::utils::contains_ignore_ascii_case;
 
     let verbatim = match effort {
+        ReasoningEffort::None => "none",
         ReasoningEffort::Low => "low",
         ReasoningEffort::Medium => "medium",
         ReasoningEffort::High => "high",
@@ -153,6 +156,7 @@ fn glm_reasoning_effort(
     if provider_name.eq_ignore_ascii_case("alibaba") {
         if contains_ignore_ascii_case(model, "glm-5.3") {
             return Some(match effort {
+                ReasoningEffort::None => "none",
                 ReasoningEffort::Low | ReasoningEffort::Medium => "low",
                 ReasoningEffort::High | ReasoningEffort::XHigh => "high",
                 ReasoningEffort::Max => "max",
@@ -316,18 +320,36 @@ async fn chat_completion_raw(
     // OpenRouter, OctoHub, Google Vertex via OpenAI-compat) accept the standard
     // `reasoning_effort` parameter with values: "low" | "medium" | "high".
     // Providers that don't recognize it will ignore it.
-    if let Some(effort) = params.reasoning_effort {
-        let s = reasoning_effort_value(config.provider_name, &params.model, effort);
-        request_body["reasoning_effort"] = serde_json::json!(s);
-    }
-
-    // DeepSeek V4 is a hybrid-thinking family. An explicit effort means the
-    // caller selected thinking, so preserve that intent on Model Studio rather
-    // than relying only on the moving alias' current default.
-    if params.reasoning_effort.is_some()
-        && is_alibaba_deepseek_v4(config.provider_name, &params.model)
-    {
-        request_body["enable_thinking"] = serde_json::json!(true);
+    match params.reasoning_effort {
+        Some(crate::llm::types::ReasoningEffort::None) => {
+            // Thinking off. Model Studio's hybrid models (DeepSeek V4, GLM, Qwen3)
+            // think by default and only `enable_thinking=false` stops it; a
+            // Workers AI model that lists "none" takes it as an effort. Other
+            // OpenAI-compatible hosts have no switch: nothing is sent, as for an
+            // unset effort — sending "none" to a host that validates the ladder
+            // is a 400 (Meta), and the default there is no thinking anyway.
+            if config.provider_name.eq_ignore_ascii_case("alibaba") {
+                request_body["enable_thinking"] = serde_json::json!(false);
+            } else if config.provider_name.eq_ignore_ascii_case("cloudflare") {
+                if let Some(value) = crate::llm::providers::cloudflare::catalog_reasoning_effort(
+                    &params.model,
+                    crate::llm::types::ReasoningEffort::None,
+                ) {
+                    request_body["reasoning_effort"] = serde_json::json!(value);
+                }
+            }
+        }
+        Some(effort) => {
+            let s = reasoning_effort_value(config.provider_name, &params.model, effort);
+            request_body["reasoning_effort"] = serde_json::json!(s);
+            // DeepSeek V4 is a hybrid-thinking family. An explicit effort means
+            // the caller selected thinking, so preserve that intent on Model
+            // Studio rather than relying only on the moving alias' current default.
+            if is_alibaba_deepseek_v4(config.provider_name, &params.model) {
+                request_body["enable_thinking"] = serde_json::json!(true);
+            }
+        }
+        None => {}
     }
 
     if let Some(tools) = &params.tools {

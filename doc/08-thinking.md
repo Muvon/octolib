@@ -6,6 +6,37 @@ Octolib provides first-class support for models that produce thinking/reasoning 
 
 ## Architecture
 
+### Reasoning effort, including `None`
+
+`ChatCompletionParams::reasoning_effort` is a provider-agnostic hint. Leaving it
+unset (`None` at the `Option` level) keeps the provider's default. Setting
+`ReasoningEffort::None` is the explicit opposite — no reasoning requested, and
+thinking switched off wherever the provider has a switch:
+
+| Provider | `ReasoningEffort::None` on the wire |
+|----------|-------------------------------------|
+| Alibaba Model Studio (DeepSeek V4, GLM, Qwen3) | `enable_thinking: false`, no `reasoning_effort` |
+| DeepSeek (native) | `thinking: {"type": "disabled"}` |
+| Z.AI | `thinking: {"type": "disabled"}` (omitted for GLM-5.3, which rejects it) |
+| OpenRouter | `reasoning: {"enabled": false}` |
+| OpenAI Responses (gpt-5.x) | `reasoning: {"effort": "none"}`; the o-series floors to `"low"` |
+| OctoHub | `reasoning_effort: "none"`, mapped server-side by this same library |
+| Cloudflare Workers AI | `reasoning_effort: "none"` only when the catalog lists it as a level |
+| Anthropic, xAI, Together, Moonshot, codex CLI, other OpenAI-compatible hosts | nothing is sent (their default is no thinking, or there is no switch) |
+
+Use it for calls whose output is the whole point — summaries, judges, structured
+extraction. A hybrid-thinking model left on its default can spend the entire
+output budget reasoning and return an empty completion (`finish_reason=length`).
+
+### Historical thinking replay
+
+`AiProvider::replays_thinking(model)` says whether the provider sends stored
+assistant `thinking` back on later requests, so it occupies context the model
+reads and bills. Z.AI (Preserved Thinking), DeepSeek (tool-carrying requests)
+and Kimi K2.6+/K3 on Moonshot and Ollama replay it; every other provider drops
+historical reasoning on the wire. Callers that estimate prompt size should
+count stored thinking only where this returns `true`.
+
 ### ThinkingBlock Structure
 
 Thinking content is stored in a separate `ThinkingBlock` structure, parallel to how `tool_calls` are separate from content:

@@ -233,7 +233,8 @@ fn effort_value(model: &str, effort: ReasoningEffort, supports_adaptive: bool) -
     ];
     let supports_xhigh = XHIGH_MODELS.iter().any(|p| model.contains(p));
     match effort {
-        ReasoningEffort::Low => "low",
+        // Unreachable: callers only ask for a level when thinking is enabled.
+        ReasoningEffort::None | ReasoningEffort::Low => "low",
         ReasoningEffort::Medium => "medium",
         ReasoningEffort::High => "high",
         ReasoningEffort::XHigh if supports_xhigh => "xhigh",
@@ -426,7 +427,9 @@ impl AiProvider for AnthropicProvider {
         // rejects non-default `temperature`/`top_p`/`top_k` whenever thinking
         // (manual or adaptive) is on — only `temperature=1` is accepted and
         // top_p/top_k must be omitted. Skip them entirely in that case.
-        let thinking_enabled = params.reasoning_effort.is_some()
+        let thinking_enabled = params
+            .reasoning_effort
+            .is_some_and(|effort| effort != ReasoningEffort::None)
             && THINKING_MODELS.iter().any(|p| params.model.contains(p));
 
         if !thinking_enabled {
@@ -534,7 +537,8 @@ impl AiProvider for AnthropicProvider {
                 } else {
                     // Manual: budget_tokens must be < max_tokens. Clamp if needed.
                     let mut budget: u32 = match effort {
-                        ReasoningEffort::Low => 2_048,
+                        // Unreachable: `thinking_enabled` excludes None.
+                        ReasoningEffort::None | ReasoningEffort::Low => 2_048,
                         ReasoningEffort::Medium => 8_192,
                         ReasoningEffort::High => 16_384,
                         ReasoningEffort::XHigh => 32_768,

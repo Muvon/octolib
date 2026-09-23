@@ -418,3 +418,25 @@ fn test_convert_messages_reasoning_content_replay() {
         Some("trivial")
     );
 }
+
+#[test]
+fn test_build_request_none_effort_disables_thinking() {
+    use crate::llm::types::{Message, ReasoningEffort};
+
+    let messages = [Message::user("summarize")];
+    let params = ChatCompletionParams::new(&messages, "deepseek-flash", 0.3, 1.0, 0, 4096)
+        .with_reasoning_effort(ReasoningEffort::None);
+
+    let request = serde_json::to_value(build_request(&params)).unwrap();
+    assert_eq!(request["thinking"]["type"], "disabled");
+    assert!(
+        request.get("reasoning_effort").is_none(),
+        "no effort level accompanies thinking off"
+    );
+}
+
+#[test]
+fn test_deepseek_replays_thinking() {
+    let provider = DeepSeekProvider::new();
+    assert!(provider.replays_thinking("deepseek-chat"));
+}

@@ -63,6 +63,12 @@ impl AiProvider for OllamaProvider {
         Ok(get_optional_api_key(OLLAMA_API_KEY_ENV))
     }
 
+    /// Ollama's OpenAI layer replays reasoning for the trailing assistant
+    /// message only, except Kimi models that preserve it across every turn.
+    fn replays_thinking(&self, model: &str) -> bool {
+        crate::llm::providers::moonshot::preserves_historical_thinking(model)
+    }
+
     fn supports_caching(&self, _model: &str) -> bool {
         false
     }

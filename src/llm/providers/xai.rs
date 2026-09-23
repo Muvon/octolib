@@ -158,7 +158,8 @@ fn ticks_to_usd(ticks: u64) -> f64 {
 }
 
 fn reasoning_effort(model: &str, effort: Option<ReasoningEffort>) -> Option<&'static str> {
-    let effort = effort?;
+    // xAI has no documented "off" value: None sends nothing, like unset.
+    let effort = effort.filter(|effort| *effort != ReasoningEffort::None)?;
     let family = model_family(model)?;
     let normalized = model.to_ascii_lowercase();
     let is_multi_agent = normalized.contains("multi-agent");

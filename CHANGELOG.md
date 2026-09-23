@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.40.1] - 2026-09-23
+
+### 📋 Release Summary
+
+GPT-6 Sol and Luna models are now supported.
+
+### ✨ New Features & Enhancements
+
+- **llm**: support GPT-6 Sol and Luna models `aa7a01fe`
+
 ## [0.40.0] - 2026-09-23
 
 ### 📋 Release Summary

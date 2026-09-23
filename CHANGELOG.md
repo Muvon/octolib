@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.40.0] - 2026-09-23
+
+### 📋 Release Summary
+
+LLM requests can explicitly disable reasoning, and Claude Opus 5.5 and Grok-4.7 models are supported. Provider model catalogs and pricing have been refreshed, and the library documentation has been clarified.
+
+### ✨ New Features & Enhancements
+
+- **llm**: support explicit reasoning disablement `fa330b1c`
+- **llm**: support claude opus 5.5 model metadata `e954aae0`
+- **xai**: support grok-4.7 models `50a7b142`
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: refresh provider model catalogs and pricing `fa96f747`
+
+### 📚 Documentation & Examples
+
+- **readme**: clarify library documentation `12bbf6cf`
+
 ## [0.39.1] - 2026-09-18
 
 ### 📋 Release Summary

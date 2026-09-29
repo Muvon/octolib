@@ -854,8 +854,9 @@ pub struct EffectiveSamplingParams {
 /// `ReasoningEffort::None` is the explicit opposite: no reasoning requested, and
 /// thinking switched off wherever the provider has a switch (Alibaba
 /// `enable_thinking=false`, DeepSeek/Z.AI `thinking.type=disabled`, OpenRouter
-/// `reasoning.enabled=false`, OpenAI `reasoning.effort=none`); providers with
-/// no switch send nothing, as for an unset effort.
+/// `reasoning.enabled=false`, OpenAI `reasoning.effort=none`); a model that
+/// cannot stop thinking (GLM-5.3 on Alibaba and Z.AI) runs at its lowest level,
+/// and providers with no switch send nothing, as for an unset effort.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ReasoningEffort {

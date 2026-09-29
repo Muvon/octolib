@@ -127,8 +127,9 @@ fn is_alibaba_deepseek_v4(provider_name: &str, model: &str) -> bool {
 /// `low|medium|high` ladder is either rejected or silently capped.
 ///
 /// Model Studio (GLM page, Sep 2026): an unsupported value returns
-/// `invalid_parameter_error`. glm-5.3 accepts only `low|high|max`; glm-5.2
-/// (and -fast-preview) accepts the full ladder through `max`; glm-5.1 accepts
+/// `invalid_parameter_error`. glm-5.3 accepts only `low|high|max`, so `none`
+/// floors to `low` like any unsupported level; glm-5.2 (and -fast-preview)
+/// accepts the full ladder through `max`; glm-5.1 accepts
 /// through `xhigh` (`max` is not supported). Older GLM models are not listed,
 /// so they keep the generic ladder. Intermediate levels floor to the next
 /// supported one, matching the K3 handling in `opencode`.
@@ -156,8 +157,7 @@ fn glm_reasoning_effort(
     if provider_name.eq_ignore_ascii_case("alibaba") {
         if contains_ignore_ascii_case(model, "glm-5.3") {
             return Some(match effort {
-                ReasoningEffort::None => "none",
-                ReasoningEffort::Low | ReasoningEffort::Medium => "low",
+                ReasoningEffort::None | ReasoningEffort::Low | ReasoningEffort::Medium => "low",
                 ReasoningEffort::High | ReasoningEffort::XHigh => "high",
                 ReasoningEffort::Max => "max",
             });
@@ -320,37 +320,12 @@ async fn chat_completion_raw(
     // OpenRouter, OctoHub, Google Vertex via OpenAI-compat) accept the standard
     // `reasoning_effort` parameter with values: "low" | "medium" | "high".
     // Providers that don't recognize it will ignore it.
-    match params.reasoning_effort {
-        Some(crate::llm::types::ReasoningEffort::None) => {
-            // Thinking off. Model Studio's hybrid models (DeepSeek V4, GLM, Qwen3)
-            // think by default and only `enable_thinking=false` stops it; a
-            // Workers AI model that lists "none" takes it as an effort. Other
-            // OpenAI-compatible hosts have no switch: nothing is sent, as for an
-            // unset effort — sending "none" to a host that validates the ladder
-            // is a 400 (Meta), and the default there is no thinking anyway.
-            if config.provider_name.eq_ignore_ascii_case("alibaba") {
-                request_body["enable_thinking"] = serde_json::json!(false);
-            } else if config.provider_name.eq_ignore_ascii_case("cloudflare") {
-                if let Some(value) = crate::llm::providers::cloudflare::catalog_reasoning_effort(
-                    &params.model,
-                    crate::llm::types::ReasoningEffort::None,
-                ) {
-                    request_body["reasoning_effort"] = serde_json::json!(value);
-                }
-            }
-        }
-        Some(effort) => {
-            let s = reasoning_effort_value(config.provider_name, &params.model, effort);
-            request_body["reasoning_effort"] = serde_json::json!(s);
-            // DeepSeek V4 is a hybrid-thinking family. An explicit effort means
-            // the caller selected thinking, so preserve that intent on Model
-            // Studio rather than relying only on the moving alias' current default.
-            if is_alibaba_deepseek_v4(config.provider_name, &params.model) {
-                request_body["enable_thinking"] = serde_json::json!(true);
-            }
-        }
-        None => {}
-    }
+    apply_reasoning_effort(
+        &mut request_body,
+        config.provider_name,
+        &params.model,
+        params.reasoning_effort,
+    );
 
     if let Some(tools) = &params.tools {
         if !tools.is_empty() {
@@ -389,6 +364,47 @@ async fn chat_completion_raw(
     }
 
     execute_request(config, api_key, api_url, request_body, params).await
+}
+
+fn apply_reasoning_effort(
+    request_body: &mut serde_json::Value,
+    provider_name: &str,
+    model: &str,
+    effort: Option<crate::llm::types::ReasoningEffort>,
+) {
+    use crate::llm::types::ReasoningEffort;
+
+    match effort.map(|effort| shared::supported_reasoning_effort(provider_name, model, effort)) {
+        Some(ReasoningEffort::None) => {
+            // Thinking off. Model Studio's hybrid models (DeepSeek V4, GLM, Qwen3)
+            // think by default and only `enable_thinking=false` stops it; a
+            // Workers AI model that lists "none" takes it as an effort. Other
+            // OpenAI-compatible hosts have no switch: nothing is sent, as for an
+            // unset effort — sending "none" to a host that validates the ladder
+            // is a 400 (Meta), and the default there is no thinking anyway.
+            if provider_name.eq_ignore_ascii_case("alibaba") {
+                request_body["enable_thinking"] = serde_json::json!(false);
+            } else if provider_name.eq_ignore_ascii_case("cloudflare") {
+                if let Some(value) = crate::llm::providers::cloudflare::catalog_reasoning_effort(
+                    model,
+                    ReasoningEffort::None,
+                ) {
+                    request_body["reasoning_effort"] = serde_json::json!(value);
+                }
+            }
+        }
+        Some(effort) => {
+            let s = reasoning_effort_value(provider_name, model, effort);
+            request_body["reasoning_effort"] = serde_json::json!(s);
+            // DeepSeek V4 is a hybrid-thinking family. An explicit effort means
+            // the caller selected thinking, so preserve that intent on Model
+            // Studio rather than relying only on the moving alias' current default.
+            if is_alibaba_deepseek_v4(provider_name, model) {
+                request_body["enable_thinking"] = serde_json::json!(true);
+            }
+        }
+        None => {}
+    }
 }
 
 fn apply_response_format(

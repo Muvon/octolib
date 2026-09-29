@@ -23,6 +23,30 @@ fn test_maybe_ephemeral_cache_control() {
     );
 }
 
+/// GLM-5.3 has no off level on Model Studio or Z.AI; every other model and host
+/// keeps the requested effort.
+#[test]
+fn test_supported_reasoning_effort_floors_only_glm_5_3_on_verified_hosts() {
+    let off = ReasoningEffort::None;
+    assert_eq!(
+        supported_reasoning_effort("alibaba", "glm-5.3", off),
+        ReasoningEffort::Low
+    );
+    assert_eq!(
+        supported_reasoning_effort("zai", "GLM-5.3-Flash", off),
+        ReasoningEffort::Low
+    );
+    assert_eq!(
+        supported_reasoning_effort("alibaba", "glm-5.3", ReasoningEffort::High),
+        ReasoningEffort::High
+    );
+    assert_eq!(supported_reasoning_effort("alibaba", "glm-5.2", off), off);
+    assert_eq!(
+        supported_reasoning_effort("together", "zai-org/glm-5.3", off),
+        off
+    );
+}
+
 #[test]
 fn test_parse_generic_tool_calls_lossy() {
     let calls = serde_json::json!([{

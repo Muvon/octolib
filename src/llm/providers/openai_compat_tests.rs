@@ -317,6 +317,11 @@ fn test_alibaba_glm_reasoning_effort_follows_model_studio_ladder() {
     use crate::llm::types::ReasoningEffort;
 
     // glm-5.3 accepts only low/high/max; "medium" is an invalid_parameter_error.
+    // It has no off level either, so no reasoning floors to low.
+    assert_eq!(
+        reasoning_effort_value("alibaba", "glm-5.3", ReasoningEffort::None),
+        "low"
+    );
     assert_eq!(
         reasoning_effort_value("alibaba", "glm-5.3", ReasoningEffort::Low),
         "low"
@@ -517,12 +522,40 @@ fn test_reasoning_effort_value_none_maps_to_the_none_level() {
         "none"
     );
     assert_eq!(
-        reasoning_effort_value("alibaba", "glm-5.3", ReasoningEffort::None),
-        "none"
-    );
-    assert_eq!(
         reasoning_effort_value("openrouter", "any", ReasoningEffort::None),
         "none"
+    );
+}
+
+/// Model Studio's GLM-5.3 rejects both `enable_thinking=false` and
+/// `reasoning_effort="none"` with a 400, which turned octomind's reasoning-off
+/// retry into a fatal error. No reasoning runs it at its lowest level; models
+/// with a switch still get `enable_thinking=false`.
+#[test]
+fn test_alibaba_no_reasoning_uses_the_switch_or_the_lowest_level() {
+    use crate::llm::types::ReasoningEffort;
+
+    let body = |model: &str| {
+        let mut request_body = serde_json::json!({});
+        apply_reasoning_effort(
+            &mut request_body,
+            "alibaba",
+            model,
+            Some(ReasoningEffort::None),
+        );
+        request_body
+    };
+    assert_eq!(
+        body("glm-5.3"),
+        serde_json::json!({ "reasoning_effort": "low" })
+    );
+    assert_eq!(
+        body("glm-5.2"),
+        serde_json::json!({ "enable_thinking": false })
+    );
+    assert_eq!(
+        body("qwen3.7-plus"),
+        serde_json::json!({ "enable_thinking": false })
     );
 }
 

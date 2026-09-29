@@ -177,6 +177,30 @@ fn test_reasoning_effort_floors_to_glm_5_3_supported_levels() {
     );
 }
 
+/// GLM-5.3 cannot stop thinking, so no reasoning runs it at its lowest level;
+/// other models get `thinking: disabled`.
+#[test]
+fn test_no_reasoning_floors_glm_5_3_and_disables_other_models() {
+    let enabled = || Some(serde_json::json!({ "type": "enabled" }));
+    assert_eq!(
+        thinking_fields("glm-5.3", Some(ReasoningEffort::None)),
+        (enabled(), Some("low"))
+    );
+    assert_eq!(
+        thinking_fields("glm-5.3-flash", Some(ReasoningEffort::None)),
+        (enabled(), Some("low"))
+    );
+    assert_eq!(
+        thinking_fields("glm-5.2", Some(ReasoningEffort::None)),
+        (Some(serde_json::json!({ "type": "disabled" })), None)
+    );
+    assert_eq!(
+        thinking_fields("glm-5.3", Some(ReasoningEffort::High)),
+        (enabled(), Some("high"))
+    );
+    assert_eq!(thinking_fields("glm-5.3", None), (None, None));
+}
+
 #[test]
 fn test_extract_thinking_from_reasoning_content() {
     let content = "Final answer";

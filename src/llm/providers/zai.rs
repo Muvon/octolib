@@ -394,6 +394,7 @@ impl AiProvider for ZaiProvider {
             .temperature
             .map(|t| (t as f64 * 100.0).round() / 100.0);
         let top_p = sampling.top_p.map(|p| (p as f64 * 100.0).round() / 100.0);
+        let (thinking, reasoning_effort) = thinking_fields(&params.model, params.reasoning_effort);
 
         let request = ZaiRequest {
             model: params.model.clone(),
@@ -419,28 +420,8 @@ impl AiProvider for ZaiProvider {
                     "type": mode_str
                 })
             }),
-            // Z.ai GLM hybrid thinking models (4.5/4.6/4.7/5.x) accept
-            // `thinking: { "type": "enabled" | "disabled" }`; any non-None
-            // ReasoningEffort enables it and the level itself goes through
-            // `reasoning_effort` below. Models without hybrid thinking
-            // (e.g. glm-4-32b, glm-ocr) ignore the field. GLM-5.3 requires
-            // thinking ("disabled" is rejected); omitting the field uses the
-            // API default, which is enabled.
-            thinking: match params.reasoning_effort {
-                // GLM-5.3 rejects "disabled": leave the field to the API default.
-                Some(ReasoningEffort::None)
-                    if normalize_model_name(&params.model).contains("glm-5.3") =>
-                {
-                    None
-                }
-                Some(ReasoningEffort::None) => Some(serde_json::json!({ "type": "disabled" })),
-                Some(_) => Some(serde_json::json!({ "type": "enabled" })),
-                None => None,
-            },
-            reasoning_effort: params
-                .reasoning_effort
-                .filter(|effort| *effort != ReasoningEffort::None)
-                .map(|effort| reasoning_effort_value(&params.model, effort)),
+            thinking,
+            reasoning_effort,
         };
 
         // Execute request with retry logic
@@ -816,6 +797,25 @@ fn reasoning_effort_value(model: &str, effort: ReasoningEffort) -> &'static str 
         ReasoningEffort::XHigh if glm_5_3 => "high",
         ReasoningEffort::XHigh => "xhigh",
         ReasoningEffort::Max => "max",
+    }
+}
+
+/// Z.ai `thinking` and `reasoning_effort` for a requested effort. GLM hybrid
+/// thinking models (4.5/4.6/4.7/5.x) accept `thinking: { "type": "enabled" |
+/// "disabled" }`; any non-None effort enables it and the level goes through
+/// `reasoning_effort`. Models without hybrid thinking (e.g. glm-4-32b, glm-ocr)
+/// ignore the field.
+fn thinking_fields(
+    model: &str,
+    effort: Option<ReasoningEffort>,
+) -> (Option<serde_json::Value>, Option<&'static str>) {
+    match effort.map(|effort| shared::supported_reasoning_effort("zai", model, effort)) {
+        Some(ReasoningEffort::None) => (Some(serde_json::json!({ "type": "disabled" })), None),
+        Some(effort) => (
+            Some(serde_json::json!({ "type": "enabled" })),
+            Some(reasoning_effort_value(model, effort)),
+        ),
+        None => (None, None),
     }
 }
 

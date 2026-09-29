@@ -317,6 +317,32 @@ fn test_fable_5_1() {
 }
 
 #[test]
+fn test_sonnet_5_5() {
+    let provider = AnthropicProvider::new();
+    let model = "claude-sonnet-5-5";
+
+    assert!(provider.supports_model(model));
+
+    let pricing = provider.get_model_pricing(model).unwrap();
+    assert_eq!(pricing.input_price_per_1m, 2.0);
+    assert_eq!(pricing.output_price_per_1m, 10.0);
+    assert_eq!(pricing.cache_write_price_per_1m, 2.50);
+    assert_eq!(pricing.cache_read_price_per_1m, 0.20);
+
+    assert_eq!(provider.get_max_input_tokens(model), 1_000_000);
+    assert!(provider.supports_vision(model));
+    assert_eq!(
+        provider.supported_sampling_params(model),
+        SamplingSupport::NONE
+    );
+
+    assert!(ADAPTIVE_ONLY_MODELS.iter().any(|p| model.contains(p)));
+    assert!(EFFORT_PARAM_MODELS.iter().any(|p| model.contains(p)));
+    assert_eq!(effort_value(model, ReasoningEffort::XHigh, true), "xhigh");
+    assert_eq!(effort_value(model, ReasoningEffort::Max, true), "max");
+}
+
+#[test]
 fn test_sonnet_5() {
     let provider = AnthropicProvider::new();
 

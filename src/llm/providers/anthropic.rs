@@ -51,6 +51,8 @@ const PRICING: &[PricingTuple] = &[
     ("claude-opus-4-8", 5.00, 25.00, 6.25, 0.50),
     // Claude 4.7
     ("claude-opus-4-7", 5.00, 25.00, 6.25, 0.50),
+    // Claude Sonnet 5.5: same pricing as Sonnet 5. Must precede the Sonnet 5 row.
+    ("claude-sonnet-5-5", 2.00, 10.00, 2.50, 0.20),
     // Claude Sonnet 5: $2/$10 introductory pricing was made permanent Aug 10, 2026.
     // Cache write is the 5m rate (1.25x input); the 1h tier is $4.00 and isn't
     // representable here.

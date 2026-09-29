@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.40.2] - 2026-09-29
+
+### 📋 Release Summary
+
+Pricing support now covers newly priced model variants, including Claude Sonnet 5.5. GLM-5.3 reasoning effort is normalized.
+
+### ✨ New Features & Enhancements
+
+- **llm**: support newly priced model variants `ff1a971a`
+
+### 🐛 Bug Fixes & Stability
+
+- **anthropic**: support Claude Sonnet 5.5 pricing `b924f19f`
+- **llm**: normalize GLM-5.3 reasoning effort `cfe6daff`
+
 ## [0.40.1] - 2026-09-23
 
 ### 📋 Release Summary

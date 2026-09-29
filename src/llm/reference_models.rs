@@ -361,6 +361,18 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(0.10, 0.30, 0.10, 0.10),
     },
     ReferenceModelEntry {
+        // AionLabs Aion 3.5 (Sep 2026): 3.0 rates with a 262K context. Mini is
+        // priced below the base model, so it must precede it here.
+        pattern: "aion-3.5-mini",
+        capabilities: caps(false, false, false, 262_144),
+        pricing: pricing(0.70, 1.40, 0.70, 0.18),
+    },
+    ReferenceModelEntry {
+        pattern: "aion-3.5",
+        capabilities: caps(false, false, false, 262_144),
+        pricing: pricing(3.00, 6.00, 3.00, 0.75),
+    },
+    ReferenceModelEntry {
         // AionLabs Aion 3.0 Mini is priced below the base model, so it must
         // precede it here.
         pattern: "aion-3.0-mini",
@@ -548,10 +560,29 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(0.95, 4.00, 0.95, 0.15),
     },
     ReferenceModelEntry {
-        // Upstage Solar Pro 4 (Aug 2026): 512K-context text model.
+        // Upstage Solar Pro 4 (Aug 2026): 512K-context text model. List price;
+        // the stepped launch promotion (through Oct 22, 2026) is not tracked.
         pattern: "solar-pro4",
         capabilities: caps(false, false, true, 524_288),
-        pricing: pricing(0.03, 0.12, 0.03, 0.006),
+        pricing: pricing(0.30, 1.20, 0.30, 0.06),
+    },
+    ReferenceModelEntry {
+        // Upstage Solar Mini 4 (Sep 2026): 512K-context text model, list price.
+        pattern: "solar-mini4",
+        capabilities: caps(false, false, true, 524_288),
+        pricing: pricing(0.10, 0.40, 0.10, 0.01),
+    },
+    ReferenceModelEntry {
+        // Fireworks Ember 1 (Sep 2026): Fireworks' own model, text/image input.
+        pattern: "ember-1",
+        capabilities: caps(true, false, true, 1_040_000),
+        pricing: pricing(3.00, 15.00, 3.00, 0.30),
+    },
+    ReferenceModelEntry {
+        // Cohere Command A Plus (Sep 2026): 192K context, text/image input.
+        pattern: "command-a-plus",
+        capabilities: caps(true, false, true, 192_000),
+        pricing: pricing(0.30, 1.50, 0.30, 0.15),
     },
     ReferenceModelEntry {
         // Poolside Laguna S 2.1 (Jul 2026): 1M-context coding model.
@@ -1399,6 +1430,13 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(0.10, 0.10, 0.10, 0.10),
     },
     ReferenceModelEntry {
+        // Qwen3.8-Omni-Flash (Sep 2026): text/image/audio/video input, 1M
+        // context. Model Studio international list price.
+        pattern: "qwen-3.8-omni-flash",
+        capabilities: caps(true, true, true, 1_000_000),
+        pricing: pricing(0.15, 0.47, 0.15, 0.016),
+    },
+    ReferenceModelEntry {
         // Qwen3.8-Flash (Aug 2026): multimodal MoE (125B total / 6B active),
         // 1M context, structured output honoured on the OpenRouter route.
         // Baseline = Model Studio list price; implicit cache hits 20% of input.
@@ -1412,6 +1450,13 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pattern: "qwen-3.8-27b",
         capabilities: caps(true, true, true, 262_144),
         pricing: pricing(0.35, 2.75, 0.35, 0.35),
+    },
+    ReferenceModelEntry {
+        // Qwen3.8-Max-Prime (Sep 2026): Model Studio sells it in the China
+        // region only; baseline from OpenRouter. Must precede qwen-3.8-max.
+        pattern: "qwen-3.8-max-prime",
+        capabilities: caps(true, true, true, 1_000_000),
+        pricing: pricing(4.00, 12.00, 4.00, 0.50),
     },
     ReferenceModelEntry {
         pattern: "qwen-3.8-max",
@@ -1830,6 +1875,20 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pattern: "pixtral",
         capabilities: caps(true, false, true, 131_072),
         pricing: None,
+    },
+    ReferenceModelEntry {
+        // GLM-5.3-Prime (Sep 2026): not on Z.ai's international price list;
+        // baseline from OpenRouter. Must precede glm-5.3.
+        pattern: "glm-5.3-prime",
+        capabilities: caps(false, false, false, 1_000_000),
+        pricing: pricing(2.80, 8.80, 0.00, 0.56),
+    },
+    ReferenceModelEntry {
+        // GLM-5.3-FlashX: faster Flash variant with image/video input.
+        // Must precede glm-5.3.
+        pattern: "glm-5.3-flashx",
+        capabilities: caps(true, true, false, 1_000_000),
+        pricing: pricing(0.37, 1.25, 0.00, 0.075),
     },
     ReferenceModelEntry {
         // Native image/video input and 1M context. Must precede glm-5.3.

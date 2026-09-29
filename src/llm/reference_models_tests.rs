@@ -320,7 +320,7 @@ fn september_2026_additions_resolve() {
         ("inclusionai/ling-3.0-flash", 0.021, 0.063),
         ("inclusionai/ling-3.0-flash-fin", 0.06, 0.18),
         ("sakana/sakana-namazu", 0.95, 4.00),
-        ("upstage/solar-pro4", 0.03, 0.12),
+        ("upstage/solar-pro4", 0.30, 1.20),
         ("poolside/laguna-s-2.1", 0.09, 0.18),
         ("poolside/laguna-xs-2.1", 0.06, 0.12),
         ("meituan/longcat-2.0", 0.30, 1.20),
@@ -429,6 +429,17 @@ fn late_september_2026_additions_resolve() {
         ("stepfun/step-3.5-flash", 0.10, 0.30),
         ("aion-labs/aion-2.0", 0.80, 1.60),
         ("mistralai/devstral-2512", 0.40, 2.00),
+        ("fireworks/ember-1", 3.00, 15.00),
+        ("accounts/fireworks/models/ember-1", 3.00, 15.00),
+        ("cohere/command-a-plus", 0.30, 1.50),
+        ("aion-labs/aion-3.5", 3.00, 6.00),
+        ("aion-labs/aion-3.5-mini", 0.70, 1.40),
+        ("upstage/solar-mini4", 0.10, 0.40),
+        ("qwen/qwen3.8-omni-flash", 0.15, 0.47),
+        // Variants that fell through to their cheaper base row.
+        ("qwen/qwen3.8-max-prime", 4.00, 12.00),
+        ("z-ai/glm-5.3-prime", 2.80, 8.80),
+        ("z-ai/glm-5.3-flashx", 0.37, 1.25),
     ] {
         let pricing = get_reference_pricing(model)
             .unwrap_or_else(|| panic!("{model} must resolve to reference pricing"));

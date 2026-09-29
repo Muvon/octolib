@@ -220,6 +220,16 @@ fn test_qwen3_8_flash_pricing() {
 }
 
 #[test]
+fn test_qwen3_8_omni_flash_pricing() {
+    let provider = AlibabaProvider::new();
+    let p = provider.get_model_pricing("qwen3.8-omni-flash").unwrap();
+    assert_eq!(p.input_price_per_1m, 0.15);
+    assert_eq!(p.output_price_per_1m, 0.47);
+    assert_eq!(p.cache_write_price_per_1m, 0.15);
+    assert_eq!(p.cache_read_price_per_1m, 0.016);
+}
+
+#[test]
 fn test_cost_calculation() {
     let provider = AlibabaProvider::new();
     let pricing = provider.get_model_pricing("qwen3.8-max").unwrap();

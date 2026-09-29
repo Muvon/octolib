@@ -73,6 +73,7 @@ const ALIBABA_API_URL: &str =
 const PRICING: &[PricingTuple] = &[
     ("qwen3.8-max", 2.00, 6.00, 2.00, 0.25),
     ("qwen3.8-flash", 0.15, 0.47, 0.15, 0.016),
+    ("qwen3.8-omni-flash", 0.15, 0.47, 0.15, 0.016),
     ("qwen3.7-max", 2.50, 7.50, 2.50, 0.50),
     ("qwen3.7-plus", 0.40, 1.60, 0.40, 0.08),
     ("qwen3.7-flash", 0.03, 0.13, 0.03, 0.006),

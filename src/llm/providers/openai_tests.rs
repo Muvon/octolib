@@ -893,6 +893,8 @@ fn test_alias_capabilities_follow_underlying_model() {
     let red = calculate_cost("gpt-daybreak-red-latest", 300_000, 10_000).unwrap();
     assert!((cyber - 4.5).abs() < 0.0000001);
     assert!((red - 4.5).abs() < 0.0000001);
+    let cyber_5_5 = calculate_cost("gpt-5.5-cyber", 300_000, 10_000).unwrap();
+    assert!((cyber_5_5 - 4.5).abs() < 0.0000001);
 }
 
 #[test]
@@ -1030,4 +1032,47 @@ fn test_gpt_5_6_usage_deserializes_cache_writes() {
     let details = usage.input_tokens_details.unwrap();
     assert_eq!(details.cached_tokens, 1_000);
     assert_eq!(details.cache_write_tokens, 500);
+}
+
+#[test]
+fn test_gpt_5_5_cyber_does_not_fall_through_to_gpt_5_5() {
+    let provider = OpenAiProvider::new();
+    assert!(provider.supports_model("gpt-5.5-cyber"));
+    for pricing in [
+        provider.get_model_pricing("gpt-5.5-cyber").unwrap(),
+        crate::llm::reference_pricing::get_reference_pricing("openai/gpt-5.5-cyber").unwrap(),
+    ] {
+        assert_eq!(pricing.input_price_per_1m, 12.50);
+        assert_eq!(pricing.output_price_per_1m, 75.00);
+        assert_eq!(pricing.cache_write_price_per_1m, 12.50);
+        assert_eq!(pricing.cache_read_price_per_1m, 1.25);
+    }
+}
+
+#[test]
+fn test_gpt_realtime_2_family() {
+    let provider = OpenAiProvider::new();
+    for pricing in [
+        provider.get_model_pricing("gpt-realtime-2").unwrap(),
+        crate::llm::reference_pricing::get_reference_pricing("openai/gpt-realtime-2").unwrap(),
+    ] {
+        assert_eq!(pricing.input_price_per_1m, 4.00);
+        assert_eq!(pricing.output_price_per_1m, 24.00);
+        assert_eq!(pricing.cache_read_price_per_1m, 0.40);
+    }
+    // The gpt-realtime-2 row must not shadow the cheaper 2.1-mini row.
+    let mini = provider.get_model_pricing("gpt-realtime-2.1-mini").unwrap();
+    assert_eq!(mini.input_price_per_1m, 0.60);
+
+    for model in [
+        "gpt-realtime-2",
+        "gpt-realtime-2.1",
+        "gpt-realtime-2.1-mini",
+    ] {
+        assert_eq!(provider.get_max_input_tokens(model), 128_000, "{model}");
+        let caps = crate::llm::reference_capabilities::get_reference_capabilities(model).unwrap();
+        assert!(caps.vision, "{model}");
+        assert_eq!(caps.max_input_tokens, 128_000, "{model}");
+    }
+    assert_eq!(provider.get_max_input_tokens("gpt-realtime-1.5"), 32_000);
 }

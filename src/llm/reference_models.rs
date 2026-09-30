@@ -548,6 +548,13 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(0.06, 0.18, 0.06, 0.012),
     },
     ReferenceModelEntry {
+        // InclusionAI Ling 3.0 Flash VL (Sep 2026): adds image/video input.
+        // Baseline from OpenRouter. Must precede ling-3.0-flash.
+        pattern: "ling-3.0-flash-vl",
+        capabilities: caps(true, true, true, 262_144),
+        pricing: pricing(0.021, 0.0616, 0.021, 0.0042),
+    },
+    ReferenceModelEntry {
         // InclusionAI Ling 3.0 Flash: 262K-context MoE, no structured outputs.
         pattern: "ling-3.0-flash",
         capabilities: caps(false, false, false, 262_144),
@@ -978,12 +985,19 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "gpt-realtime-2.1-mini",
-        capabilities: caps(false, false, true, 32_000),
+        capabilities: caps(true, false, true, 128_000),
         pricing: pricing(0.60, 2.40, 0.60, 0.06),
     },
     ReferenceModelEntry {
         pattern: "gpt-realtime-2.1",
-        capabilities: caps(false, false, true, 32_000),
+        capabilities: caps(true, false, true, 128_000),
+        pricing: pricing(4.00, 24.00, 4.00, 0.40),
+    },
+    ReferenceModelEntry {
+        // GPT-Realtime-2 family: 128K context, text/audio/image input
+        // (verified Sep 30, 2026). Must follow the gpt-realtime-2.1 rows.
+        pattern: "gpt-realtime-2",
+        capabilities: caps(true, false, true, 128_000),
         pricing: pricing(4.00, 24.00, 4.00, 0.40),
     },
     ReferenceModelEntry {
@@ -1468,8 +1482,9 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     ReferenceModelEntry {
         pattern: "qwen-3.8-max",
         capabilities: caps(true, true, true, 1_000_000),
-        // Priced by providers/alibaba.rs — no third-party host yet.
-        pricing: None,
+        // Baseline from OpenRouter (qwen3.8-max-0902); Alibaba-direct rates
+        // live in providers/alibaba.rs.
+        pricing: pricing(2.00, 6.00, 2.50, 0.25),
     },
     ReferenceModelEntry {
         pattern: "qwen-3.7-max",
@@ -1963,6 +1978,13 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pattern: "kimi-k2",
         capabilities: caps(false, false, true, 256_000),
         pricing: pricing(0.60, 2.50, 0.60, 0.15),
+    },
+    ReferenceModelEntry {
+        // GPT-5.5 Cyber: listed on the pricing page only, with no model card,
+        // so capabilities fall through to gpt-5.5. Must precede gpt-5.5.
+        pattern: "gpt-5.5-cyber",
+        capabilities: None,
+        pricing: pricing(12.50, 75.00, 12.50, 1.25),
     },
     ReferenceModelEntry {
         pattern: "gpt-5.5",

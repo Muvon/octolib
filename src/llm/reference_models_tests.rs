@@ -328,6 +328,7 @@ fn september_2026_additions_resolve() {
         ("xiaomi/mimo-v2.5", 0.14, 0.28),
         ("xiaomi/mimo-v2.5-pro", 0.435, 0.87),
         ("qwen/qwen3.8-2.4t-a95b", 2.00, 6.00),
+        ("qwen/qwen3.8-max-0902", 2.00, 6.00),
         ("nvidia/nemotron-3-super-120b-a12b", 0.085, 0.40),
     ] {
         let pricing = get_reference_pricing(model)
@@ -440,12 +441,15 @@ fn late_september_2026_additions_resolve() {
         ("qwen/qwen3.8-max-prime", 4.00, 12.00),
         ("z-ai/glm-5.3-prime", 2.80, 8.80),
         ("z-ai/glm-5.3-flashx", 0.37, 1.25),
+        ("inclusionai/ling-3.0-flash-vl", 0.021, 0.0616),
     ] {
         let pricing = get_reference_pricing(model)
             .unwrap_or_else(|| panic!("{model} must resolve to reference pricing"));
         assert_eq!(pricing.input_price_per_1m, input, "{model}");
         assert_eq!(pricing.output_price_per_1m, output, "{model}");
     }
+    let caps = get_reference_capabilities("inclusionai/ling-3.0-flash-vl").unwrap();
+    assert!(caps.vision && caps.video && caps.structured_output);
 
     // Preview Nova 2 models publish a rate but no context window.
     assert!(get_reference_capabilities("amazon.nova-2-pro-v1:0").is_none());

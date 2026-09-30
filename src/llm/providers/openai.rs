@@ -54,7 +54,8 @@ const PRICING: &[PricingTuple] = &[
     // pricing follows the underlying model.
     ("gpt-daybreak-blue-latest", 4.00, 20.00, 5.00, 0.40),
     ("gpt-daybreak-red-latest", 12.50, 75.00, 15.625, 1.25),
-    // GPT-5.5 family
+    // GPT-5.5 family. gpt-5.5-cyber has no long-context tier.
+    ("gpt-5.5-cyber", 12.50, 75.00, 12.50, 1.25),
     ("gpt-5.5-pro", 30.00, 180.00, 30.00, 30.00),
     ("gpt-5.5", 5.00, 30.00, 5.00, 0.50),
     // GPT-5.4 family
@@ -96,6 +97,8 @@ const PRICING: &[PricingTuple] = &[
     // GPT-4o / realtime / audio
     ("gpt-realtime-2.1-mini", 0.60, 2.40, 0.60, 0.06),
     ("gpt-realtime-2.1", 4.00, 24.00, 4.00, 0.40),
+    // Must follow the gpt-realtime-2.1 rows: lookups are substring matches.
+    ("gpt-realtime-2", 4.00, 24.00, 4.00, 0.40),
     ("gpt-realtime-1.5", 4.00, 16.00, 4.00, 0.40),
     ("gpt-realtime-mini", 0.60, 2.40, 0.60, 0.06),
     ("gpt-realtime", 4.00, 16.00, 4.00, 0.40),
@@ -139,11 +142,11 @@ fn get_usage_pricing(model: &str, input_tokens: u64) -> Option<(f64, f64, f64, f
         get_model_pricing(model, PRICING)?;
 
     let normalized = normalize_model_name(model);
-    // gpt-5.6-cyber and its daybreak-red alias have no long-context tier.
+    // Cyber models and the daybreak-red alias have no long-context tier.
     let tiered_long_context = (is_gpt_5_6_or_later(&normalized)
         && !normalized.starts_with("gpt-5.6-cyber")
         && !normalized.starts_with("gpt-daybreak-red"))
-        || normalized.starts_with("gpt-5.5")
+        || (normalized.starts_with("gpt-5.5") && !normalized.starts_with("gpt-5.5-cyber"))
         || (normalized.starts_with("gpt-5.4")
             && !normalized.starts_with("gpt-5.4-mini")
             && !normalized.starts_with("gpt-5.4-nano"));
@@ -532,6 +535,10 @@ impl AiProvider for OpenAiProvider {
         // chat-latest: 400K context window
         if normalized.starts_with("chat-latest") {
             return 400_000;
+        }
+        // GPT-Realtime-2 family (2, 2.1, 2.1-mini): 128K context window
+        if normalized.starts_with("gpt-realtime-2") {
+            return 128_000;
         }
         // Realtime models: 32K context window
         if normalized.starts_with("gpt-realtime") {

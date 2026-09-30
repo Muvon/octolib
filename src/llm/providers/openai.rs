@@ -34,7 +34,10 @@ use std::env;
 /// Format: (model, input, output, cache_write, cache_read)
 /// Note: For models without caching, cache_write = input and cache_read = input
 const PRICING: &[PricingTuple] = &[
-    // GPT-6 family. Cache writes cost 1.25x uncached input; cache reads 0.1x.
+    // GPT-6 family. Cache writes cost 1.25x uncached input; cache reads 0.1x
+    // (0.05x for gpt-6.1-sol).
+    // gpt-6.1-sol verified Sep 30, 2026 against the official pricing page above.
+    ("gpt-6.1-sol", 2.00, 10.00, 2.50, 0.10),
     ("gpt-6-astra", 10.00, 50.00, 12.50, 1.00),
     // Sol/Luna verified Sep 24, 2026 against the official pricing page above.
     ("gpt-6-sol", 2.00, 10.00, 2.50, 0.20),

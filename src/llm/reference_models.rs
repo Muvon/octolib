@@ -628,6 +628,13 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(10.00, 50.00, 12.50, 1.00),
     },
     ReferenceModelEntry {
+        // GPT-6.1 Sol: https://developers.openai.com/api/docs/pricing
+        // Standard short-context rates, verified Sep 30, 2026.
+        pattern: "gpt-6.1-sol",
+        capabilities: caps(true, false, true, 1_050_000),
+        pricing: pricing(2.00, 10.00, 2.50, 0.10),
+    },
+    ReferenceModelEntry {
         // GPT-6 Sol/Luna: https://developers.openai.com/api/docs/pricing
         // Standard short-context rates, verified Sep 24, 2026.
         pattern: "gpt-6-sol",

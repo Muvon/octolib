@@ -965,6 +965,7 @@ fn test_gpt_6_astra() {
 fn test_gpt_6_sol_and_luna_provider_and_reference_support() {
     let provider = OpenAiProvider::new();
     for (model, input, output, cache_write, cache_read) in [
+        ("gpt-6.1-sol", 2.00, 10.00, 2.50, 0.10),
         ("gpt-6-sol", 2.00, 10.00, 2.50, 0.20),
         ("gpt-6-luna", 0.10, 0.50, 0.125, 0.01),
     ] {
@@ -999,6 +1000,7 @@ fn test_gpt_6_sol_and_luna_provider_and_reference_support() {
 #[test]
 fn test_gpt_6_sol_and_luna_long_context_boundary_includes_cache_tokens() {
     for (model, standard_cost, long_cost) in [
+        ("gpt-6.1-sol", 0.5752, 1.1024002),
         ("gpt-6-sol", 0.5794, 1.1108004),
         ("gpt-6-luna", 0.02897, 0.05554002),
     ] {

@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.40.3] - 2026-09-30
+
+### 📋 Release Summary
+
+Pricing support is available for OpenAI’s gpt-6.1-sol model. Model pricing and capability metadata have been corrected.
+
+### ✨ New Features & Enhancements
+
+- **openai**: support gpt-6.1-sol pricing `911120f6`
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: correct model pricing and capability metadata `8aa0b0e7`
+
 ## [0.40.2] - 2026-09-29
 
 ### 📋 Release Summary

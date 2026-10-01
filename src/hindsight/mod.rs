@@ -78,6 +78,13 @@ const FORMAT: u32 = 1;
 /// ORT threads per graph — enough to keep one encode under ~50 ms on a
 /// laptop core without starving the agent process.
 const THREADS: usize = 4;
+/// Whole-file download attempts after a transient failure (each resumes).
+const DOWNLOAD_RETRIES: usize = 3;
+const RETRY_WAIT: std::time::Duration = std::time::Duration::from_secs(5);
+/// How long to wait for another process's download of the same file before
+/// giving up: attempts × interval ≈ 10 minutes, a 500 MB graph on a slow link.
+const LOCK_WAIT_ATTEMPTS: usize = 40;
+const LOCK_WAIT: std::time::Duration = std::time::Duration::from_secs(15);
 
 /// `hindsight.json`: what the export needs the caller to know.
 #[derive(Debug, Clone, Deserialize)]
@@ -174,10 +181,35 @@ impl Hindsight {
         ));
         let mut dir = None;
         for name in FILES {
-            let path = repo
-                .get(&format!("{prefix}/{name}"))
-                .await
-                .with_context(|| format!("Failed to download {prefix}/{name} from {repo_id}"))?;
+            let file = format!("{prefix}/{name}");
+            let (mut waits, mut retries) = (0, 0);
+            let path = loop {
+                match repo.get(&file).await {
+                    Ok(path) => break path,
+                    // Another process (a second agent session started at the
+                    // same time) is downloading this file; hf-hub gives up on
+                    // its lock after five seconds. Wait for it: when it is
+                    // done the file is in the shared cache.
+                    Err(hf_hub::api::tokio::ApiError::LockAcquisition(_))
+                        if waits < LOCK_WAIT_ATTEMPTS =>
+                    {
+                        waits += 1;
+                        tokio::time::sleep(LOCK_WAIT).await;
+                    }
+                    // The encoder graph is 500 MB and the tokio client does
+                    // no retries of its own; a new attempt resumes from the
+                    // partial file hf-hub keeps.
+                    Err(error) if retries < DOWNLOAD_RETRIES => {
+                        tracing::debug!("hindsight: download of {file} failed, retrying: {error}");
+                        retries += 1;
+                        tokio::time::sleep(RETRY_WAIT).await;
+                    }
+                    Err(error) => {
+                        return Err(error)
+                            .with_context(|| format!("Failed to download {file} from {repo_id}"))
+                    }
+                }
+            };
             dir = path.parent().map(Path::to_path_buf);
         }
         Self::load_dir(&dir.context("hf_hub returned no file path")?)

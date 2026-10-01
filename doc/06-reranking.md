@@ -17,10 +17,10 @@ Cross-encoders process query and document together, enabling deeper semantic und
 
 | Provider | Models | Context Length | Features |
 |----------|--------|----------------|----------|
-| **Voyage AI** | rerank-2.5, rerank-2.5-lite, rerank-2, rerank-2-lite, rerank-1, rerank-lite-1 | 4K-32K tokens | Multilingual, instruction-following |
-| **Cohere** | rerank-english-v3.0, rerank-multilingual-v3.0, rerank-english-v2.0, rerank-multilingual-v2.0 | Up to 4K tokens | Enterprise-grade, multilingual |
-| **Jina AI** | jina-reranker-v3, jina-reranker-v2-base-multilingual, jina-reranker-v1-base-en, jina-colbert-v2 | 1K-131K tokens | Automatic chunking, multilingual |
-| **Mixedbread AI** | mxbai-rerank-large-v2, mxbai-rerank-base-v2, mxbai-rerank-large-v1, mxbai-rerank-base-v1, mxbai-rerank-xsmall-v1 | 8K tokens | RL-trained, 100+ languages, open-source v1 models |
+| **Voyage AI** | rerank-3, rerank-3-lite, rerank-2.5, rerank-2.5-lite, rerank-2, rerank-2-lite, rerank-1, rerank-lite-1 | 4K-32K tokens | Multilingual, instruction-following |
+| **Cohere** | rerank-v4.0-pro, rerank-v4.0-fast, rerank-v3.5, rerank-english-v3.0, rerank-multilingual-v3.0 | 4K-32K tokens | Enterprise-grade, multilingual |
+| **Jina AI** | jina-reranker-v3.5, jina-reranker-v3, jina-reranker-m0, jina-reranker-v2-base-multilingual, jina-colbert-v2 | 1K-131K tokens | Automatic chunking, multilingual |
+| **Mixedbread AI** | mixedbread-ai/mxbai-rerank-v3.1-listwise, mxbai-rerank-large-v2 | 8K tokens | Listwise v3.1 default, RL-trained v2 |
 
 ### Local Providers (no API keys)
 
@@ -36,8 +36,10 @@ Cross-encoders process query and document together, enabling deeper semantic und
 
 | Model | Context Length | Description | Use Case |
 |-------|----------------|-------------|----------|
-| `rerank-2.5` | 32K tokens | Latest model, optimized for quality | Best quality, multilingual |
-| `rerank-2.5-lite` | 32K tokens | Optimized for latency and quality | Balanced performance |
+| `rerank-3` | 32K tokens | Latest model, highest accuracy | Best quality, multilingual |
+| `rerank-3-lite` | 32K tokens | Latest lite model, rerank-2.5 quality | Balanced performance |
+| `rerank-2.5` | 32K tokens | Previous generation | General purpose |
+| `rerank-2.5-lite` | 32K tokens | Previous generation lite | Balanced performance |
 | `rerank-2` | 16K tokens | Second generation | General purpose |
 | `rerank-2-lite` | 8K tokens | Optimized for speed | Fast reranking |
 | `rerank-1` | 8K tokens | First generation | Legacy support |
@@ -47,20 +49,18 @@ Cross-encoders process query and document together, enabling deeper semantic und
 
 | Model | Description | Use Case |
 |-------|-------------|----------|
-| `rerank-english-v3.0` | Latest English model | Best for English content |
-| `rerank-multilingual-v3.0` | Latest multilingual model | 100+ languages |
-| `rerank-english-v2.0` | Previous generation English | Legacy support |
-| `rerank-multilingual-v2.0` | Previous generation multilingual | Legacy support |
+| `rerank-v4.0-pro` | Latest model, 32K context | Best quality |
+| `rerank-v4.0-fast` | Latest fast model, 32K context | Low latency |
+| `rerank-v3.5` | Previous generation, 4K context | General purpose |
+| `rerank-english-v3.0` | English model, 4K context | English content |
+| `rerank-multilingual-v3.0` | Multilingual model, 4K context | 100+ languages |
 
 **Mixedbread AI Models:**
 
 | Model | Context Length | Description | Use Case |
 |-------|----------------|-------------|----------|
-| `mxbai-rerank-large-v2` | 8K tokens | RL-trained, best quality | High accuracy reranking |
-| `mxbai-rerank-base-v2` | 8K tokens | Balanced v2 model | Good performance/speed |
-| `mxbai-rerank-large-v1` | 8K tokens | Open-source (Apache 2.0) | Open-source deployments |
-| `mxbai-rerank-base-v1` | 8K tokens | Open-source, balanced | Open-source deployments |
-| `mxbai-rerank-xsmall-v1` | 8K tokens | Fastest open-source | Low-latency needs |
+| `mixedbread-ai/mxbai-rerank-v3.1-listwise` | - | Listwise, hosted default | Best quality |
+| `mxbai-rerank-large-v2` | 8K tokens | RL-trained, pointwise | High accuracy reranking |
 
 **Jina AI Models:**
 **FastEmbed Models (Local):**
@@ -73,11 +73,11 @@ Cross-encoders process query and document together, enabling deeper semantic und
 | `jina-reranker-v2-base-multilingual` | Jina multilingual | Multilingual local |
 
 **Recommendations:**
-- **Best Quality**: Voyage `rerank-2.5` or Jina `jina-reranker-v3`
-- **Balanced**: Cohere `rerank-english-v3.0` or Voyage `rerank-2.5-lite`
+- **Best Quality**: Voyage `rerank-3` or Jina `jina-reranker-v3.5`
+- **Balanced**: Cohere `rerank-v4.0-fast` or Voyage `rerank-3-lite`
 - **Fast/Local**: FastEmbed `bge-reranker-base` (no API costs)
 - **Multilingual**: Cohere `rerank-multilingual-v3.0` or Jina `jina-reranker-v2-base-multilingual`
-- **Long Documents**: Jina `jina-reranker-v3` (131K context)
+- **Long Documents**: Jina `jina-reranker-v3.5` (131K context)
 
 ## 🚀 Quick Start
 
@@ -122,7 +122,7 @@ async fn voyage_example() -> anyhow::Result<()> {
         query,
         documents,
         "voyage",
-        "rerank-2.5",
+        "rerank-3",
         Some(2)  // Return top 2 results
     ).await?;
 
@@ -204,7 +204,7 @@ async fn rerank_all_example() -> anyhow::Result<()> {
     ];
 
     // Rerank all documents (no top_k limit)
-    let response = rerank(query, documents, "voyage", "rerank-2.5", None).await?;
+    let response = rerank(query, documents, "voyage", "rerank-3", None).await?;
 
     for result in response.results {
         println!("Score: {:.4} - {}", result.relevance_score, result.document);
@@ -228,7 +228,7 @@ async fn truncation_example() -> anyhow::Result<()> {
         query,
         documents,
         "voyage",
-        "rerank-2.5",
+        "rerank-3",
         Some(5),
         false  // truncation disabled
     ).await?;
@@ -284,18 +284,18 @@ async fn rag_pipeline(query: &str, corpus: Vec<String>) -> anyhow::Result<Vec<St
     let candidates = retrieve_top_k_by_similarity(&query_embedding, &corpus, 100);
 
     // Stage 2: Precise reranking (top 5)
-    let response = rerank(query, candidates, "voyage", "rerank-2.5", Some(5)).await?;
+    let response = rerank(query, candidates, "voyage", "rerank-3", Some(5)).await?;
 
     Ok(response.results.into_iter().map(|r| r.document).collect())
 }
 ```
 
-### 2. Instruction-Following (rerank-2.5 models)
+### 2. Instruction-Following (rerank-2.5 and newer)
 
 ```rust
 // Add instructions to query for better relevance
 let query = "Instruction: Focus on technical accuracy. Query: What is quantum computing?";
-let response = rerank(query, documents, "voyage", "rerank-2.5", Some(3)).await?;
+let response = rerank(query, documents, "voyage", "rerank-3", Some(3)).await?;
 ```
 
 ### 3. Batch Processing
@@ -315,7 +315,7 @@ async fn rerank_large_corpus(
             query,
             chunk.to_vec(),
             "voyage",
-            "rerank-2.5",
+            "rerank-3",
             None
         ).await?;
         all_results.extend(response.results);
@@ -334,7 +334,7 @@ async fn rerank_large_corpus(
 use octolib::reranker::rerank;
 
 async fn robust_reranking(query: &str, docs: Vec<String>) -> anyhow::Result<()> {
-    match rerank(query, docs, "voyage", "rerank-2.5", Some(5)).await {
+    match rerank(query, docs, "voyage", "rerank-3", Some(5)).await {
         Ok(response) => {
             println!("Reranked {} documents", response.results.len());
         }
@@ -364,7 +364,7 @@ async fn rag_with_reranking(
         user_query,
         candidate_docs,
         "voyage",
-        "rerank-2.5",
+        "rerank-3",
         Some(3)
     ).await?;
 
@@ -405,7 +405,7 @@ async fn hybrid_search(
         query,
         embedding_candidates,
         "voyage",
-        "rerank-2.5",
+        "rerank-3",
         Some(10)
     ).await?;
 
@@ -419,10 +419,9 @@ async fn hybrid_search(
 
 | Scenario | Recommended Model | Reason |
 |----------|------------------|---------|
-| Best quality | `rerank-2.5` | Highest accuracy |
-| Balanced | `rerank-2.5-lite` | Good quality, faster |
-| High throughput | `rerank-2-lite` | Optimized latency |
-| Long documents | `rerank-2.5` | 32K context |
+| Best quality | `rerank-3` | Highest accuracy |
+| Balanced | `rerank-3-lite` | rerank-2.5 quality, lower cost and latency |
+| Long documents | `rerank-3` | 32K context |
 
 ### Cost Optimization
 

@@ -23,7 +23,7 @@
 //! ## API-Based Providers (require API keys)
 //!
 //! - **Voyage AI**: Latest reranker models with multilingual support
-//!   - Models: `rerank-2.5`, `rerank-2.5-lite`, `rerank-2`, `rerank-2-lite`
+//!   - Models: `rerank-3`, `rerank-3-lite`, `rerank-2.5`, `rerank-2.5-lite`, `rerank-2`, `rerank-2-lite`
 //!   - Requires: `VOYAGE_API_KEY` environment variable
 //!
 //! - **Cohere**: Enterprise-grade reranking with multiple language support
@@ -31,11 +31,11 @@
 //!   - Requires: `COHERE_API_KEY` environment variable
 //!
 //! - **Jina AI**: Multilingual reranking with automatic chunking for long documents
-//!   - Models: `jina-reranker-v3`, `jina-reranker-m0`, `jina-reranker-v2-base-multilingual`, `jina-colbert-v2`
+//!   - Models: `jina-reranker-v3.5`, `jina-reranker-v3`, `jina-reranker-m0`, `jina-reranker-v2-base-multilingual`, `jina-colbert-v2`
 //!   - Requires: `JINA_API_KEY` environment variable
 //!
 //! - **Mixedbread**: Open-source-friendly reranking with strong multilingual benchmarks
-//!   - Models: `mxbai-rerank-large-v2`, `mxbai-rerank-base-v2`, `mxbai-rerank-large-v1`, `mxbai-rerank-base-v1`
+//!   - Models: `mixedbread-ai/mxbai-rerank-v3.1-listwise`, `mxbai-rerank-large-v2`
 //!   - Requires: `MXBAI_API_KEY` environment variable
 //!
 //! ## Local Providers
@@ -68,7 +68,7 @@
 //!     ];
 //!
 //!     // Rerank with Voyage AI (requires VOYAGE_API_KEY)
-//!     let response = rerank(query, documents, "voyage", "rerank-2.5", Some(2)).await?;
+//!     let response = rerank(query, documents, "voyage", "rerank-3", Some(2)).await?;
 //!
 //!     for result in response.results {
 //!         println!("Score: {:.4} - {}", result.relevance_score, result.document);
@@ -142,7 +142,7 @@ pub use types::{parse_provider_model, RerankProviderType, RerankResponse, Rerank
 /// * `query` - The search query
 /// * `documents` - List of documents to rerank
 /// * `provider` - Provider name (e.g., "voyage")
-/// * `model` - Model name (e.g., "rerank-2.5")
+/// * `model` - Model name (e.g., "rerank-3")
 /// * `top_k` - Optional number of top results to return (None = all)
 ///
 /// # Returns
@@ -159,7 +159,7 @@ pub use types::{parse_provider_model, RerankProviderType, RerankResponse, Rerank
 ///     "machine learning",
 ///     vec!["AI tutorial".to_string(), "Cooking recipes".to_string()],
 ///     "voyage",
-///     "rerank-2.5",
+///     "rerank-3",
 ///     Some(1)
 /// ).await?;
 /// # Ok(())
@@ -184,7 +184,7 @@ pub async fn rerank(
 /// * `query` - The search query
 /// * `documents` - List of documents to rerank
 /// * `provider` - Provider name (e.g., "voyage")
-/// * `model` - Model name (e.g., "rerank-2.5")
+/// * `model` - Model name (e.g., "rerank-3")
 /// * `top_k` - Optional number of top results to return
 /// * `truncation` - Whether to truncate long inputs (true = truncate, false = error on overflow)
 ///

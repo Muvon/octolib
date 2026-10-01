@@ -30,6 +30,8 @@ impl VoyageProviderImpl {
     pub fn new(model: &str) -> Result<Self> {
         // Validate model first - fail fast if unsupported
         let supported_models = [
+            "rerank-3",
+            "rerank-3-lite",
             "rerank-2.5",
             "rerank-2.5-lite",
             "rerank-2",
@@ -67,7 +69,9 @@ impl RerankProvider for VoyageProviderImpl {
     fn is_model_supported(&self) -> bool {
         matches!(
             self.model_name.as_str(),
-            "rerank-2.5"
+            "rerank-3"
+                | "rerank-3-lite"
+                | "rerank-2.5"
                 | "rerank-2.5-lite"
                 | "rerank-2"
                 | "rerank-2-lite"

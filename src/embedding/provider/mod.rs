@@ -60,7 +60,6 @@ pub mod local;
 pub mod octohub;
 pub mod openai;
 pub mod openrouter;
-pub mod together;
 pub mod voyage;
 // Re-export providers
 #[cfg(feature = "fastembed")]
@@ -76,7 +75,6 @@ pub use local::LocalEmbeddingProvider;
 pub use octohub::OctoHubEmbeddingProvider;
 pub use openai::{OpenAIProvider, OpenAIProviderImpl};
 pub use openrouter::{OpenRouterProvider, OpenRouterProviderImpl};
-pub use together::{TogetherProvider, TogetherProviderImpl};
 pub use voyage::{VoyageProvider, VoyageProviderImpl};
 /// Trait for embedding providers
 #[async_trait::async_trait]
@@ -135,7 +133,6 @@ pub async fn create_embedding_provider_from_parts(
         EmbeddingProviderType::OpenRouter => {
             Ok(Box::new(OpenRouterProviderImpl::new(model).await?))
         }
-        EmbeddingProviderType::Together => Ok(Box::new(TogetherProviderImpl::new(model)?)),
         EmbeddingProviderType::OctoHub => Ok(Box::new(OctoHubEmbeddingProvider::new(model).await?)),
         EmbeddingProviderType::Local => Ok(Box::new(LocalEmbeddingProvider::new(model).await?)),
         EmbeddingProviderType::HuggingFace => {

@@ -59,13 +59,14 @@ pub type EmbeddingPricingTuple = (&'static str, f64);
 
 /// Reference embedding pricing, USD per 1M input tokens.
 ///
-/// Voyage rates verified from docs.voyageai.com (2026-07); OpenAI and Jina v3
-/// are stable published rates. Lines tagged `estimate` are best-effort and must
+/// Voyage rates verified from docs.voyageai.com and Jina rates from the
+/// api.jina.ai/v1/models catalog (2026-10); OpenAI rates are stable published
+/// rates. Lines tagged `estimate` are best-effort and must
 /// be confirmed against the provider before launch (same convention as the LLM
 /// tables and `spec/pricing.md`). These are the raw *provider list* prices; any
 /// margin is applied downstream by the billing layer.
 pub const EMBEDDING_PRICING: &[EmbeddingPricingTuple] = &[
-    // ── Voyage (verified: docs.voyageai.com, 2026-07) ──
+    // ── Voyage (verified: docs.voyageai.com, 2026-10) ──
     ("voyage-4-large", 0.12),
     ("voyage-4", 0.06),
     ("voyage-4-lite", 0.02),
@@ -84,23 +85,20 @@ pub const EMBEDDING_PRICING: &[EmbeddingPricingTuple] = &[
     ("text-embedding-3-small", 0.02),
     ("text-embedding-3-large", 0.13),
     ("text-embedding-ada-002", 0.10),
-    // ── Jina (v3 verified: jina.ai; others estimate at Jina's flat $0.02/M) ──
-    ("jina-embeddings-v5-omni-small", 0.02), // estimate
-    ("jina-embeddings-v5-omni-nano", 0.02),  // estimate
-    ("jina-embeddings-v5-text-small", 0.02), // estimate
-    ("jina-embeddings-v5-text-nano", 0.02),  // estimate
-    ("jina-embeddings-v3", 0.02),
-    ("jina-embeddings-v4", 0.02),           // estimate
-    ("jina-embeddings-v2-base-code", 0.02), // estimate
-    ("jina-embeddings-v2-base-en", 0.02),   // estimate
-    ("jina-code-embeddings-1.5b", 0.02),    // estimate
-    ("jina-code-embeddings-0.5b", 0.02),    // estimate
+    // ── Jina (verified: api.jina.ai/v1/models, 2026-10) ──
+    ("jina-embeddings-v5-omni-small", 0.05),
+    ("jina-embeddings-v5-omni-nano", 0.02),
+    ("jina-embeddings-v5-text-small", 0.05),
+    ("jina-embeddings-v5-text-nano", 0.02),
+    ("jina-embeddings-v3", 0.05),
+    ("jina-embeddings-v4", 0.05),
+    ("jina-embeddings-v2-base-code", 0.05),
+    ("jina-embeddings-v2-base-en", 0.05),
+    ("jina-code-embeddings-1.5b", 0.05),
+    ("jina-code-embeddings-0.5b", 0.05),
     // ── Google (estimate — verify before launch) ──
     ("gemini-embedding-2", 0.20), // text tokens only; image/audio/video are billed higher
     ("gemini-embedding-001", 0.15), // estimate
-    ("text-embedding-005", 0.10), // estimate
-    // ── Together (verified: together.ai model page, 2026-07; flat serverless rate) ──
-    ("intfloat/multilingual-e5-large-instruct", 0.02),
 ];
 
 /// Cost in USD for `input_tokens` of an embedding `model`, or `None` when the

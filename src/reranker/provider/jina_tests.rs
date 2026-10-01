@@ -16,6 +16,7 @@ use super::*;
 
 #[test]
 fn test_jina_provider_creation() {
+    assert!(JinaProvider::new("jina-reranker-v3.5").is_ok());
     assert!(JinaProvider::new("jina-reranker-v3").is_ok());
     assert!(JinaProvider::new("jina-reranker-m0").is_ok());
     assert!(JinaProvider::new("jina-reranker-v2-base-multilingual").is_ok());
@@ -27,6 +28,7 @@ fn test_jina_provider_creation() {
 #[test]
 fn test_jina_model_validation() {
     let models = [
+        "jina-reranker-v3.5",
         "jina-reranker-v3",
         "jina-reranker-m0",
         "jina-reranker-v2-base-multilingual",

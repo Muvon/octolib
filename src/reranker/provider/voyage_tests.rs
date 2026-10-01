@@ -17,6 +17,8 @@ use super::*;
 #[test]
 fn test_voyage_provider_creation() {
     // Test valid models
+    assert!(VoyageProviderImpl::new("rerank-3").is_ok());
+    assert!(VoyageProviderImpl::new("rerank-3-lite").is_ok());
     assert!(VoyageProviderImpl::new("rerank-2.5").is_ok());
     assert!(VoyageProviderImpl::new("rerank-2.5-lite").is_ok());
     assert!(VoyageProviderImpl::new("rerank-2").is_ok());
@@ -31,6 +33,8 @@ fn test_voyage_provider_creation() {
 #[test]
 fn test_voyage_model_validation() {
     let models = [
+        "rerank-3",
+        "rerank-3-lite",
         "rerank-2.5",
         "rerank-2.5-lite",
         "rerank-2",

@@ -60,8 +60,8 @@ async fn main() -> anyhow::Result<()> {
 
     // Try Voyage AI
     if std::env::var("VOYAGE_API_KEY").is_ok() {
-        println!("🚢 Voyage AI Reranker (rerank-2.5)");
-        match rerank(query, documents.clone(), "voyage", "rerank-2.5", Some(3)).await {
+        println!("🚢 Voyage AI Reranker (rerank-3)");
+        match rerank(query, documents.clone(), "voyage", "rerank-3", Some(3)).await {
             Ok(response) => {
                 println!("Top 3 results:");
                 for (i, result) in response.results.iter().enumerate() {

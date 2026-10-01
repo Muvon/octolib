@@ -29,6 +29,7 @@ pub struct JinaProvider {
 impl JinaProvider {
     pub fn new(model: &str) -> Result<Self> {
         let supported_models = [
+            "jina-reranker-v3.5",
             "jina-reranker-v3",
             "jina-reranker-m0",
             "jina-reranker-v2-base-multilingual",
@@ -126,7 +127,8 @@ impl RerankProvider for JinaProvider {
     fn is_model_supported(&self) -> bool {
         matches!(
             self.model_name.as_str(),
-            "jina-reranker-v3"
+            "jina-reranker-v3.5"
+                | "jina-reranker-v3"
                 | "jina-reranker-m0"
                 | "jina-reranker-v2-base-multilingual"
                 | "jina-colbert-v2"

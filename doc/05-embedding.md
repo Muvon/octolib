@@ -6,12 +6,11 @@ Octolib provides a unified interface for generating embeddings across multiple p
 
 | Provider | Models | Features | API Key Required |
 |----------|--------|----------|------------------|
-| **Jina** | jina-embeddings-v5-text-small/omni-small (1024d), jina-embeddings-v5-text-nano/omni-nano (768d), jina-embeddings-v4 (2048d), jina-embeddings-v3 (1024d), jina-clip-v2 (1024d), jina-clip-v1 (768d), jina-colbert-v2 (128d/96d/64d), jina-code-embeddings-0.5b (896d)/1.5b (1536d), jina-embeddings-v2-base-es/de/zh/en/code (768d), jina-embeddings-v2-small-en (512d) | High-quality embeddings, multimodal, late-interaction, code-specialized | ✅ JINA_API_KEY |
+| **Jina** | jina-embeddings-v5-text-small/omni-small (1024d), jina-embeddings-v5-text-nano/omni-nano (768d), jina-embeddings-v4 (2048d), jina-embeddings-v3 (1024d), jina-clip-v2 (1024d), jina-clip-v1 (768d), jina-colbert-v2 (128d), jina-code-embeddings-0.5b (896d)/1.5b (1536d), jina-embeddings-v2-base-es/de/zh/en/code (768d) | High-quality embeddings, multimodal, late-interaction, code-specialized | ✅ JINA_API_KEY |
 | **Voyage** | voyage-4-large/4/4-lite (1024d, MRL), voyage-3.5/3.5-lite (1024d), voyage-3-large (1024d), voyage-code-4 (1024d, MRL), voyage-code-3 (1024d), voyage-code-2 (1536d), voyage-finance-2/law-2 (1024d), voyage-2 (1024d), voyage-context-4/context-3 (1024d), voyage-multimodal-3.5 (1024d) | Specialized models, MRL support, contextualized chunks | ✅ VOYAGE_API_KEY |
-| **Google** | gemini-embedding-2 (3072d), gemini-embedding-001 (3072d), text-embedding-005 (768d), text-multilingual-embedding-002 (768d) | Google AI embeddings, multilingual | ✅ GOOGLE_API_KEY |
+| **Google** | gemini-embedding-2 (3072d), gemini-embedding-001 (3072d) | Google AI embeddings, multilingual | ✅ GOOGLE_API_KEY |
 | **OpenAI** | text-embedding-3-small (1536d), text-embedding-3-large (3072d), text-embedding-ada-002 (1536d) | OpenAI embeddings, reliable | ✅ OPENAI_API_KEY |
 | **OpenRouter** | Dynamic model discovery from API | OpenRouter proxy models | ✅ OPENROUTER_API_KEY |
-| **Together AI** | intfloat/multilingual-e5-large-instruct (1024d) | Together proxy models | ✅ TOGETHER_API_KEY |
 | **OctoHub** | Any embedding model through OctoHub | Local serving via OctoHub | ✅ OCTOHUB_API_KEY |
 | **Local** | Any model via Ollama, llama.cpp, LM Studio, vLLM, LocalAI | OpenAI-compatible local servers | ❌ Optional LOCAL_EMBED_API_KEY |
 | **FastEmbed** | Local sentence-transformers models (dynamic discovery) | Local processing | ❌ No API key |
@@ -25,10 +24,9 @@ Octolib provides a unified interface for generating embeddings across multiple p
 - `jina-embeddings-v3`: 1024d, multilingual, 8K context
 - `jina-clip-v2`: 1024d, multimodal (text+images)
 - `jina-clip-v1`: 768d, multimodal (text+images)
-- `jina-colbert-v2`: Late-interaction retrieval (128d/96d/64d variants)
+- `jina-colbert-v2`: Late-interaction retrieval (128d)
 - `jina-code-embeddings-0.5b/1.5b`: Code-specialized, 896d/1536d, 32K context
 - `jina-embeddings-v2-base-*`: 768d multilingual/code variants (es, de, zh, en, code)
-- `jina-embeddings-v2-small-en`: 512d, English-only
 
 **Voyage AI:**
 - `voyage-4-large/4/4-lite`: Latest v4 series with MRL (Matryoshka Representation Learning) - supports dimension truncation to 2048/1024/512/256
@@ -44,7 +42,7 @@ Octolib provides a unified interface for generating embeddings across multiple p
 - All v4 models share the same embedding space (interoperable)
 
 **Google:**
-- Note: `text-embedding-004` is deprecated
+- Note: `text-embedding-004` is shut down; `text-embedding-005` and `text-multilingual-embedding-002` are Vertex AI-only and not served by the Gemini API
 
 ## 🚀 Quick Start
 

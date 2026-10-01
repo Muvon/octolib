@@ -54,8 +54,8 @@ async fn main() -> anyhow::Result<()> {
     println!("Documents to rerank: {}\n", documents.len());
 
     // Rerank with Voyage AI - get top 3 results
-    println!("Reranking with Voyage AI (rerank-2.5)...\n");
-    let response = rerank(query, documents.clone(), "voyage", "rerank-2.5", Some(3)).await?;
+    println!("Reranking with Voyage AI (rerank-3)...\n");
+    let response = rerank(query, documents.clone(), "voyage", "rerank-3", Some(3)).await?;
 
     println!("Top {} results:", response.results.len());
     println!("Total tokens used: {}\n", response.total_tokens);
@@ -68,7 +68,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Example 2: Rerank all documents without top_k limit
     println!("\n=== Reranking all documents ===\n");
-    let response_all = rerank(query, documents, "voyage", "rerank-2.5", None).await?;
+    let response_all = rerank(query, documents, "voyage", "rerank-3", None).await?;
 
     println!("All {} results ranked:", response_all.results.len());
     for (rank, result) in response_all.results.iter().enumerate() {

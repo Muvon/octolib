@@ -22,7 +22,7 @@ Pricing and capability tables ship inside the crate, so every response reports t
 - **📋 Structured output** — JSON and JSON Schema modes, validated locally even when the upstream doesn't enforce them
 - **🧠 Thinking/reasoning** — reasoning content and token counts surfaced separately from the answer; the `ReasoningEffort` hint maps to each provider's knob
 - **🖼️ Vision & video** — image and video attachments on vision-capable models
-- **🎯 Embeddings & reranking** — Jina, Voyage, Google, OpenAI, Together, OctoHub, plus local FastEmbed and HuggingFace backends
+- **🎯 Embeddings & reranking** — Jina, Voyage, Google, OpenAI, OctoHub, plus local FastEmbed and HuggingFace backends
 - **🎬 Media generation** — typed image, video, speech, and transcription APIs with durable jobs and dimensional cost reporting
 - **🧩 CLI proxies** — drive `codex`, `claude`, `gemini`, or `cursor-agent` as a provider via `cli:<backend>/<model>` (prompt-only)
 - **🛡️ Production posture** — `Result` everywhere, exponential-backoff retries, cancellation tokens, and API keys from the environment only
@@ -383,7 +383,7 @@ async fn embedding_example() -> anyhow::Result<()> {
 // Supported embedding providers:
 // - Jina: jina-embeddings-v4, jina-clip-v2, etc.
 // - Voyage: voyage-3.5, voyage-code-2, etc.
-// - Google: gemini-embedding-001, text-embedding-005
+// - Google: gemini-embedding-2, gemini-embedding-001
 // - OpenAI: text-embedding-3-small, text-embedding-3-large
 // - FastEmbed: Local models (feature-gated)
 // - HuggingFace: sentence-transformers models
@@ -409,7 +409,7 @@ async fn reranking_example() -> anyhow::Result<()> {
         query,
         documents,
         "voyage",           // provider: voyage, cohere, jina, fastembed
-        "rerank-2.5",       // model
+        "rerank-3",         // model
         Some(2)             // top_k: return top 2 results
     ).await?;
 
@@ -426,9 +426,9 @@ async fn reranking_example() -> anyhow::Result<()> {
 // Supported Providers:
 //
 // API-Based (require API keys):
-// - Voyage AI (VOYAGE_API_KEY): rerank-2.5, rerank-2.5-lite, rerank-2, rerank-2-lite
-// - Cohere (COHERE_API_KEY): rerank-english-v3.0, rerank-multilingual-v3.0
-// - Jina AI (JINA_API_KEY): jina-reranker-v3, jina-reranker-v2-base-multilingual
+// - Voyage AI (VOYAGE_API_KEY): rerank-3, rerank-3-lite, rerank-2.5, rerank-2.5-lite
+// - Cohere (COHERE_API_KEY): rerank-v4.0-pro, rerank-v4.0-fast, rerank-v3.5
+// - Jina AI (JINA_API_KEY): jina-reranker-v3.5, jina-reranker-v3, jina-reranker-m0
 //
 // Local (no API keys, requires features):
 // - FastEmbed (fastembed feature): bge-reranker-base, bge-reranker-large, jina-reranker-v1-turbo-en

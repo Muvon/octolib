@@ -29,13 +29,10 @@ pub struct MixedbreadProvider {
 impl MixedbreadProvider {
     pub fn new(model: &str) -> Result<Self> {
         let supported_models = [
-            // v2 models (2025) - RL-trained, 100+ languages, 8K context
+            // v3.1 listwise (2026-07) - the hosted default; docs use the prefixed id
+            "mixedbread-ai/mxbai-rerank-v3.1-listwise",
+            // v2 (2025) - RL-trained, 100+ languages, 8K context; v1 and base-v2 are legacy
             "mxbai-rerank-large-v2",
-            "mxbai-rerank-base-v2",
-            // v1 models - open-source, Apache 2.0
-            "mxbai-rerank-large-v1",
-            "mxbai-rerank-base-v1",
-            "mxbai-rerank-xsmall-v1",
         ];
 
         if !supported_models.contains(&model) {
@@ -129,11 +126,7 @@ impl RerankProvider for MixedbreadProvider {
     fn is_model_supported(&self) -> bool {
         matches!(
             self.model_name.as_str(),
-            "mxbai-rerank-large-v2"
-                | "mxbai-rerank-base-v2"
-                | "mxbai-rerank-large-v1"
-                | "mxbai-rerank-base-v1"
-                | "mxbai-rerank-xsmall-v1"
+            "mixedbread-ai/mxbai-rerank-v3.1-listwise" | "mxbai-rerank-large-v2"
         )
     }
 }

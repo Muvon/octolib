@@ -57,13 +57,15 @@ async fn test_create_voyage_provider() {
 
 #[tokio::test]
 async fn test_create_google_provider() {
-    let result =
-        create_embedding_provider_from_parts(&EmbeddingProviderType::Google, "text-embedding-005")
-            .await;
+    let result = create_embedding_provider_from_parts(
+        &EmbeddingProviderType::Google,
+        "gemini-embedding-001",
+    )
+    .await;
 
     match result {
         Ok(provider) => {
-            assert_eq!(provider.get_dimension(), 768);
+            assert_eq!(provider.get_dimension(), 3072);
             assert!(provider.is_model_supported());
         }
         Err(e) => {
@@ -751,8 +753,7 @@ fn dimension_strategy(provider: &EmbeddingProviderType) -> DimensionStrategy {
         | EmbeddingProviderType::Jina
         | EmbeddingProviderType::Voyage
         | EmbeddingProviderType::Google
-        | EmbeddingProviderType::OpenAI
-        | EmbeddingProviderType::Together => DimensionStrategy::StaticAtConstruction,
+        | EmbeddingProviderType::OpenAI => DimensionStrategy::StaticAtConstruction,
         EmbeddingProviderType::OpenRouter
         | EmbeddingProviderType::OctoHub
         | EmbeddingProviderType::Local => DimensionStrategy::ProbedAtConstruction,

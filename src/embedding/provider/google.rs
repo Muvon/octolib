@@ -55,10 +55,8 @@ impl GoogleProviderImpl {
         match model {
 			"gemini-embedding-2" => Ok(3072),    // Multimodal, 8192 input tokens, MRL down to 128d
 			"gemini-embedding-001" => Ok(3072),  // Up to 3072 dimensions, state-of-the-art performance
-			"text-embedding-005" => Ok(768),     // Specialized in English and code tasks
-			"text-multilingual-embedding-002" => Ok(768), // Specialized in multilingual tasks
 			_ => Err(anyhow::anyhow!(
-				"Unsupported Google model: '{}'. Supported models: gemini-embedding-2 (3072d), gemini-embedding-001 (3072d), text-embedding-005 (768d), text-multilingual-embedding-002 (768d)",
+				"Unsupported Google model: '{}'. Supported models: gemini-embedding-2 (3072d), gemini-embedding-001 (3072d)",
 				model
 			)),
 		}
@@ -91,10 +89,7 @@ impl EmbeddingProvider for GoogleProviderImpl {
     fn is_model_supported(&self) -> bool {
         matches!(
             self.model_name.as_str(),
-            "gemini-embedding-2"
-                | "gemini-embedding-001"
-                | "text-embedding-005"
-                | "text-multilingual-embedding-002"
+            "gemini-embedding-2" | "gemini-embedding-001"
         )
     }
 }
@@ -105,12 +100,7 @@ pub struct GoogleProvider;
 impl GoogleProvider {
     /// Get list of supported models for dynamic discovery
     pub fn get_supported_models() -> Vec<&'static str> {
-        vec![
-            "gemini-embedding-2",
-            "gemini-embedding-001",
-            "text-embedding-005",
-            "text-multilingual-embedding-002",
-        ]
+        vec!["gemini-embedding-2", "gemini-embedding-001"]
     }
     pub async fn generate_embeddings(
         contents: &str,

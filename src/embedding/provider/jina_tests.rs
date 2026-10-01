@@ -48,28 +48,10 @@ fn test_jina_model_dimensions() {
         1024
     );
     assert_eq!(
-        JinaProviderImpl::new("jina-embeddings-v2-small-en")
-            .unwrap()
-            .get_dimension(),
-        512
-    );
-    assert_eq!(
         JinaProviderImpl::new("jina-colbert-v2")
             .unwrap()
             .get_dimension(),
         128
-    );
-    assert_eq!(
-        JinaProviderImpl::new("jina-colbert-v2-96")
-            .unwrap()
-            .get_dimension(),
-        96
-    );
-    assert_eq!(
-        JinaProviderImpl::new("jina-colbert-v2-64")
-            .unwrap()
-            .get_dimension(),
-        64
     );
     assert_eq!(
         JinaProviderImpl::new("jina-code-embeddings-0.5b")
@@ -96,10 +78,7 @@ fn test_jina_model_validation() {
         "jina-embeddings-v3",
         "jina-clip-v2",
         "jina-clip-v1",
-        "jina-embeddings-v2-small-en",
         "jina-colbert-v2",
-        "jina-colbert-v2-96",
-        "jina-colbert-v2-64",
         "jina-code-embeddings-0.5b",
         "jina-code-embeddings-1.5b",
     ];

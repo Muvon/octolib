@@ -44,10 +44,7 @@ impl JinaProviderImpl {
             "jina-embeddings-v2-base-de",
             "jina-embeddings-v2-base-zh",
             "jina-embeddings-v2-base-en",
-            "jina-embeddings-v2-small-en",
             "jina-colbert-v2",
-            "jina-colbert-v2-96",
-            "jina-colbert-v2-64",
             "jina-code-embeddings-0.5b",
             "jina-code-embeddings-1.5b",
         ];
@@ -83,10 +80,7 @@ impl JinaProviderImpl {
             "jina-embeddings-v2-base-de" => 768,
             "jina-embeddings-v2-base-zh" => 768,
             "jina-embeddings-v2-base-en" => 768,
-            "jina-embeddings-v2-small-en" => 512,
             "jina-colbert-v2" => 128,
-            "jina-colbert-v2-96" => 96,
-            "jina-colbert-v2-64" => 64,
             // Qwen2 hidden sizes: 0.5B -> 896, 1.5B -> 1536 (api.jina.ai/v1/models).
             "jina-code-embeddings-0.5b" => 896,
             "jina-code-embeddings-1.5b" => 1536,
@@ -135,10 +129,7 @@ impl EmbeddingProvider for JinaProviderImpl {
                 | "jina-embeddings-v2-base-de"
                 | "jina-embeddings-v2-base-zh"
                 | "jina-embeddings-v2-base-en"
-                | "jina-embeddings-v2-small-en"
                 | "jina-colbert-v2"
-                | "jina-colbert-v2-96"
-                | "jina-colbert-v2-64"
                 | "jina-code-embeddings-0.5b"
                 | "jina-code-embeddings-1.5b"
         )

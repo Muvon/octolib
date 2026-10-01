@@ -2940,6 +2940,7 @@ dependencies = [
  "hf-hub 0.4.3",
  "jsonschema",
  "jsonwebtoken",
+ "ort",
  "reqwest",
  "serde",
  "serde_json",

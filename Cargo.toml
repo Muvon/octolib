@@ -14,7 +14,7 @@ categories = ["api-bindings", "development-tools"]
 exclude = ["scripts/"]
 
 [features]
-default = ["llm", "embeddings", "reranker", "media", "evaluation", "fastembed", "huggingface"]
+default = ["llm", "embeddings", "reranker", "media", "evaluation", "fastembed", "huggingface", "hindsight"]
 
 # Capability modules. Each gates one top-level module and the dependencies only
 # it needs, so an LLM-only build does not compile the media or embedding stack.
@@ -35,6 +35,12 @@ huggingface = ["embeddings", "onnx", "dep:candle-core", "dep:candle-nn", "dep:ca
 # turn it on. It borrows ort + the session builder from the fastembed crate,
 # which is why it pulls that dep even in a candle-only build.
 onnx = ["embeddings", "dep:fastembed", "dep:tokenizers", "dep:hf-hub"]
+
+# hindsight: the calibrated next-turn-correction verifier for coding-agent
+# traces (`octolib::hindsight`), two ONNX graphs run through ort directly.
+# Needs `onnx` for the tokenizer, hf-hub download and the ort binary that
+# fastembed's feature set provides.
+hindsight = ["onnx", "dep:ort"]
 
 # Hardware acceleration — enable whichever matches your hardware.
 # Each feature activates the backend in both candle and fastembed (when those features are active).
@@ -77,6 +83,9 @@ tiktoken-rs = { version = "0.9.1", optional = true }
 
 # Optional embedding provider dependencies
 fastembed = { version = "5.13.4", default-features = false, features = ["hf-hub-rustls-tls", "ort-download-binaries-rustls-tls"], optional = true }
+# Pinned to the exact version fastembed depends on so one ort links; the
+# runtime binary comes through fastembed's download feature.
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "api-24"], optional = true }
 # Candle dependencies for HuggingFace support (optional)
 # Pinned to 0.10.2 to match fastembed's candle version (qwen3 feature)
 candle-core = { version = "0.10.2", optional = true }

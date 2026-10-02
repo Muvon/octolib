@@ -29,6 +29,7 @@
 //! - **Retry logic**: Exponential backoff with smart rate limit handling
 //! - **Embeddings**: Multi-provider embedding support (Jina, Voyage, Google, OpenAI, FastEmbed, HuggingFace)
 //! - **Reranking**: Document relevance scoring with cross-encoder models (Voyage AI)
+//! - **Hindsight**: Local, calibrated next-turn-correction verifier for coding-agent traces (ONNX, CPU)
 //! - **Configuration migration**: Comment-preserving TOML upgrades with locking, backups, and atomic writes
 //! - **Self-sufficient**: No external dependencies on application-specific types
 //! - **CLI provider**: `cli:<backend>/<model>` proxies CLIs; tool calling/MCP is not used or controllable (prompt-only)
@@ -38,8 +39,9 @@
 //! Every capability is enabled by default. Turn defaults off to compile only
 //! what you use: `llm`, `embeddings`, `reranker`, and `media` — each gates the
 //! module of the same name. The local embedding backends `fastembed` and
-//! `huggingface` both imply `embeddings`. The `errors`, `storage` and `utils`
-//! modules and `set_user_agent` are always compiled.
+//! `huggingface` both imply `embeddings`; `hindsight` implies `onnx`. The
+//! `errors`, `storage` and `utils` modules and `set_user_agent` are always
+//! compiled.
 //!
 //! ## Usage
 //!
@@ -142,6 +144,8 @@ pub mod embedding;
 pub mod errors;
 #[cfg(feature = "evaluation")]
 pub mod evaluation;
+#[cfg(feature = "hindsight")]
+pub mod hindsight;
 pub mod http;
 #[cfg(feature = "llm")]
 pub mod llm;

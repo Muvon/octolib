@@ -59,19 +59,36 @@ const FEATHERLESS_API_KEY_ENV: &str = "FEATHERLESS_API_KEY";
 const FEATHERLESS_API_URL_ENV: &str = "FEATHERLESS_API_URL";
 const FEATHERLESS_API_URL: &str = "https://api.featherless.ai/v1/chat/completions";
 
-/// Feather Developer request prices per 1M tokens, verified Sep 22, 2026.
+/// Feather Developer request prices per 1M tokens, verified Sep 22, 2026
+/// (rows added Oct 2, 2026 verified that day). Classes without a listed
+/// cached rate use the input rate.
 /// Format: (model ID pattern, input, output, cache write, cached input).
 const PRICING: &[PricingTuple] = &[
+    ("deepseek-ai/DeepSeek-V4.1-Flash", 0.30, 1.20, 0.30, 0.03),
     ("deepseek-ai/DeepSeek-V4-Flash-0731", 0.14, 0.28, 0.14, 0.03),
     ("deepseek-ai/DeepSeek-V4-Flash", 0.14, 0.28, 0.14, 0.03),
     ("deepseek-ai/DeepSeek-V4-Pro", 1.60, 3.20, 1.60, 0.20),
     ("deepseek-ai/DeepSeek-V3.2", 0.264, 0.41, 0.264, 0.06),
+    ("zai-org/GLM-5.3-Flash", 0.15, 0.50, 0.15, 0.03),
+    ("zai-org/GLM-5.3", 1.40, 4.40, 1.40, 0.26),
     ("zai-org/GLM-5.2", 1.40, 4.40, 1.40, 0.15),
+    ("zai-org/GLM-5.1", 1.30, 4.30, 1.30, 0.26),
+    // Must follow every GLM-5.x row: lookup is a first-match substring scan.
+    ("zai-org/GLM-5", 0.95, 3.15, 0.95, 0.19),
+    ("zai-org/GLM-4.7-Flash", 0.0653, 0.40, 0.0653, 0.0131),
     ("zai-org/GLM-4.7", 0.55, 2.20, 0.55, 0.11),
     // Pricing doc lists 3.00/15.00 while the model page still lists 2.00/10.00.
     ("moonshotai/Kimi-K3", 2.00, 10.00, 2.00, 0.30),
+    ("moonshotai/Kimi-K2.7-Code", 0.80, 3.40, 0.80, 0.154),
+    ("moonshotai/Kimi-K2.6", 0.80, 3.40, 0.80, 0.154),
     ("moonshotai/Kimi-K2.5", 0.80, 3.40, 0.80, 0.154),
     ("MiniMaxAI/MiniMax-M3", 0.55, 2.20, 0.55, 0.06),
+    ("MiniMaxAI/MiniMax-M2.7", 0.30, 1.20, 0.30, 0.06),
+    ("Qwen/Qwen3.8-2.4T-A95B", 1.00, 4.00, 1.00, 1.00),
+    ("Qwen/Qwen3.8-Flash-Next", 0.15, 0.50, 0.15, 0.03),
+    ("Qwen/Qwen3.8-27B", 0.40, 3.00, 0.40, 0.15),
+    ("Qwen/Qwen3.6-35B-A3B", 0.186, 1.11375, 0.186, 0.032),
+    ("Qwen/Qwen3.6-27B", 0.32, 2.70, 0.32, 0.064),
     ("Qwen/Qwen3.5-397B-A17B", 0.55, 3.50, 0.55, 0.55),
     (
         "Qwen/Qwen3-Coder-480B-A35B-Instruct",
@@ -86,6 +103,27 @@ const PRICING: &[PricingTuple] = &[
         1.15,
         0.125,
         0.025,
+    ),
+    ("meta-models/Muse-Glimmer-30B", 0.30, 1.10, 0.30, 0.04),
+    ("stepfun-ai/Step-3.7-Flash", 0.20, 1.15, 0.20, 0.04),
+    ("XiaomiMiMo/MiMo-V2.5", 0.149, 0.493, 0.149, 0.028),
+    ("mistralai/Mistral-Medium-3.5-128B", 1.00, 4.00, 1.00, 0.20),
+    ("poolside/Laguna-S-2.1", 1.00, 4.00, 1.00, 0.20),
+    ("tencent/Hy3", 1.00, 4.00, 1.00, 1.00),
+    // QAT builds carry a model-specific price above their class rate.
+    (
+        "google/gemma-4-31B-it-qat-q4_0-unquantized",
+        0.48,
+        1.44,
+        0.48,
+        0.48,
+    ),
+    (
+        "google/gemma-4-26B-A4B-it-qat-q4_0-unquantized",
+        0.40,
+        0.80,
+        0.40,
+        0.40,
     ),
     ("google/gemma-4-31B", 0.12, 0.36, 0.12, 0.10),
     ("google/gemma-4-26B", 0.07, 0.34, 0.07, 0.05),

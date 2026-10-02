@@ -110,6 +110,8 @@ const PRICING: &[PricingTuple] = &[
     ("deepseek-v4-flash-0731", 0.44, 1.32, 0.44, 0.044),
     ("deepseek-v4-flash", 0.20, 0.40, 0.20, 0.04),
     ("glm-5.3", 1.40, 4.40, 1.40, 0.28),
+    // No implicit cache in Singapore; must precede glm-5.2.
+    ("glm-5.2-fast-preview", 2.80, 8.80, 2.80, 2.80),
     ("glm-5.2", 1.40, 4.40, 1.40, 0.28),
     ("kimi-k3", 3.00, 15.00, 3.00, 0.30),
 ];

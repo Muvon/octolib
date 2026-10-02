@@ -156,6 +156,77 @@ fn newly_listed_serverless_routes_use_fireworks_pricing_and_context() {
 }
 
 #[test]
+fn fast_and_us_routers_use_their_own_rates() {
+    let provider = FireworksProvider::new();
+
+    for router in [
+        "accounts/fireworks/routers/kimi-k3-fast",
+        "accounts/fireworks/routers/kimi-k3-us",
+    ] {
+        let kimi = provider.get_model_pricing(router).unwrap();
+        assert_eq!(kimi.input_price_per_1m, 4.50, "{router}");
+        assert_eq!(kimi.cache_read_price_per_1m, 0.45, "{router}");
+        assert_eq!(kimi.output_price_per_1m, 22.50, "{router}");
+    }
+
+    for router in [
+        "accounts/fireworks/routers/glm-5p3-fast",
+        "accounts/fireworks/routers/glm-5p3-us",
+    ] {
+        let glm = provider.get_model_pricing(router).unwrap();
+        assert_eq!(glm.input_price_per_1m, 2.10, "{router}");
+        assert_eq!(glm.cache_read_price_per_1m, 0.39, "{router}");
+        assert_eq!(glm.output_price_per_1m, 6.60, "{router}");
+    }
+
+    let glm_flash = provider
+        .get_model_pricing("accounts/fireworks/routers/glm-5p3-flash-us")
+        .unwrap();
+    assert_eq!(glm_flash.input_price_per_1m, 0.225);
+    assert_eq!(glm_flash.output_price_per_1m, 0.75);
+
+    let deepseek_us = provider
+        .get_model_pricing("accounts/fireworks/routers/deepseek-v4p1-flash-us")
+        .unwrap();
+    assert_eq!(deepseek_us.input_price_per_1m, 0.45);
+    assert_eq!(deepseek_us.cache_read_price_per_1m, 0.009);
+    assert_eq!(deepseek_us.output_price_per_1m, 1.80);
+}
+
+#[test]
+fn october_serverless_models_use_fireworks_pricing_and_context() {
+    let provider = FireworksProvider::new();
+
+    let deepseek = provider
+        .get_model_pricing("accounts/fireworks/models/deepseek-v4p1-flash")
+        .unwrap();
+    assert_eq!(deepseek.input_price_per_1m, 0.30);
+    assert_eq!(deepseek.cache_read_price_per_1m, 0.006);
+    assert_eq!(deepseek.output_price_per_1m, 1.20);
+    assert_eq!(
+        provider.get_max_input_tokens("accounts/fireworks/models/deepseek-v4p1-flash"),
+        1_040_000
+    );
+
+    let nemotron = provider
+        .get_model_pricing("accounts/fireworks/models/nemotron-3-ultra-nvfp4")
+        .unwrap();
+    assert_eq!(nemotron.input_price_per_1m, 0.60);
+    assert_eq!(nemotron.cache_read_price_per_1m, 0.12);
+    assert_eq!(nemotron.output_price_per_1m, 2.40);
+    assert_eq!(
+        provider.get_max_input_tokens("accounts/fireworks/models/nemotron-3-ultra-nvfp4"),
+        262_144
+    );
+
+    // Inkling prices correctly via the reference table; only its context is local.
+    assert_eq!(
+        provider.get_max_input_tokens("accounts/fireworks/models/inkling"),
+        1_040_000
+    );
+}
+
+#[test]
 fn retired_routes_leave_fireworks_table() {
     assert!(fireworks_model_pricing("accounts/fireworks/models/qwen3p7-plus").is_none());
 }

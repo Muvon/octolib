@@ -400,6 +400,9 @@ fn late_september_2026_additions_resolve() {
         ("mistral-small-2603", 0.15, 0.60),
         ("mistral-small-4", 0.15, 0.60),
         ("nvidia.nemotron-super-3-120b", 0.15, 0.65),
+        ("nvidia.nemotron-nano-3-30b", 0.06, 0.24),
+        ("nvidia.nemotron-nano-12b-v2", 0.20, 0.60),
+        ("nvidia.nemotron-nano-9b-v2", 0.06, 0.23),
         ("openai.gpt-oss-safeguard-120b", 0.15, 0.60),
         ("openai.gpt-oss-safeguard-20b", 0.07, 0.20),
         ("writer.palmyra-vision-7b", 0.15, 0.60),
@@ -437,11 +440,17 @@ fn late_september_2026_additions_resolve() {
         ("aion-labs/aion-3.5-mini", 0.70, 1.40),
         ("upstage/solar-mini4", 0.10, 0.40),
         ("qwen/qwen3.8-omni-flash", 0.15, 0.47),
+        ("qwen/qwen3.5-122b-a10b", 0.26, 2.08),
+        ("qwen/qwen3.5-35b-a3b", 0.15, 1.00),
+        ("qwen/qwen3.5-27b", 0.195, 1.56),
+        ("openai/gpt-chat-latest", 5.00, 30.00),
         // Variants that fell through to their cheaper base row.
         ("qwen/qwen3.8-max-prime", 4.00, 12.00),
         ("z-ai/glm-5.3-prime", 2.80, 8.80),
         ("z-ai/glm-5.3-flashx", 0.37, 1.25),
         ("inclusionai/ling-3.0-flash-vl", 0.021, 0.0616),
+        ("mistralai/mistral-medium-3-5", 1.50, 7.50),
+        ("unbiased/pareto-26.10-preview", 0.80, 3.20),
     ] {
         let pricing = get_reference_pricing(model)
             .unwrap_or_else(|| panic!("{model} must resolve to reference pricing"));
@@ -450,6 +459,15 @@ fn late_september_2026_additions_resolve() {
     }
     let caps = get_reference_capabilities("inclusionai/ling-3.0-flash-vl").unwrap();
     assert!(caps.vision && caps.video && caps.structured_output);
+    let medium = get_reference_capabilities("mistralai/mistral-medium-3-5").unwrap();
+    assert!(medium.vision);
+    assert_eq!(medium.max_input_tokens, 262_144);
+    assert_eq!(
+        get_reference_capabilities("perceptron/perceptron-mk1.5")
+            .unwrap()
+            .max_input_tokens,
+        36_864
+    );
 
     // Preview Nova 2 models publish a rate but no context window.
     assert!(get_reference_capabilities("amazon.nova-2-pro-v1:0").is_none());

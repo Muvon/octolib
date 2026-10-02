@@ -159,6 +159,23 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(0.15, 0.65, 0.15, 0.15),
     },
     ReferenceModelEntry {
+        // Bedrock NVIDIA Nemotron Nano models (`nvidia.nemotron-nano-*`):
+        // us-east-1 Standard tier, no prompt caching.
+        pattern: "nemotron-nano-3-30b",
+        capabilities: caps(false, false, true, 262_144),
+        pricing: pricing(0.06, 0.24, 0.06, 0.06),
+    },
+    ReferenceModelEntry {
+        pattern: "nemotron-nano-12b-v2",
+        capabilities: caps(true, false, true, 131_072),
+        pricing: pricing(0.20, 0.60, 0.20, 0.20),
+    },
+    ReferenceModelEntry {
+        pattern: "nemotron-nano-9b-v2",
+        capabilities: caps(false, false, true, 131_072),
+        pricing: pricing(0.06, 0.23, 0.06, 0.06),
+    },
+    ReferenceModelEntry {
         // NVIDIA Nemotron 3.5 Content Safety: text+image classifier, 131K context.
         pattern: "nemotron-3.5-content-safety",
         capabilities: caps(true, false, false, 131_072),
@@ -391,6 +408,13 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(0.80, 1.60, 0.80, 0.20),
     },
     ReferenceModelEntry {
+        // Unbiased Pareto 26.10 Preview (Oct 2026): 1M context, text/image
+        // input. Must precede the base `unbiased/pareto` row.
+        pattern: "unbiased/pareto-26.10",
+        capabilities: caps(true, false, false, 1_048_576),
+        pricing: pricing(0.80, 3.20, 0.80, 0.03),
+    },
+    ReferenceModelEntry {
         // Unbiased Pareto: vendor-qualified so the variable-priced
         // `openrouter/pareto-code` route does not inherit this rate.
         pattern: "unbiased/pareto",
@@ -413,6 +437,12 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pattern: "schematron-v2-turbo",
         capabilities: caps(false, false, true, 128_000),
         pricing: pricing(0.03, 0.15, 0.03, 0.03),
+    },
+    ReferenceModelEntry {
+        // Perceptron MK1.5 (Sep 2026): 36K context, text/image/video/audio input.
+        pattern: "perceptron-mk1.5",
+        capabilities: caps(true, true, true, 36_864),
+        pricing: pricing(0.15, 1.50, 0.15, 0.15),
     },
     ReferenceModelEntry {
         // Perceptron MK1: 32K context, text/image/video input.
@@ -515,6 +545,23 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pattern: "qwen-3.6-35b-a3b",
         capabilities: caps(true, true, true, 262_144),
         pricing: pricing(0.10, 0.90, 0.10, 0.05),
+    },
+    ReferenceModelEntry {
+        // Qwen 3.5 open-weight multimodal family (Feb 2026), priced on
+        // OpenRouter; 262K context, text/image/video input.
+        pattern: "qwen-3.5-122b-a10b",
+        capabilities: caps(true, true, true, 262_144),
+        pricing: pricing(0.26, 2.08, 0.26, 0.26),
+    },
+    ReferenceModelEntry {
+        pattern: "qwen-3.5-35b-a3b",
+        capabilities: caps(true, true, true, 262_144),
+        pricing: pricing(0.15, 1.00, 0.15, 0.05),
+    },
+    ReferenceModelEntry {
+        pattern: "qwen-3.5-27b",
+        capabilities: caps(true, true, true, 262_144),
+        pricing: pricing(0.195, 1.56, 0.195, 0.195),
     },
     ReferenceModelEntry {
         // Inception Mercury 2.5 (Sep 2026): diffusion LLM, 260K context.
@@ -887,6 +934,13 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(1.25, 10.00, 1.25, 0.125),
     },
     ReferenceModelEntry {
+        // OpenRouter's id for OpenAI `chat-latest`; the `gpt-5.x-chat-latest`
+        // rows above don't match it. Same rates as providers/openai.rs.
+        pattern: "gpt-chat-latest",
+        capabilities: caps(true, false, true, 400_000),
+        pricing: pricing(5.00, 30.00, 5.00, 0.50),
+    },
+    ReferenceModelEntry {
         pattern: "codex-mini-latest",
         capabilities: caps(false, false, true, 200_000),
         pricing: pricing(1.50, 6.00, 1.50, 0.375),
@@ -910,6 +964,13 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pattern: "llama-4-maverick",
         capabilities: caps(true, false, true, 1_048_576),
         pricing: pricing(0.17, 0.60, 0.17, 0.17),
+    },
+    ReferenceModelEntry {
+        // Mistral Medium 3.5 (Apr 2026): 262K context, text/image input.
+        // Must precede `mistral-medium-3`, which would otherwise catch it.
+        pattern: "mistral-medium-3.5",
+        capabilities: caps(true, false, true, 262_144),
+        pricing: pricing(1.50, 7.50, 1.50, 1.50),
     },
     ReferenceModelEntry {
         pattern: "mistral-medium-3",

@@ -195,6 +195,14 @@ fn test_pricing_added_models() {
     assert_eq!(p.output_price_per_1m, 4.40);
     assert_eq!(p.cache_read_price_per_1m, 0.28);
 
+    // The fast preview bills 2x and must not fall through to glm-5.2.
+    let p = provider.get_model_pricing("glm-5.2-fast-preview").unwrap();
+    assert_eq!(p.input_price_per_1m, 2.80);
+    assert_eq!(p.output_price_per_1m, 8.80);
+    assert_eq!(p.cache_read_price_per_1m, 2.80);
+    let p = provider.get_model_pricing("glm-5.2").unwrap();
+    assert_eq!(p.input_price_per_1m, 1.40);
+
     let p = provider.get_model_pricing("kimi-k3").unwrap();
     assert_eq!(p.input_price_per_1m, 3.00);
     assert_eq!(p.output_price_per_1m, 15.00);

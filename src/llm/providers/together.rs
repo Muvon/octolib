@@ -62,6 +62,9 @@ const PRICING: &[PricingTuple] = &[
     ),
     ("google/gemma-4-31B-it", 0.39, 0.97, 0.39, 0.39),
     ("thinkingmachines/Inkling", 1.00, 4.05, 1.00, 0.17),
+    ("meta-models/Muse-Glimmer-30B", 0.35, 1.50, 0.35, 0.04),
+    // Free serverless model (verified Oct 2, 2026).
+    ("Prism-ML/Ternary-Bonsai-27B", 0.00, 0.00, 0.00, 0.00),
 ];
 
 fn together_model_pricing(model: &str) -> Option<crate::llm::types::ModelPricing> {
@@ -86,7 +89,9 @@ fn together_model_context(model: &str) -> Option<usize> {
         Some(1_048_576)
     } else if normalized.contains("zai-org/glm-5.3") {
         Some(1_048_575)
-    } else if normalized.contains("google/gemma-4-31b-it") || normalized.contains("qwen/qwen3.5-9b")
+    } else if normalized.contains("google/gemma-4-31b-it")
+        || normalized.contains("qwen/qwen3.5-9b")
+        || normalized.contains("prism-ml/ternary-bonsai-27b")
     {
         Some(262_144)
     } else if normalized.contains("qwen/qwen3.8-flash")
@@ -99,6 +104,7 @@ fn together_model_context(model: &str) -> Option<usize> {
         Some(1_000_000)
     } else if normalized.contains("openai/gpt-oss-120b")
         || normalized.contains("meta-llama/llama-3.3-70b-instruct-turbo")
+        || normalized.contains("meta-models/muse-glimmer-30b")
     {
         Some(131_072)
     } else {

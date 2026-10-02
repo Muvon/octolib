@@ -76,6 +76,23 @@ fn test_model_pricing() {
     assert_eq!(p.input_price_per_1m, 0.50);
     assert_eq!(p.output_price_per_1m, 3.00);
 
+    let p = provider.get_model_pricing("gemini-omni-1.1-flash").unwrap();
+    assert_eq!(p.input_price_per_1m, 1.50);
+    assert_eq!(p.output_price_per_1m, 9.00);
+    assert!(provider
+        .get_model_pricing("gemini-omni-flash-preview")
+        .is_some());
+
+    let p = provider
+        .get_model_pricing("gemini-robotics-er-2-preview")
+        .unwrap();
+    assert_eq!(p.input_price_per_1m, 1.00);
+    assert_eq!(p.output_price_per_1m, 5.00);
+    assert_eq!(p.cache_read_price_per_1m, 0.10);
+    assert!(provider
+        .get_model_pricing("gemini-robotics-er-2-streaming-preview")
+        .is_some());
+
     // Removed from the live pricing page; must not fall through to a neighbouring row
     assert!(provider.get_model_pricing("gemini-3.1-flash").is_none());
     assert!(provider.get_model_pricing("gemini-3-pro").is_none());

@@ -69,6 +69,13 @@ pub(super) const PRICING: &[PricingTuple] = &[
     // Gemini 3.5 series (gemini-flash-latest points here)
     ("gemini-3.5-flash-lite", 0.30, 2.50, 0.30, 0.03),
     ("gemini-3.5-flash", 1.50, 9.00, 1.50, 0.15),
+    // Gemini Omni Flash (gemini-omni-1.1-flash, gemini-omni-flash-preview): text
+    // output rate; video output bills $17.50. No context caching rate published.
+    ("gemini-omni", 1.50, 9.00, 1.50, 1.50),
+    // Gemini Robotics-ER 2 (preview + streaming preview) — introductory pricing
+    // through Dec 31, 2026; standard rates from Jan 1, 2027: input $2.00,
+    // output $10.00, cache read $0.20
+    ("gemini-robotics-er-2", 1.00, 5.00, 1.00, 0.10),
     // Gemini 3.x series
     ("gemini-3.1-pro", 2.00, 12.00, 2.00, 0.20),
     ("gemini-3.1-flash-lite", 0.25, 1.50, 0.25, 0.025),

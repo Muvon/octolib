@@ -119,6 +119,27 @@ fn newly_listed_serverless_models_use_together_rates() {
         provider.get_max_input_tokens("meta-llama/Llama-3.3-70B-Instruct-Turbo"),
         131_072
     );
+
+    let muse = provider
+        .get_model_pricing("meta-models/Muse-Glimmer-30B")
+        .unwrap();
+    assert_eq!(muse.input_price_per_1m, 0.35);
+    assert_eq!(muse.cache_read_price_per_1m, 0.04);
+    assert_eq!(muse.output_price_per_1m, 1.50);
+    assert_eq!(
+        provider.get_max_input_tokens("meta-models/Muse-Glimmer-30B"),
+        131_072
+    );
+
+    let bonsai = provider
+        .get_model_pricing("Prism-ML/Ternary-Bonsai-27B")
+        .unwrap();
+    assert_eq!(bonsai.input_price_per_1m, 0.0);
+    assert_eq!(bonsai.output_price_per_1m, 0.0);
+    assert_eq!(
+        provider.get_max_input_tokens("Prism-ML/Ternary-Bonsai-27B"),
+        262_144
+    );
 }
 
 #[test]

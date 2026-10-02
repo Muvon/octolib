@@ -102,8 +102,8 @@ const PRICING: &[PricingTuple] = &[
     ("gpt-realtime-1.5", 4.00, 16.00, 4.00, 0.40),
     ("gpt-realtime-mini", 0.60, 2.40, 0.60, 0.06),
     ("gpt-realtime", 4.00, 16.00, 4.00, 0.40),
-    ("gpt-audio-1.5", 2.50, 10.00, 2.50, 0.25),
-    ("gpt-audio-mini", 0.15, 0.60, 0.15, 0.015),
+    ("gpt-audio-1.5", 2.50, 10.00, 2.50, 2.50),
+    ("gpt-audio-mini", 0.60, 2.40, 0.60, 0.60),
     ("gpt-audio", 2.50, 10.00, 2.50, 2.50),
     ("gpt-4o-mini-realtime-preview", 0.60, 2.40, 0.60, 0.30),
     ("gpt-4o-realtime-preview", 5.00, 20.00, 5.00, 2.50),
@@ -121,6 +121,7 @@ const PRICING: &[PricingTuple] = &[
     ("gpt-4-turbo", 10.00, 30.00, 10.00, 10.00),
     ("gpt-4", 30.00, 60.00, 30.00, 30.00),
     ("gpt-3.5-turbo-instruct", 1.50, 2.00, 1.50, 1.50),
+    ("gpt-3.5-turbo-1106", 1.00, 2.00, 1.00, 1.00),
     ("gpt-3.5-turbo", 0.50, 1.50, 0.50, 0.50),
 ];
 

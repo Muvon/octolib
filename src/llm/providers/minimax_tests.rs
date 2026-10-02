@@ -32,6 +32,21 @@ fn test_model_support() {
 }
 
 #[test]
+fn test_context_windows_follow_model_table() {
+    let provider = MinimaxProvider::new();
+    assert_eq!(provider.get_max_input_tokens("MiniMax-M3"), 1_000_000);
+    for model in [
+        "MiniMax-M2.7",
+        "MiniMax-M2.7-highspeed",
+        "MiniMax-M2.5",
+        "MiniMax-M2.1",
+        "MiniMax-M2",
+    ] {
+        assert_eq!(provider.get_max_input_tokens(model), 204_800, "{model}");
+    }
+}
+
+#[test]
 fn test_model_support_case_insensitive() {
     let provider = MinimaxProvider::new();
     // Test lowercase

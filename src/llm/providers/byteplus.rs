@@ -73,10 +73,6 @@ const PRICING: &[PricingTuple] = &[
     ("dola-seed-2.0-lite", 0.25, 2.00, 0.25, 0.05),
     ("dola-seed-2.0-code", 0.50, 3.00, 0.50, 0.10),
     ("bytedance-seed-code", 0.50, 3.00, 0.50, 0.10),
-    // Seed 1.x family (128K context)
-    ("seed-1-8", 0.25, 2.00, 0.25, 0.05),
-    ("seed-1-6-flash", 0.075, 0.30, 0.075, 0.015),
-    ("seed-1-6", 0.25, 2.00, 0.25, 0.05),
     // Third-party models hosted on BytePlus (BytePlus-specific pricing).
     // The DeepSeek V4 rows cover both the `-260425` preview IDs and the GA
     // snapshots (`-ga-260731`, `-ga-260813`), which share one rate card.
@@ -87,7 +83,6 @@ const PRICING: &[PricingTuple] = &[
     ("deepseek-v4-flash", 0.44, 1.32, 0.44, 0.014),
     ("glm-5-3-flash-260828", 0.15, 0.50, 0.15, 0.03),
     ("glm-5-2", 1.40, 4.40, 1.40, 0.26),
-    ("gpt-oss-120b-250805", 0.10, 0.50, 0.10, 0.00),
 ];
 
 const SEED_2_LONG_CONTEXT_THRESHOLD: u64 = 128_000;
@@ -147,12 +142,15 @@ impl AiProvider for BytePlusProvider {
         true
     }
 
+    /// ModelArk supports native JSON Schema only for the models whose model-list
+    /// entry shows structured output. Other hosted models use shared forced-tool
+    /// enforcement plus local validation.
     fn supports_structured_output(&self, _model: &str) -> bool {
         true
     }
 
-    fn enforces_response_schema(&self, _model: &str) -> bool {
-        true
+    fn enforces_response_schema(&self, model: &str) -> bool {
+        natively_enforces_response_schema(model)
     }
 
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
@@ -180,7 +178,7 @@ impl AiProvider for BytePlusProvider {
                 provider_name: "byteplus",
                 usage_fallback_cost: None,
                 use_response_cost: true,
-                enforces_response_schema: true,
+                enforces_response_schema: natively_enforces_response_schema(&model),
                 supports_required_tool_choice: false,
             },
             api_key,
@@ -218,6 +216,22 @@ impl AiProvider for BytePlusProvider {
 
         Ok(response)
     }
+}
+
+/// JSON Schema is native only for the model families the ModelArk model list
+/// shows with structured output. The DeepSeek V4 preview snapshots, Seed 2.0
+/// Pro/Code and GLM have none, and DeepSeek V4.1 Flash is `json_object` only.
+fn natively_enforces_response_schema(model: &str) -> bool {
+    let model = normalize_model_name(model);
+    [
+        "seed-2-0-lite",
+        "seed-2-0-mini",
+        "dola-seed-2-1-turbo",
+        "deepseek-v4-pro-ga",
+        "deepseek-v4-flash-ga",
+    ]
+    .iter()
+    .any(|prefix| model.starts_with(prefix))
 }
 
 #[cfg(test)]

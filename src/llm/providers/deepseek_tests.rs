@@ -28,14 +28,38 @@ fn test_supports_model() {
     let provider = DeepSeekProvider::new();
     assert!(provider.supports_model("deepseek-flash"));
     assert!(provider.supports_model("deepseek-v4-pro"));
-    // Routes retired by DeepSeek: chat/reasoner (2026-07-24), v4-flash and its
-    // vision-exp variant (2026-09-10)
+    // Retired legacy names DeepSeek still accepts and bills at the Flash price
+    assert!(provider.supports_model("deepseek-v4-flash"));
+    assert!(provider.supports_model("deepseek-v4-flash-vision-exp"));
+    // Routes retired by DeepSeek: chat/reasoner (2026-07-24)
     assert!(!provider.supports_model("deepseek-chat"));
     assert!(!provider.supports_model("deepseek-reasoner"));
-    assert!(!provider.supports_model("deepseek-v4-flash"));
-    assert!(!provider.supports_model("deepseek-v4-flash-vision-exp"));
     assert!(!provider.supports_model("gpt-4"));
     assert!(!provider.supports_model("deepseek-coder")); // Not in current API
+}
+
+#[test]
+fn test_legacy_flash_names_resolve_like_flash() {
+    let provider = DeepSeekProvider::new();
+    for pricing in [PRICING_PEAK, PRICING_OFF_PEAK] {
+        let flash = crate::llm::utils::get_model_pricing("deepseek-flash", pricing).unwrap();
+        for legacy in ["deepseek-v4-flash", "deepseek-v4-flash-vision-exp"] {
+            assert_eq!(
+                crate::llm::utils::get_model_pricing(legacy, pricing),
+                Some(flash),
+                "{} must bill at the Flash price",
+                legacy
+            );
+        }
+    }
+    for legacy in ["deepseek-v4-flash", "deepseek-v4-flash-vision-exp"] {
+        assert!(provider.supports_vision(legacy));
+        assert_eq!(provider.get_max_input_tokens(legacy), 1_000_000);
+        assert_eq!(
+            provider.supported_sampling_params(legacy),
+            SamplingSupport::NONE
+        );
+    }
 }
 
 #[test]
@@ -211,6 +235,44 @@ fn test_pricing_table_at_selects_tier() {
             hour
         );
     }
+}
+
+#[test]
+fn test_epoch_day_matches_unix_time() {
+    // 2026-01-01 00:00 UTC and 2026-08-17 00:00 UTC
+    assert_eq!(epoch_day(2026, 1, 1), 1_767_225_600 / 86_400);
+    assert_eq!(epoch_day(2026, 8, 17), 1_786_924_800 / 86_400);
+}
+
+#[test]
+fn test_chinese_public_holidays_are_off_peak() {
+    use std::time::{Duration, SystemTime};
+
+    let at = |day: u64, hour: u64| {
+        SystemTime::UNIX_EPOCH + Duration::from_secs(day * 86_400 + hour * 3_600)
+    };
+
+    // Thursday 2026-10-01 (National Day) and Monday 2026-02-23 (last Spring
+    // Festival day) are weekdays off in China: off-peak through peak hours.
+    for day in [epoch_day(2026, 10, 1), epoch_day(2026, 2, 23)] {
+        for hour in [1, 3, 6, 9] {
+            assert_eq!(pricing_table_at(at(day, hour)), PRICING_OFF_PEAK);
+        }
+    }
+
+    // Thursday 2026-10-08 and Tuesday 2026-02-24 are ordinary weekdays: peak.
+    for day in [epoch_day(2026, 10, 8), epoch_day(2026, 2, 24)] {
+        for hour in [1, 3, 6, 9] {
+            assert_eq!(pricing_table_at(at(day, hour)), PRICING_PEAK);
+        }
+    }
+
+    // Saturday 2026-10-10 is a make-up working day in China but DeepSeek's
+    // peak is Monday-Friday only, so it stays off-peak.
+    assert_eq!(
+        pricing_table_at(at(epoch_day(2026, 10, 10), 2)),
+        PRICING_OFF_PEAK
+    );
 }
 
 /// Deserializes real payload shapes on purpose: the bug this guards lived in

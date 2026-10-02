@@ -193,13 +193,13 @@ impl AiProvider for MinimaxProvider {
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {
-        // MiniMax model context window limits (case-insensitive)
+        // MiniMax model context window limits (case-insensitive), per the
+        // Anthropic API model table (verified Oct 2, 2026)
         let model_lower = normalize_model_name(model);
-        if model_lower.contains("minimax-m3")
-            || model_lower.contains("minimax-m2.1")
-            || model_lower.contains("minimax-m2")
-        {
+        if model_lower.contains("minimax-m3") {
             1_000_000 // 1M context window
+        } else if model_lower.contains("minimax-m2") {
+            204_800 // M2, M2.1, M2.5, M2.7 and their highspeed variants
         } else {
             128_000 // Default fallback
         }

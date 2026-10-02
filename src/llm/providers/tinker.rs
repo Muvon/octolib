@@ -172,7 +172,6 @@ const PRICING: &[PricingTuple] = &[
     ("qwen/qwen3.8-27b:peft:262144", 2.48, 7.46, 2.48, 0.496),
     ("qwen/qwen3.8-27b", 1.86, 5.595, 1.86, 0.372),
     ("qwen/qwen3.6-35b-a3b", 0.54, 1.335, 0.54, 0.108),
-    ("qwen/qwen3.6-27b", 1.86, 5.595, 1.86, 0.372),
     (
         "qwen/qwen3.5-397b-a17b:peft:262144",
         4.00,
@@ -184,7 +183,7 @@ const PRICING: &[PricingTuple] = &[
     ("qwen/qwen3.5-35b-a3b-base", 0.54, 1.335, 0.54, 0.108),
     ("qwen/qwen3.5-9b-base", 0.66, 1.995, 0.66, 0.132),
     ("qwen/qwen3.5-9b", 0.66, 1.995, 0.66, 0.132),
-    ("qwen/qwen3.5-4b", 0.33, 1.00, 0.33, 0.066),
+    ("qwen/qwen3.5-4b", 0.33, 1.005, 0.33, 0.066),
     ("qwen/qwen3-8b", 0.195, 0.60, 0.195, 0.039),
     // OpenAI GPT-OSS
     ("openai/gpt-oss-120b:peft:131072", 0.78, 1.94, 0.78, 0.156),
@@ -231,7 +230,6 @@ const CONTEXTS: &[(&str, usize)] = &[
     ("qwen/qwen3.8-27b:peft:262144", 262_144),
     ("qwen/qwen3.8-27b", 65_536),
     ("qwen/qwen3.6-35b-a3b", 65_536),
-    ("qwen/qwen3.6-27b", 65_536),
     ("qwen/qwen3.5-397b-a17b:peft:262144", 262_144),
     ("qwen/qwen3.5-397b-a17b", 65_536),
     ("qwen/qwen3.5-35b-a3b-base", 65_536),

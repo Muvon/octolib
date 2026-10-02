@@ -324,6 +324,14 @@ fn test_provider_capabilities() {
     // GLM-5 / GLM-5-Turbo: 200K per the model pages
     assert_eq!(provider.get_max_input_tokens("glm-5"), 200_000);
     assert_eq!(provider.get_max_input_tokens("glm-5-turbo"), 200_000);
+    // Context windows from the Z.ai models overview
+    assert_eq!(provider.get_max_input_tokens("glm-5.2"), 1_000_000);
+    assert_eq!(provider.get_max_input_tokens("glm-5.1"), 200_000);
+    assert_eq!(provider.get_max_input_tokens("glm-4.6"), 200_000);
+    assert_eq!(provider.get_max_input_tokens("glm-4.6v"), 128_000);
+    assert_eq!(provider.get_max_input_tokens("glm-4.5-flash"), 200_000);
+    assert_eq!(provider.get_max_input_tokens("glm-4.5v"), 64_000);
+    assert_eq!(provider.get_max_input_tokens("glm-4.5-air"), 131_072);
     // Non-vision models
     assert!(!provider.supports_vision("glm-5.1"));
     assert!(!provider.supports_vision("glm-5-turbo"));

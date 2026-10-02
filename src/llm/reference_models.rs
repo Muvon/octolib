@@ -182,8 +182,8 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(0.20, 0.20, 0.20, 0.20),
     },
     ReferenceModelEntry {
-        // Bedrock Qwen3 Next 80B A3B (`qwen.qwen3-next-80b-a3b`): us-east-1
-        // Standard tier, 256K context.
+        // Qwen3 Next 80B A3B: Model Studio international rate, 256K context.
+        // Bedrock bills $0.14 input (see providers/amazon.rs).
         pattern: "qwen3-next-80b-a3b",
         capabilities: caps(false, false, true, 262_144),
         pricing: pricing(0.15, 1.20, 0.15, 0.15),
@@ -486,31 +486,31 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         // Contributor tiers trade training rights for a much lower rate, so
         // they must precede their base versions in this substring-matched table.
         pattern: "muse-spark-1.3-contributor",
-        capabilities: caps(true, true, false, 1_048_576),
+        capabilities: caps(true, true, true, 1_048_576),
         pricing: pricing(0.10, 0.20, 0.10, 0.002),
     },
     ReferenceModelEntry {
         pattern: "muse-spark-1.2-contributor",
-        capabilities: caps(true, true, false, 1_048_576),
+        capabilities: caps(true, true, true, 1_048_576),
         pricing: pricing(0.10, 0.20, 0.10, 0.002),
     },
     ReferenceModelEntry {
         // Meta Muse Spark 1.3 (Sep 2026): current flagship on the Meta Model
         // API, OpenCode Zen and OpenRouter; 1.1/1.2/1.3 share one rate card.
         pattern: "muse-spark-1.3",
-        capabilities: caps(true, true, false, 1_048_576),
+        capabilities: caps(true, true, true, 1_048_576),
         pricing: pricing(1.25, 4.25, 1.25, 0.15),
     },
     ReferenceModelEntry {
         // Meta Muse Spark 1.2 (Aug 2026): closed flagship on the Meta Model API
         // and OpenRouter; text/image/video/audio input, 1M context.
         pattern: "muse-spark-1.2",
-        capabilities: caps(true, true, false, 1_048_576),
+        capabilities: caps(true, true, true, 1_048_576),
         pricing: pricing(1.25, 4.25, 1.25, 0.15),
     },
     ReferenceModelEntry {
         pattern: "muse-spark-1.1",
-        capabilities: caps(true, true, false, 1_048_576),
+        capabilities: caps(true, true, true, 1_048_576),
         pricing: pricing(1.25, 4.25, 1.25, 0.15),
     },
     ReferenceModelEntry {
@@ -727,7 +727,7 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "kimi-k2.7-code-highspeed",
-        capabilities: caps(true, true, true, 256_000),
+        capabilities: caps(true, false, true, 256_000),
         pricing: pricing(1.90, 8.00, 1.90, 0.38),
     },
     ReferenceModelEntry {
@@ -737,12 +737,12 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "minimax-m2.7-highspeed",
-        capabilities: caps(false, false, false, 1_000_000),
+        capabilities: caps(false, false, false, 204_800),
         pricing: pricing(0.60, 2.40, 0.375, 0.06),
     },
     ReferenceModelEntry {
         pattern: "minimax-m2.5-highspeed",
-        capabilities: caps(false, false, false, 1_000_000),
+        capabilities: caps(false, false, false, 204_800),
         pricing: pricing(0.60, 2.40, 0.375, 0.03),
     },
     ReferenceModelEntry {
@@ -776,9 +776,22 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(1.50, 2.00, 1.50, 1.50),
     },
     ReferenceModelEntry {
+        // Gemini image-generation models: text-token rates only (image output
+        // bills separately), no caching or structured outputs. Each must
+        // precede the text model whose name it extends.
+        pattern: "gemini-3.1-flash-lite-image",
+        capabilities: caps(true, true, false, 65_536),
+        pricing: pricing(0.25, 1.50, 0.25, 0.25),
+    },
+    ReferenceModelEntry {
         pattern: "gemini-3.1-flash-lite",
         capabilities: caps(true, true, true, 1_048_576),
         pricing: pricing(0.25, 1.50, 0.25, 0.025),
+    },
+    ReferenceModelEntry {
+        pattern: "gemini-3.1-flash-image",
+        capabilities: caps(true, true, false, 131_072),
+        pricing: pricing(0.50, 3.00, 0.50, 0.50),
     },
     ReferenceModelEntry {
         pattern: "gemini-3.1-flash",
@@ -903,14 +916,14 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "claude-sonnet-4-6",
-        capabilities: caps(true, false, false, 1_000_000),
+        capabilities: caps(true, false, true, 1_000_000),
         pricing: pricing(3.00, 15.00, 3.75, 0.30),
     },
     ReferenceModelEntry {
         // 1M context, but unlike 4.6+ the >200K tier is billed at a premium
         // ($6/$22.50) that a single pricing row cannot express.
         pattern: "claude-sonnet-4-5",
-        capabilities: caps(true, false, false, 1_000_000),
+        capabilities: caps(true, false, true, 1_000_000),
         pricing: pricing(3.00, 15.00, 3.75, 0.30),
     },
     ReferenceModelEntry {
@@ -1031,7 +1044,7 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "claude-haiku-4-5",
-        capabilities: caps(true, false, false, 200_000),
+        capabilities: caps(true, false, true, 200_000),
         pricing: pricing(1.00, 5.00, 1.25, 0.10),
     },
     ReferenceModelEntry {
@@ -1097,37 +1110,37 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         // Cache hits on the 5.1 pair are 0.025x input ($0.25), not the 0.1x
         // every other Claude uses.
         pattern: "claude-mythos-5-1",
-        capabilities: caps(true, false, false, 1_000_000),
+        capabilities: caps(true, false, true, 1_000_000),
         pricing: pricing(10.00, 50.00, 12.50, 0.25),
     },
     ReferenceModelEntry {
         pattern: "claude-mythos-5",
-        capabilities: caps(true, false, false, 1_000_000),
+        capabilities: caps(true, false, true, 1_000_000),
         pricing: pricing(10.00, 50.00, 12.50, 1.00),
     },
     ReferenceModelEntry {
         pattern: "claude-opus-5-5",
-        capabilities: caps(true, false, false, 1_000_000),
+        capabilities: caps(true, false, true, 1_000_000),
         pricing: pricing(4.00, 20.00, 5.00, 0.20),
     },
     ReferenceModelEntry {
         pattern: "claude-opus-5",
-        capabilities: caps(true, false, false, 1_000_000),
+        capabilities: caps(true, false, true, 1_000_000),
         pricing: pricing(5.00, 25.00, 6.25, 0.50),
     },
     ReferenceModelEntry {
         pattern: "claude-opus-4-7",
-        capabilities: caps(true, false, false, 1_000_000),
+        capabilities: caps(true, false, true, 1_000_000),
         pricing: pricing(5.00, 25.00, 6.25, 0.50),
     },
     ReferenceModelEntry {
         pattern: "claude-opus-4-6",
-        capabilities: caps(true, false, false, 1_000_000),
+        capabilities: caps(true, false, true, 1_000_000),
         pricing: pricing(5.00, 25.00, 6.25, 0.50),
     },
     ReferenceModelEntry {
         pattern: "claude-opus-4-5",
-        capabilities: caps(true, false, false, 200_000),
+        capabilities: caps(true, false, true, 200_000),
         pricing: pricing(5.00, 25.00, 6.25, 0.50),
     },
     ReferenceModelEntry {
@@ -1157,12 +1170,12 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "claude-opus-4-8",
-        capabilities: caps(true, false, false, 1_000_000),
+        capabilities: caps(true, false, true, 1_000_000),
         pricing: pricing(5.00, 25.00, 6.25, 0.50),
     },
     ReferenceModelEntry {
         pattern: "claude-sonnet-5",
-        capabilities: caps(true, false, false, 1_000_000),
+        capabilities: caps(true, false, true, 1_000_000),
         pricing: pricing(2.00, 10.00, 2.50, 0.20),
     },
     ReferenceModelEntry {
@@ -1222,7 +1235,7 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "kimi-k2.7-code",
-        capabilities: caps(true, true, true, 256_000),
+        capabilities: caps(true, false, true, 256_000),
         pricing: pricing(0.95, 4.00, 0.95, 0.19),
     },
     ReferenceModelEntry {
@@ -1230,7 +1243,7 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         // way) — the sanitizer can't bridge a real letter difference, so an
         // explicit twin keeps these calls priced.
         pattern: "kimi-2.7-code",
-        capabilities: caps(true, true, true, 256_000),
+        capabilities: caps(true, false, true, 256_000),
         pricing: pricing(0.95, 4.00, 0.95, 0.19),
     },
     ReferenceModelEntry {
@@ -1247,12 +1260,12 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         // Cache hits on the 5.1 pair are 0.025x input ($0.25), not the 0.1x
         // every other Claude uses.
         pattern: "claude-fable-5-1",
-        capabilities: caps(true, false, false, 1_000_000),
+        capabilities: caps(true, false, true, 1_000_000),
         pricing: pricing(10.00, 50.00, 12.50, 0.25),
     },
     ReferenceModelEntry {
         pattern: "claude-fable-5",
-        capabilities: caps(true, false, false, 1_000_000),
+        capabilities: caps(true, false, true, 1_000_000),
         pricing: pricing(10.00, 50.00, 12.50, 1.00),
     },
     ReferenceModelEntry {
@@ -1268,7 +1281,7 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     ReferenceModelEntry {
         pattern: "gpt-audio-mini",
         capabilities: caps(false, false, true, 128_000),
-        pricing: pricing(0.15, 0.60, 0.15, 0.015),
+        pricing: pricing(0.60, 2.40, 0.60, 0.60),
     },
     ReferenceModelEntry {
         // Structured output verified against the live openrouter route
@@ -1278,7 +1291,7 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         // "enforces", which would be right by luck rather than by measurement.
         pattern: "qwen-3.7-flash",
         capabilities: caps(true, true, true, 1_000_000),
-        pricing: pricing(0.03, 0.13, 0.03, 0.003),
+        pricing: pricing(0.03, 0.13, 0.03, 0.006),
     },
     ReferenceModelEntry {
         pattern: "qwen-3.6-flash",
@@ -1303,17 +1316,17 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "seed-2-0-code",
-        capabilities: caps(false, false, true, 256_000),
+        capabilities: caps(true, true, true, 256_000),
         pricing: pricing(0.50, 3.00, 0.50, 0.10),
     },
     ReferenceModelEntry {
         pattern: "seed-2-0-lite",
-        capabilities: caps(false, false, true, 256_000),
+        capabilities: caps(true, true, true, 256_000),
         pricing: pricing(0.25, 2.00, 0.25, 0.05),
     },
     ReferenceModelEntry {
         pattern: "seed-2-0-mini",
-        capabilities: caps(false, false, true, 256_000),
+        capabilities: caps(true, true, true, 256_000),
         pricing: pricing(0.10, 0.40, 0.10, 0.02),
     },
     ReferenceModelEntry {
@@ -1438,7 +1451,7 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "gpt-5.3-codex",
-        capabilities: caps(false, false, true, 400_000),
+        capabilities: caps(true, false, true, 400_000),
         pricing: pricing(1.75, 14.00, 1.75, 0.175),
     },
     ReferenceModelEntry {
@@ -1454,7 +1467,12 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     ReferenceModelEntry {
         pattern: "gpt-audio-1.5",
         capabilities: caps(false, false, true, 128_000),
-        pricing: pricing(2.50, 10.00, 2.50, 0.25),
+        pricing: pricing(2.50, 10.00, 2.50, 2.50),
+    },
+    ReferenceModelEntry {
+        pattern: "gpt-3.5-turbo-1106",
+        capabilities: caps(false, false, true, 16_385),
+        pricing: pricing(1.00, 2.00, 1.00, 1.00),
     },
     ReferenceModelEntry {
         pattern: "gpt-3.5-turbo",
@@ -1464,7 +1482,7 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     ReferenceModelEntry {
         pattern: "qwen-3.7-plus",
         capabilities: caps(true, true, true, 1_000_000),
-        pricing: pricing(0.32, 1.28, 0.32, 0.03),
+        pricing: pricing(0.32, 1.28, 0.32, 0.064),
     },
     ReferenceModelEntry {
         pattern: "qwen-3.6-plus",
@@ -1480,7 +1498,7 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         // Seed 2.1 Turbo (Aug 2026): multimodal, 262K context; no cache rates
         // published, so cache columns mirror the input price.
         pattern: "seed-2-1-turbo",
-        capabilities: caps(true, false, true, 262_144),
+        capabilities: caps(true, true, true, 262_144),
         pricing: pricing(0.50, 2.50, 0.50, 0.50),
     },
     ReferenceModelEntry {
@@ -1493,7 +1511,7 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "seed-2-0-pro",
-        capabilities: caps(false, false, true, 256_000),
+        capabilities: caps(true, true, true, 256_000),
         pricing: pricing(0.50, 3.00, 0.50, 0.10),
     },
     ReferenceModelEntry {
@@ -1521,10 +1539,11 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     ReferenceModelEntry {
         // Qwen3.8-Flash (Aug 2026): multimodal MoE (125B total / 6B active),
         // 1M context, structured output honoured on the OpenRouter route.
-        // Baseline = Model Studio list price; implicit cache hits 20% of input.
+        // Baseline = Model Studio list price; the cache-hit rate is outside the
+        // public 20% rule (console only) and matches providers/alibaba.rs.
         pattern: "qwen-3.8-flash",
         capabilities: caps(true, true, true, 1_000_000),
-        pricing: pricing(0.113, 0.382, 0.113, 0.0226),
+        pricing: pricing(0.15, 0.47, 0.15, 0.016),
     },
     ReferenceModelEntry {
         // Qwen3.8-27B (Aug 2026 open weights): dense vision-language, 262K
@@ -1549,8 +1568,8 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "qwen-3.7-max",
-        capabilities: caps(false, false, true, 262_144),
-        pricing: pricing(2.50, 7.50, 2.50, 0.25),
+        capabilities: caps(false, false, true, 1_000_000),
+        pricing: pricing(2.50, 7.50, 2.50, 0.50),
     },
     ReferenceModelEntry {
         pattern: "qwen-2.5-72b",
@@ -1573,13 +1592,19 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(0.02, 0.04, 0.02, 0.02),
     },
     ReferenceModelEntry {
+        // Image-generation model; see the Gemini image rows above.
+        pattern: "gemini-3-pro-image",
+        capabilities: caps(true, false, false, 65_536),
+        pricing: pricing(2.00, 12.00, 2.00, 2.00),
+    },
+    ReferenceModelEntry {
         pattern: "gemini-3-pro",
         capabilities: caps(true, true, true, 1_048_576),
         pricing: pricing(2.00, 12.00, 2.00, 0.20),
     },
     ReferenceModelEntry {
         pattern: "glm-5v-turbo",
-        capabilities: caps(true, false, true, 128_000),
+        capabilities: caps(true, false, true, 200_000),
         pricing: pricing(1.20, 4.00, 0.00, 0.24),
     },
     ReferenceModelEntry {
@@ -1589,17 +1614,17 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "minimax-m2.7",
-        capabilities: caps(false, false, false, 1_000_000),
+        capabilities: caps(false, false, false, 204_800),
         pricing: pricing(0.30, 1.20, 0.375, 0.06),
     },
     ReferenceModelEntry {
         pattern: "minimax-m2.5",
-        capabilities: caps(false, false, false, 1_000_000),
+        capabilities: caps(false, false, false, 204_800),
         pricing: pricing(0.30, 1.20, 0.375, 0.03),
     },
     ReferenceModelEntry {
         pattern: "minimax-m2.1",
-        capabilities: caps(false, false, false, 1_000_000),
+        capabilities: caps(false, false, false, 204_800),
         pricing: pricing(0.27, 0.95, 0.27, 0.027),
     },
     ReferenceModelEntry {
@@ -1624,12 +1649,12 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "gpt-5.4-mini",
-        capabilities: caps(false, false, true, 400_000),
+        capabilities: caps(true, false, true, 400_000),
         pricing: pricing(0.75, 4.50, 0.75, 0.075),
     },
     ReferenceModelEntry {
         pattern: "gpt-5.4-nano",
-        capabilities: caps(false, false, true, 400_000),
+        capabilities: caps(true, false, true, 400_000),
         pricing: pricing(0.20, 1.25, 0.20, 0.02),
     },
     ReferenceModelEntry {
@@ -1654,7 +1679,7 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "qwen-3.6-max",
-        capabilities: None,
+        capabilities: caps(false, false, true, 262_144),
         pricing: pricing(1.30, 7.80, 1.30, 0.13),
     },
     ReferenceModelEntry {
@@ -1664,7 +1689,7 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "qwen-3.5-9b",
-        capabilities: caps(false, false, true, 131_072),
+        capabilities: caps(true, true, true, 262_144),
         pricing: pricing(0.17, 0.25, 0.17, 0.17),
     },
     ReferenceModelEntry {
@@ -1745,7 +1770,7 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "glm-5-turbo",
-        capabilities: caps(false, false, true, 128_000),
+        capabilities: caps(false, false, true, 200_000),
         pricing: pricing(1.20, 4.00, 0.00, 0.24),
     },
     ReferenceModelEntry {
@@ -1825,7 +1850,7 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "minimax-m2",
-        capabilities: caps(false, false, false, 1_000_000),
+        capabilities: caps(false, false, false, 204_800),
         pricing: pricing(0.30, 1.20, 0.375, 0.03),
     },
     ReferenceModelEntry {
@@ -1880,13 +1905,13 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "kimi-k2.6",
-        capabilities: caps(false, false, true, 256_000),
+        capabilities: caps(true, false, true, 256_000),
         pricing: pricing(0.95, 4.00, 0.95, 0.16),
     },
     ReferenceModelEntry {
         // Alias twin of kimi-k2.6 (see kimi-2.7-code above).
         pattern: "kimi-2.6",
-        capabilities: caps(false, false, true, 256_000),
+        capabilities: caps(true, false, true, 256_000),
         pricing: pricing(0.95, 4.00, 0.95, 0.16),
     },
     ReferenceModelEntry {
@@ -1987,7 +2012,7 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "glm-5.2",
-        capabilities: caps(false, false, true, 200_000),
+        capabilities: caps(false, false, true, 1_000_000),
         pricing: pricing(1.40, 4.40, 0.00, 0.26),
     },
     ReferenceModelEntry {
@@ -2060,7 +2085,7 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "gpt-5.4",
-        capabilities: caps(false, false, true, 400_000),
+        capabilities: caps(true, false, true, 1_050_000),
         pricing: pricing(2.50, 15.00, 2.50, 0.25),
     },
     ReferenceModelEntry {
@@ -2145,7 +2170,7 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "glm-5",
-        capabilities: caps(false, false, true, 128_000),
+        capabilities: caps(false, false, true, 200_000),
         pricing: pricing(1.00, 3.20, 0.00, 0.20),
     },
     ReferenceModelEntry {

@@ -144,7 +144,7 @@ fn usage_splits_reasoning_out_of_output_without_double_counting() {
 fn reasoning_effort_is_only_sent_where_documented() {
     assert_eq!(
         reasoning_effort("grok-4.5", Some(ReasoningEffort::Max)),
-        Some("high")
+        Some("xhigh")
     );
     assert_eq!(
         reasoning_effort("grok-4.3", Some(ReasoningEffort::Low)),
@@ -160,6 +160,52 @@ fn reasoning_effort_is_only_sent_where_documented() {
     );
     assert_eq!(
         reasoning_effort("grok-build-0.1", Some(ReasoningEffort::High)),
+        None
+    );
+}
+
+#[test]
+fn xhigh_is_sent_only_to_models_documenting_it() {
+    assert_eq!(
+        reasoning_effort("grok-4.7", Some(ReasoningEffort::High)),
+        Some("high")
+    );
+    assert_eq!(
+        reasoning_effort("grok-4.7", Some(ReasoningEffort::XHigh)),
+        Some("xhigh")
+    );
+    // xAI has no "max" level; Max maps to the highest documented one.
+    assert_eq!(
+        reasoning_effort("grok-4.7", Some(ReasoningEffort::Max)),
+        Some("xhigh")
+    );
+    assert_eq!(
+        reasoning_effort("grok-build-0.1", Some(ReasoningEffort::XHigh)),
+        None
+    );
+    assert_eq!(
+        reasoning_effort("grok-4.20-0309-reasoning", Some(ReasoningEffort::Max)),
+        None
+    );
+}
+
+#[test]
+fn none_effort_is_sent_only_to_grok_4_3() {
+    assert_eq!(
+        reasoning_effort("grok-4.3", Some(ReasoningEffort::None)),
+        Some("none")
+    );
+    assert_eq!(
+        reasoning_effort("grok-4.3-latest", Some(ReasoningEffort::None)),
+        Some("none")
+    );
+    assert_eq!(reasoning_effort("grok-4.3", None), None);
+    assert_eq!(
+        reasoning_effort("grok-4.7", Some(ReasoningEffort::None)),
+        None
+    );
+    assert_eq!(
+        reasoning_effort("grok-4.20-multi-agent-0309", Some(ReasoningEffort::None)),
         None
     );
 }

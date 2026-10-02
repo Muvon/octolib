@@ -366,14 +366,19 @@ impl AiProvider for ZaiProvider {
     }
 
     fn get_max_input_tokens(&self, model: &str) -> usize {
-        // Z.ai model context window limits (case-insensitive)
+        // Z.ai model context window limits (case-insensitive), per
+        // https://docs.z.ai/guides/overview/overview (verified Oct 2, 2026)
         let model_lower = normalize_model_name(model);
-        if model_lower.contains("glm-5.3") {
-            1_000_000 // 1M context window for GLM-5.3, GLM-5.3-Flash and GLM-5.3-FlashX
+        if model_lower.contains("glm-5.3") || model_lower.contains("glm-5.2") {
+            1_000_000 // 1M for GLM-5.3 (incl. Flash/FlashX) and GLM-5.2
         } else if model_lower.contains("glm-5") || model_lower.contains("glm-4.7") {
-            200_000 // 200K context window for GLM-5 / GLM-5-Turbo, GLM-5.1, GLM-5.2 and GLM-4.7
-        } else if model_lower.contains("glm-4.6") {
-            128_000 // 128K context window for GLM-4.6
+            200_000 // 200K for GLM-5 / GLM-5-Turbo, GLM-5.1 and GLM-4.7
+        } else if model_lower.contains("glm-4.5v") {
+            64_000 // 64K for GLM-4.5V
+        } else if model_lower.contains("glm-4.6v") {
+            128_000 // 128K for the GLM-4.6V family
+        } else if model_lower.contains("glm-4.6") || model_lower.contains("glm-4.5-flash") {
+            200_000 // 200K for GLM-4.6 and GLM-4.5-Flash
         } else if model_lower.contains("glm-4.5") {
             131_072 // ~128K context window for GLM-4.5
         } else {

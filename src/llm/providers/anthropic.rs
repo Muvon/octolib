@@ -331,6 +331,13 @@ impl AiProvider for AnthropicProvider {
             || model_lower.contains("claude-mythos-5")
     }
 
+    /// This provider never sends `output_config.format`, so schemas reach Claude
+    /// only through the shared tool-call path. The reference table records the
+    /// models' own support, which proxy routes rely on.
+    fn supports_structured_output(&self, _model: &str) -> bool {
+        false
+    }
+
     fn get_max_input_tokens(&self, model: &str) -> usize {
         // Anthropic model context window limits (case-insensitive)
         let model_lower = normalize_model_name(model);

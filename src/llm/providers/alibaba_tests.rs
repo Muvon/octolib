@@ -72,7 +72,7 @@ fn test_pricing_qwen() {
 
     let p = provider.get_model_pricing("qwen3.6-flash").unwrap();
     assert_eq!(p.input_price_per_1m, 0.25);
-    assert_eq!(p.cache_read_price_per_1m, 0.05);
+    assert_eq!(p.cache_read_price_per_1m, 0.025);
 
     // Dated DeepSeek V4 snapshots carry their own busy-hour rate card; the
     // moving aliases keep the flat rate.
@@ -189,6 +189,34 @@ fn test_pricing_added_models() {
     assert_eq!(p.input_price_per_1m, 0.30);
     assert_eq!(p.output_price_per_1m, 2.40);
 
+    // Older open-weight checkpoints must not fall through to the reference table.
+    for (model, input, output) in [
+        ("qwen3-235b-a22b-thinking-2507", 0.23, 2.30),
+        ("qwen3-235b-a22b-instruct-2507", 0.23, 0.92),
+        ("qwen3-235b-a22b", 0.70, 2.80),
+        ("qwen3-32b", 0.16, 0.64),
+        ("qwen3-8b", 0.18, 0.70),
+        ("qwen3-vl-235b-a22b-thinking", 0.40, 4.00),
+        ("qwen3-vl-235b-a22b-instruct", 0.40, 1.60),
+        ("qwen3-coder-next", 0.30, 1.50),
+        ("qwen3-coder-480b-a35b-instruct", 1.50, 7.50),
+        ("qwen3-coder-30b-a3b-instruct", 0.45, 2.25),
+        ("qwen-plus-character", 0.50, 1.40),
+        ("qwen-plus-character-ja", 0.50, 1.40),
+        ("deepseek-v3.2", 0.57, 1.71),
+        ("glm-5.1", 1.40, 4.40),
+    ] {
+        let p = provider.get_model_pricing(model).unwrap();
+        assert_eq!(p.input_price_per_1m, input, "{model}");
+        assert_eq!(p.output_price_per_1m, output, "{model}");
+    }
+
+    // Explicit-cache-only models bill hits at 10% of input.
+    let p = provider.get_model_pricing("qwen3.6-plus").unwrap();
+    assert_eq!(p.cache_read_price_per_1m, 0.05);
+    let p = provider.get_model_pricing("qwen3.5-flash").unwrap();
+    assert_eq!(p.cache_read_price_per_1m, 0.01);
+
     // Third-party
     let p = provider.get_model_pricing("glm-5.3").unwrap();
     assert_eq!(p.input_price_per_1m, 1.40);
@@ -202,11 +230,12 @@ fn test_pricing_added_models() {
     assert_eq!(p.cache_read_price_per_1m, 2.80);
     let p = provider.get_model_pricing("glm-5.2").unwrap();
     assert_eq!(p.input_price_per_1m, 1.40);
+    assert_eq!(p.cache_read_price_per_1m, 0.35);
 
     let p = provider.get_model_pricing("kimi-k3").unwrap();
     assert_eq!(p.input_price_per_1m, 3.00);
     assert_eq!(p.output_price_per_1m, 15.00);
-    assert_eq!(p.cache_read_price_per_1m, 0.30);
+    assert_eq!(p.cache_read_price_per_1m, 0.60);
 }
 
 #[test]

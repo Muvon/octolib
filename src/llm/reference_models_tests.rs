@@ -124,7 +124,7 @@ fn opus_5_properties_match_anthropic_model_facts() {
     let capabilities = props.capabilities.unwrap();
     assert!(capabilities.vision);
     assert!(!capabilities.video);
-    assert!(!capabilities.structured_output);
+    assert!(capabilities.structured_output);
     assert_eq!(capabilities.max_input_tokens, 1_000_000);
 
     let pricing = props.pricing.unwrap();
@@ -219,9 +219,9 @@ fn august_2026_additions_resolve() {
 
     // Qwen3.8-Flash production API (Aug 2026)
     let p = get_reference_pricing("qwen3.8-flash").unwrap();
-    assert_eq!(p.input_price_per_1m, 0.113);
-    assert_eq!(p.output_price_per_1m, 0.382);
-    assert_eq!(p.cache_read_price_per_1m, 0.0226);
+    assert_eq!(p.input_price_per_1m, 0.15);
+    assert_eq!(p.output_price_per_1m, 0.47);
+    assert_eq!(p.cache_read_price_per_1m, 0.016);
     let caps = get_reference_capabilities("qwen3.8-flash").unwrap();
     assert!(caps.vision);
     assert!(caps.structured_output);

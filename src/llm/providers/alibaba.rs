@@ -59,7 +59,7 @@ const ALIBABA_API_URL_ENV: &str = "ALIBABA_API_URL";
 const ALIBABA_API_URL: &str =
     "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions";
 
-// Model Studio international pricing (per 1M tokens in USD) - Sep 2026
+// Model Studio international pricing (per 1M tokens in USD) - Oct 2026
 // Source: https://www.alibabacloud.com/help/en/model-studio/model-pricing plus the
 // per-model pages linked from https://www.alibabacloud.com/help/en/model-studio/models
 // Format: (model, input, output, cache_write, cache_read)
@@ -69,7 +69,8 @@ const ALIBABA_API_URL: &str =
 // that is the only one published). Models without context caching bill hits at
 // the input rate.
 // Tiered models are priced at their lowest tier; longer prompts bill up to 4x more.
-// Busy/idle models are priced at the busy rate (idle is half).
+// Busy/idle models are priced at the busy rate (idle is half). Hybrid-thinking
+// open-weight models are priced at the non-thinking output rate.
 const PRICING: &[PricingTuple] = &[
     ("qwen3.8-max", 2.00, 6.00, 2.00, 0.25),
     ("qwen3.8-flash", 0.15, 0.47, 0.15, 0.016),
@@ -78,17 +79,25 @@ const PRICING: &[PricingTuple] = &[
     ("qwen3.7-plus", 0.40, 1.60, 0.40, 0.08),
     ("qwen3.7-flash", 0.03, 0.13, 0.03, 0.006),
     ("qwen3.6-max-preview", 1.30, 7.80, 1.30, 0.13),
-    ("qwen3.6-plus", 0.50, 3.00, 0.50, 0.10),
-    ("qwen3.6-flash", 0.25, 1.50, 0.25, 0.05),
+    // Explicit cache only (10% hit rate); not on the international implicit list.
+    ("qwen3.6-plus", 0.50, 3.00, 0.50, 0.05),
+    ("qwen3.6-flash", 0.25, 1.50, 0.25, 0.025),
     ("qwen3.5-plus", 0.40, 2.40, 0.40, 0.04),
-    ("qwen3.5-flash", 0.10, 0.40, 0.10, 0.02),
+    ("qwen3.5-flash", 0.10, 0.40, 0.10, 0.01),
     ("qwen3-coder-plus", 1.00, 5.00, 1.00, 0.20),
     ("qwen3-coder-flash", 0.30, 1.50, 0.30, 0.06),
+    ("qwen3-coder-next", 0.30, 1.50, 0.30, 0.30),
+    ("qwen3-coder-480b-a35b-instruct", 1.50, 7.50, 1.50, 1.50),
+    ("qwen3-coder-30b-a3b-instruct", 0.45, 2.25, 0.45, 0.45),
     ("qwen3-vl-plus", 0.20, 1.60, 0.20, 0.04),
     ("qwen3-vl-flash", 0.05, 0.40, 0.05, 0.01),
+    ("qwen3-vl-235b-a22b-thinking", 0.40, 4.00, 0.40, 0.40),
+    ("qwen3-vl-235b-a22b-instruct", 0.40, 1.60, 0.40, 0.40),
     ("qwen3-max", 1.20, 6.00, 1.20, 0.24),
     ("qwen-vl-max", 0.80, 3.20, 0.80, 0.16),
     ("qwen-max", 1.60, 6.40, 1.60, 0.32),
+    // Must precede qwen-plus; covers qwen-plus-character-ja too.
+    ("qwen-plus-character", 0.50, 1.40, 0.50, 0.10),
     ("qwen-plus", 0.40, 1.20, 0.40, 0.08),
     ("qwen-flash", 0.05, 0.40, 0.05, 0.01),
     ("qwen-turbo", 0.05, 0.20, 0.05, 0.01),
@@ -101,6 +110,11 @@ const PRICING: &[PricingTuple] = &[
     ("qwen3.5-122b-a10b", 0.40, 3.20, 0.40, 0.40),
     ("qwen3.5-35b-a3b", 0.25, 2.00, 0.25, 0.25),
     ("qwen3.5-27b", 0.30, 2.40, 0.30, 0.30),
+    ("qwen3-235b-a22b-thinking-2507", 0.23, 2.30, 0.23, 0.23),
+    ("qwen3-235b-a22b-instruct-2507", 0.23, 0.92, 0.23, 0.23),
+    ("qwen3-235b-a22b", 0.70, 2.80, 0.70, 0.70),
+    ("qwen3-32b", 0.16, 0.64, 0.16, 0.16),
+    ("qwen3-8b", 0.18, 0.70, 0.18, 0.18),
     // Third-party models resold by Model Studio at Alibaba's own rates.
     // V4.1 Flash and the dated V4 snapshots bill busy/idle; the moving V4
     // aliases have flat rates.
@@ -109,11 +123,14 @@ const PRICING: &[PricingTuple] = &[
     ("deepseek-v4-pro", 2.40, 4.80, 2.40, 0.20),
     ("deepseek-v4-flash-0731", 0.44, 1.32, 0.44, 0.044),
     ("deepseek-v4-flash", 0.20, 0.40, 0.20, 0.04),
+    ("deepseek-v3.2", 0.57, 1.71, 0.57, 0.114),
     ("glm-5.3", 1.40, 4.40, 1.40, 0.28),
-    // No implicit cache in Singapore; must precede glm-5.2.
+    // On no international implicit-cache list; must precede glm-5.2.
     ("glm-5.2-fast-preview", 2.80, 8.80, 2.80, 2.80),
-    ("glm-5.2", 1.40, 4.40, 1.40, 0.28),
-    ("kimi-k3", 3.00, 15.00, 3.00, 0.30),
+    // 25% cache-hit rate; implicit cache only in the US (Virginia) global scope.
+    ("glm-5.2", 1.40, 4.40, 1.40, 0.35),
+    ("glm-5.1", 1.40, 4.40, 1.40, 0.28),
+    ("kimi-k3", 3.00, 15.00, 3.00, 0.60),
 ];
 
 const QWEN_PLUS_LONG_CONTEXT_THRESHOLD: u64 = 256_000;

@@ -34,13 +34,15 @@ use std::env;
 const TOGETHER_API_KEY_ENV: &str = "TOGETHER_API_KEY";
 const TOGETHER_API_URL: &str = "https://api.together.xyz/v1/chat/completions";
 
-/// Together serverless prices per 1M tokens, verified Sep 22, 2026.
+/// Together serverless prices per 1M tokens from https://www.together.ai/pricing,
+/// verified Oct 2, 2026. The docs catalog lists $0.50 cached for Qwen3.7-Max and
+/// Qwen3.8-2.4T-A95B; the pricing page's cached rates are used here.
 /// Format: (model pattern, input, output, cache write, cached input).
 /// Models without a listed cache discount use the normal input rate.
 const PRICING: &[PricingTuple] = &[
     ("Qwen/Qwen3.8-2.4T-A95B", 2.00, 6.00, 2.00, 0.25),
-    ("Qwen/Qwen3.8-Flash", 0.15, 0.47, 0.15, 0.15),
-    ("Qwen/Qwen3.7-Max", 2.50, 7.50, 2.50, 0.25),
+    ("Qwen/Qwen3.8-Flash", 0.09, 0.28, 0.09, 0.09),
+    ("Qwen/Qwen3.7-Max", 1.50, 4.50, 1.50, 0.30),
     ("Qwen/Qwen3.7-Plus", 0.32, 1.28, 0.32, 0.32),
     ("Qwen/Qwen3.6-Plus", 0.50, 3.00, 0.50, 0.50),
     ("Qwen/Qwen3.5-9B", 0.17, 0.25, 0.17, 0.17),

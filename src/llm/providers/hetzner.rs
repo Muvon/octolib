@@ -27,7 +27,7 @@
 //! reported as $0. Rate limits per API key: 4M input / 100k output tokens
 //! and 10 requests per 60s.
 //!
-//! Source: <https://docs.hetzner.com/experiments/inference>
+//! Source: <https://docs.hetzner.com/general/company-and-policy/experiments/inference/>
 //!
 //! Configuration:
 //! - `HETZNER_API_KEY`: Required API key

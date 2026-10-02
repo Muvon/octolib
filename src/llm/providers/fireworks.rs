@@ -63,21 +63,16 @@ const FIREWORKS_API_KEY_ENV: &str = "FIREWORKS_API_KEY";
 const FIREWORKS_API_URL_ENV: &str = "FIREWORKS_API_URL";
 const FIREWORKS_API_URL: &str = "https://api.fireworks.ai/inference/v1/chat/completions";
 
-/// Fireworks Standard serverless prices per 1M tokens, verified Sep 22, 2026;
-/// Fast/US router and Oct 2026 rows verified Oct 2, 2026. Router ids share
-/// their base model's prefix, so they must precede it.
+/// Fireworks Standard serverless prices per 1M tokens, verified Oct 2, 2026.
+/// Models whose page shows "Serverless Not supported" have no row: on-demand
+/// deployments bill per GPU-hour. Router ids share their base model's prefix,
+/// so they must precede it.
 /// US routes are served from `https://us.api.fireworks.ai` (`FIREWORKS_API_URL`).
 /// Format: (model path pattern, input, output, cache write, cached input).
 const PRICING: &[PricingTuple] = &[
-    ("qwen3p8-2p4t-a95b", 2.00, 6.00, 2.00, 0.25),
     ("qwen3p8-max", 2.00, 6.00, 2.00, 0.25),
-    ("deepseek-v4-pro-0813", 1.32, 3.96, 1.32, 0.044),
-    ("deepseek-v4-pro", 1.74, 3.48, 1.74, 0.145),
     ("deepseek-v4p1-flash-us", 0.45, 1.80, 0.45, 0.009),
     ("deepseek-v4p1-flash", 0.30, 1.20, 0.30, 0.006),
-    ("deepseek-v4-flash", 0.22, 0.66, 0.22, 0.007),
-    ("kimi-k2p7-code", 0.95, 4.00, 0.95, 0.19),
-    ("kimi-k2p6", 0.95, 4.00, 0.95, 0.16),
     ("kimi-k3-fast", 4.50, 22.50, 4.50, 0.45),
     ("kimi-k3-us", 4.50, 22.50, 4.50, 0.45),
     ("kimi-k3", 3.00, 15.00, 3.00, 0.30),
@@ -91,7 +86,6 @@ const PRICING: &[PricingTuple] = &[
     ("gpt-oss-120b", 0.15, 0.60, 0.15, 0.015),
     ("nemotron-lightning-3p5-30b-a3b", 0.05, 0.20, 0.05, 0.01),
     ("nemotron-3-ultra-nvfp4", 0.60, 2.40, 0.60, 0.12),
-    ("muse-glimmer-30b", 0.35, 1.50, 0.35, 0.04),
 ];
 
 fn fireworks_model_pricing(model: &str) -> Option<crate::llm::types::ModelPricing> {

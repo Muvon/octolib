@@ -35,9 +35,9 @@ fn current_serverless_pricing_uses_together_rates() {
     assert_eq!(qwen.output_price_per_1m, 6.00);
 
     let qwen_max = provider.get_model_pricing("Qwen/Qwen3.7-Max").unwrap();
-    assert_eq!(qwen_max.input_price_per_1m, 2.50);
-    assert_eq!(qwen_max.cache_read_price_per_1m, 0.25);
-    assert_eq!(qwen_max.output_price_per_1m, 7.50);
+    assert_eq!(qwen_max.input_price_per_1m, 1.50);
+    assert_eq!(qwen_max.cache_read_price_per_1m, 0.30);
+    assert_eq!(qwen_max.output_price_per_1m, 4.50);
 
     let deepseek = provider
         .get_model_pricing("deepseek-ai/DeepSeek-V4-Flash-0731")
@@ -79,8 +79,8 @@ fn newly_listed_serverless_models_use_together_rates() {
     );
 
     let qwen_flash = provider.get_model_pricing("Qwen/Qwen3.8-Flash").unwrap();
-    assert_eq!(qwen_flash.input_price_per_1m, 0.15);
-    assert_eq!(qwen_flash.output_price_per_1m, 0.47);
+    assert_eq!(qwen_flash.input_price_per_1m, 0.09);
+    assert_eq!(qwen_flash.output_price_per_1m, 0.28);
     assert_eq!(
         provider.get_max_input_tokens("Qwen/Qwen3.8-Flash"),
         1_000_000

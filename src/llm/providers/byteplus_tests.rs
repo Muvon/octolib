@@ -34,6 +34,37 @@ fn test_default_capabilities() {
 }
 
 #[test]
+fn test_schema_enforcement_follows_model_list() {
+    let provider = BytePlusProvider::new();
+
+    for model in [
+        "seed-2-0-lite-260228",
+        "seed-2-0-lite-260428",
+        "seed-2-0-mini-260215",
+        "seed-2-0-mini-260428",
+        "dola-seed-2-1-turbo-260628",
+        "deepseek-v4-pro-ga-260813",
+        "deepseek-v4-flash-ga-260731",
+    ] {
+        assert!(provider.enforces_response_schema(model), "{model}");
+    }
+
+    // No structured output on the model list, or json_object mode only.
+    for model in [
+        "seed-2-0-pro-260328",
+        "seed-2-0-code-preview-260328",
+        "deepseek-v4-pro-260425",
+        "deepseek-v4-flash-260425",
+        "deepseek-v4-1-flash-260910",
+        "glm-5-2-260617",
+        "glm-5-3-flash-260828",
+    ] {
+        assert!(!provider.enforces_response_schema(model), "{model}");
+        assert!(provider.supports_structured_output(model), "{model}");
+    }
+}
+
+#[test]
 fn test_pricing_seed_models() {
     let provider = BytePlusProvider::new();
 
@@ -50,10 +81,21 @@ fn test_pricing_seed_models() {
     assert_eq!(p.input_price_per_1m, 0.50);
     assert_eq!(p.output_price_per_1m, 2.50);
     assert_eq!(p.cache_read_price_per_1m, 0.10);
+}
 
-    let p = provider.get_model_pricing("seed-1-6-flash-250715").unwrap();
-    assert_eq!(p.input_price_per_1m, 0.075);
-    assert_eq!(p.output_price_per_1m, 0.30);
+#[test]
+fn test_retired_models_have_no_byteplus_pricing() {
+    for model in [
+        "seed-1-8-251228",
+        "seed-1-6-250915",
+        "seed-1-6-flash-250715",
+        "gpt-oss-120b-250805",
+    ] {
+        assert!(
+            calculate_usage_cost(model, 1_000, 0, 0, 1_000).is_none(),
+            "{model}"
+        );
+    }
 }
 
 #[test]

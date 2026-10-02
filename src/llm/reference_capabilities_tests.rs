@@ -170,7 +170,7 @@ fn test_openai_gpt5_family() {
         get_reference_capabilities("gpt-5.4")
             .unwrap()
             .max_input_tokens,
-        400_000
+        1_050_000
     );
     assert_eq!(
         get_reference_capabilities("gpt-5")
@@ -331,7 +331,7 @@ fn test_minimax_variants() {
         get_reference_capabilities("MiniMax-M2.7-highspeed")
             .unwrap()
             .max_input_tokens,
-        1_000_000
+        204_800
     );
     assert_eq!(
         get_reference_capabilities("MiniMax-M2.5-lightning")
@@ -343,7 +343,7 @@ fn test_minimax_variants() {
         get_reference_capabilities("MiniMax-M2.1")
             .unwrap()
             .max_input_tokens,
-        1_000_000
+        204_800
     );
 }
 

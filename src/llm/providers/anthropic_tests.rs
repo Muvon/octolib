@@ -156,6 +156,20 @@ fn test_supports_vision_case_insensitive() {
 }
 
 #[test]
+fn native_provider_does_not_claim_structured_output() {
+    // The reference table records Claude's own support for OpenRouter-style
+    // routes; this provider never sends output_config.format.
+    let provider = AnthropicProvider::new();
+    assert!(!provider.supports_structured_output("claude-opus-5-5"));
+    assert!(!provider.enforces_response_schema("claude-opus-5-5"));
+    assert!(
+        crate::llm::reference_models::get_reference_capabilities("claude-opus-5-5")
+            .unwrap()
+            .structured_output
+    );
+}
+
+#[test]
 fn test_get_model_pricing() {
     let provider = AnthropicProvider::new();
 

@@ -44,23 +44,11 @@ fn test_pricing_reference_fallback() {
 fn current_serverless_routes_use_fireworks_pricing_and_context() {
     let provider = FireworksProvider::new();
 
-    let qwen = provider
-        .get_model_pricing("accounts/fireworks/models/qwen3p8-2p4t-a95b")
-        .unwrap();
-    assert_eq!(qwen.input_price_per_1m, 2.00);
-    assert_eq!(qwen.cache_read_price_per_1m, 0.25);
-    assert_eq!(qwen.output_price_per_1m, 6.00);
+    // No longer serverless: context stays known, pricing leaves the table.
     assert_eq!(
         provider.get_max_input_tokens("accounts/fireworks/models/qwen3p8-2p4t-a95b"),
         262_144
     );
-
-    let deepseek = provider
-        .get_model_pricing("accounts/fireworks/models/deepseek-v4-flash")
-        .unwrap();
-    assert_eq!(deepseek.input_price_per_1m, 0.22);
-    assert_eq!(deepseek.cache_read_price_per_1m, 0.007);
-    assert_eq!(deepseek.output_price_per_1m, 0.66);
 
     let kimi = provider
         .get_model_pricing("accounts/fireworks/models/kimi-k3")
@@ -79,13 +67,6 @@ fn current_serverless_routes_use_fireworks_pricing_and_context() {
     assert_eq!(qwen_max.input_price_per_1m, 2.00);
     assert_eq!(qwen_max.cache_read_price_per_1m, 0.25);
     assert_eq!(qwen_max.output_price_per_1m, 6.00);
-
-    let deepseek_pro = provider
-        .get_model_pricing("accounts/fireworks/models/deepseek-v4-pro-0813")
-        .unwrap();
-    assert_eq!(deepseek_pro.input_price_per_1m, 1.32);
-    assert_eq!(deepseek_pro.cache_read_price_per_1m, 0.044);
-    assert_eq!(deepseek_pro.output_price_per_1m, 3.96);
 }
 
 #[test]
@@ -110,12 +91,7 @@ fn newly_listed_serverless_routes_use_fireworks_pricing_and_context() {
     assert_eq!(glm_flash.cache_read_price_per_1m, 0.03);
     assert_eq!(glm_flash.output_price_per_1m, 0.50);
 
-    let kimi = provider
-        .get_model_pricing("accounts/fireworks/models/kimi-k2p6")
-        .unwrap();
-    assert_eq!(kimi.input_price_per_1m, 0.95);
-    assert_eq!(kimi.cache_read_price_per_1m, 0.16);
-    assert_eq!(kimi.output_price_per_1m, 4.00);
+    // No longer serverless: context stays known, pricing leaves the table.
     assert_eq!(
         provider.get_max_input_tokens("accounts/fireworks/models/kimi-k2p6"),
         262_144
@@ -143,12 +119,6 @@ fn newly_listed_serverless_routes_use_fireworks_pricing_and_context() {
         262_144
     );
 
-    let muse = provider
-        .get_model_pricing("accounts/fireworks/models/muse-glimmer-30b")
-        .unwrap();
-    assert_eq!(muse.input_price_per_1m, 0.35);
-    assert_eq!(muse.cache_read_price_per_1m, 0.04);
-    assert_eq!(muse.output_price_per_1m, 1.50);
     assert_eq!(
         provider.get_max_input_tokens("accounts/fireworks/models/muse-glimmer-30b"),
         131_072
@@ -228,5 +198,16 @@ fn october_serverless_models_use_fireworks_pricing_and_context() {
 
 #[test]
 fn retired_routes_leave_fireworks_table() {
-    assert!(fireworks_model_pricing("accounts/fireworks/models/qwen3p7-plus").is_none());
+    for model in [
+        "accounts/fireworks/models/qwen3p7-plus",
+        "accounts/fireworks/models/qwen3p8-2p4t-a95b",
+        "accounts/fireworks/models/deepseek-v4-pro-0813",
+        "accounts/fireworks/models/deepseek-v4-pro",
+        "accounts/fireworks/models/deepseek-v4-flash",
+        "accounts/fireworks/models/kimi-k2p7-code",
+        "accounts/fireworks/models/kimi-k2p6",
+        "accounts/fireworks/models/muse-glimmer-30b",
+    ] {
+        assert!(fireworks_model_pricing(model).is_none(), "{model}");
+    }
 }

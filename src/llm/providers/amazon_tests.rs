@@ -84,3 +84,41 @@ fn test_nova_has_no_native_structured_outputs() {
     assert!(provider.supports_structured_output("anthropic.claude-sonnet-4-5"));
     assert!(provider.enforces_response_schema("anthropic.claude-sonnet-4-5"));
 }
+
+#[test]
+fn bedrock_rates_override_maker_reference_rates() {
+    let provider = AmazonBedrockProvider::new();
+
+    for (model, input, output) in [
+        ("qwen.qwen3-32b-v1:0", 0.15, 0.60),
+        ("qwen.qwen3-235b-a22b-2507-v1:0", 0.22, 0.88),
+        ("qwen.qwen3-coder-480b-a35b-v1:0", 0.45, 1.80),
+        ("qwen.qwen3-coder-next", 0.50, 1.20),
+        ("qwen.qwen3-next-80b-a3b-instruct", 0.14, 1.20),
+        ("openai.gpt-oss-120b-1:0", 0.15, 0.60),
+        ("openai.gpt-oss-20b-1:0", 0.07, 0.30),
+        ("deepseek.v3.2", 0.62, 1.85),
+        ("deepseek.v3-v1:0", 0.58, 1.68),
+        ("deepseek.r1-v1:0", 1.35, 5.40),
+        ("zai.glm-4.7-flash", 0.07, 0.40),
+        ("minimax.minimax-m2.1", 0.30, 1.20),
+        ("google.gemma-4-31b", 0.14, 0.40),
+        ("google.gemma-4-26b-a4b", 0.13, 0.40),
+        ("google.gemma-4-e2b", 0.04, 0.08),
+        ("moonshotai.kimi-k3", 3.30, 16.50),
+        ("us.moonshotai.kimi-k3", 3.30, 16.50),
+        ("global.moonshotai.kimi-k3", 3.00, 15.00),
+        ("xai.grok-4.7", 2.20, 6.60),
+        ("global.xai.grok-4.7", 2.00, 6.00),
+    ] {
+        let pricing = provider
+            .get_model_pricing(model)
+            .unwrap_or_else(|| panic!("{model} must resolve to pricing"));
+        assert_eq!(pricing.input_price_per_1m, input, "{model}");
+        assert_eq!(pricing.output_price_per_1m, output, "{model}");
+    }
+
+    // The vendor prefix keeps Bedrock rates off the makers' own ids.
+    assert!(get_model_pricing("deepseek-v3.2", PRICING).is_none());
+    assert!(get_model_pricing("qwen/qwen3-32b", PRICING).is_none());
+}

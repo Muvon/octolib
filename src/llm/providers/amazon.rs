@@ -34,7 +34,7 @@ use crate::llm::providers::openai_compat::{
 };
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderResponse};
-use crate::llm::utils::normalize_model_name;
+use crate::llm::utils::{get_model_pricing, normalize_model_name, PricingTuple};
 use anyhow::Result;
 
 /// Amazon Bedrock provider
@@ -56,6 +56,41 @@ impl AmazonBedrockProvider {
 const AWS_BEARER_TOKEN_BEDROCK_ENV: &str = "AWS_BEARER_TOKEN_BEDROCK";
 const AWS_BEDROCK_REGION_ENV: &str = "AWS_BEDROCK_REGION";
 const AWS_BEDROCK_API_URL_ENV: &str = "AWS_BEDROCK_API_URL";
+
+/// Bedrock on-demand Standard rates (us-east-1, per 1M tokens) for hosted
+/// open-weight and partner models whose Bedrock price differs from the
+/// maker's. Patterns keep Bedrock's `vendor.` prefix and match raw (no
+/// sanitizing), so `deepseek.v3.2` never catches DeepSeek's own
+/// `deepseek-v3.2`. Source: AWS Price List API, AmazonBedrock offer published
+/// 2026-09-30. `global.` cross-region IDs bill below in-region IDs and must
+/// precede them. Models without prompt caching bill cache columns at input.
+/// Format: (model, input, output, cache_write, cache_read)
+const PRICING: &[PricingTuple] = &[
+    ("global.moonshotai.kimi-k3", 3.00, 15.00, 3.75, 0.30),
+    ("moonshotai.kimi-k3", 3.30, 16.50, 4.125, 0.33),
+    ("global.xai.grok-4.7", 2.00, 6.00, 2.00, 0.50),
+    ("xai.grok-4.7", 2.20, 6.60, 2.20, 0.55),
+    ("global.xai.grok-4.6", 2.00, 6.00, 2.00, 0.50),
+    ("xai.grok-4.6", 2.20, 6.60, 2.20, 0.55),
+    ("qwen.qwen3-235b-a22b-2507", 0.22, 0.88, 0.22, 0.22),
+    ("qwen.qwen3-32b", 0.15, 0.60, 0.15, 0.15),
+    ("qwen.qwen3-coder-480b-a35b", 0.45, 1.80, 0.45, 0.45),
+    ("qwen.qwen3-coder-next", 0.50, 1.20, 0.50, 0.50),
+    ("qwen.qwen3-next-80b-a3b", 0.14, 1.20, 0.14, 0.14),
+    ("openai.gpt-oss-120b", 0.15, 0.60, 0.15, 0.15),
+    ("openai.gpt-oss-20b", 0.07, 0.30, 0.07, 0.07),
+    ("deepseek.v3.2", 0.62, 1.85, 0.62, 0.62),
+    // DeepSeek V3.1: `deepseek.v3.1` on the Mantle endpoint, `deepseek.v3-v1:0`
+    // on bedrock-runtime.
+    ("deepseek.v3.1", 0.58, 1.68, 0.58, 0.58),
+    ("deepseek.v3-v1", 0.58, 1.68, 0.58, 0.58),
+    ("deepseek.r1", 1.35, 5.40, 1.35, 1.35),
+    ("zai.glm-4.7-flash", 0.07, 0.40, 0.07, 0.07),
+    ("minimax.minimax-m2.1", 0.30, 1.20, 0.30, 0.30),
+    ("google.gemma-4-31b", 0.14, 0.40, 0.14, 0.14),
+    ("google.gemma-4-26b-a4b", 0.13, 0.40, 0.13, 0.13),
+    ("google.gemma-4-e2b", 0.04, 0.08, 0.04, 0.04),
+];
 
 fn default_bedrock_api_url() -> String {
     let region = std::env::var(AWS_BEDROCK_REGION_ENV).unwrap_or_else(|_| "us-east-1".to_string());
@@ -141,8 +176,13 @@ impl AiProvider for AmazonBedrockProvider {
     }
 
     fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
-        // Try reference pricing based on underlying model
-        crate::llm::reference_models::get_reference_pricing(model)
+        // Bedrock's own rate where it differs from the maker's; otherwise the
+        // reference table's model-level rate.
+        get_model_pricing(model, PRICING)
+            .map(|(input, output, cache_write, cache_read)| {
+                crate::llm::types::ModelPricing::new(input, output, cache_write, cache_read)
+            })
+            .or_else(|| crate::llm::reference_models::get_reference_pricing(model))
     }
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {

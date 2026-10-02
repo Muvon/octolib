@@ -14,8 +14,9 @@
 
 //! DeepSeek provider implementation
 //!
-//! PRICING VERIFIED: 2026-09-22 — peak/off-peak billing (peak windows
-//! 01:00-04:00 and 06:00-10:00 UTC Monday-Friday, off-peak rates are half of peak).
+//! PRICING VERIFIED: 2026-10-02 — peak/off-peak billing (peak windows
+//! 01:00-04:00 and 06:00-10:00 UTC Monday-Friday excluding Chinese public
+//! holidays, off-peak rates are half of peak).
 //! Source: <https://api-docs.deepseek.com/quick_start/pricing>
 //!
 //! deepseek-flash — DeepSeek-V4.1-Flash (1M context, 384K max output, vision,
@@ -30,11 +31,12 @@
 //! - Cache Miss (Input): $1.32 / $0.66
 //! - Output: $3.96 / $1.98
 //!
-//! Retired native routes: deepseek-chat / deepseek-reasoner (2026-07-24) and
-//! deepseek-v4-flash / deepseek-v4-flash-vision-exp (2026-09-10) — discontinued,
-//! their requests routed to V4.1 Flash and billed at Flash price. They are no
-//! longer priced here; the same weights served by third-party lanes keep their
-//! `reference_models` entries.
+//! Retired native routes: deepseek-chat / deepseek-reasoner (2026-07-24) —
+//! discontinued, no longer priced here. The legacy names deepseek-v4-flash /
+//! deepseek-v4-flash-vision-exp (retired 2026-09-10) are still accepted, served
+//! by V4.1 Flash and billed at the Flash price, so they share the Flash rows.
+//! The same weights served by third-party lanes keep their `reference_models`
+//! entries.
 //!
 //! Thinking is enabled by default (effort "high"); effort is controlled via
 //! the top-level `reasoning_effort` field: "low" | "high" | "max"
@@ -58,10 +60,13 @@ use std::env;
 /// Format: (model, input, output, cache_write, cache_read)
 /// Note: DeepSeek uses cache_hit/cache_miss model - cache_write = cache_miss (input), cache_read = cache_hit
 /// DeepSeek bills peak / off-peak: peak windows are 01:00-04:00 and 06:00-10:00
-/// UTC Monday-Friday; off-peak is half of peak.
+/// UTC Monday-Friday excluding Chinese public holidays; off-peak is half of peak.
 const PRICING_PEAK: &[PricingTuple] = &[
     // V4.1 Flash (1M context), peak-hour rates
     ("deepseek-flash", 0.3, 1.2, 0.3, 0.006),
+    // Legacy names deepseek-v4-flash / deepseek-v4-flash-vision-exp: retired,
+    // still accepted, served by V4.1 Flash and billed at the Flash price
+    ("deepseek-v4-flash", 0.3, 1.2, 0.3, 0.006),
     // V4 Pro (1M context, text-only), peak-hour rates
     ("deepseek-v4-pro", 1.32, 3.96, 1.32, 0.044),
 ];
@@ -69,18 +74,56 @@ const PRICING_PEAK: &[PricingTuple] = &[
 const PRICING_OFF_PEAK: &[PricingTuple] = &[
     // V4.1 Flash (1M context), off-peak rates (half of peak)
     ("deepseek-flash", 0.15, 0.6, 0.15, 0.003),
+    // Legacy names deepseek-v4-flash / deepseek-v4-flash-vision-exp, billed at Flash price
+    ("deepseek-v4-flash", 0.15, 0.6, 0.15, 0.003),
     // V4 Pro (1M context, text-only), off-peak rates (half of peak)
     ("deepseek-v4-pro", 0.66, 1.98, 0.66, 0.022),
 ];
 
-/// Peak billing windows: Monday-Friday, 01:00-04:00 and 06:00-10:00 UTC.
+/// Days since 1970-01-01 for a Gregorian date in 1970 or later
+/// (Howard Hinnant's `days_from_civil`).
+const fn epoch_day(year: u64, month: u64, day: u64) -> u64 {
+    let y = if month <= 2 { year - 1 } else { year };
+    let era = y / 400;
+    let year_of_era = y - era * 400;
+    let shifted_month = if month > 2 { month - 3 } else { month + 9 };
+    let day_of_year = (153 * shifted_month + 2) / 5 + day - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    era * 146_097 + day_of_era - 719_468
+}
+
+/// Chinese public holidays as inclusive `(first, last)` spans of days off,
+/// in China-calendar dates. Source: State Council General Office notice
+/// 国办发明电〔2025〕7号, <https://www.gov.cn/zhengce/zhengceku/202511/content_7047091.htm>.
+/// Covers 2026 only: the 2027 notice was not yet published on 2026-10-02.
+/// Weekend make-up working days (调休上班) are deliberately absent: DeepSeek's
+/// peak hours are Monday-Friday only, so those weekends stay off-peak.
+const CHINESE_PUBLIC_HOLIDAYS: &[(u64, u64)] = &[
+    (epoch_day(2026, 1, 1), epoch_day(2026, 1, 3)), // New Year's Day
+    (epoch_day(2026, 2, 15), epoch_day(2026, 2, 23)), // Spring Festival
+    (epoch_day(2026, 4, 4), epoch_day(2026, 4, 6)), // Qingming
+    (epoch_day(2026, 5, 1), epoch_day(2026, 5, 5)), // Labour Day
+    (epoch_day(2026, 6, 19), epoch_day(2026, 6, 21)), // Dragon Boat
+    (epoch_day(2026, 9, 25), epoch_day(2026, 9, 27)), // Mid-Autumn
+    (epoch_day(2026, 10, 1), epoch_day(2026, 10, 7)), // National Day
+];
+
+/// Peak billing windows: Monday-Friday, 01:00-04:00 and 06:00-10:00 UTC,
+/// excluding Chinese public holidays.
 fn is_peak_window(days_since_epoch: u64, utc_hour: u64) -> bool {
     // 1970-01-01 was Thursday. Map Monday..Sunday to 0..6.
     let weekday = (days_since_epoch + 3) % 7;
-    weekday < 5 && ((1..4).contains(&utc_hour) || (6..10).contains(&utc_hour))
+    // The peak hours are 09:00-12:00 and 14:00-18:00 Beijing time (UTC+8), so
+    // within them the UTC date is the China date the holiday table is keyed on.
+    weekday < 5
+        && ((1..4).contains(&utc_hour) || (6..10).contains(&utc_hour))
+        && !CHINESE_PUBLIC_HOLIDAYS
+            .iter()
+            .any(|&(first, last)| (first..=last).contains(&days_since_epoch))
 }
 
-/// Pick the pricing table that applies at `time` (tier decided by UTC weekday and hour)
+/// Pick the pricing table that applies at `time` (tier decided by UTC weekday,
+/// hour and Chinese public holidays)
 fn pricing_table_at(time: std::time::SystemTime) -> &'static [PricingTuple] {
     let secs = time
         .duration_since(std::time::SystemTime::UNIX_EPOCH)
@@ -624,7 +667,8 @@ impl AiProvider for DeepSeekProvider {
             // ONE path for both the cached and uncached case: with zero hits this is
             // exactly the no-cache calculation, so the two can never drift apart.
             // Tier is picked from the pricing table active now (peak windows
-            // 01:00-04:00 and 06:00-10:00 UTC Monday-Friday, off-peak — half price — otherwise).
+            // 01:00-04:00 and 06:00-10:00 UTC Monday-Friday excluding Chinese public
+            // holidays, off-peak — half price — otherwise).
             let pricing = pricing_table_at(std::time::SystemTime::now());
             let cost = calculate_cost_with_cache(
                 pricing,

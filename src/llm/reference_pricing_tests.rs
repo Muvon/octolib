@@ -38,7 +38,7 @@ fn test_reference_pricing_qwen_3_5_3_7() {
     // Realistic Together model IDs must resolve via sanitized substring matching.
     let p = get_reference_pricing("Qwen/Qwen3.7-Max").unwrap();
     assert_eq!(p.input_price_per_1m, 2.50);
-    assert_eq!(p.cache_read_price_per_1m, 0.25);
+    assert_eq!(p.cache_read_price_per_1m, 0.50);
 
     let p = get_reference_pricing("Qwen/Qwen3.5-397B-A17B").unwrap();
     assert_eq!(p.input_price_per_1m, 0.60);

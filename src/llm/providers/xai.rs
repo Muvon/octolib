@@ -158,8 +158,8 @@ fn ticks_to_usd(ticks: u64) -> f64 {
 }
 
 fn reasoning_effort(model: &str, effort: Option<ReasoningEffort>) -> Option<&'static str> {
-    // xAI has no documented "off" value: None sends nothing, like unset.
-    let effort = effort.filter(|effort| *effort != ReasoningEffort::None)?;
+    // Only grok-4.3 documents a "none" effort; elsewhere None sends nothing, like unset.
+    let effort = effort?;
     let family = model_family(model)?;
     let normalized = model.to_ascii_lowercase();
     let is_multi_agent = normalized.contains("multi-agent");
@@ -177,6 +177,11 @@ fn reasoning_effort(model: &str, effort: Option<ReasoningEffort>) -> Option<&'st
             | "grok-latest"
     );
     match (family, is_multi_agent, effort) {
+        (ModelFamily::Grok43, _, ReasoningEffort::None)
+            if matches!(normalized.as_str(), "grok-4.3" | "grok-4.3-latest") =>
+        {
+            Some("none")
+        }
         (
             ModelFamily::Grok47 | ModelFamily::Grok46 | ModelFamily::Grok45 | ModelFamily::Grok43,
             _,
@@ -190,8 +195,13 @@ fn reasoning_effort(model: &str, effort: Option<ReasoningEffort>) -> Option<&'st
         (
             ModelFamily::Grok47 | ModelFamily::Grok46 | ModelFamily::Grok45 | ModelFamily::Grok43,
             _,
-            _,
+            ReasoningEffort::High,
         ) if is_configurable_single_agent => Some("high"),
+        (
+            ModelFamily::Grok47 | ModelFamily::Grok46 | ModelFamily::Grok45 | ModelFamily::Grok43,
+            _,
+            ReasoningEffort::XHigh | ReasoningEffort::Max,
+        ) if is_configurable_single_agent => Some("xhigh"),
         (ModelFamily::Grok420, true, ReasoningEffort::Low) => Some("low"),
         (ModelFamily::Grok420, true, ReasoningEffort::Medium) => Some("medium"),
         (ModelFamily::Grok420, true, ReasoningEffort::High) => Some("high"),

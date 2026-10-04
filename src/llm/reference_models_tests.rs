@@ -251,7 +251,7 @@ fn august_2026_additions_resolve() {
     let p = get_reference_pricing("meta-models/Muse-Glimmer-30B").unwrap();
     assert_eq!(p.input_price_per_1m, 0.30);
     assert_eq!(p.output_price_per_1m, 1.10);
-    assert!(!proxy_route_enforces_response_schema("meta/muse-spark-1.2"));
+    assert!(proxy_route_enforces_response_schema("meta/muse-spark-1.2"));
 }
 
 /// Bedrock's Nova family resolves pricing and capabilities through the

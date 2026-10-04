@@ -614,7 +614,7 @@ fn is_git_command(cmd: &str) -> bool {
         if let Some(after) = rest.strip_prefix(prefix) {
             let mut chars = after.chars();
             if chars.next().is_some_and(char::is_whitespace) {
-                return chars.skip_while(|c| c.is_whitespace()).next().is_some();
+                return chars.any(|c| !c.is_whitespace());
             }
         }
     }

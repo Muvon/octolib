@@ -327,6 +327,10 @@ fn test_minimax_variants() {
             .max_input_tokens,
         1_000_000
     );
+    let m3_1_flash = get_reference_capabilities("MiniMax-M3.1-Flash-Preview").unwrap();
+    assert!(m3_1_flash.vision);
+    assert!(m3_1_flash.video);
+    assert_eq!(m3_1_flash.max_input_tokens, 1_000_000);
     assert_eq!(
         get_reference_capabilities("MiniMax-M2.7-highspeed")
             .unwrap()

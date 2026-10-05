@@ -819,6 +819,13 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: None,
     },
     ReferenceModelEntry {
+        // Token Plan / MiniMax Code only, no pay-as-you-go rate; zero keeps it
+        // from falling through to the paid `minimax-m3` row.
+        pattern: "minimax-m3.1-flash-preview",
+        capabilities: caps(true, true, false, 1_000_000),
+        pricing: pricing(0.0, 0.0, 0.0, 0.0),
+    },
+    ReferenceModelEntry {
         pattern: "minimax-m3-highspeed",
         capabilities: caps(true, true, false, 1_000_000),
         pricing: pricing(0.30, 1.20, 0.0, 0.06),

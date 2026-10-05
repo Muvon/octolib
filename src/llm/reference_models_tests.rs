@@ -72,7 +72,7 @@ fn assert_same_pricing(left: ModelPricing, right: ModelPricing) {
 /// provider tables silently misbills those routes, so they must agree.
 #[test]
 fn reference_pricing_matches_first_party_provider_tables() {
-    use crate::llm::providers::{AnthropicProvider, GoogleVertexProvider};
+    use crate::llm::providers::{AnthropicProvider, GoogleVertexProvider, MinimaxProvider};
     use crate::llm::traits::AiProvider;
 
     let anthropic = AnthropicProvider::new();
@@ -106,6 +106,14 @@ fn reference_pricing_matches_first_party_provider_tables() {
             google.get_model_pricing(model).unwrap(),
         );
     }
+
+    let minimax = MinimaxProvider::new();
+    assert_same_pricing(
+        get_reference_pricing("MiniMax-M3.1-Flash-Preview").unwrap(),
+        minimax
+            .get_model_pricing("MiniMax-M3.1-Flash-Preview")
+            .unwrap(),
+    );
 }
 
 #[test]

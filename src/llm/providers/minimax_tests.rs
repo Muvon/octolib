@@ -17,6 +17,7 @@ use super::*;
 #[test]
 fn test_model_support() {
     let provider = MinimaxProvider::new();
+    assert!(provider.supports_model("MiniMax-M3.1-Flash-Preview"));
     assert!(provider.supports_model("MiniMax-M3"));
     assert!(provider.supports_model("MiniMax-M2.7"));
     assert!(provider.supports_model("MiniMax-M2.7-highspeed"));
@@ -35,6 +36,10 @@ fn test_model_support() {
 fn test_context_windows_follow_model_table() {
     let provider = MinimaxProvider::new();
     assert_eq!(provider.get_max_input_tokens("MiniMax-M3"), 1_000_000);
+    assert_eq!(
+        provider.get_max_input_tokens("MiniMax-M3.1-Flash-Preview"),
+        1_000_000
+    );
     for model in [
         "MiniMax-M2.7",
         "MiniMax-M2.7-highspeed",
@@ -128,6 +133,33 @@ fn test_m3_long_context_tier_boundary() {
 }
 
 #[test]
+fn test_m3_1_flash_preview_has_no_per_token_cost() {
+    // Token Plan only: must not fall through to the MiniMax-M3 substring row
+    let cost = calculate_minimax_cost(
+        "MiniMax-M3.1-Flash-Preview",
+        600_000,
+        1_000_000,
+        1_000,
+        1_000,
+    );
+    assert_eq!(cost, Some(0.0));
+}
+
+#[test]
+fn test_effort_only_for_m3_1_flash_preview() {
+    let model = "MiniMax-M3.1-Flash-Preview";
+    assert_eq!(effort_value(model, ReasoningEffort::None), Some("low"));
+    assert_eq!(effort_value(model, ReasoningEffort::Low), Some("low"));
+    assert_eq!(effort_value(model, ReasoningEffort::Medium), Some("medium"));
+    assert_eq!(effort_value(model, ReasoningEffort::High), Some("high"));
+    assert_eq!(effort_value(model, ReasoningEffort::XHigh), Some("xhigh"));
+    assert_eq!(effort_value(model, ReasoningEffort::Max), Some("max"));
+
+    assert_eq!(effort_value("MiniMax-M3", ReasoningEffort::High), None);
+    assert_eq!(effort_value("MiniMax-M2.7", ReasoningEffort::High), None);
+}
+
+#[test]
 fn test_provider_capabilities() {
     let provider = MinimaxProvider::new();
     assert!(provider.supports_caching("MiniMax-M2.1"));
@@ -139,6 +171,8 @@ fn test_provider_capabilities() {
     assert!(provider.supports_vision("MiniMax-M3"));
     assert!(provider.supports_video("MiniMax-M3"));
     assert!(provider.supports_caching("MiniMax-M3"));
+    assert!(provider.supports_vision("MiniMax-M3.1-Flash-Preview"));
+    assert!(provider.supports_video("MiniMax-M3.1-Flash-Preview"));
 }
 
 #[test]

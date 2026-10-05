@@ -19,8 +19,8 @@ use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-    ChatCompletionParams, ImageData, Message, ProviderExchange, ProviderResponse, SamplingSupport,
-    ThinkingBlock, TokenUsage, ToolCall, VideoData,
+    ChatCompletionParams, ImageData, Message, ProviderExchange, ProviderResponse, ReasoningEffort,
+    SamplingSupport, ThinkingBlock, TokenUsage, ToolCall, VideoData,
 };
 use crate::llm::utils::{
     get_model_pricing, is_model_in_pricing_table, normalize_model_name, PricingTuple,
@@ -34,6 +34,10 @@ use std::env;
 /// Source: https://platform.minimax.io/docs/guides/pricing-paygo (verified Sep 22, 2026)
 /// Format: (model, input, output, cache_write, cache_read)
 const PRICING: &[PricingTuple] = &[
+    // MiniMax M3.1 Flash Preview: Token Plan / MiniMax Code only, no pay-as-you-go
+    // rate published (verified Oct 5, 2026), so requests carry no per-token cost.
+    // Must precede MiniMax-M3 (substring match, first wins).
+    ("MiniMax-M3.1-Flash-Preview", 0.0, 0.0, 0.0, 0.0),
     // MiniMax M3 (latest generation, natively multimodal — image + video input)
     // ≤512k input tokens: 0.30 / 1.20 / cache read 0.06; >512k input tokens:
     // 0.60 / 2.40 / cache read 0.12 (tier applied in `calculate_cost_with_cache`).
@@ -57,6 +61,21 @@ const M3_DISCOUNT_MAX_INPUT: u64 = 512_000;
 
 fn is_m3_model(model: &str) -> bool {
     normalize_model_name(model) == "minimax-m3"
+}
+
+/// MiniMax-M3.1-Flash-Preview takes `output_config.effort` (defaults to `max`
+/// when omitted). Thinking cannot be disabled, so an explicit `None` runs at `low`.
+fn effort_value(model: &str, effort: ReasoningEffort) -> Option<&'static str> {
+    if normalize_model_name(model) != "minimax-m3.1-flash-preview" {
+        return None;
+    }
+    Some(match effort {
+        ReasoningEffort::None | ReasoningEffort::Low => "low",
+        ReasoningEffort::Medium => "medium",
+        ReasoningEffort::High => "high",
+        ReasoningEffort::XHigh => "xhigh",
+        ReasoningEffort::Max => "max",
+    })
 }
 
 /// Token usage breakdown for cache-aware pricing
@@ -250,6 +269,13 @@ impl AiProvider for MinimaxProvider {
         // Add max_tokens if specified (0 means don't include it in request)
         if params.max_tokens > 0 {
             request_body["max_tokens"] = serde_json::json!(params.max_tokens);
+        }
+
+        if let Some(effort) = params
+            .reasoning_effort
+            .and_then(|effort| effort_value(&params.model, effort))
+        {
+            request_body["output_config"] = serde_json::json!({ "effort": effort });
         }
 
         // Add system message with cache control if needed

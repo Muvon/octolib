@@ -14,6 +14,28 @@
 
 use super::*;
 
+/// A router keeps a request on the same model when it moves between hosts, so
+/// every host's spelling of one model must resolve to one id — and a name that
+/// only fuzzily matches an entry must not claim to be that model.
+#[test]
+fn reference_model_id_names_one_model_across_hosts() {
+    for model in [
+        "kimi-k2.7-code",
+        "kimi-2.7-code",
+        "@cf/moonshotai/kimi-k2.7-code",
+        "moonshotai/Kimi-K2.7-Code",
+    ] {
+        assert_eq!(reference_model_id(model), Some("kimi-k2.7-code"), "{model}");
+    }
+    assert_eq!(reference_model_id("kimi-2.6"), Some("kimi-k2.6"));
+    assert_eq!(
+        reference_model_id("kimi-k2.7-code-highspeed"),
+        Some("kimi-k2.7-code-highspeed")
+    );
+    assert_eq!(reference_model_id("deepseek-v4.1-flash:cloud"), None);
+    assert_eq!(reference_model_id("no-such-model"), None);
+}
+
 /// The verifier route the completion gate runs on. The openrouter catalogue
 /// advertises structured_outputs=false for this model while the live route
 /// honours a strict json_schema, so the entry is measured rather than

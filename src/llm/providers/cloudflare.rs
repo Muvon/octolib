@@ -678,6 +678,14 @@ impl AiProvider for CloudflareWorkersAiProvider {
             .unwrap_or(false)
     }
 
+    /// Workers AI documents image input only ("Vision inputs for processing
+    /// images", kimi-k2.7-code launch note, 2026-06-12) and its catalog has no
+    /// video property, so a video part must not reach it on the strength of the
+    /// model's reference entry.
+    fn supports_video(&self, _model: &str) -> bool {
+        false
+    }
+
     /// Legacy-schema models reach a schema only through a forced tool call (see
     /// `enforces_response_schema`), so structured output needs function calling.
     fn supports_structured_output(&self, model: &str) -> bool {

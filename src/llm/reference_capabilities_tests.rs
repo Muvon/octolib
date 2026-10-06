@@ -264,6 +264,22 @@ fn test_kimi_k3_1m() {
 }
 
 #[test]
+fn kimi_k2_6_and_k2_7_code_read_video() {
+    for model in [
+        "kimi-k2.7-code",
+        "kimi-k2.7-code-highspeed",
+        "kimi-2.7-code",
+        "kimi-k2.6",
+        "kimi-2.6",
+        "moonshotai/Kimi-K2.7-Code",
+    ] {
+        let caps = get_reference_capabilities(model).unwrap();
+        assert!(caps.vision, "{model} reads images");
+        assert!(caps.video, "{model} reads video");
+    }
+}
+
+#[test]
 fn test_kimi_k2_256k() {
     // All Kimi K2 variants now report 256K (matches MoonshotProvider override)
     assert_eq!(

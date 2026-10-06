@@ -125,6 +125,7 @@ fn model_pages_drive_context_vision_and_tool_support() {
     assert!(provider.supports_vision("@cf/qwen/qwen3.8-27b"));
     assert!(provider.supports_vision("@cf/google/gemma-4-26b-a4b-it"));
     assert!(!provider.supports_vision("@cf/zai-org/glm-5.3"));
+    assert!(!provider.supports_video("@cf/moonshotai/kimi-k2.7-code"));
 
     // OpenAI-shaped models decode against the schema; legacy ones need a
     // forced tool call, so their structured output rides on function calling.

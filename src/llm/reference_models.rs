@@ -727,7 +727,7 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "kimi-k2.7-code-highspeed",
-        capabilities: caps(true, false, true, 256_000),
+        capabilities: caps(true, true, true, 256_000),
         pricing: pricing(1.90, 8.00, 1.90, 0.38),
     },
     ReferenceModelEntry {
@@ -1241,16 +1241,19 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(0.00, 0.00, 0.00, 0.00),
     },
     ReferenceModelEntry {
+        // Moonshot's vision guide: kimi-k3, kimi-k2.6, kimi-k2.7-code and
+        // kimi-k2.7-code-highspeed "can also understand video content" (checked
+        // 2026-10-06), so all four read video.
         pattern: "kimi-k2.7-code",
-        capabilities: caps(true, false, true, 256_000),
+        capabilities: caps(true, true, true, 256_000),
         pricing: pricing(0.95, 4.00, 0.95, 0.19),
     },
     ReferenceModelEntry {
         // Alias without the "k" (self-hosted / gateway deployments name it this
         // way) — the sanitizer can't bridge a real letter difference, so an
-        // explicit twin keeps these calls priced.
+        // explicit twin keeps these calls priced. Listed in TWINS.
         pattern: "kimi-2.7-code",
-        capabilities: caps(true, false, true, 256_000),
+        capabilities: caps(true, true, true, 256_000),
         pricing: pricing(0.95, 4.00, 0.95, 0.19),
     },
     ReferenceModelEntry {
@@ -1912,13 +1915,13 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "kimi-k2.6",
-        capabilities: caps(true, false, true, 256_000),
+        capabilities: caps(true, true, true, 256_000),
         pricing: pricing(0.95, 4.00, 0.95, 0.16),
     },
     ReferenceModelEntry {
         // Alias twin of kimi-k2.6 (see kimi-2.7-code above).
         pattern: "kimi-2.6",
-        capabilities: caps(true, false, true, 256_000),
+        capabilities: caps(true, true, true, 256_000),
         pricing: pricing(0.95, 4.00, 0.95, 0.16),
     },
     ReferenceModelEntry {
@@ -2238,6 +2241,32 @@ fn matches_model(normalized: &str, pattern: &str) -> bool {
 
 fn normalized_model(model: &str) -> String {
     sanitize_model_name(&normalize_model_name(model))
+}
+
+/// Twin entries that spell one model two ways, mapped to the entry they mirror.
+const TWINS: &[(&str, &str)] = &[
+    ("kimi-2.7-code", "kimi-k2.7-code"),
+    ("kimi-2.6", "kimi-k2.6"),
+];
+
+/// The reference model a name denotes exactly — vendor path (`@cf/moonshotai/`),
+/// case and separators aside — or `None` when the name only fuzzily matches an
+/// entry (a dated snapshot, a quantization tag) or matches none. Hosts that name
+/// one model differently resolve to the same id, which is how a router tells
+/// another host of the same model from a different model.
+pub fn reference_model_id(model: &str) -> Option<&'static str> {
+    let normalized = normalized_model(model);
+    let name = normalized.rsplit('/').next().unwrap_or(&normalized);
+    let pattern = REFERENCE_MODELS
+        .iter()
+        .find(|entry| sanitize_model_name(entry.pattern) == name)?
+        .pattern;
+    Some(
+        TWINS
+            .iter()
+            .find(|(twin, _)| *twin == pattern)
+            .map_or(pattern, |(_, canonical)| *canonical),
+    )
 }
 
 /// Look up all known reference properties for a model by fuzzy name matching.

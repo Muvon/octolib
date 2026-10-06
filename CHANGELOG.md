@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.41.0] - 2026-10-06
+
+### 📋 Release Summary
+
+The library now supports the ChatGPT Responses API, Hindsight session scoring, and MiniMax-M3.1-Flash-Preview. Provider model pricing and capabilities, along with supported embedding and reranker models, have been updated; ChatGPT token usage costs are calculated, and Hindsight downloads retry and wait for cache locks.
+
+### 🚨 Breaking Changes
+
+- **providers**: refresh supported embedding and reranker models `f400273c`
+
+### ✨ New Features & Enhancements
+
+- **llm**: support ChatGPT Responses API `253cdcc2`
+- **hindsight**: add hindsight session scoring `4bef759d`
+- **minimax**: support MiniMax-M3.1-Flash-Preview `c72743f4`
+- **llm**: update provider model pricing and capabilities `335989d3`
+
+### 🔧 Improvements & Optimizations
+
+- simplify git command whitespace scanning `0a90a2b9`
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: calculate ChatGPT token usage costs `59f78342`
+- **hindsight**: retry downloads and wait for cache locks `c73962e8`
+- **llm**: update model pricing and provider capabilities `ccc9e5cf`
+
 ## [0.40.3] - 2026-09-30
 
 ### 📋 Release Summary

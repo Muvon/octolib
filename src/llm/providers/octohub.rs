@@ -284,14 +284,17 @@ impl AiProvider for OctoHubProvider {
                     }
 
                     // App attribution rides through the proxy: octohub forwards
-                    // X-Title / HTTP-Referer to its upstream (e.g. OpenRouter),
-                    // so the originating app gets credited, not the proxy. No
+                    // X-Title / HTTP-Referer / X-OpenRouter-Categories to its upstream
+                    // (e.g. OpenRouter), so the originating app gets credited, not the proxy. No
                     // defaults here — absent vars leave attribution to octohub.
                     if let Ok(title) = std::env::var("OPENROUTER_APP_TITLE") {
                         req = req.header("X-Title", title);
                     }
                     if let Ok(referer) = std::env::var("OPENROUTER_HTTP_REFERER") {
                         req = req.header("HTTP-Referer", referer);
+                    }
+                    if let Ok(categories) = std::env::var("OPENROUTER_APP_CATEGORIES") {
+                        req = req.header("X-OpenRouter-Categories", categories);
                     }
 
                     let captured = shared::send_and_read(

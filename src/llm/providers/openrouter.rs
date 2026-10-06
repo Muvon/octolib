@@ -645,15 +645,20 @@ async fn execute_openrouter_request(
                 std::env::var("OPENROUTER_APP_TITLE").unwrap_or_else(|_| "octolib".to_string());
             let openrouter_http_referer = std::env::var("OPENROUTER_HTTP_REFERER")
                 .unwrap_or_else(|_| "https://octomind.run/product/octolib".to_string());
+            // Category leaderboards (e.g. "cli-agent") describe the calling app, so no default.
+            let openrouter_app_categories = std::env::var("OPENROUTER_APP_CATEGORIES").ok();
 
             Box::pin(async move {
-                let req = client
+                let mut req = client
                     .post(&api_url)
                     .header("Content-Type", "application/json")
                     .header("Authorization", format!("Bearer {}", api_key))
                     .header("HTTP-Referer", openrouter_http_referer)
                     .header("X-Title", openrouter_app_title)
                     .json(&request_body);
+                if let Some(categories) = openrouter_app_categories {
+                    req = req.header("X-OpenRouter-Categories", categories);
+                }
 
                 let captured =
                     shared::send_and_read(req, request_timeout, extra_headers.as_ref()).await?;

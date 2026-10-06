@@ -16,12 +16,12 @@
 
 use crate::llm::providers::{
     AlibabaProvider, AmazonBedrockProvider, AnthropicProvider, BytePlusProvider, CerebrasProvider,
-    CliProvider, CloudflareWorkersAiProvider, DeepSeekProvider, FeatherlessProvider,
-    FireworksProvider, GoogleStudioProvider, GoogleVertexProvider, GroqProvider, HetznerProvider,
-    InceptionProvider, LocalProvider, MetaProvider, MinimaxProvider, MoonshotProvider,
-    NvidiaProvider, OctoHubProvider, OllamaProvider, OpenAiProvider, OpenCodeGoProvider,
-    OpenCodeZenProvider, OpenRouterProvider, TinkerProvider, TogetherProvider, XaiProvider,
-    ZaiProvider,
+    ChatGptProvider, CliProvider, CloudflareWorkersAiProvider, DeepSeekProvider,
+    FeatherlessProvider, FireworksProvider, GoogleStudioProvider, GoogleVertexProvider,
+    GroqProvider, HetznerProvider, InceptionProvider, LocalProvider, MetaProvider, MinimaxProvider,
+    MoonshotProvider, NvidiaProvider, OctoHubProvider, OllamaProvider, OpenAiProvider,
+    OpenCodeGoProvider, OpenCodeZenProvider, OpenRouterProvider, TinkerProvider, TogetherProvider,
+    XaiProvider, ZaiProvider,
 };
 use crate::llm::traits::AiProvider;
 use anyhow::Result;
@@ -58,6 +58,7 @@ impl ProviderFactory {
         match provider_name.to_lowercase().as_str() {
             "openrouter" => Ok(Box::new(OpenRouterProvider::new())),
             "openai" => Ok(Box::new(OpenAiProvider::new())),
+            "chatgpt" => Ok(Box::new(ChatGptProvider::new())),
             "cerebras" => Ok(Box::new(CerebrasProvider::new())),
             "local" => Ok(Box::new(LocalProvider::new())),
             "ollama" => Ok(Box::new(OllamaProvider::new())),
@@ -88,7 +89,7 @@ impl ProviderFactory {
             "cli" => Err(anyhow::anyhow!(
                 "CLI provider requires a model string like 'cli:<backend>/<model>'. Use ProviderFactory::get_provider_for_model instead."
             )),
-            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported: openai, anthropic, openrouter, cerebras, local, ollama, google-vertex, google-studio, groq, alibaba, amazon, cloudflare, deepseek, featherless, fireworks, hetzner, inception, meta, minimax, moonshot, nvidia, octohub, opencode-zen, opencode-go, tinker, together, xai, zai, byteplus, cli", provider_name))
+            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported: openai, chatgpt, anthropic, openrouter, cerebras, local, ollama, google-vertex, google-studio, groq, alibaba, amazon, cloudflare, deepseek, featherless, fireworks, hetzner, inception, meta, minimax, moonshot, nvidia, octohub, opencode-zen, opencode-go, tinker, together, xai, zai, byteplus, cli", provider_name))
         }
     }
 
@@ -118,6 +119,7 @@ impl ProviderFactory {
         vec![
             "openrouter",
             "openai",
+            "chatgpt",
             "cerebras",
             "local",
             "ollama",

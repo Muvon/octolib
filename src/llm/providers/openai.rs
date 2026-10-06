@@ -19,8 +19,9 @@ use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-    ChatCompletionParams, ImageData, Message, ProviderExchange, ProviderResponse, ReasoningEffort,
-    SamplingSupport, ThinkingBlock, TokenUsage, ToolCall, VideoData,
+    ChatCompletionParams, FunctionDefinition, ImageData, Message, ProviderExchange,
+    ProviderResponse, ReasoningEffort, SamplingSupport, StructuredOutputRequest, ThinkingBlock,
+    TokenUsage, ToolCall, VideoData,
 };
 use crate::llm::utils::{
     get_model_pricing, is_model_in_pricing_table, normalize_model_name, PricingTuple,
@@ -214,7 +215,7 @@ const NO_TEMPERATURE_PREFIXES: &[&str] =
 /// * `messages` - Full conversation history
 /// * `previous_response_id` - Exact OpenAI response being continued, if any
 /// * `explicit_cache_breakpoints` - Map `Message.cached` to GPT-5.6+ content breakpoints
-fn messages_to_input(
+pub(super) fn messages_to_input(
     messages: &[Message],
     previous_response_id: Option<&str>,
     explicit_cache_breakpoints: bool,
@@ -398,6 +399,96 @@ fn apply_explicit_cache_options(
     }
 
     Ok(())
+}
+
+/// Responses API `reasoning.effort` for reasoning models (o1/o3/o4/gpt-5/gpt-6/daybreak);
+/// `None` for models without one. GPT-5.6 and later additionally accept "max".
+/// Default when caller omits is "medium" (per OpenAI guidance).
+pub(super) fn reasoning_effort(
+    model: &str,
+    effort: Option<ReasoningEffort>,
+) -> Option<&'static str> {
+    let is_reasoning_model = model.starts_with("o1")
+        || model.starts_with("o3")
+        || model.starts_with("o4")
+        || model.starts_with("gpt-5")
+        || model.starts_with("gpt-6")
+        || model.starts_with("gpt-daybreak");
+    if !is_reasoning_model {
+        return None;
+    }
+
+    let is_gpt_5_6_plus = is_gpt_5_6_or_later(&normalize_model_name(model));
+    Some(match effort {
+        // GPT-5.x accepts "none" (no reasoning); the o-series does not,
+        // where "low" is the floor.
+        Some(ReasoningEffort::None) if model.starts_with("gpt-") => "none",
+        Some(ReasoningEffort::None) => "low",
+        Some(ReasoningEffort::Low) => "low",
+        Some(ReasoningEffort::Medium) => "medium",
+        Some(ReasoningEffort::High) => "high",
+        Some(ReasoningEffort::XHigh) => "xhigh",
+        Some(ReasoningEffort::Max) if is_gpt_5_6_plus => "max",
+        Some(ReasoningEffort::Max) => "xhigh",
+        None => "medium",
+    })
+}
+
+/// Responses API function tools sorted by name, or `None` when there are none.
+pub(super) fn function_tools(
+    tools: Option<&[FunctionDefinition]>,
+) -> Option<Vec<serde_json::Value>> {
+    let tools = tools.filter(|tools| !tools.is_empty())?;
+    let mut sorted_tools = tools.to_vec();
+    sorted_tools.sort_by(|a, b| a.name.cmp(&b.name));
+
+    Some(
+        sorted_tools
+            .iter()
+            .map(|f| {
+                serde_json::json!({
+                    "type": "function",
+                    "name": f.name,
+                    "description": f.description,
+                    "parameters": f.parameters
+                })
+            })
+            .collect(),
+    )
+}
+
+/// Responses API `text` block for structured output; `None` for a JSON-schema
+/// request that carries no schema.
+pub(super) fn text_format(response_format: &StructuredOutputRequest) -> Option<serde_json::Value> {
+    let format = match &response_format.format {
+        crate::llm::types::OutputFormat::Json => serde_json::json!({ "type": "json_object" }),
+        crate::llm::types::OutputFormat::JsonSchema => {
+            // Strict structured outputs need additionalProperties:false on
+            // every nested object (no-op unless mode is Strict).
+            let schema = crate::llm::utils::normalize_strict_schema(
+                response_format.schema.as_ref()?,
+                response_format.mode,
+            );
+
+            let mut format_obj = serde_json::json!({
+                "type": "json_schema",
+                "name": "response_schema",
+                "schema": schema
+            });
+
+            // Add strict mode if specified
+            if matches!(
+                response_format.mode,
+                crate::llm::types::ResponseMode::Strict
+            ) {
+                format_obj["strict"] = serde_json::json!(true);
+            }
+
+            format_obj
+        }
+    };
+
+    Some(serde_json::json!({ "format": format }))
 }
 
 /// OpenAI provider
@@ -670,94 +761,16 @@ impl AiProvider for OpenAiProvider {
             request_body["max_output_tokens"] = serde_json::json!(params.max_tokens);
         }
 
-        // Add reasoning effort for reasoning models (o1/o3/o4/gpt-5/gpt-6/daybreak).
-        // Maps generic ReasoningEffort -> OpenAI Responses API "effort" string.
-        // GPT-5.6 and later additionally accept "max".
-        // Default when caller omits is "medium" (per OpenAI guidance).
-        if params.model.starts_with("o1")
-            || params.model.starts_with("o3")
-            || params.model.starts_with("o4")
-            || params.model.starts_with("gpt-5")
-            || params.model.starts_with("gpt-6")
-            || params.model.starts_with("gpt-daybreak")
-        {
-            let effort = match params.reasoning_effort {
-                // GPT-5.x accepts "none" (no reasoning); the o-series does not,
-                // where "low" is the floor.
-                Some(ReasoningEffort::None) if params.model.starts_with("gpt-") => "none",
-                Some(ReasoningEffort::None) => "low",
-                Some(ReasoningEffort::Low) => "low",
-                Some(ReasoningEffort::Medium) => "medium",
-                Some(ReasoningEffort::High) => "high",
-                Some(ReasoningEffort::XHigh) => "xhigh",
-                Some(ReasoningEffort::Max) if is_gpt_5_6_plus => "max",
-                Some(ReasoningEffort::Max) => "xhigh",
-                None => "medium",
-            };
+        if let Some(effort) = reasoning_effort(&params.model, params.reasoning_effort) {
             request_body["reasoning"] = serde_json::json!({ "effort": effort });
         }
 
-        // Add tools if available
-        if let Some(tools) = &params.tools {
-            if !tools.is_empty() {
-                let mut sorted_tools = tools.clone();
-                sorted_tools.sort_by(|a, b| a.name.cmp(&b.name));
-
-                let openai_tools: Vec<serde_json::Value> = sorted_tools
-                    .iter()
-                    .map(|f| {
-                        serde_json::json!({
-                            "type": "function",
-                            "name": f.name,
-                            "description": f.description,
-                            "parameters": f.parameters
-                        })
-                    })
-                    .collect();
-
-                request_body["tools"] = serde_json::json!(openai_tools);
-            }
+        if let Some(tools) = function_tools(params.tools.as_deref()) {
+            request_body["tools"] = serde_json::json!(tools);
         }
 
-        // Add structured output format if specified
-        if let Some(response_format) = &params.response_format {
-            match &response_format.format {
-                crate::llm::types::OutputFormat::Json => {
-                    request_body["text"] = serde_json::json!({
-                        "format": {
-                            "type": "json_object"
-                        }
-                    });
-                }
-                crate::llm::types::OutputFormat::JsonSchema => {
-                    if let Some(schema) = &response_format.schema {
-                        // Strict structured outputs need additionalProperties:false on
-                        // every nested object (no-op unless mode is Strict).
-                        let schema = crate::llm::utils::normalize_strict_schema(
-                            schema,
-                            response_format.mode,
-                        );
-
-                        let mut format_obj = serde_json::json!({
-                            "type": "json_schema",
-                            "name": "response_schema",
-                            "schema": schema
-                        });
-
-                        // Add strict mode if specified
-                        if matches!(
-                            response_format.mode,
-                            crate::llm::types::ResponseMode::Strict
-                        ) {
-                            format_obj["strict"] = serde_json::json!(true);
-                        }
-
-                        request_body["text"] = serde_json::json!({
-                            "format": format_obj
-                        });
-                    }
-                }
-            }
+        if let Some(text) = params.response_format.as_ref().and_then(text_format) {
+            request_body["text"] = text;
         }
 
         // GPT-5.6 replaced the old maximum-retention field with
@@ -983,8 +996,61 @@ async fn execute_openai_request(
         ));
     }
 
-    let response_text = response.body;
-    let api_response: ResponsesApiResponse = serde_json::from_str(&response_text)?;
+    let response_json: serde_json::Value = serde_json::from_str(&response.body)?;
+    parse_responses_api_response(
+        request_body,
+        response_json,
+        "openai",
+        true,
+        request_time_ms,
+        rate_limit_headers,
+    )
+}
+
+/// Tool-call metadata key holding a response's encrypted reasoning items.
+pub(super) const REASONING_META_KEY: &str = "openai_reasoning_items";
+
+/// Reasoning items that carry `encrypted_content`. They only come back when the
+/// request asked for them (`include: ["reasoning.encrypted_content"]`), which a
+/// stateless caller does so it can replay reasoning across tool calls.
+fn encrypted_reasoning_meta(
+    response_json: &serde_json::Value,
+) -> Option<serde_json::Map<String, serde_json::Value>> {
+    let items: Vec<serde_json::Value> = response_json
+        .get("output")?
+        .as_array()?
+        .iter()
+        .filter(|item| {
+            item.get("type").and_then(serde_json::Value::as_str) == Some("reasoning")
+                && item
+                    .get("encrypted_content")
+                    .and_then(serde_json::Value::as_str)
+                    .is_some()
+        })
+        .cloned()
+        .collect();
+
+    (!items.is_empty()).then(|| {
+        serde_json::Map::from_iter([(
+            REASONING_META_KEY.to_string(),
+            serde_json::Value::Array(items),
+        )])
+    })
+}
+
+/// Build a [`ProviderResponse`] from a complete Responses API response object.
+///
+/// `priced` is false for subscription-billed traffic (ChatGPT plan usage), which
+/// has no per-token cost.
+pub(super) fn parse_responses_api_response(
+    request_body: serde_json::Value,
+    mut response_json: serde_json::Value,
+    provider_name: &str,
+    priced: bool,
+    request_time_ms: u64,
+    rate_limit_headers: std::collections::HashMap<String, String>,
+) -> Result<ProviderResponse> {
+    let api_response: ResponsesApiResponse = serde_json::from_value(response_json.clone())?;
 
     // Extract content from output array
     let mut content = String::new();
@@ -1063,44 +1129,48 @@ async fn execute_openai_request(
         tokens: reasoning_tokens,
     });
 
-    // Calculate cost
-    let cost = request_body
-        .get("model")
-        .and_then(|m| m.as_str())
-        .and_then(|model| {
-            let cached_tokens = api_response
-                .usage
-                .input_tokens_details
-                .as_ref()
-                .map(|d| d.cached_tokens)
-                .unwrap_or(0);
-            let cache_write_tokens = api_response
-                .usage
-                .input_tokens_details
-                .as_ref()
-                .map(|d| d.cache_write_tokens)
-                .unwrap_or(0);
-            if cached_tokens > 0 || cache_write_tokens > 0 {
-                let regular_input_tokens = api_response
+    // Calculate cost; subscription-billed traffic has none.
+    let cost = if priced {
+        request_body
+            .get("model")
+            .and_then(|m| m.as_str())
+            .and_then(|model| {
+                let cached_tokens = api_response
                     .usage
-                    .input_tokens
-                    .saturating_sub(cached_tokens)
-                    .saturating_sub(cache_write_tokens);
-                calculate_cost_with_cache(
-                    model,
-                    regular_input_tokens,
-                    cache_write_tokens,
-                    cached_tokens,
-                    api_response.usage.output_tokens,
-                )
-            } else {
-                calculate_cost(
-                    model,
-                    api_response.usage.input_tokens,
-                    api_response.usage.output_tokens,
-                )
-            }
-        });
+                    .input_tokens_details
+                    .as_ref()
+                    .map(|d| d.cached_tokens)
+                    .unwrap_or(0);
+                let cache_write_tokens = api_response
+                    .usage
+                    .input_tokens_details
+                    .as_ref()
+                    .map(|d| d.cache_write_tokens)
+                    .unwrap_or(0);
+                if cached_tokens > 0 || cache_write_tokens > 0 {
+                    let regular_input_tokens = api_response
+                        .usage
+                        .input_tokens
+                        .saturating_sub(cached_tokens)
+                        .saturating_sub(cache_write_tokens);
+                    calculate_cost_with_cache(
+                        model,
+                        regular_input_tokens,
+                        cache_write_tokens,
+                        cached_tokens,
+                        api_response.usage.output_tokens,
+                    )
+                } else {
+                    calculate_cost(
+                        model,
+                        api_response.usage.input_tokens,
+                        api_response.usage.output_tokens,
+                    )
+                }
+            })
+    } else {
+        None
+    };
 
     // input_tokens includes regular input, cache reads, and cache writes.
     let cache_read_tokens = api_response
@@ -1138,22 +1208,21 @@ async fn execute_openai_request(
         request_time_ms: Some(request_time_ms),
     };
 
-    // Create response JSON and store tool_calls in unified format
-    let mut response_json: serde_json::Value = serde_json::from_str(&response_text)?;
-
-    // Store tool_calls in unified GenericToolCall format for conversation history
+    // Store tool_calls in unified GenericToolCall format for conversation history.
+    // Encrypted reasoning rides along so a stateless caller can replay it.
     if let Some(ref tc) = tool_calls {
-        shared::set_response_tool_calls(&mut response_json, tc, None);
+        let reasoning_meta = encrypted_reasoning_meta(&response_json);
+        shared::set_response_tool_calls(&mut response_json, tc, reasoning_meta.as_ref());
     }
 
     let exchange = if rate_limit_headers.is_empty() {
-        ProviderExchange::new(request_body, response_json, Some(usage), "openai")
+        ProviderExchange::new(request_body, response_json, Some(usage), provider_name)
     } else {
         ProviderExchange::with_rate_limit_headers(
             request_body,
             response_json,
             Some(usage),
-            "openai",
+            provider_name,
             rate_limit_headers,
         )
     };

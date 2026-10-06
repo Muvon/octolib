@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.41.2] - 2026-10-06
+
+### 📋 Release Summary
+
+Model IDs can now be resolved, and Kimi video models are included in the catalog.
+
+### ✨ New Features & Enhancements
+
+- **llm**: resolve model IDs and catalog Kimi video `1901d69b`
+
 ## [0.41.1] - 2026-10-06
 
 ### 📋 Release Summary

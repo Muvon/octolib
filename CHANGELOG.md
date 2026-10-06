@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.41.1] - 2026-10-06
+
+### 📋 Release Summary
+
+OpenRouter requests now forward application categories.
+
+### ✨ New Features & Enhancements
+
+- **providers**: forward OpenRouter app categories `fa33b47d`
+
 ## [0.41.0] - 2026-10-06
 
 ### 📋 Release Summary

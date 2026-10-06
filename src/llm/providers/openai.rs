@@ -1001,7 +1001,6 @@ async fn execute_openai_request(
         request_body,
         response_json,
         "openai",
-        true,
         request_time_ms,
         rate_limit_headers,
     )
@@ -1039,14 +1038,10 @@ fn encrypted_reasoning_meta(
 }
 
 /// Build a [`ProviderResponse`] from a complete Responses API response object.
-///
-/// `priced` is false for subscription-billed traffic (ChatGPT plan usage), which
-/// has no per-token cost.
 pub(super) fn parse_responses_api_response(
     request_body: serde_json::Value,
     mut response_json: serde_json::Value,
     provider_name: &str,
-    priced: bool,
     request_time_ms: u64,
     rate_limit_headers: std::collections::HashMap<String, String>,
 ) -> Result<ProviderResponse> {
@@ -1129,48 +1124,44 @@ pub(super) fn parse_responses_api_response(
         tokens: reasoning_tokens,
     });
 
-    // Calculate cost; subscription-billed traffic has none.
-    let cost = if priced {
-        request_body
-            .get("model")
-            .and_then(|m| m.as_str())
-            .and_then(|model| {
-                let cached_tokens = api_response
+    // Calculate cost
+    let cost = request_body
+        .get("model")
+        .and_then(|m| m.as_str())
+        .and_then(|model| {
+            let cached_tokens = api_response
+                .usage
+                .input_tokens_details
+                .as_ref()
+                .map(|d| d.cached_tokens)
+                .unwrap_or(0);
+            let cache_write_tokens = api_response
+                .usage
+                .input_tokens_details
+                .as_ref()
+                .map(|d| d.cache_write_tokens)
+                .unwrap_or(0);
+            if cached_tokens > 0 || cache_write_tokens > 0 {
+                let regular_input_tokens = api_response
                     .usage
-                    .input_tokens_details
-                    .as_ref()
-                    .map(|d| d.cached_tokens)
-                    .unwrap_or(0);
-                let cache_write_tokens = api_response
-                    .usage
-                    .input_tokens_details
-                    .as_ref()
-                    .map(|d| d.cache_write_tokens)
-                    .unwrap_or(0);
-                if cached_tokens > 0 || cache_write_tokens > 0 {
-                    let regular_input_tokens = api_response
-                        .usage
-                        .input_tokens
-                        .saturating_sub(cached_tokens)
-                        .saturating_sub(cache_write_tokens);
-                    calculate_cost_with_cache(
-                        model,
-                        regular_input_tokens,
-                        cache_write_tokens,
-                        cached_tokens,
-                        api_response.usage.output_tokens,
-                    )
-                } else {
-                    calculate_cost(
-                        model,
-                        api_response.usage.input_tokens,
-                        api_response.usage.output_tokens,
-                    )
-                }
-            })
-    } else {
-        None
-    };
+                    .input_tokens
+                    .saturating_sub(cached_tokens)
+                    .saturating_sub(cache_write_tokens);
+                calculate_cost_with_cache(
+                    model,
+                    regular_input_tokens,
+                    cache_write_tokens,
+                    cached_tokens,
+                    api_response.usage.output_tokens,
+                )
+            } else {
+                calculate_cost(
+                    model,
+                    api_response.usage.input_tokens,
+                    api_response.usage.output_tokens,
+                )
+            }
+        });
 
     // input_tokens includes regular input, cache reads, and cache writes.
     let cache_read_tokens = api_response

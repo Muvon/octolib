@@ -36,7 +36,7 @@ fn factory_resolves_chatgpt_models() {
     let (provider, model) = ProviderFactory::get_provider_for_model("chatgpt:gpt-6.1-sol").unwrap();
     assert_eq!(provider.name(), "chatgpt");
     assert_eq!(model, "gpt-6.1-sol");
-    assert!(provider.get_model_pricing(&model).is_none());
+    assert!(provider.get_model_pricing(&model).is_some());
 }
 
 #[test]
@@ -128,7 +128,6 @@ fn stream_folds_into_a_response_that_keeps_reasoning_for_replay() {
         json!({"model": "gpt-6.1-sol"}),
         merged,
         "chatgpt",
-        false,
         1,
         HashMap::new(),
     )
@@ -137,7 +136,8 @@ fn stream_folds_into_a_response_that_keeps_reasoning_for_replay() {
     let calls = response.tool_calls.expect("tool call parsed");
     assert_eq!(calls[0].name, "view");
     assert_eq!(calls[0].arguments, json!({"path": "a.rs"}));
-    assert!(response.exchange.usage.expect("usage").cost.is_none());
+    let cost = response.exchange.usage.expect("usage").cost;
+    assert!(cost.is_some_and(|cost| cost > 0.0), "{:?}", cost);
     assert_eq!(response.exchange.provider, "chatgpt");
 
     // Stored on the tool call, the reasoning is replayed by the next request.

@@ -89,9 +89,10 @@ impl AiProvider for ChatGptProvider {
         OpenAiProvider.supports_structured_output(model)
     }
 
-    /// Plan usage is billed to the subscription, not per token.
-    fn get_model_pricing(&self, _model: &str) -> Option<ModelPricing> {
-        None
+    /// Real per-token API prices, whatever the subscription covers, so cost
+    /// reports actual model consumption.
+    fn get_model_pricing(&self, model: &str) -> Option<ModelPricing> {
+        OpenAiProvider.get_model_pricing(model)
     }
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
@@ -154,7 +155,6 @@ impl AiProvider for ChatGptProvider {
             request_body,
             response_json,
             "chatgpt",
-            false,
             request_time_ms,
             HashMap::new(),
         )

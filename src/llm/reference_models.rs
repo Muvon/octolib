@@ -842,17 +842,17 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "gpt-5.3-chat-latest",
-        capabilities: caps(false, false, true, 400_000),
+        capabilities: caps(true, false, true, 128_000),
         pricing: pricing(1.75, 14.00, 1.75, 0.175),
     },
     ReferenceModelEntry {
         pattern: "gpt-5.2-chat-latest",
-        capabilities: caps(false, false, true, 400_000),
+        capabilities: caps(true, false, true, 128_000),
         pricing: pricing(1.75, 14.00, 1.75, 0.175),
     },
     ReferenceModelEntry {
         pattern: "gpt-5.1-chat-latest",
-        capabilities: caps(false, false, true, 400_000),
+        capabilities: caps(true, false, true, 128_000),
         pricing: pricing(1.25, 10.00, 1.25, 0.125),
     },
     ReferenceModelEntry {
@@ -950,7 +950,7 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
     },
     ReferenceModelEntry {
         pattern: "gpt-5-chat-latest",
-        capabilities: caps(false, false, true, 400_000),
+        capabilities: caps(true, false, true, 128_000),
         pricing: pricing(1.25, 10.00, 1.25, 0.125),
     },
     ReferenceModelEntry {
@@ -959,6 +959,18 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pattern: "gpt-chat-latest",
         capabilities: caps(true, false, true, 400_000),
         pricing: pricing(5.00, 30.00, 5.00, 0.50),
+    },
+    ReferenceModelEntry {
+        // Bare OpenAI alias; versioned chat-latest rows above take precedence.
+        pattern: "chat-latest",
+        capabilities: caps(true, false, true, 400_000),
+        pricing: pricing(5.00, 30.00, 5.00, 0.50),
+    },
+    ReferenceModelEntry {
+        // Official pricing is published; capabilities have no public model card.
+        pattern: "gpt-rosalind-research",
+        capabilities: None,
+        pricing: pricing(5.00, 25.00, 5.00, 0.50),
     },
     ReferenceModelEntry {
         pattern: "codex-mini-latest",
@@ -2245,6 +2257,7 @@ fn normalized_model(model: &str) -> String {
 
 /// Twin entries that spell one model two ways, mapped to the entry they mirror.
 const TWINS: &[(&str, &str)] = &[
+    ("gpt-chat-latest", "chat-latest"),
     ("kimi-2.7-code", "kimi-k2.7-code"),
     ("kimi-2.6", "kimi-k2.6"),
 ];

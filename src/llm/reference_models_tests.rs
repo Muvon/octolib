@@ -555,3 +555,107 @@ fn late_september_2026_additions_resolve() {
     let p = get_reference_pricing("mistralai/mistral-small-3.2-24b-instruct").unwrap();
     assert_eq!(p.input_price_per_1m, 0.10);
 }
+
+#[test]
+fn openai_chat_latest_reference_matches_native_and_host_alias() {
+    use crate::llm::providers::{NvidiaProvider, OpenAiProvider};
+    use crate::llm::traits::AiProvider;
+
+    let native = OpenAiProvider::new();
+    let proxy = NvidiaProvider::new();
+    for model in [
+        "chat-latest",
+        "openai/chat-latest",
+        "openai/gpt-chat-latest",
+    ] {
+        assert_eq!(reference_model_id(model), Some("chat-latest"), "{model}");
+        let capabilities = crate::llm::reference_capabilities::get_reference_capabilities(model)
+            .expect("Chat Latest must have reference capabilities");
+        assert!(capabilities.vision, "{model}");
+        assert!(!capabilities.video, "{model}");
+        assert!(capabilities.structured_output, "{model}");
+        assert_eq!(capabilities.max_input_tokens, 400_000, "{model}");
+        assert!(proxy.supports_vision(model), "{model}");
+        assert!(proxy.supports_structured_output(model), "{model}");
+        assert_eq!(proxy.get_max_input_tokens(model), 400_000, "{model}");
+        let expected = native.get_model_pricing("chat-latest").unwrap();
+        assert_same_pricing(
+            crate::llm::reference_pricing::get_reference_pricing(model).unwrap(),
+            expected,
+        );
+        assert_same_pricing(proxy.get_model_pricing(model).unwrap(), expected);
+    }
+    for model in [
+        "gpt-5.3-chat-latest",
+        "gpt-5.2-chat-latest",
+        "gpt-5.1-chat-latest",
+    ] {
+        assert_eq!(
+            get_reference_model_properties(model)
+                .unwrap()
+                .pricing_pattern,
+            Some(model)
+        );
+    }
+}
+
+#[test]
+fn openai_rosalind_reference_has_verified_pricing_only() {
+    use crate::llm::providers::{NvidiaProvider, OpenAiProvider};
+    use crate::llm::traits::AiProvider;
+
+    let native = OpenAiProvider::new();
+    let proxy = NvidiaProvider::new();
+    for model in ["gpt-rosalind-research", "openai/gpt-rosalind-research"] {
+        let properties =
+            get_reference_model_properties(model).expect("Rosalind must have reference pricing");
+        assert_eq!(properties.pricing_pattern, Some("gpt-rosalind-research"));
+        assert!(properties.capabilities.is_none());
+        assert!(crate::llm::reference_capabilities::get_reference_capabilities(model).is_none());
+        let expected = native.get_model_pricing("gpt-rosalind-research").unwrap();
+        assert_same_pricing(
+            crate::llm::reference_pricing::get_reference_pricing(model).unwrap(),
+            expected,
+        );
+        assert_same_pricing(proxy.get_model_pricing(model).unwrap(), expected);
+        let cost = crate::llm::reference_pricing::calculate_reference_cost(
+            model, 1_000_000, 1_000_000, 1_000_000,
+        )
+        .unwrap();
+        assert_eq!(cost, 30.50);
+    }
+}
+
+#[test]
+fn openai_chat_snapshots_reference_matches_native() {
+    use crate::llm::providers::{NvidiaProvider, OpenAiProvider};
+    use crate::llm::traits::AiProvider;
+
+    let native = OpenAiProvider::new();
+    let proxy = NvidiaProvider::new();
+    for model in [
+        "gpt-5.3-chat-latest",
+        "gpt-5.2-chat-latest",
+        "gpt-5.1-chat-latest",
+        "gpt-5-chat-latest",
+    ] {
+        let capabilities = crate::llm::reference_capabilities::get_reference_capabilities(model)
+            .expect("Chat snapshots must have reference capabilities");
+        assert!(capabilities.vision, "{model}");
+        assert_eq!(capabilities.max_input_tokens, 128_000, "{model}");
+        assert_eq!(
+            capabilities.vision,
+            native.supports_vision(model),
+            "{model}"
+        );
+        assert_eq!(
+            proxy.get_max_input_tokens(model),
+            native.get_max_input_tokens(model),
+            "{model}"
+        );
+        assert_same_pricing(
+            proxy.get_model_pricing(model).unwrap(),
+            native.get_model_pricing(model).unwrap(),
+        );
+    }
+}

@@ -659,3 +659,58 @@ fn openai_chat_snapshots_reference_matches_native() {
         );
     }
 }
+
+#[test]
+fn haiku_5_5_reference_metadata_and_aliases() {
+    for model in [
+        "claude-haiku-5-5",
+        "anthropic/claude-haiku-5.5",
+        "Anthropic/Claude-Haiku-5-5",
+    ] {
+        let properties = get_reference_model_properties(model).unwrap();
+        assert_eq!(properties.pricing_pattern, Some("claude-haiku-5-5"));
+        assert_eq!(properties.capability_pattern, Some("claude-haiku-5-5"));
+        assert_eq!(reference_model_id(model), Some("claude-haiku-5-5"));
+        let pricing = crate::llm::reference_pricing::get_reference_pricing(model).unwrap();
+        assert_eq!(pricing.input_price_per_1m, 0.10);
+        assert_eq!(pricing.output_price_per_1m, 0.50);
+        assert_eq!(pricing.cache_write_price_per_1m, 0.125);
+        assert_eq!(pricing.cache_read_price_per_1m, 0.01);
+        let capabilities = properties.capabilities.unwrap();
+        assert!(capabilities.vision);
+        assert!(!capabilities.video);
+        assert!(capabilities.structured_output);
+        assert_eq!(capabilities.max_input_tokens, 1_000_000);
+
+        // Cache reads count toward the tier; output never does.
+        let base = pricing.calculate_cost(10_000, 0, 90_000, 200_000);
+        assert!(
+            (crate::llm::reference_pricing::calculate_reference_cost(
+                model, 10_000, 90_000, 200_000,
+            )
+            .unwrap()
+                - base)
+                .abs()
+                < 1e-12
+        );
+        let long = pricing.calculate_cost(10_001, 0, 90_000, 200_000) * 5.0;
+        assert!(
+            (calculate_reference_cost(model, 10_001, 90_000, 200_000).unwrap() - long).abs()
+                < 1e-12
+        );
+
+        // Cache writes also select the long-context tier.
+        let base = pricing.calculate_cost(10_000, 90_000, 0, 20_000);
+        assert!(
+            (calculate_reference_cost_with_cache(model, 10_000, 90_000, 0, 20_000).unwrap() - base)
+                .abs()
+                < 1e-12
+        );
+        let long = pricing.calculate_cost(10_000, 90_001, 0, 20_000) * 5.0;
+        assert!(
+            (calculate_reference_cost_with_cache(model, 10_000, 90_001, 0, 20_000).unwrap() - long)
+                .abs()
+                < 1e-12
+        );
+    }
+}

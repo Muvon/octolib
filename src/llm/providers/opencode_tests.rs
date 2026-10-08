@@ -222,3 +222,45 @@ fn test_session_header_is_added_unless_caller_set_it() {
     assert_eq!(headers.len(), 1);
     assert_eq!(headers["X-OpenCode-Session"], "caller-session");
 }
+
+#[test]
+fn haiku_5_5_opencode_reference_fallback() {
+    let model = "claude-haiku-5-5";
+    let pricing = crate::llm::reference_models::get_reference_pricing(model).unwrap();
+    for provider in [
+        &OpenCodeZenProvider::new() as &dyn AiProvider,
+        &OpenCodeGoProvider::new() as &dyn AiProvider,
+    ] {
+        assert_eq!(provider.get_model_pricing(model).unwrap(), pricing);
+        assert_eq!(provider.get_max_input_tokens(model), 1_000_000);
+        assert!(provider.supports_vision(model));
+        assert_eq!(
+            provider.supported_sampling_params(model),
+            SamplingSupport::NONE
+        );
+    }
+    for prompt_tokens in [100_000, 100_001] {
+        let usage = TokenUsage {
+            input_tokens: 10_000,
+            cache_write_tokens: prompt_tokens - 20_000,
+            cache_read_tokens: 10_000,
+            output_tokens: 10_000,
+            reasoning_tokens: 10_000,
+            ..Default::default()
+        };
+        let expected = pricing.calculate_cost(
+            usage.input_tokens,
+            usage.cache_write_tokens,
+            usage.cache_read_tokens,
+            usage.billable_output_tokens(),
+        ) * if prompt_tokens > 100_000 { 5.0 } else { 1.0 };
+        for provider_name in ["opencode-go", "opencode-zen"] {
+            let actual = resolve_opencode_cost(provider_name, model, None, &usage).unwrap();
+            assert!((actual - expected).abs() < 1e-12);
+        }
+        assert_eq!(
+            resolve_opencode_cost("opencode-zen", model, Some(0.01), &usage),
+            Some(0.01)
+        );
+    }
+}

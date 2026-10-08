@@ -231,7 +231,23 @@ fn haiku_5_5_opencode_reference_fallback() {
         &OpenCodeZenProvider::new() as &dyn AiProvider,
         &OpenCodeGoProvider::new() as &dyn AiProvider,
     ] {
-        assert_eq!(provider.get_model_pricing(model).unwrap(), pricing);
+        let actual_pricing = provider.get_model_pricing(model).unwrap();
+        assert_eq!(
+            actual_pricing.input_price_per_1m,
+            pricing.input_price_per_1m
+        );
+        assert_eq!(
+            actual_pricing.output_price_per_1m,
+            pricing.output_price_per_1m
+        );
+        assert_eq!(
+            actual_pricing.cache_write_price_per_1m,
+            pricing.cache_write_price_per_1m
+        );
+        assert_eq!(
+            actual_pricing.cache_read_price_per_1m,
+            pricing.cache_read_price_per_1m
+        );
         assert_eq!(provider.get_max_input_tokens(model), 1_000_000);
         assert!(provider.supports_vision(model));
         assert_eq!(
@@ -246,7 +262,9 @@ fn haiku_5_5_opencode_reference_fallback() {
             cache_read_tokens: 10_000,
             output_tokens: 10_000,
             reasoning_tokens: 10_000,
-            ..Default::default()
+            total_tokens: prompt_tokens + 20_000,
+            cost: None,
+            request_time_ms: None,
         };
         let expected = pricing.calculate_cost(
             usage.input_tokens,

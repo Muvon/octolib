@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.41.7] - 2026-10-08
+
+### 📋 Release Summary
+
+Claude Haiku 5.5 is now supported, including its pricing tiers.
+
+### ✨ New Features & Enhancements
+
+- **llm**: support Haiku 5.5 pricing tiers `edbfc99b`
+- **anthropic**: support Claude Haiku 5.5 model `73d242bb`
+
+### 🔧 Improvements & Optimizations
+
+- **llm**: test Haiku 5.5 reference pricing `3f2301e5`
+
 ## [0.41.6] - 2026-10-08
 
 ### 🔧 Improvements & Optimizations

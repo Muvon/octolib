@@ -57,6 +57,9 @@ const PRICING: &[PricingTuple] = &[
     // Cache write is the 5m rate (1.25x input); the 1h tier is $4.00 and isn't
     // representable here.
     ("claude-sonnet-5", 2.00, 10.00, 2.50, 0.20),
+    // Claude Haiku 5.5: base rates for prompts up to 100k tokens.
+    // Longer prompts multiply every rate by 5 in calculate_cost_with_cache.
+    ("claude-haiku-5-5", 0.10, 0.50, 0.125, 0.01),
     // Claude 4.6
     ("claude-sonnet-4-6-20260217", 3.00, 15.00, 3.75, 0.30),
     ("claude-sonnet-4-6", 3.00, 15.00, 3.75, 0.30),
@@ -95,7 +98,13 @@ struct CacheTokenUsage {
 
 /// Models that reject ALL sampling parameters (temperature, top_p, top_k).
 const NO_SAMPLING_MODELS: &[&str] = &[
-    "fable-5", "mythos-5", "opus-5", "opus-4-8", "opus-4-7", "sonnet-5",
+    "fable-5",
+    "mythos-5",
+    "opus-5",
+    "opus-4-8",
+    "opus-4-7",
+    "sonnet-5",
+    "haiku-5-5",
 ];
 
 /// Models that support extended thinking via the `thinking` block.
@@ -115,6 +124,7 @@ const THINKING_MODELS: &[&str] = &[
     "sonnet-4-5",
     "sonnet-4",
     "haiku-4-5",
+    "haiku-5-5",
 ];
 
 /// Models that support (or require) adaptive thinking via `thinking.type: "adaptive"`.
@@ -129,6 +139,7 @@ const ADAPTIVE_THINKING_MODELS: &[&str] = &[
     "opus-4-6",
     "sonnet-5",
     "sonnet-4-6",
+    "haiku-5-5",
 ];
 
 /// Models where adaptive thinking is the ONLY accepted mode. Manual
@@ -136,12 +147,18 @@ const ADAPTIVE_THINKING_MODELS: &[&str] = &[
 /// `display: "omitted"`, so we opt in to `"summarized"` to keep thinking
 /// text visible in `ProviderResponse::thinking`.
 const ADAPTIVE_ONLY_MODELS: &[&str] = &[
-    "fable-5", "mythos-5", "opus-5", "opus-4-8", "opus-4-7", "sonnet-5",
+    "fable-5",
+    "mythos-5",
+    "opus-5",
+    "opus-4-8",
+    "opus-4-7",
+    "sonnet-5",
+    "haiku-5-5",
 ];
 
 /// Models that accept `output_config.effort`. Per the models API capability
 /// report: Fable 5/5.1, Mythos 5/5.1, Opus 5, Opus 4.8, Opus 4.7, Opus 4.6,
-/// Sonnet 5, Sonnet 4.6, Opus 4.5.
+/// Sonnet 5, Sonnet 4.6, Opus 4.5, Haiku 5.5.
 const EFFORT_PARAM_MODELS: &[&str] = &[
     "fable-5",
     "mythos-5",
@@ -152,6 +169,7 @@ const EFFORT_PARAM_MODELS: &[&str] = &[
     "sonnet-5",
     "sonnet-4-6",
     "opus-4-5",
+    "haiku-5-5",
 ];
 
 /// Models that reject top_p but accept temperature and top_k.
@@ -202,7 +220,22 @@ fn calculate_cost_with_cache(model: &str, usage: CacheTokenUsage) -> Option<f64>
         + cache_read_cost
         + output_cost;
 
-    Some(total_cost)
+    // Haiku 5.5's tier is selected by total prompt length, including both
+    // cache-write TTLs and cache reads; output tokens do not affect the tier.
+    const HAIKU_5_5_LONG_CONTEXT_THRESHOLD: u64 = 100_000;
+    const HAIKU_5_5_LONG_CONTEXT_MULTIPLIER: f64 = 5.0;
+    let prompt_tokens = usage.regular_input_tokens
+        + usage.cache_creation_tokens
+        + usage.cache_creation_tokens_1h
+        + usage.cache_read_tokens;
+    let multiplier = if normalize_model_name(model).contains("claude-haiku-5-5")
+        && prompt_tokens > HAIKU_5_5_LONG_CONTEXT_THRESHOLD
+    {
+        HAIKU_5_5_LONG_CONTEXT_MULTIPLIER
+    } else {
+        1.0
+    };
+    Some(total_cost * multiplier)
 }
 
 /// Simplified cost calculation for Anthropic models with cache support
@@ -231,7 +264,13 @@ fn calculate_anthropic_cost(
 
 fn effort_value(model: &str, effort: ReasoningEffort, supports_adaptive: bool) -> &'static str {
     const XHIGH_MODELS: &[&str] = &[
-        "fable-5", "mythos-5", "opus-5", "opus-4-8", "opus-4-7", "sonnet-5",
+        "fable-5",
+        "mythos-5",
+        "opus-5",
+        "opus-4-8",
+        "opus-4-7",
+        "sonnet-5",
+        "haiku-5-5",
     ];
     let supports_xhigh = XHIGH_MODELS.iter().any(|p| model.contains(p));
     match effort {
@@ -345,12 +384,13 @@ impl AiProvider for AnthropicProvider {
             || model_lower.contains("claude-fable-5")
             || model_lower.contains("claude-mythos-5")
             || model_lower.contains("claude-sonnet-5")
+            || model_lower.contains("claude-haiku-5-5")
             || model_lower.contains("claude-opus-4-8")
             || model_lower.contains("claude-opus-4-7")
             || model_lower.contains("claude-opus-4-6")
             || model_lower.contains("claude-sonnet-4-6")
         {
-            // Claude 4.6 and later models have 1M context at standard pricing.
+            // Claude 4.6+ has 1M context; Haiku 5.5 has a long-prompt price tier.
             1_000_000
         } else if model_lower.contains("claude-opus-4")
             || model_lower.contains("claude-sonnet-4")

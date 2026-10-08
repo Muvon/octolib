@@ -450,3 +450,69 @@ fn tool_results_merge_following_user_hint() {
     assert_eq!(blocks[2]["type"], "text");
     assert_eq!(blocks[2]["text"], "Please use those results.");
 }
+
+#[test]
+fn test_haiku_5_5() {
+    let provider = AnthropicProvider::new();
+    let model = "claude-haiku-5-5";
+    assert!(provider.supports_model(model));
+    assert!(provider.supports_model("CLAUDE-HAIKU-5-5"));
+    assert_eq!(provider.get_max_input_tokens(model), 1_000_000);
+    assert!(provider.supports_vision(model));
+    assert!(provider.supports_caching(model));
+    assert!(!provider.supports_structured_output(model));
+    assert_eq!(
+        provider.supported_sampling_params(model),
+        SamplingSupport::NONE
+    );
+    let pricing = provider.get_model_pricing(model).unwrap();
+    assert_eq!(pricing.input_price_per_1m, 0.10);
+    assert_eq!(pricing.output_price_per_1m, 0.50);
+    assert_eq!(pricing.cache_write_price_per_1m, 0.125);
+    assert_eq!(pricing.cache_read_price_per_1m, 0.01);
+    assert!(THINKING_MODELS.iter().any(|p| model.contains(p)));
+    assert!(ADAPTIVE_THINKING_MODELS.iter().any(|p| model.contains(p)));
+    assert!(ADAPTIVE_ONLY_MODELS.iter().any(|p| model.contains(p)));
+    assert!(EFFORT_PARAM_MODELS.iter().any(|p| model.contains(p)));
+    for (effort, expected) in [
+        (ReasoningEffort::Low, "low"),
+        (ReasoningEffort::Medium, "medium"),
+        (ReasoningEffort::High, "high"),
+        (ReasoningEffort::XHigh, "xhigh"),
+        (ReasoningEffort::Max, "max"),
+    ] {
+        assert_eq!(effort_value(model, effort, true), expected);
+    }
+}
+
+#[test]
+fn haiku_5_5_cost_tiers_include_all_prompt_tokens() {
+    for prompt_tokens in [99_999, 100_000, 100_001] {
+        // Each input category independently crosses the boundary, including
+        // both cache-write TTLs. Output alone must never select the high tier.
+        for category in 0..4 {
+            let mut tokens = [0; 4];
+            tokens[category] = prompt_tokens;
+            let cost = calculate_anthropic_cost(
+                "CLAUDE-HAIKU-5-5",
+                tokens[0],
+                1_000_000,
+                tokens[1],
+                tokens[2],
+                tokens[3],
+            )
+            .unwrap();
+            let rate = [0.10, 0.125, 0.20, 0.01][category];
+            let multiplier = if prompt_tokens > 100_000 { 5.0 } else { 1.0 };
+            let expected = (prompt_tokens as f64 / 1_000_000.0 * rate + 0.50) * multiplier;
+            assert!((cost - expected).abs() < 1e-12);
+        }
+    }
+    // The combined prompt crosses 100k even though each individual counter doesn't.
+    let cost = calculate_anthropic_cost("claude-haiku-5-5", 25_001, 10_000, 25_000, 25_000, 25_000)
+        .unwrap();
+    assert!((cost - 0.0793755).abs() < 1e-12);
+    // Other Claude models must not acquire Haiku's tiered pricing.
+    let cost = calculate_anthropic_cost("claude-haiku-4-5", 100_001, 1_000_000, 0, 0, 0).unwrap();
+    assert!((cost - 5.100001).abs() < 1e-12);
+}

@@ -45,6 +45,16 @@ fn test_default_capabilities() {
 }
 
 #[test]
+fn test_glm_replayed_thinking_counts_toward_context() {
+    // GLM reads every prior turn's reasoning back on this host, so callers
+    // sizing a prompt must count it; DeepSeek reasoning is not sent.
+    let provider = AlibabaProvider::new();
+    assert!(provider.replays_thinking("glm-5.3"));
+    assert!(provider.replays_thinking("glm-5.2-fast-preview"));
+    assert!(!provider.replays_thinking("deepseek-v4-flash-0731"));
+}
+
+#[test]
 fn test_pricing_qwen() {
     let provider = AlibabaProvider::new();
 

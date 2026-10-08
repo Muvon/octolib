@@ -34,7 +34,7 @@ use crate::llm::providers::openai_compat::{
 };
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderResponse};
-use crate::llm::utils::{normalize_model_name, PricingTuple};
+use crate::llm::utils::{contains_ignore_ascii_case, normalize_model_name, PricingTuple};
 use anyhow::Result;
 use std::env;
 
@@ -189,6 +189,13 @@ impl AiProvider for AlibabaProvider {
         true
     }
 
+    /// GLM reads every prior turn's reasoning back (see
+    /// `preserves_historical_thinking`), so it occupies context the model
+    /// reads and bills.
+    fn replays_thinking(&self, model: &str) -> bool {
+        preserves_historical_thinking(model)
+    }
+
     // supports_vision, supports_video, get_max_input_tokens are resolved via
     // reference capabilities (trait defaults)
 
@@ -280,6 +287,17 @@ fn natively_enforces_response_schema(model: &str) -> bool {
     ]
     .iter()
     .any(|prefix| model.starts_with(prefix))
+}
+
+/// Model Studio's GLM models keep earlier turns' reasoning in context by
+/// default (`clear_thinking` defaults to false), and Preserved Thinking needs
+/// that `reasoning_content` sent back complete, unmodified and in its original
+/// order. Without it every call starts with none of the model's earlier
+/// reasoning: a glm-5.3 max-effort run re-derived the same plan (20-88k chars)
+/// on every step until it timed out. DeepSeek and Qwen follow other rules on
+/// this host.
+pub(crate) fn preserves_historical_thinking(model: &str) -> bool {
+    contains_ignore_ascii_case(model, "glm")
 }
 
 #[cfg(test)]

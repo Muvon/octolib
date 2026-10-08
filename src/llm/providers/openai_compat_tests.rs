@@ -198,7 +198,66 @@ fn test_alibaba_deepseek_sends_no_reasoning_fields() {
     let messages = [assistant("one"), assistant("two")];
 
     let converted = convert_messages(&messages, "alibaba", "deepseek-v4-flash-0731");
-    assert!(converted.iter().all(|message| message.reasoning.is_none()));
+    assert!(converted
+        .iter()
+        .all(|message| message.reasoning.is_none() && message.reasoning_content.is_none()));
+}
+
+/// Model Studio's GLM models keep earlier turns' reasoning by default
+/// (`clear_thinking` = false) and need it back complete and in order, so every
+/// assistant turn, with or without tool calls, replays it as `reasoning_content`.
+#[test]
+fn test_alibaba_glm_replays_every_reasoning_turn_as_reasoning_content() {
+    let thinking = |text: &str| ThinkingBlock {
+        content: format!("thinking for {text}"),
+        tokens: 4,
+    };
+    let call = crate::llm::tool_calls::GenericToolCall {
+        id: "call_1".to_string(),
+        name: "view".to_string(),
+        arguments: serde_json::json!({"path": "src/lib.rs"}),
+        meta: None,
+    };
+    let messages = [
+        Message::user("fix the bug"),
+        Message::assistant("")
+            .with_tool_calls(vec![call])
+            .with_thinking(thinking("plan")),
+        Message::tool("fn main() {}", "call_1", "view"),
+        Message::assistant("done").with_thinking(thinking("answer")),
+    ];
+
+    let converted = convert_messages(&messages, "alibaba", "glm-5.3");
+    let json: Vec<serde_json::Value> = converted
+        .iter()
+        .map(|message| serde_json::to_value(message).unwrap())
+        .collect();
+    let replayed: Vec<Option<&str>> = json
+        .iter()
+        .map(|message| {
+            message
+                .get("reasoning_content")
+                .and_then(serde_json::Value::as_str)
+        })
+        .collect();
+    assert_eq!(
+        replayed,
+        [
+            None,
+            Some("thinking for plan"),
+            None,
+            Some("thinking for answer")
+        ]
+    );
+    assert!(json
+        .iter()
+        .all(|message| message.get("reasoning").is_none()));
+
+    // The field is Model Studio's: the same GLM model on Ollama keeps Ollama's rule.
+    let converted = convert_messages(&messages, "ollama", "glm-5.3");
+    assert!(converted
+        .iter()
+        .all(|message| message.reasoning_content.is_none()));
 }
 
 #[test]
@@ -561,9 +620,9 @@ fn test_alibaba_no_reasoning_uses_the_switch_or_the_lowest_level() {
 
 #[test]
 fn test_openai_compat_transport_drops_thinking_by_default() {
-    // The shared transport family (Alibaba, Ollama minus Kimi, OpenRouter,
-    // OctoHub, ...) never replays historical reasoning, so callers must not
-    // count it towards the prompt.
+    // The shared transport family (Alibaba except GLM, Ollama minus Kimi,
+    // OpenRouter, OctoHub, ...) never replays historical reasoning, so callers
+    // must not count it towards the prompt.
     let provider = crate::llm::providers::alibaba::AlibabaProvider::new();
     assert!(!provider.replays_thinking("deepseek-v4-flash-0731"));
 }

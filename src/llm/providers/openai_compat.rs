@@ -504,6 +504,10 @@ struct OpenAiCompatMessage {
     /// preserve reasoning across turns.
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning: Option<String>,
+    /// Model Studio's continuation field. Its GLM models read prior assistant
+    /// reasoning back under this exact key.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_content: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -626,6 +630,8 @@ fn convert_messages(
             && (Some(idx) == last_assistant
                 || crate::llm::providers::moonshot::preserves_historical_thinking(model))
     };
+    let replays_reasoning_content = provider_name.eq_ignore_ascii_case("alibaba")
+        && crate::llm::providers::alibaba::preserves_historical_thinking(model);
 
     for (msg_idx, message) in messages.iter().enumerate() {
         match message.role.as_str() {
@@ -636,6 +642,7 @@ fn convert_messages(
                     tool_calls: None,
                     tool_call_id: message.tool_call_id.clone(),
                     reasoning: None,
+                    reasoning_content: None,
                 });
             }
             "assistant" if message.tool_calls.is_some() => {
@@ -678,6 +685,11 @@ fn convert_messages(
                     tool_calls,
                     tool_call_id: None,
                     reasoning: if replays_reasoning(msg_idx) {
+                        message.thinking.as_ref().map(|t| t.content.clone())
+                    } else {
+                        None
+                    },
+                    reasoning_content: if replays_reasoning_content {
                         message.thinking.as_ref().map(|t| t.content.clone())
                     } else {
                         None
@@ -739,6 +751,11 @@ fn convert_messages(
                     tool_calls: None,
                     tool_call_id: None,
                     reasoning: if message.role == "assistant" && replays_reasoning(msg_idx) {
+                        message.thinking.as_ref().map(|t| t.content.clone())
+                    } else {
+                        None
+                    },
+                    reasoning_content: if message.role == "assistant" && replays_reasoning_content {
                         message.thinking.as_ref().map(|t| t.content.clone())
                     } else {
                         None

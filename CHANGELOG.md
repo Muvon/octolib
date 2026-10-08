@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.41.4] - 2026-10-08
+
+### 📋 Release Summary
+
+GLM reasoning is now preserved when messages are converted between provider formats.
+
+### 🐛 Bug Fixes & Stability
+
+- **providers**: preserve GLM reasoning across message conversion `55017388`
+
 ## [0.41.3] - 2026-10-08
 
 ### 📋 Release Summary

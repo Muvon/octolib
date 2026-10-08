@@ -249,9 +249,9 @@ async fn test_qwen3_batch_embeddings_match_single_inputs() {
 fn test_embedding_device_matches_acceleration_feature() {
     let device = crate::embedding::provider::huggingface::embedding_device().unwrap();
 
-    #[cfg(feature = "metal")]
+    #[cfg(all(feature = "metal", target_os = "macos"))]
     assert!(device.is_metal());
-    #[cfg(not(feature = "metal"))]
+    #[cfg(not(all(feature = "metal", target_os = "macos")))]
     assert!(!device.is_metal());
 }
 

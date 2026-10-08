@@ -84,11 +84,11 @@ use tokio::sync::{Mutex as AsyncMutex, RwLock};
 /// Select Metal when this build enables it; otherwise preserve CPU portability.
 #[cfg(feature = "huggingface")]
 pub(crate) fn embedding_device() -> Result<Device> {
-    #[cfg(feature = "metal")]
+    #[cfg(all(feature = "metal", target_os = "macos"))]
     {
         Device::metal_if_available(0).context("Failed to initialize Metal embedding device")
     }
-    #[cfg(not(feature = "metal"))]
+    #[cfg(not(all(feature = "metal", target_os = "macos")))]
     {
         Ok(Device::Cpu)
     }

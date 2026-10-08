@@ -54,7 +54,7 @@ Every capability is on by default. Pick only what you need to cut compile time a
 octolib = { version = "<latest>", default-features = false, features = ["llm"] }
 ```
 
-`octolib::errors`, `octolib::storage`, `octolib::utils` and `set_user_agent` are always available. Hardware acceleration is opt-in via features: `metal`, `cuda`, `cudnn`, `mkl`, `accelerate`.
+`octolib::errors`, `octolib::storage`, `octolib::utils` and `set_user_agent` are always available. Hardware acceleration is opt-in via features: `metal`, `cuda`, `cudnn`, `mkl`, `accelerate`. The `metal` feature enables Apple dependencies only on macOS and is a no-op elsewhere. It only enables acceleration for backends already selected; omitting `metal` retains CPU-only builds. The `octolib-metal` package owns the target-specific dependency activation and must be published before an octolib release that depends on it.
 
 ## 🚀 Quick Start
 

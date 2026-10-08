@@ -218,11 +218,11 @@ fn test_alibaba_glm_replays_every_reasoning_turn_as_reasoning_content() {
         arguments: serde_json::json!({"path": "src/lib.rs"}),
         meta: None,
     };
+    let mut tool_turn = Message::assistant("").with_thinking(thinking("plan"));
+    tool_turn.tool_calls = Some(serde_json::to_value([call]).unwrap());
     let messages = [
         Message::user("fix the bug"),
-        Message::assistant("")
-            .with_tool_calls(vec![call])
-            .with_thinking(thinking("plan")),
+        tool_turn,
         Message::tool("fn main() {}", "call_1", "view"),
         Message::assistant("done").with_thinking(thinking("answer")),
     ];

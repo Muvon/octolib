@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.41.3] - 2026-10-08
+
+### 📋 Release Summary
+
+Response failures are now classified within the retry logic, and OpenAI model references have been updated.
+
+### 🐛 Bug Fixes & Stability
+
+- **chatgpt**: classify response failures in retry closure `79a22ecc`
+- **llm**: update OpenAI model references `b1a5a1f1`
+
 ## [0.41.2] - 2026-10-06
 
 ### 📋 Release Summary

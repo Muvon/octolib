@@ -100,7 +100,9 @@ impl AiProvider for ChatGptProvider {
         let request_body = build_request(&params);
         let start_time = std::time::Instant::now();
 
-        let response = retry::retry_with_exponential_backoff(
+        // Errors are retried; `Ok` holds the outcome of a delivered response,
+        // which a retry would not change.
+        let response_json = retry::retry_with_exponential_backoff(
             || {
                 let client = shared::http_client();
                 let access_token = access_token.clone();
@@ -127,7 +129,18 @@ impl AiProvider for ChatGptProvider {
                         ));
                     }
 
-                    Ok(captured)
+                    if !captured.status.is_success() {
+                        return Ok(Err(anyhow::anyhow!(
+                            "ChatGPT API error {}: {}",
+                            captured.status,
+                            captured.body
+                        )));
+                    }
+
+                    match merge_stream(&captured.body) {
+                        Err(e) if e.is::<StreamCutOff>() => Err(e),
+                        merged => Ok(merged),
+                    }
                 })
             },
             params.max_retries,
@@ -142,15 +155,10 @@ impl AiProvider for ChatGptProvider {
             },
             |e: &anyhow::Error| shared::is_connection_error(e),
         )
-        .await?;
+        .await??;
 
         let request_time_ms = start_time.elapsed().as_millis() as u64;
 
-        if !response.status.is_success() {
-            anyhow::bail!("ChatGPT API error {}: {}", response.status, response.body);
-        }
-
-        let response_json = merge_stream(&response.body)?;
         openai::parse_responses_api_response(
             request_body,
             response_json,
@@ -235,6 +243,12 @@ fn stored_reasoning_items(message: &Message) -> Vec<Value> {
         .unwrap_or_default()
 }
 
+/// The stream closed before any terminal event. Unlike the failures terminal
+/// events report, this cut-off is transient, so it is the one retried.
+#[derive(Debug, thiserror::Error)]
+#[error("ChatGPT stream ended without response.completed")]
+struct StreamCutOff;
+
 /// Fold the buffered SSE body back into one Responses API response object.
 ///
 /// Output items arrive in `response.output_item.done` events; the terminal
@@ -269,7 +283,7 @@ fn merge_stream(body: &str) -> Result<Value> {
         }
     }
 
-    anyhow::bail!("ChatGPT stream ended without response.completed")
+    Err(StreamCutOff.into())
 }
 
 #[cfg(test)]

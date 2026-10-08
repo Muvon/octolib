@@ -150,17 +150,25 @@ fn stream_folds_into_a_response_that_keeps_reasoning_for_replay() {
 }
 
 #[test]
-fn failed_and_unfinished_streams_are_errors() {
+fn failed_and_unfinished_streams_are_errors_and_only_a_cut_off_is_retried() {
     let failed = r#"data: {"type":"response.failed","response":{"error":{"code":"subscription_sharing_usage_limit_exceeded","message":"weekly cap reached"}}}"#;
-    let error = merge_stream(failed).unwrap_err().to_string();
+    let error = merge_stream(failed).unwrap_err();
+    assert!(!error.is::<StreamCutOff>());
     assert!(
-        error.contains("subscription_sharing_usage_limit_exceeded"),
+        error
+            .to_string()
+            .contains("subscription_sharing_usage_limit_exceeded"),
         "{}",
         error
     );
 
     let unfinished =
         r#"data: {"type":"response.output_item.done","item":{"type":"message","content":[]}}"#;
-    let error = merge_stream(unfinished).unwrap_err().to_string();
-    assert!(error.contains("without response.completed"), "{}", error);
+    let error = merge_stream(unfinished).unwrap_err();
+    assert!(error.is::<StreamCutOff>());
+    assert!(
+        error.to_string().contains("without response.completed"),
+        "{}",
+        error
+    );
 }

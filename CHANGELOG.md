@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.41.8] - 2026-10-08
+
+### 📋 Release Summary
+
+Images in tool results are now preserved consistently across providers.
+
+### 🐛 Bug Fixes & Stability
+
+- **llm/providers**: preserve images in tool results across providers `8b5fc6ab`
+
 ## [0.41.7] - 2026-10-08
 
 ### 📋 Release Summary

@@ -1062,6 +1062,13 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(2.00, 5.00, 2.00, 2.00),
     },
     ReferenceModelEntry {
+        // Haiku 5.5: base rates through 100k prompt tokens; cost helpers apply
+        // the 5x long-context tier above that threshold.
+        pattern: "claude-haiku-5-5",
+        capabilities: caps(true, false, true, 1_000_000),
+        pricing: pricing(0.10, 0.50, 0.125, 0.01),
+    },
+    ReferenceModelEntry {
         pattern: "claude-haiku-4-5",
         capabilities: caps(true, false, true, 200_000),
         pricing: pricing(1.00, 5.00, 1.25, 0.10),
@@ -2329,8 +2336,36 @@ pub fn calculate_reference_cost(
     cache_read_tokens: u64,
     output_tokens: u64,
 ) -> Option<f64> {
+    calculate_reference_cost_with_cache(model, input_tokens, 0, cache_read_tokens, output_tokens)
+}
+
+/// Cache-aware reference cost, including cache writes in the prompt-length tier.
+pub(crate) fn calculate_reference_cost_with_cache(
+    model: &str,
+    input_tokens: u64,
+    cache_write_tokens: u64,
+    cache_read_tokens: u64,
+    output_tokens: u64,
+) -> Option<f64> {
     let pricing = get_reference_pricing(model)?;
-    Some(pricing.calculate_cost(input_tokens, 0, cache_read_tokens, output_tokens))
+    let prompt_tokens = input_tokens + cache_write_tokens + cache_read_tokens;
+    const HAIKU_5_5_LONG_CONTEXT_THRESHOLD: u64 = 100_000;
+    const HAIKU_5_5_LONG_CONTEXT_MULTIPLIER: f64 = 5.0;
+    let multiplier = if matches_model(&normalized_model(model), "claude-haiku-5-5")
+        && prompt_tokens > HAIKU_5_5_LONG_CONTEXT_THRESHOLD
+    {
+        HAIKU_5_5_LONG_CONTEXT_MULTIPLIER
+    } else {
+        1.0
+    };
+    Some(
+        pricing.calculate_cost(
+            input_tokens,
+            cache_write_tokens,
+            cache_read_tokens,
+            output_tokens,
+        ) * multiplier,
+    )
 }
 
 /// Schema-enforcement policy for proxy/aggregator routes.

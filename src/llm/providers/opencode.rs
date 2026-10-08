@@ -145,14 +145,13 @@ fn resolve_opencode_cost(
     };
 
     response_cost.or_else(|| {
-        crate::llm::reference_models::get_reference_pricing(model).map(|pricing| {
-            pricing.calculate_cost(
-                usage.input_tokens,
-                usage.cache_write_tokens,
-                usage.cache_read_tokens,
-                usage.billable_output_tokens(),
-            )
-        })
+        crate::llm::reference_models::calculate_reference_cost_with_cache(
+            model,
+            usage.input_tokens,
+            usage.cache_write_tokens,
+            usage.cache_read_tokens,
+            usage.billable_output_tokens(),
+        )
     })
 }
 

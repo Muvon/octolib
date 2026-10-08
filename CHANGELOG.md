@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.41.6] - 2026-10-08
+
+### 🔧 Improvements & Optimizations
+
+- **dependencies**: inline target-specific Metal dependencies `e1886bc8`
+- **ci**: upgrade Rust toolchain to 1.99.0 `d233f5b5`
+
 ## [0.41.5] - 2026-10-08
 
 ### 📋 Release Summary

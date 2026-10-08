@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.41.5] - 2026-10-08
+
+### 📋 Release Summary
+
+ChatGPT streaming now retries transient failures, and Metal dependencies are gated to supported platforms. OpenAI-compatible tool-call tests now set tool calls after reasoning is added.
+
+### 🔧 Improvements & Optimizations
+
+- **openai-compat**: set tool calls after adding reasoning `353c4180`
+
+### 🐛 Bug Fixes & Stability
+
+- **chatgpt**: retry transient stream failures `a123b64b`
+- **metal**: gate Metal dependencies by platform `d792c9d4`
+
 ## [0.41.4] - 2026-10-08
 
 ### 📋 Release Summary

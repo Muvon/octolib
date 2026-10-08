@@ -150,10 +150,10 @@ fn stream_folds_into_a_response_that_keeps_reasoning_for_replay() {
 }
 
 #[test]
-fn failed_and_unfinished_streams_are_errors_and_only_a_cut_off_is_retried() {
+fn failed_and_unfinished_streams_are_errors_and_only_transient_ones_are_retried() {
     let failed = r#"data: {"type":"response.failed","response":{"error":{"code":"subscription_sharing_usage_limit_exceeded","message":"weekly cap reached"}}}"#;
     let error = merge_stream(failed).unwrap_err();
-    assert!(!error.is::<StreamCutOff>());
+    assert!(!error.is::<RetryableStreamError>());
     assert!(
         error
             .to_string()
@@ -165,10 +165,51 @@ fn failed_and_unfinished_streams_are_errors_and_only_a_cut_off_is_retried() {
     let unfinished =
         r#"data: {"type":"response.output_item.done","item":{"type":"message","content":[]}}"#;
     let error = merge_stream(unfinished).unwrap_err();
-    assert!(error.is::<StreamCutOff>());
+    assert!(error.is::<RetryableStreamError>());
     assert!(
         error.to_string().contains("without response.completed"),
         "{}",
         error
     );
+}
+
+#[test]
+fn server_faults_reported_mid_stream_are_retried() {
+    // Verbatim shape of a plan-route `error` event observed in a live session.
+    let stream_error = r#"data: {"type":"error","error":{"type":"server_error","code":"server_error","message":"An error occurred while processing your request. You can retry your request.","param":null},"sequence_number":7}"#;
+    let error = merge_stream(stream_error).unwrap_err();
+    assert!(error.is::<RetryableStreamError>());
+    assert!(
+        error.to_string().starts_with("ChatGPT stream error: "),
+        "{}",
+        error
+    );
+    assert!(error.to_string().contains("server_error"), "{}", error);
+
+    for code in TRANSIENT_ERROR_CODES {
+        let failed = format!(
+            r#"data: {{"type":"response.failed","response":{{"error":{{"code":"{}","message":"try again"}}}}}}"#,
+            code
+        );
+        let error = merge_stream(&failed).unwrap_err();
+        assert!(error.is::<RetryableStreamError>(), "{}", code);
+        assert!(
+            error.to_string().starts_with("ChatGPT response failed: "),
+            "{}",
+            error
+        );
+    }
+}
+
+#[test]
+fn request_faults_reported_mid_stream_are_not_retried() {
+    let stream_error = r#"data: {"type":"error","error":{"type":"invalid_request_error","code":"invalid_prompt","message":"Invalid prompt.","param":null},"sequence_number":3}"#;
+    let error = merge_stream(stream_error).unwrap_err();
+    assert!(!error.is::<RetryableStreamError>());
+    assert!(error.to_string().contains("invalid_prompt"), "{}", error);
+
+    let uncoded = r#"data: {"type":"error","error":{"message":"no code"},"sequence_number":1}"#;
+    assert!(!merge_stream(uncoded)
+        .unwrap_err()
+        .is::<RetryableStreamError>());
 }

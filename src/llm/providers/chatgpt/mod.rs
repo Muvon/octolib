@@ -138,7 +138,7 @@ impl AiProvider for ChatGptProvider {
                     }
 
                     match merge_stream(&captured.body) {
-                        Err(e) if e.is::<StreamCutOff>() => Err(e),
+                        Err(e) if e.is::<RetryableStreamError>() => Err(e),
                         merged => Ok(merged),
                     }
                 })
@@ -243,11 +243,40 @@ fn stored_reasoning_items(message: &Message) -> Vec<Value> {
         .unwrap_or_default()
 }
 
-/// The stream closed before any terminal event. Unlike the failures terminal
-/// events report, this cut-off is transient, so it is the one retried.
+/// Responses API error codes for a server-side fault or throttling: the stream
+/// counterparts of the HTTP 5xx and 429 that [`retry::is_retryable_status`]
+/// retries. Usage-limit codes are absent — an exhausted allowance does not
+/// clear on retry.
+const TRANSIENT_ERROR_CODES: [&str; 4] = [
+    "server_error",
+    "server_is_overloaded",
+    "rate_limit_exceeded",
+    "slow_down",
+];
+
+/// A stream failure a retry can clear. Every other terminal event is the
+/// outcome of the request, which a retry would not change.
 #[derive(Debug, thiserror::Error)]
-#[error("ChatGPT stream ended without response.completed")]
-struct StreamCutOff;
+enum RetryableStreamError {
+    /// The stream closed before any terminal event.
+    #[error("ChatGPT stream ended without response.completed")]
+    CutOff,
+    /// A terminal event carrying one of [`TRANSIENT_ERROR_CODES`].
+    #[error("{0}")]
+    Transient(String),
+}
+
+/// A terminal failure event as an error, retryable when its code is transient.
+fn terminal_error(error: &Value, message: String) -> anyhow::Error {
+    let transient = error["code"]
+        .as_str()
+        .is_some_and(|code| TRANSIENT_ERROR_CODES.contains(&code));
+    if transient {
+        RetryableStreamError::Transient(message).into()
+    } else {
+        anyhow::Error::msg(message)
+    }
+}
 
 /// Fold the buffered SSE body back into one Responses API response object.
 ///
@@ -272,18 +301,30 @@ fn merge_stream(body: &str) -> Result<Value> {
                 return Ok(response);
             }
             Some("response.failed") => {
-                anyhow::bail!("ChatGPT response failed: {}", event["response"]["error"])
+                let error = &event["response"]["error"];
+                return Err(terminal_error(
+                    error,
+                    format!("ChatGPT response failed: {}", error),
+                ));
             }
             Some("response.incomplete") => anyhow::bail!(
                 "ChatGPT response incomplete: {}",
                 event["response"]["incomplete_details"]
             ),
-            Some("error") => anyhow::bail!("ChatGPT stream error: {}", event),
+            // The plan route nests the error object (`{"type":"error",
+            // "error":{"code":…}}`), unlike the flat `ResponseErrorEvent` of
+            // the API reference.
+            Some("error") => {
+                return Err(terminal_error(
+                    &event["error"],
+                    format!("ChatGPT stream error: {}", event),
+                ));
+            }
             _ => {}
         }
     }
 
-    Err(StreamCutOff.into())
+    Err(RetryableStreamError::CutOff.into())
 }
 
 #[cfg(test)]

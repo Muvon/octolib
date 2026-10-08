@@ -2940,7 +2940,6 @@ dependencies = [
  "hf-hub 0.4.3",
  "jsonschema",
  "jsonwebtoken",
- "octolib-metal",
  "ort",
  "reqwest",
  "serde",
@@ -2956,15 +2955,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
-]
-
-[[package]]
-name = "octolib-metal"
-version = "0.1.0"
-dependencies = [
- "candle-core 0.10.2",
- "candle-nn 0.10.2",
- "fastembed",
 ]
 
 [[package]]

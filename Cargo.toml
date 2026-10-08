@@ -28,13 +28,13 @@ evaluation = []
 # they enable it. Both also enable `onnx`, so the ONNX provider is present
 # whenever any local backend is — it is never a separate opt-in.
 fastembed = ["embeddings", "onnx", "dep:fastembed"]
-huggingface = ["embeddings", "onnx", "dep:candle-core", "dep:candle-nn", "dep:candle-transformers", "dep:tokenizers", "dep:hf-hub", "octolib-metal?/huggingface"]
+huggingface = ["embeddings", "onnx", "dep:candle-core", "dep:candle-nn", "dep:candle-transformers", "dep:tokenizers", "dep:hf-hub"]
 
 # ONNX Runtime embedding provider: runs a HF-hosted `onnx/` export through ORT
 # instead of candle. Not selected directly — `fastembed` and `huggingface` both
 # turn it on. It borrows ort + the session builder from the fastembed crate,
 # which is why it pulls that dep even in a candle-only build.
-onnx = ["embeddings", "dep:fastembed", "dep:tokenizers", "dep:hf-hub", "octolib-metal?/fastembed"]
+onnx = ["embeddings", "dep:fastembed", "dep:tokenizers", "dep:hf-hub"]
 
 # hindsight: the calibrated next-turn-correction verifier for coding-agent
 # traces (`octolib::hindsight`), two ONNX graphs run through ort directly.
@@ -43,16 +43,15 @@ onnx = ["embeddings", "dep:fastembed", "dep:tokenizers", "dep:hf-hub", "octolib-
 hindsight = ["onnx", "dep:ort"]
 
 # Hardware acceleration — enable whichever matches your hardware.
-# Each feature activates the backend in both candle and fastembed (when those features are active).
-# Metal dependencies are macOS-only; enabling this feature elsewhere is a no-op.
-metal = ["dep:octolib-metal"]
+# macOS local backends compile Metal support through target-specific dependencies below.
+# This feature selects Metal for HuggingFace at runtime; it is a no-op elsewhere.
+metal = []
 mkl = ["fastembed?/mkl", "candle-core?/mkl", "candle-nn?/mkl"]
 accelerate = ["fastembed?/accelerate", "candle-core?/accelerate", "candle-nn?/accelerate"]
 cuda = ["fastembed?/cuda", "candle-core?/cuda", "candle-nn?/cuda"]
 cudnn = ["fastembed?/cudnn", "candle-core?/cudnn", "candle-nn?/cudnn"]
 
 [dependencies]
-octolib-metal = { version = "0.1.0", path = "metal", optional = true }
 async-trait = "0.1.89"
 anyhow = "1.0.102"
 serde = { version = "1.0.228", features = ["derive"] }
@@ -83,15 +82,9 @@ uuid = { version = "1", features = ["v4"] }
 # Embedding dependencies
 tiktoken-rs = { version = "0.9.1", optional = true }
 
-# Optional embedding provider dependencies
-fastembed = { version = "5.13.4", default-features = false, features = ["hf-hub-rustls-tls", "ort-download-binaries-rustls-tls"], optional = true }
 # Pinned to the exact version fastembed depends on so one ort links; the
 # runtime binary comes through fastembed's download feature.
 ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "api-24"], optional = true }
-# Candle dependencies for HuggingFace support (optional)
-# Pinned to 0.10.2 to match fastembed's candle version (qwen3 feature)
-candle-core = { version = "0.10.2", optional = true }
-candle-nn = { version = "0.10.2", optional = true }
 candle-transformers = { version = "0.10.2", optional = true }
 tokenizers = { version = "0.22.2", optional = true }
 # HuggingFace Hub - use rustls-tls to avoid native-tls dependency
@@ -206,3 +199,13 @@ opt-level = "z"
 lto = "thin"           # faster than "fat" lto, still significant gains
 codegen-units = 1      # max optimization, slower compile
 strip = "symbols"
+# Keep Apple dependencies off other platforms without a separate helper crate.
+[target.'cfg(target_os = "macos")'.dependencies]
+fastembed = { version = "5.13.4", default-features = false, features = ["hf-hub-rustls-tls", "ort-download-binaries-rustls-tls", "metal"], optional = true }
+candle-core = { version = "0.10.2", features = ["metal"], optional = true }
+candle-nn = { version = "0.10.2", features = ["metal"], optional = true }
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+fastembed = { version = "5.13.4", default-features = false, features = ["hf-hub-rustls-tls", "ort-download-binaries-rustls-tls"], optional = true }
+candle-core = { version = "0.10.2", optional = true }
+candle-nn = { version = "0.10.2", optional = true }

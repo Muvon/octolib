@@ -271,7 +271,7 @@ fn message_to_input(message: &Message, replay_reasoning: bool) -> Vec<Value> {
         "tool" => items.push(json!({
             "type": "function_call_output",
             "call_id": message.tool_call_id.clone().unwrap_or_default(),
-            "output": message.content,
+            "output": user_content(message),
         })),
         "user" => items.push(json!({"role": "user", "content": user_content(message)})),
         "system" => items.push(json!({"role": "system", "content": message.content})),

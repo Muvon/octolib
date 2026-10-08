@@ -22,6 +22,72 @@ use std::time::Duration;
 pub use crate::http::set_user_agent;
 pub(crate) use crate::http::{http_client, refresh_http_client};
 
+/// Chat Completions tool content is text-only. Deliver images as attributed user
+/// turns after the entire tool-result batch, never between a call and its results.
+pub(super) fn chat_completion_messages(
+    messages: &[crate::llm::types::Message],
+) -> std::borrow::Cow<'_, [crate::llm::types::Message]> {
+    use crate::llm::types::Message;
+    use std::borrow::Cow;
+    if !messages.iter().any(|message| {
+        message.role == "tool"
+            && message
+                .images
+                .as_ref()
+                .is_some_and(|images| !images.is_empty())
+    }) {
+        return Cow::Borrowed(messages);
+    }
+    let mut result = Vec::with_capacity(messages.len());
+    let mut image_turns = Vec::new();
+    for message in messages {
+        if message.role != "tool" {
+            result.append(&mut image_turns);
+        }
+        let mut message = message.clone();
+        if message.role == "tool"
+            && message
+                .images
+                .as_ref()
+                .is_some_and(|images| !images.is_empty())
+        {
+            let mut image_turn = Message::user(&format!(
+                "Images returned by tool {} (tool_call_id: {}):",
+                message.name.as_deref().unwrap_or_default(),
+                message.tool_call_id.as_deref().unwrap_or_default(),
+            ));
+            image_turn.timestamp = message.timestamp;
+            image_turn.images = message.images.take();
+            image_turns.push(image_turn);
+        }
+        result.push(message);
+    }
+    result.append(&mut image_turns);
+    Cow::Owned(result)
+}
+
+/// Anthropic-compatible tool results accept text or nested image content blocks.
+pub(super) fn anthropic_tool_content(message: &crate::llm::types::Message) -> serde_json::Value {
+    use crate::llm::types::ImageData;
+    let images = message.images.as_deref().unwrap_or_default();
+    if images.is_empty() {
+        return serde_json::json!(message.content);
+    }
+    let mut blocks = Vec::new();
+    if !message.content.trim().is_empty() {
+        blocks.push(serde_json::json!({"type": "text", "text": message.content}));
+    }
+    for image in images {
+        let source = match &image.data {
+            ImageData::Base64(data) => serde_json::json!({
+                "type": "base64", "media_type": image.media_type, "data": data,
+            }),
+            ImageData::Url(url) => serde_json::json!({"type": "url", "url": url}),
+        };
+        blocks.push(serde_json::json!({"type": "image", "source": source}));
+    }
+    serde_json::Value::Array(blocks)
+}
 /// Returns true if the error is a connection-level failure that indicates
 /// the HTTP client's connection pool may contain stale/broken connections.
 ///
@@ -332,4 +398,4 @@ pub(super) fn supported_reasoning_effort(
 
 #[cfg(test)]
 #[path = "shared_tests.rs"]
-mod tests;
+pub(super) mod tests;

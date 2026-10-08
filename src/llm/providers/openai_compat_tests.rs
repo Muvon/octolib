@@ -626,3 +626,29 @@ fn test_openai_compat_transport_drops_thinking_by_default() {
     let provider = crate::llm::providers::alibaba::AlibabaProvider::new();
     assert!(!provider.replays_thinking("deepseek-v4-flash-0731"));
 }
+
+#[test]
+fn tool_images_follow_plain_tool_content_in_an_attributed_user_turn() {
+    for text in ["caption", ""] {
+        let messages = [shared::tests::tool_image_message(text)];
+        let value =
+            serde_json::to_value(convert_messages(&messages, "openai", "vision-model")).unwrap();
+        assert_eq!(value.as_array().unwrap().len(), 2);
+        assert_eq!(value[0]["role"], "tool");
+        assert_eq!(value[0]["tool_call_id"], "call_image");
+        assert_eq!(value[0]["content"], text);
+        assert_eq!(value[1]["role"], "user");
+        assert!(value[1]["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("call_image"));
+        assert_eq!(
+            value[1]["content"][1]["image_url"]["url"],
+            "data:image/png;base64,aW1hZ2U="
+        );
+        assert_eq!(
+            value[1]["content"][2]["image_url"]["url"],
+            "https://example.com/screenshot.jpg"
+        );
+    }
+}

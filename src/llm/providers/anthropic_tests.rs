@@ -516,3 +516,21 @@ fn haiku_5_5_cost_tiers_include_all_prompt_tokens() {
     let cost = calculate_anthropic_cost("claude-haiku-4-5", 100_001, 1_000_000, 0, 0, 0).unwrap();
     assert!((cost - 5.100001).abs() < 1e-12);
 }
+
+#[test]
+fn tool_images_stay_inside_the_matching_tool_result() {
+    for text in ["caption", ""] {
+        let converted = convert_messages(&[shared::tests::tool_image_message(text)]);
+        let value = serde_json::to_value(&converted).unwrap();
+        let result = &value[0]["content"][0];
+        assert_eq!(result["type"], "tool_result");
+        assert_eq!(result["tool_use_id"], "call_image");
+        let offset = usize::from(!text.is_empty());
+        assert_eq!(result["content"][offset]["type"], "image");
+        assert_eq!(result["content"][offset]["source"]["data"], "aW1hZ2U=");
+        assert_eq!(
+            result["content"][offset + 1]["source"]["url"],
+            "https://example.com/screenshot.jpg"
+        );
+    }
+}

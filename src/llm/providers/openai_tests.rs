@@ -1076,3 +1076,28 @@ fn test_gpt_realtime_2_family() {
     }
     assert_eq!(provider.get_max_input_tokens("gpt-realtime-1.5"), 32_000);
 }
+
+#[test]
+fn tool_images_use_responses_output_blocks_in_replay_and_continuation() {
+    for text in ["caption", ""] {
+        let message = shared::tests::tool_image_message(text);
+        for previous_id in [None, Some("resp_previous")] {
+            let input = messages_to_input(std::slice::from_ref(&message), previous_id, false);
+            assert_eq!(input.len(), 1);
+            assert_eq!(input[0]["type"], "function_call_output");
+            assert_eq!(input[0]["call_id"], "call_image");
+            assert_eq!(input[0]["output"][1]["type"], "input_image");
+            assert_eq!(
+                input[0]["output"][1]["image_url"],
+                "data:image/png;base64,aW1hZ2U="
+            );
+            assert_eq!(
+                input[0]["output"][2]["image_url"],
+                "https://example.com/screenshot.jpg"
+            );
+        }
+    }
+    let text = Message::tool("body", "call_text", "view").with_cache_marker();
+    let input = messages_to_input(&[text], None, true);
+    assert_eq!(input[0]["output"], "body");
+}

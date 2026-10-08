@@ -151,3 +151,73 @@ fn test_parse_tool_call_arguments_lossy() {
         serde_json::json!({"raw_arguments": "{invalid"})
     );
 }
+
+// Central fixture keeps provider contract regressions on the same image payload.
+pub(crate) fn tool_image_message(text: &str) -> crate::llm::types::Message {
+    use crate::llm::types::{ImageAttachment, ImageData, Message, SourceType};
+    Message::tool(text, "call_image", "screenshot").with_images(vec![
+        ImageAttachment {
+            data: ImageData::Base64("aW1hZ2U=".into()),
+            media_type: "image/png".into(),
+            source_type: SourceType::Url,
+            dimensions: None,
+            size_bytes: None,
+        },
+        ImageAttachment {
+            data: ImageData::Url("https://example.com/screenshot.jpg".into()),
+            media_type: "image/jpeg".into(),
+            source_type: SourceType::Url,
+            dimensions: None,
+            size_bytes: None,
+        },
+    ])
+}
+
+#[test]
+fn chat_images_follow_all_parallel_tool_results_and_keep_attribution() {
+    use crate::llm::types::Message;
+    let messages = vec![
+        Message::assistant(""),
+        tool_image_message("caption"),
+        Message::tool("second result", "call_second", "view"),
+        Message::user("continue"),
+    ];
+    let converted = chat_completion_messages(&messages);
+    assert_eq!(converted.len(), 5);
+    assert_eq!(converted[1].tool_call_id.as_deref(), Some("call_image"));
+    assert!(converted[1].images.is_none());
+    assert_eq!(converted[2].tool_call_id.as_deref(), Some("call_second"));
+    assert_eq!(converted[3].role, "user");
+    assert!(converted[3].content.contains("screenshot"));
+    assert!(converted[3].content.contains("call_image"));
+    assert_eq!(converted[3].images.as_ref().unwrap().len(), 2);
+    assert_eq!(converted[4].content, "continue");
+    assert_eq!(messages[1].images.as_ref().unwrap().len(), 2);
+    let text_only = [Message::tool("text", "call_text", "view")];
+    assert!(matches!(
+        chat_completion_messages(&text_only),
+        std::borrow::Cow::Borrowed(_)
+    ));
+}
+
+#[test]
+fn anthropic_tool_blocks_preserve_images_and_text_only_shape() {
+    use crate::llm::types::Message;
+    assert_eq!(
+        anthropic_tool_content(&Message::tool("text", "id", "view")),
+        serde_json::json!("text")
+    );
+    for text in ["caption", ""] {
+        let blocks = anthropic_tool_content(&tool_image_message(text));
+        let offset = usize::from(!text.is_empty());
+        assert_eq!(blocks.as_array().unwrap().len(), offset + 2);
+        assert_eq!(blocks[offset]["source"]["type"], "base64");
+        assert_eq!(blocks[offset]["source"]["media_type"], "image/png");
+        assert_eq!(blocks[offset]["source"]["data"], "aW1hZ2U=");
+        assert_eq!(blocks[offset + 1]["source"]["type"], "url");
+        assert_eq!(
+            blocks[offset + 1]["source"]["url"],
+            "https://example.com/screenshot.jpg"
+        );
+    }
+}

@@ -618,6 +618,8 @@ fn convert_messages(
     provider_name: &str,
     model: &str,
 ) -> Vec<OpenAiCompatMessage> {
+    let messages = shared::chat_completion_messages(messages);
+    let messages = messages.as_ref();
     let mut result = Vec::new();
 
     // Reasoning replay is per-request context the provider re-renders (and bills)

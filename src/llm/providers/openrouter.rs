@@ -448,6 +448,8 @@ struct OpenRouterCompletionTokensDetails {
 
 // Convert messages to OpenRouter format (same as OpenAI)
 fn convert_messages(messages: &[Message]) -> Result<Vec<OpenRouterMessage>, ToolCallError> {
+    let messages = shared::chat_completion_messages(messages);
+    let messages = messages.as_ref();
     let mut result = Vec::new();
 
     for message in messages {

@@ -213,3 +213,15 @@ fn request_faults_reported_mid_stream_are_not_retried() {
         .unwrap_err()
         .is::<RetryableStreamError>());
 }
+
+#[test]
+fn tool_images_reach_the_chatgpt_plan_route() {
+    let input = build_input(&[shared::tests::tool_image_message("caption")]);
+    assert_eq!(input.len(), 1);
+    assert_eq!(input[0]["type"], "function_call_output");
+    assert_eq!(input[0]["call_id"], "call_image");
+    assert_eq!(
+        input[0]["output"][1]["image_url"],
+        "data:image/png;base64,aW1hZ2U="
+    );
+}

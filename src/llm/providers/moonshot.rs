@@ -353,6 +353,8 @@ fn k3_reasoning_effort(model: &str, effort: Option<ReasoningEffort>) -> Option<&
 }
 
 fn convert_messages(messages: &[crate::llm::types::Message], model: &str) -> Vec<MoonshotMessage> {
+    let messages = shared::chat_completion_messages(messages);
+    let messages = messages.as_ref();
     let mut result = Vec::new();
 
     for message in messages {

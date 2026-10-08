@@ -347,6 +347,8 @@ fn convert_messages(
     messages: &[crate::llm::types::Message],
     has_tools: bool,
 ) -> Vec<DeepSeekMessage> {
+    let messages = shared::chat_completion_messages(messages);
+    let messages = messages.as_ref();
     messages
         .iter()
         .map(|msg| {

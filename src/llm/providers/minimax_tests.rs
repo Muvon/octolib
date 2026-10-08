@@ -223,3 +223,20 @@ fn tool_results_merge_following_user_hint() {
     assert_eq!(blocks[2]["type"], "text");
     assert_eq!(blocks[2]["text"], "Please use those results.");
 }
+
+#[test]
+fn tool_images_stay_inside_the_matching_tool_result() {
+    for text in ["caption", ""] {
+        let converted = convert_messages(&[shared::tests::tool_image_message(text)]);
+        let value = serde_json::to_value(&converted).unwrap();
+        let result = &value[0]["content"][0];
+        assert_eq!(result["type"], "tool_result");
+        assert_eq!(result["tool_use_id"], "call_image");
+        let offset = usize::from(!text.is_empty());
+        assert_eq!(result["content"][offset]["source"]["data"], "aW1hZ2U=");
+        assert_eq!(
+            result["content"][offset + 1]["source"]["url"],
+            "https://example.com/screenshot.jpg"
+        );
+    }
+}

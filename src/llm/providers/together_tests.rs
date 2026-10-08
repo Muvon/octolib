@@ -218,3 +218,17 @@ fn test_extract_thinking_none() {
     let (thinking, _) = extract_thinking("x", Some("  ".to_string()));
     assert!(thinking.is_none());
 }
+
+#[test]
+fn tool_images_follow_tool_results_without_losing_call_association() {
+    let messages = [shared::tests::tool_image_message("")];
+    let value = serde_json::to_value(convert_messages(&messages).unwrap()).unwrap();
+    assert_eq!(value[0]["role"], "tool");
+    assert_eq!(value[0]["tool_call_id"], "call_image");
+    assert_eq!(value[0]["content"], "");
+    assert_eq!(value[1]["role"], "user");
+    assert_eq!(
+        value[1]["content"][1]["image_url"]["url"],
+        "data:image/png;base64,aW1hZ2U="
+    );
+}

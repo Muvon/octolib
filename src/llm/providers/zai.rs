@@ -456,6 +456,8 @@ impl AiProvider for ZaiProvider {
 /// rust/tokio, thinking rose 44k -> 114k tokens and the sequence went from 31.8
 /// to 56.6 minutes for the same 5/5 result.
 fn convert_messages(messages: &[crate::llm::types::Message]) -> Vec<ZaiMessage> {
+    let messages = shared::chat_completion_messages(messages);
+    let messages = messages.as_ref();
     messages
         .iter()
         .map(|msg| {

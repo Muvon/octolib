@@ -400,7 +400,7 @@ enum MinimaxContent {
     #[serde(rename = "tool_result")]
     ToolResult {
         tool_use_id: String,
-        content: String,
+        content: serde_json::Value,
         #[serde(skip_serializing_if = "Option::is_none")]
         cache_control: Option<serde_json::Value>,
     },
@@ -470,7 +470,7 @@ fn convert_messages(messages: &[Message]) -> Vec<MinimaxMessage> {
 
                     content.push(MinimaxContent::ToolResult {
                         tool_use_id: tool_call_id.to_string(),
-                        content: tool_message.content.clone(),
+                        content: shared::anthropic_tool_content(tool_message),
                         cache_control: shared::maybe_ephemeral_cache_control(tool_message.cached),
                     });
                     index += 1;

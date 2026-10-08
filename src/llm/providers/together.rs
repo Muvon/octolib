@@ -459,6 +459,8 @@ fn merge_sse_stream(body: &str) -> MergedStream {
 }
 
 fn convert_messages(messages: &[Message]) -> Result<Vec<TogetherMessage>, ToolCallError> {
+    let messages = shared::chat_completion_messages(messages);
+    let messages = messages.as_ref();
     let mut result = Vec::new();
 
     for message in messages {

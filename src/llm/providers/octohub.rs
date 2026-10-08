@@ -568,7 +568,11 @@ fn input_items_for_message(msg: &Message) -> Vec<serde_json::Value> {
             let mut item = serde_json::json!({
                 "type": "function_call_output",
                 "call_id": call_id,
-                "output": msg.content
+                "output": if msg.images.as_ref().is_some_and(|images| !images.is_empty()) {
+                    user_message_value(msg)["content"].clone()
+                } else {
+                    serde_json::json!(msg.content)
+                }
             });
             // Forward the rolling cache breakpoint octomind sets on the tail tool
             // result. Without this the marker is dropped and the (large) tool-result

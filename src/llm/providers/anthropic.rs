@@ -666,7 +666,7 @@ enum AnthropicContent {
     #[serde(rename = "tool_result")]
     ToolResult {
         tool_use_id: String,
-        content: String,
+        content: serde_json::Value,
         #[serde(skip_serializing_if = "Option::is_none")]
         cache_control: Option<serde_json::Value>,
     },
@@ -761,7 +761,7 @@ fn convert_messages(messages: &[Message]) -> Vec<AnthropicMessage> {
 
                     content.push(AnthropicContent::ToolResult {
                         tool_use_id: tool_call_id.to_string(),
-                        content: tool_message.content.clone(),
+                        content: shared::anthropic_tool_content(tool_message),
                         cache_control: shared::maybe_cache_control_with_ttl(
                             tool_message.cached,
                             tool_message.cache_ttl.as_deref(),

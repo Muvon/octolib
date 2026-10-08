@@ -298,7 +298,11 @@ pub(super) fn messages_to_input(
                 items.push(serde_json::json!({
                     "type": "function_call_output",
                     "call_id": call_id,
-                    "output": msg.content
+                    "output": if msg.images.as_ref().is_some_and(|images| !images.is_empty()) {
+                        content(msg)
+                    } else {
+                        serde_json::json!(msg.content)
+                    }
                 }));
             }
             "user" | "system" => items.push(serde_json::json!({

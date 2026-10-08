@@ -285,3 +285,18 @@ fn test_parse_usage_with_cache() {
     assert_eq!(resp.usage.cache_write_tokens, Some(20));
     assert_eq!(resp.usage.cost, Some(0.005));
 }
+
+#[test]
+fn tool_images_use_typed_output_and_keep_cache_control() {
+    for text in ["caption", ""] {
+        let message = shared::tests::tool_image_message(text).with_cache_marker();
+        let input = input_items_for_message(&message);
+        assert_eq!(input[0]["call_id"], "call_image");
+        assert_eq!(input[0]["output"][1]["type"], "input_image");
+        assert_eq!(
+            input[0]["output"][1]["image_url"],
+            "data:image/png;base64,aW1hZ2U="
+        );
+        assert_eq!(input[0]["cache_control"]["type"], "ephemeral");
+    }
+}

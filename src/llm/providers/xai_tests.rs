@@ -289,3 +289,17 @@ fn vision_input_uses_responses_api_parts() {
         "data:image/png;base64,aGVsbG8="
     );
 }
+
+#[test]
+fn tool_images_use_typed_responses_output() {
+    for text in ["caption", ""] {
+        let input = message_to_input(&shared::tests::tool_image_message(text), false);
+        assert_eq!(input[0]["type"], "function_call_output");
+        assert_eq!(input[0]["call_id"], "call_image");
+        assert_eq!(input[0]["output"][1]["type"], "input_image");
+        assert_eq!(
+            input[0]["output"][1]["image_url"],
+            "data:image/png;base64,aW1hZ2U="
+        );
+    }
+}

@@ -31,7 +31,7 @@ use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
@@ -199,6 +199,10 @@ impl PendingLogin {
 
     /// Wait for the browser callback, exchange the code, and persist the session.
     pub async fn finish(self) -> Result<Account> {
+        self.finish_with_token_url(TOKEN_URL).await
+    }
+
+    async fn finish_with_token_url(self, token_url: &str) -> Result<Account> {
         let callback = wait_for_callback(&self.listener).await?;
         if let Some(error) = callback.get("error") {
             anyhow::bail!(
@@ -225,14 +229,20 @@ impl PendingLogin {
                 .context("ChatGPT sign-in callback has no client id")?,
         };
 
-        let tokens: CodeExchangeResponse = token_request(&[
-            ("grant_type", "authorization_code"),
-            ("client_id", client_id.as_str()),
-            ("code", code.as_str()),
-            ("code_verifier", self.code_verifier.as_str()),
-            ("redirect_uri", self.redirect_uri.as_str()),
-            ("resource", RESOURCE),
-        ])
+        // Serialize the exchange as well as the write: both login and refresh
+        // can rotate the server-side credentials for this registration.
+        let _lock = lock_refresh(&self.auth_path).await?;
+        let tokens: CodeExchangeResponse = token_request(
+            token_url,
+            &[
+                ("grant_type", "authorization_code"),
+                ("client_id", client_id.as_str()),
+                ("code", code.as_str()),
+                ("code_verifier", self.code_verifier.as_str()),
+                ("redirect_uri", self.redirect_uri.as_str()),
+                ("resource", RESOURCE),
+            ],
+        )
         .await?;
         anyhow::ensure!(
             tokens
@@ -280,13 +290,18 @@ pub async fn list_models() -> Result<Vec<ChatGptModel>> {
         visibility: String,
     }
 
-    let response = shared::http_client()
-        .get(MODELS_URL)
-        .bearer_auth(access_token().await?)
-        .send()
+    let response = send_authenticated(shared::http_client().get(MODELS_URL), None, None)
         .await
         .context("ChatGPT model catalog request failed")?;
-    let catalog: Catalog = read_json(response, "ChatGPT model catalog").await?;
+    if !response.status.is_success() {
+        anyhow::bail!(
+            "ChatGPT model catalog error {}: {}",
+            response.status,
+            response.body
+        );
+    }
+    let catalog: Catalog = serde_json::from_str(&response.body)
+        .context("ChatGPT model catalog returned an unexpected response")?;
 
     Ok(catalog
         .models
@@ -299,30 +314,73 @@ pub async fn list_models() -> Result<Vec<ChatGptModel>> {
         .collect())
 }
 
-/// A valid access token for plan-usage requests, refreshed near expiry.
-pub(super) async fn access_token() -> Result<String> {
-    let path = auth_dir()?.join(AUTH_FILE);
-    let registration = require_registration(&path)?;
-    if !registration.expires_soon(unix_now()?) {
+/// Send a replayable request with current credentials, recovering once on 401.
+pub(super) async fn send_authenticated(
+    request: reqwest::RequestBuilder,
+    timeout: Option<Duration>,
+    extra_headers: Option<&HashMap<String, String>>,
+) -> Result<shared::CapturedResponse> {
+    send_authenticated_at(
+        &auth_dir()?.join(AUTH_FILE),
+        TOKEN_URL,
+        request,
+        timeout,
+        extra_headers,
+    )
+    .await
+}
+
+async fn send_authenticated_at(
+    path: &Path,
+    token_url: &str,
+    request: reqwest::RequestBuilder,
+    timeout: Option<Duration>,
+    extra_headers: Option<&HashMap<String, String>>,
+) -> Result<shared::CapturedResponse> {
+    let access_token = access_token_at(path, token_url, None).await?;
+    let first = request
+        .try_clone()
+        .context("ChatGPT request body is not replayable")?;
+    let response =
+        shared::send_and_read(first.bearer_auth(&access_token), timeout, extra_headers).await?;
+    if response.status != reqwest::StatusCode::UNAUTHORIZED {
+        return Ok(response);
+    }
+    let access_token = access_token_at(path, token_url, Some(&access_token)).await?;
+    shared::send_and_read(request.bearer_auth(access_token), timeout, extra_headers).await
+}
+
+/// Refresh near expiry or after rejection, without rotating the same token twice.
+async fn access_token_at(
+    path: &Path,
+    token_url: &str,
+    rejected_token: Option<&str>,
+) -> Result<String> {
+    let registration = require_registration(path)?;
+    let needs_refresh = |registration: &Registration| -> Result<bool> {
+        Ok(registration.expires_soon(unix_now()?)
+            || rejected_token == Some(registration.access_token.as_str()))
+    };
+    if !needs_refresh(&registration)? {
         return Ok(registration.access_token);
     }
 
-    let _lock = lock_refresh(&path).await?;
-    // Another process may have refreshed while this one waited for the lock.
-    let mut registration = require_registration(&path)?;
-    if registration.expires_soon(unix_now()?) {
-        let tokens: RefreshResponse = token_request(&[
+    let _lock = lock_refresh(path).await?;
+    // Another request or login may have replaced the rejected token while we waited.
+    let mut registration = require_registration(path)?;
+    if needs_refresh(&registration)? {
+        let tokens: RefreshResponse = token_request(token_url, &[
             ("grant_type", "refresh_token"),
             ("client_id", registration.client_id.as_str()),
             ("refresh_token", registration.refresh_token.as_str()),
             ("resource", RESOURCE),
         ])
         .await
-        .context("Refreshing the ChatGPT session failed; sign in again")?;
+        .context("Refreshing the ChatGPT session failed; sign in again with `octomind login chatgpt --force`")?;
         registration.access_token = tokens.access_token;
         registration.refresh_token = tokens.refresh_token;
         registration.expires_at = unix_now()? + tokens.expires_in;
-        save_registration(&path, &registration)?;
+        save_registration(path, &registration)?;
     }
 
     Ok(registration.access_token)
@@ -423,9 +481,9 @@ async fn lock_refresh(path: &Path) -> Result<fs::File> {
     .await?
 }
 
-async fn token_request<T: DeserializeOwned>(form: &[(&str, &str)]) -> Result<T> {
+async fn token_request<T: DeserializeOwned>(token_url: &str, form: &[(&str, &str)]) -> Result<T> {
     let response = shared::http_client()
-        .post(TOKEN_URL)
+        .post(token_url)
         .form(form)
         .send()
         .await

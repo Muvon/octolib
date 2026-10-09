@@ -96,7 +96,6 @@ impl AiProvider for ChatGptProvider {
     }
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-        let access_token = auth::access_token().await?;
         let request_body = build_request(&params);
         let start_time = std::time::Instant::now();
 
@@ -105,18 +104,23 @@ impl AiProvider for ChatGptProvider {
         let response_json = retry::retry_with_exponential_backoff(
             || {
                 let client = shared::http_client();
-                let access_token = access_token.clone();
                 let request_body = request_body.clone();
                 let request_timeout = params.request_timeout;
                 let extra_headers = params.extra_headers.clone();
                 Box::pin(async move {
-                    let request = client
-                        .post(RESPONSES_URL)
-                        .bearer_auth(access_token)
-                        .json(&request_body);
-                    let captured =
-                        shared::send_and_read(request, request_timeout, extra_headers.as_ref())
-                            .await?;
+                    let request = client.post(RESPONSES_URL).json(&request_body);
+                    let captured = match auth::send_authenticated(
+                        request,
+                        request_timeout,
+                        extra_headers.as_ref(),
+                    )
+                    .await
+                    {
+                        Ok(captured) => captured,
+                        Err(error) if error.is::<reqwest::Error>() => return Err(error),
+                        // Credential failures need sign-in, not another refresh attempt.
+                        Err(error) => return Ok(Err(error)),
+                    };
 
                     // An exhausted plan allowance or app cap does not clear on retry.
                     if retry::is_retryable_status(captured.status.as_u16())

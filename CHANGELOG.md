@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.41.9] - 2026-10-09
+
+### 📋 Release Summary
+
+Authentication refresh for ChatGPT now works correctly.
+
+### 🐛 Bug Fixes & Stability
+
+- **chatgpt**: fix authentication refresh flow `2093ac0b`
+
 ## [0.41.8] - 2026-10-08
 
 ### 📋 Release Summary

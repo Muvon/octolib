@@ -215,6 +215,40 @@ fn request_faults_reported_mid_stream_are_not_retried() {
 }
 
 #[test]
+fn plan_usage_errors_lead_with_guidance_and_keep_the_raw_error() {
+    // Verbatim shape of the plan-route event observed when the app limit was hit.
+    let limit = r#"data: {"type":"error","error":{"type":"invalid_request_error","code":"subscription_sharing_usage_limit_exceeded","message":"The ChatGPT user has reached their Subscription Sharing usage limit.","param":null},"sequence_number":2}"#;
+    let error = merge_stream(limit).unwrap_err();
+    assert!(!error.is::<RetryableStreamError>());
+    let text = error.to_string();
+    assert!(
+        text.starts_with("ChatGPT plan usage limit reached for this app."),
+        "{}",
+        text
+    );
+    assert!(text.contains("ChatGPT settings → Usage"), "{}", text);
+    assert!(
+        text.contains("subscription_sharing_usage_limit_exceeded"),
+        "{}",
+        text
+    );
+
+    let unavailable = with_usage_guidance(
+        Some("subscription_sharing_usage_unavailable"),
+        "ChatGPT API error 503 Service Unavailable: {}".to_string(),
+    );
+    assert!(unavailable
+        .to_string()
+        .starts_with("ChatGPT could not check"));
+    assert!(unavailable
+        .to_string()
+        .ends_with("503 Service Unavailable: {}"));
+
+    let other = with_usage_guidance(Some("invalid_prompt"), "raw".to_string());
+    assert_eq!(other.to_string(), "raw");
+}
+
+#[test]
 fn tool_images_reach_the_chatgpt_plan_route() {
     let input = build_input(&[shared::tests::tool_image_message("caption")]);
     assert_eq!(input.len(), 1);

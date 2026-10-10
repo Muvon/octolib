@@ -134,10 +134,12 @@ impl AiProvider for ChatGptProvider {
                     }
 
                     if !captured.status.is_success() {
-                        return Ok(Err(anyhow::anyhow!(
-                            "ChatGPT API error {}: {}",
-                            captured.status,
-                            captured.body
+                        let code = serde_json::from_str::<Value>(&captured.body)
+                            .ok()
+                            .and_then(|body| body["error"]["code"].as_str().map(str::to_owned));
+                        return Ok(Err(with_usage_guidance(
+                            code.as_deref(),
+                            format!("ChatGPT API error {}: {}", captured.status, captured.body),
                         )));
                     }
 
@@ -272,14 +274,32 @@ enum RetryableStreamError {
 
 /// A terminal failure event as an error, retryable when its code is transient.
 fn terminal_error(error: &Value, message: String) -> anyhow::Error {
-    let transient = error["code"]
-        .as_str()
-        .is_some_and(|code| TRANSIENT_ERROR_CODES.contains(&code));
-    if transient {
+    let code = error["code"].as_str();
+    if code.is_some_and(|code| TRANSIENT_ERROR_CODES.contains(&code)) {
         RetryableStreamError::Transient(message).into()
     } else {
-        anyhow::Error::msg(message)
+        with_usage_guidance(code, message)
     }
+}
+
+/// Lead a plan-usage error with what the user can act on; the raw provider
+/// error follows unchanged. The code does not say whether the whole plan or an
+/// app-specific limit is exhausted, and signing in again clears neither.
+fn with_usage_guidance(code: Option<&str>, message: String) -> anyhow::Error {
+    let guidance = match code {
+        Some("subscription_sharing_usage_limit_exceeded") => {
+            "ChatGPT plan usage limit reached for this app. It can be an app-specific limit \
+             while the account still has usage in ChatGPT or Codex, and signing in again does \
+             not clear it. Check ChatGPT settings → Usage for your limits and reset time, or \
+             use an API-key provider until then."
+        }
+        Some("subscription_sharing_usage_unavailable") => {
+            "ChatGPT could not check this plan's usage availability; try again later. \
+             Your sign-in is still valid."
+        }
+        _ => return anyhow::Error::msg(message),
+    };
+    anyhow::Error::msg(format!("{guidance}\n{message}"))
 }
 
 /// Fold the buffered SSE body back into one Responses API response object.

@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.41.11] - 2026-10-10
+
+### 📋 Release Summary
+
+Mistral Large 4 model references are now supported.
+
+### ✨ New Features & Enhancements
+
+- **llm**: support Mistral Large 4 model references `eb4b6512`
+
 ## [0.41.10] - 2026-10-10
 
 ### 📋 Release Summary

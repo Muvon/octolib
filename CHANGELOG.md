@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.41.10] - 2026-10-10
+
+### 📋 Release Summary
+
+ChatGPT plan usage errors now provide clearer messages.
+
+### 🐛 Bug Fixes & Stability
+
+- **chatgpt**: clarify ChatGPT plan usage errors `05921cba`
+
 ## [0.41.9] - 2026-10-09
 
 ### 📋 Release Summary

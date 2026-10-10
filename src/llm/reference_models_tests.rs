@@ -556,6 +556,17 @@ fn late_september_2026_additions_resolve() {
     assert_eq!(p.input_price_per_1m, 0.10);
 }
 
+/// Mistral Large 4 must not fall through to the generic `mistral-large` row
+/// (Large 2: 2.00/6.00, text-only, 131K).
+#[test]
+fn mistral_large_4_resolves_to_its_own_row() {
+    let pricing = get_reference_pricing("mistral-large-4:cloud").unwrap();
+    assert_eq!(pricing.input_price_per_1m, 1.36);
+    assert_eq!(pricing.output_price_per_1m, 4.18);
+    let caps = get_reference_capabilities("mistral-large-4:cloud").unwrap();
+    assert!(caps.vision);
+    assert_eq!(caps.max_input_tokens, 1_000_000);
+}
 #[test]
 fn openai_chat_latest_reference_matches_native_and_host_alias() {
     use crate::llm::providers::{NvidiaProvider, OpenAiProvider};

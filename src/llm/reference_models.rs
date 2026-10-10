@@ -1118,6 +1118,15 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
         pricing: pricing(1.32, 3.96, 1.32, 0.044),
     },
     ReferenceModelEntry {
+        // Mistral Large 4 (Oct 2026 public preview): text+image input, 1M context
+        // on Ollama Cloud (`mistral-large-4:cloud`). Mistral lists 1.36/4.18 and
+        // publishes no cache rates, so those follow the Small 4 row. Must precede
+        // the generic `mistral-large` row, which bills Large 2's 2.00/6.00.
+        pattern: "mistral-large-4",
+        capabilities: caps(true, false, true, 1_000_000),
+        pricing: pricing(1.36, 4.18, 1.36, 0.136),
+    },
+    ReferenceModelEntry {
         pattern: "mistral-large-3",
         capabilities: caps(false, false, true, 131_072),
         pricing: pricing(0.50, 1.50, 0.50, 0.125),

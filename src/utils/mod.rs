@@ -66,15 +66,9 @@ fn strip_userinfo(authority_and_path: &str) -> &str {
     }
 }
 
-/// Derive a stable 16-hex-char project ID from a directory path.
-///
-/// Always canonicalizes the path first. If the path is inside a git repo with
-/// a remote origin, the normalized URL is hashed (credentials stripped,
-/// lowercased, scheme and .git suffix removed) so SSH and token-auth HTTPS
-/// clones of the same repo produce the same ID. Falls back to the canonical
-/// absolute path when no git remote is found.
-pub fn path_to_id(path: &Path) -> String {
-    let source = Command::new("git")
+/// Normalized `origin` remote of the repo containing `path`, if any.
+fn git_remote_key(path: &Path) -> Option<String> {
+    Command::new("git")
         .args(["remote", "get-url", "origin"])
         .current_dir(path)
         .output()
@@ -83,15 +77,54 @@ pub fn path_to_id(path: &Path) -> String {
         .and_then(|o| String::from_utf8(o.stdout).ok())
         .map(|s| normalize_git_url(s.trim()))
         .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| {
-            path.canonicalize()
-                .unwrap_or_else(|_| path.to_path_buf())
-                .to_string_lossy()
-                .into_owned()
-        });
+}
+
+/// Derive a stable 16-hex-char project ID from a directory path.
+///
+/// Always canonicalizes the path first. If the path is inside a git repo with
+/// a remote origin, the normalized URL is hashed (credentials stripped,
+/// lowercased, scheme and .git suffix removed) so SSH and token-auth HTTPS
+/// clones of the same repo produce the same ID. Falls back to the canonical
+/// absolute path when no git remote is found.
+pub fn path_to_id(path: &Path) -> String {
+    let source = git_remote_key(path).unwrap_or_else(|| {
+        path.canonicalize()
+            .unwrap_or_else(|_| path.to_path_buf())
+            .to_string_lossy()
+            .into_owned()
+    });
 
     let hash = Sha256::digest(source.as_bytes());
     hex::encode(hash)[..16].to_string()
+}
+
+/// Derive a human-readable project scope from a directory path — the readable
+/// counterpart of [`path_to_id`], for keys people and models see.
+///
+/// The normalized git remote (`github.com/org/repo`) when there is one, otherwise
+/// `local/<parent>/<dir>` from the last two canonical path segments, lowercased.
+/// Never returns an empty string.
+pub fn path_to_scope(path: &Path) -> String {
+    if let Some(remote) = git_remote_key(path) {
+        return remote;
+    }
+    let absolute = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let mut segments: Vec<String> = absolute
+        .components()
+        .filter_map(|c| match c {
+            std::path::Component::Normal(s) => Some(s.to_string_lossy().to_lowercase()),
+            _ => None,
+        })
+        .collect();
+    match segments.len() {
+        0 => "local/unknown".to_string(),
+        1 => format!("local/{}", segments.remove(0)),
+        _ => {
+            let dir = segments.pop().unwrap();
+            let parent = segments.pop().unwrap();
+            format!("local/{}/{}", parent, dir)
+        }
+    }
 }
 
 /// Derive a stable 16-hex-char project ID from the current working directory.
@@ -125,3 +158,7 @@ pub fn org_repo_from_url(url: &str) -> String {
         .unwrap_or(&normalized)
         .to_string()
 }
+
+#[cfg(test)]
+#[path = "mod_tests.rs"]
+mod tests;

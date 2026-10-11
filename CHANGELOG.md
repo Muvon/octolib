@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.41.12] - 2026-10-11
+
+### 📋 Release Summary
+
+Project scopes can now be derived in a readable format.
+
+### ✨ New Features & Enhancements
+
+- **utils**: add readable project scope derivation `3f982d0c`
+
 ## [0.41.11] - 2026-10-10
 
 ### 📋 Release Summary

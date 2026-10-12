@@ -49,8 +49,9 @@ const TOOL_NAMESPACE_DESCRIPTION: &str = "Tools available in this session.";
 const USAGE_LIMIT_ERROR_PREFIX: &str = "subscription_sharing_usage";
 /// The plan route replaces `prompt_cache_key` with a random per-request key
 /// unless this header names the session, so without it a repeated prefix lands
-/// on a cold cache (measured: 0 of 5 repeats cached without it, 4 of 4 with it).
-const SESSION_HEADER: &str = "session_id";
+/// on a cold cache (measured: 0 of 6 repeats cached without it, 12 of 12 with
+/// it, 10 of 12 with `session_id`). Codex sends the same header name.
+const SESSION_HEADER: &str = "session-id";
 
 /// ChatGPT subscription provider (`chatgpt:<model>`).
 #[derive(Debug, Clone, Default)]

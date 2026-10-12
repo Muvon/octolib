@@ -47,6 +47,10 @@ const TOOL_NAMESPACE_DESCRIPTION: &str = "Tools available in this session.";
 /// Error codes for an exhausted plan allowance or per-app weekly cap
 /// (`subscription_sharing_usage_limit_exceeded`, `…_usage_unavailable`).
 const USAGE_LIMIT_ERROR_PREFIX: &str = "subscription_sharing_usage";
+/// The plan route replaces `prompt_cache_key` with a random per-request key
+/// unless this header names the session, so without it a repeated prefix lands
+/// on a cold cache (measured: 0 of 5 repeats cached without it, 4 of 4 with it).
+const SESSION_HEADER: &str = "session_id";
 
 /// ChatGPT subscription provider (`chatgpt:<model>`).
 #[derive(Debug, Clone, Default)]
@@ -97,6 +101,7 @@ impl AiProvider for ChatGptProvider {
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
         let request_body = build_request(&params);
+        let extra_headers = request_headers(&params);
         let start_time = std::time::Instant::now();
 
         // Errors are retried; `Ok` holds the outcome of a delivered response,
@@ -106,7 +111,7 @@ impl AiProvider for ChatGptProvider {
                 let client = shared::http_client();
                 let request_body = request_body.clone();
                 let request_timeout = params.request_timeout;
-                let extra_headers = params.extra_headers.clone();
+                let extra_headers = extra_headers.clone();
                 Box::pin(async move {
                     let request = client.post(RESPONSES_URL).json(&request_body);
                     let captured = match auth::send_authenticated(
@@ -210,6 +215,17 @@ fn build_request(params: &ChatCompletionParams) -> Value {
     }
 
     request
+}
+
+fn request_headers(params: &ChatCompletionParams) -> Option<HashMap<String, String>> {
+    let mut headers = params.extra_headers.clone();
+    if let Some(cache_key) = &params.prompt_cache_key {
+        headers
+            .get_or_insert_with(HashMap::new)
+            .entry(SESSION_HEADER.to_string())
+            .or_insert_with(|| cache_key.clone());
+    }
+    headers
 }
 
 /// The full transcript as Responses API input: each assistant turn preceded by

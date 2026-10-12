@@ -78,6 +78,27 @@ fn request_follows_the_plan_route_contract() {
 }
 
 #[test]
+fn cache_key_names_the_session_so_the_plan_route_keeps_it() {
+    let messages = vec![Message::user("hi")];
+    let params = ChatCompletionParams::new(&messages, "gpt-6.1-sol", 0.7, 1.0, 50, 1000);
+    assert_eq!(request_headers(&params), None);
+
+    let params = params.with_prompt_cache_key("s-1");
+    assert_eq!(build_request(&params)["prompt_cache_key"], "s-1");
+    assert_eq!(
+        request_headers(&params).unwrap().get(SESSION_HEADER),
+        Some(&"s-1".to_string())
+    );
+
+    let caller = HashMap::from([(SESSION_HEADER.to_string(), "caller".to_string())]);
+    let params = params.with_extra_headers(caller);
+    assert_eq!(
+        request_headers(&params).unwrap().get(SESSION_HEADER),
+        Some(&"caller".to_string())
+    );
+}
+
+#[test]
 fn replay_puts_encrypted_reasoning_before_namespaced_calls() {
     let reasoning = json!({
         "type": "reasoning",

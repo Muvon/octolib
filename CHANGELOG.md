@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.41.14] - 2026-10-12
+
+### 📋 Release Summary
+
+ChatGPT requests now use the correct session header name.
+
+### 🐛 Bug Fixes & Stability
+
+- **chatgpt**: use the correct session header name `8cc4c911`
+
 ## [0.41.13] - 2026-10-12
 
 ### 📋 Release Summary

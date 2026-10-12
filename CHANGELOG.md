@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.41.13] - 2026-10-12
+
+### 📋 Release Summary
+
+ChatGPT requests now use cache-aware headers.
+
+### 🐛 Bug Fixes & Stability
+
+- **chatgpt**: route requests through cache-aware headers `ca3fb9eb`
+
 ## [0.41.12] - 2026-10-11
 
 ### 📋 Release Summary

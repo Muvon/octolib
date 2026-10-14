@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.41.15] - 2026-10-14
+
+### 📋 Release Summary
+
+OpenRouter now uses catalog-aware reasoning settings, and Higgsfield media generation is supported.
+
+### ✨ New Features & Enhancements
+
+- **openrouter**: use catalog-aware reasoning settings `deb506c4`
+- **media**: support Higgsfield media generation `cca3e87f`
+
 ## [0.41.14] - 2026-10-12
 
 ### 📋 Release Summary

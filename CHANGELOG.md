@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.41.16] - 2026-10-14
+
+### 📋 Release Summary
+
+ChatGPT turn state is now preserved across requests, with stable request prefixes verified across turns.
+
+### 🔧 Improvements & Optimizations
+
+- **chatgpt**: verify stable request prefixes across turns `70b505fb`
+- **dependencies**: refresh locked dependency versions `51eb9f79`
+
+### 🐛 Bug Fixes & Stability
+
+- **chatgpt**: preserve ChatGPT turn state across requests `9b6542f1`
+
 ## [0.41.15] - 2026-10-14
 
 ### 📋 Release Summary

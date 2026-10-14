@@ -114,11 +114,11 @@ async fn image_example() -> octolib::MediaResult<()> {
 }
 ```
 
-- **Coverage** — OpenRouter, Replicate, and fal serve all four task traits; Runway serves image and video; ElevenLabs serves speech and transcription; Cloudflare Workers AI serves image, speech, and transcription via `/ai/run`
+- **Coverage** — OpenRouter, Replicate, and fal serve all four task traits; Runway and Higgsfield serve image and video; ElevenLabs serves speech and transcription; Cloudflare Workers AI serves image, speech, and transcription via `/ai/run`
 - **Synchronous vs. durable** — ElevenLabs and Cloudflare answer synchronously, so results are complete on submission; the rest return a credential-free `JobHandle` you can persist and resume after a restart, and a local `wait_timeout` returns `MediaError::WaitTimeout { handle }` without cancelling the remote job
 - **Honest costs** — `provider_reported_cost` only when the upstream returns a dollar amount; otherwise a caller-supplied `CostEstimate` or the crate's reference rates, always stored as `estimated_cost`, with the rate frozen into the `JobHandle` at submit
 - **Safe downloads** — generated URLs are never fetched automatically; `download_artifact` takes an explicit byte limit, accepts HTTPS only, rejects embedded credentials and local/private addresses, and does not follow redirects
-- **No duplicate paid work** — only idempotent schema and polling queries are retried; generation POSTs are never replayed after an ambiguous transport failure
+- **No duplicate paid work** — only idempotent schema and polling queries are retried; generation POSTs are never replayed after an ambiguous transport failure unless the provider honours `request_options.idempotency_key` (Higgsfield)
 
 Provider-specific fields live under the provider's own namespace (`provider_options["replicate"].input`), with optional `field_map` mappings for portable fields. The `media_openrouter`, `media_replicate`, and `media_fal` examples show the full contract.
 

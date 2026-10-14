@@ -424,8 +424,10 @@ pub(super) fn reasoning_effort(
 
     let is_gpt_5_6_plus = is_gpt_5_6_or_later(&normalize_model_name(model));
     Some(match effort {
-        // GPT-5.x accepts "none" (no reasoning); the o-series does not,
-        // where "low" is the floor.
+        // GPT-5.x accepts "none" (no reasoning); the o-series and GPT-6 do not
+        // (GPT-6 answers "none" with a 400 listing low..max), so "low" is
+        // their floor.
+        Some(ReasoningEffort::None) if model.starts_with("gpt-6") => "low",
         Some(ReasoningEffort::None) if model.starts_with("gpt-") => "none",
         Some(ReasoningEffort::None) => "low",
         Some(ReasoningEffort::Low) => "low",
@@ -454,6 +456,10 @@ pub(super) fn function_tools(
                     "type": "function",
                     "name": f.name,
                     "description": f.description,
+                    // Omitted `strict` lets Responses normalize the schema to
+                    // strict mode, which makes every optional field required:
+                    // the model then fills all of them with guessed values.
+                    "strict": false,
                     "parameters": f.parameters
                 })
             })

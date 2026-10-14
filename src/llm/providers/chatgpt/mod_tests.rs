@@ -75,6 +75,7 @@ fn request_follows_the_plan_route_contract() {
     assert_eq!(request["tools"][0]["type"], "namespace");
     assert_eq!(request["tools"][0]["name"], TOOL_NAMESPACE);
     assert_eq!(request["tools"][0]["tools"][0]["name"], "view");
+    assert_eq!(request["tools"][0]["tools"][0]["strict"], false);
 }
 
 #[test]

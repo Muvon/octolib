@@ -964,6 +964,25 @@ fn test_gpt_6_astra() {
 }
 
 #[test]
+fn test_reasoning_off_floors_to_each_family_lowest_level() {
+    // GPT-6 rejects "none" (400: supported values are low..max).
+    for model in ["gpt-6-astra", "gpt-6.1-sol", "gpt-6-luna"] {
+        assert_eq!(
+            reasoning_effort(model, Some(ReasoningEffort::None)),
+            Some("low")
+        );
+    }
+    assert_eq!(
+        reasoning_effort("gpt-5.6-sol", Some(ReasoningEffort::None)),
+        Some("none")
+    );
+    assert_eq!(
+        reasoning_effort("o3", Some(ReasoningEffort::None)),
+        Some("low")
+    );
+}
+
+#[test]
 fn test_gpt_6_sol_and_luna_provider_and_reference_support() {
     let provider = OpenAiProvider::new();
     for (model, input, output, cache_write, cache_read) in [

@@ -24,7 +24,7 @@
 //! - **Structured output**: JSON and JSON Schema support for OpenAI, xAI, OpenRouter, DeepSeek, and Z.ai
 //! - **Cost tracking**: Automatic token usage and cost calculation
 //! - **Vision support**: Image attachment support for compatible models
-//! - **Media generation**: Images, asynchronous video, speech, and transcription through ElevenLabs, fal, OpenRouter, Replicate, and Runway, with unit-aware reference pricing
+//! - **Media generation**: Images, asynchronous video, speech, and transcription through ElevenLabs, fal, Higgsfield, OpenRouter, Replicate, and Runway, with unit-aware reference pricing
 //! - **Caching support**: Automatic detection of caching-capable models
 //! - **Retry logic**: Exponential backoff with smart rate limit handling
 //! - **Embeddings**: Multi-provider embedding support (Jina, Voyage, Google, OpenAI, FastEmbed, HuggingFace)
@@ -193,18 +193,19 @@ pub use media::{
     download_artifact, generate_image, generate_video, reference_cost_estimate, synthesize_speech,
     transcribe, ArtifactSource, AudioFormat, AudioOutputSpec, CapabilitySupport, CostEstimate,
     Dimensions, ElevenLabsMediaOptions, ElevenLabsMediaProvider, FailureCategory, FalMediaOptions,
-    FalMediaProvider, ImageCapabilities, ImageFormat, ImageGenerationMode, ImageGenerationProvider,
-    ImageGenerationRequest, ImageGenerationResult, JobHandle, MediaArtifact, MediaError, MediaKind,
-    MediaLimits, MediaModelDescriptor, MediaModelPricing, MediaProviderFactory, MediaResult,
-    MediaSource, MediaTask, MediaUsage, Modality, OpenRouterMediaOptions, OpenRouterMediaProvider,
-    Operation, OperationStatus, OutputGeometry, ParameterCapabilities, ProviderOptions,
-    ProviderWarning, ReplicateMediaOptions, ReplicateMediaProvider, RequestOptions,
-    RunwayMediaOptions, RunwayMediaProvider, SafetyReport, SafetyStatus, SpeechCapabilities,
-    SpeechStream, SpeechSynthesisProvider, SpeechSynthesisRequest, SpeechSynthesisResult,
-    TimestampGranularity, TranscriptSegment, TranscriptWord, TranscriptionCapabilities,
-    TranscriptionProvider, TranscriptionRequest, TranscriptionResult, UnsupportedParameterPolicy,
-    UsageLineItem, UsageUnit, VideoCapabilities, VideoFormat, VideoGenerationMode,
-    VideoGenerationProvider, VideoGenerationRequest, VideoGenerationResult, WarningCode,
+    FalMediaProvider, HiggsfieldMediaOptions, HiggsfieldMediaProvider, ImageCapabilities,
+    ImageFormat, ImageGenerationMode, ImageGenerationProvider, ImageGenerationRequest,
+    ImageGenerationResult, JobHandle, MediaArtifact, MediaError, MediaKind, MediaLimits,
+    MediaModelDescriptor, MediaModelPricing, MediaProviderFactory, MediaResult, MediaSource,
+    MediaTask, MediaUsage, Modality, OpenRouterMediaOptions, OpenRouterMediaProvider, Operation,
+    OperationStatus, OutputGeometry, ParameterCapabilities, ProviderOptions, ProviderWarning,
+    ReplicateMediaOptions, ReplicateMediaProvider, RequestOptions, RunwayMediaOptions,
+    RunwayMediaProvider, SafetyReport, SafetyStatus, SpeechCapabilities, SpeechStream,
+    SpeechSynthesisProvider, SpeechSynthesisRequest, SpeechSynthesisResult, TimestampGranularity,
+    TranscriptSegment, TranscriptWord, TranscriptionCapabilities, TranscriptionProvider,
+    TranscriptionRequest, TranscriptionResult, UnsupportedParameterPolicy, UsageLineItem,
+    UsageUnit, VideoCapabilities, VideoFormat, VideoGenerationMode, VideoGenerationProvider,
+    VideoGenerationRequest, VideoGenerationResult, WarningCode,
 };
 #[cfg(feature = "reranker")]
 pub use reranker::{

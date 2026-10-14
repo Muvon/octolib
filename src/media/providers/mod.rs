@@ -15,6 +15,7 @@
 pub mod cloudflare;
 pub mod elevenlabs;
 pub mod fal;
+pub mod higgsfield;
 pub mod openrouter;
 pub mod replicate;
 pub mod runway;
@@ -23,6 +24,7 @@ pub(crate) mod shared;
 pub use cloudflare::{CloudflareMediaOptions, CloudflareMediaProvider};
 pub use elevenlabs::{ElevenLabsMediaOptions, ElevenLabsMediaProvider};
 pub use fal::{FalMediaOptions, FalMediaProvider};
+pub use higgsfield::{HiggsfieldMediaOptions, HiggsfieldMediaProvider};
 pub use openrouter::{OpenRouterMediaOptions, OpenRouterMediaProvider};
 pub use replicate::{ReplicateMediaOptions, ReplicateMediaProvider};
 pub use runway::{RunwayMediaOptions, RunwayMediaProvider};

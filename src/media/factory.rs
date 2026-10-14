@@ -14,8 +14,8 @@
 
 use super::errors::{MediaError, MediaResult};
 use super::providers::{
-    CloudflareMediaProvider, ElevenLabsMediaProvider, FalMediaProvider, OpenRouterMediaProvider,
-    ReplicateMediaProvider, RunwayMediaProvider,
+    CloudflareMediaProvider, ElevenLabsMediaProvider, FalMediaProvider, HiggsfieldMediaProvider,
+    OpenRouterMediaProvider, ReplicateMediaProvider, RunwayMediaProvider,
 };
 use super::traits::*;
 
@@ -39,6 +39,7 @@ impl MediaProviderFactory {
         match name.to_ascii_lowercase().as_str() {
             "cloudflare" => Ok(Box::new(CloudflareMediaProvider::new())),
             "fal" => Ok(Box::new(FalMediaProvider::new())),
+            "higgsfield" => Ok(Box::new(HiggsfieldMediaProvider::new())),
             "openrouter" => Ok(Box::new(OpenRouterMediaProvider::new())),
             "replicate" => Ok(Box::new(ReplicateMediaProvider::new())),
             "runway" => Ok(Box::new(RunwayMediaProvider::new())),
@@ -64,6 +65,7 @@ impl MediaProviderFactory {
     pub fn create_video_provider(name: &str) -> MediaResult<Box<dyn VideoGenerationProvider>> {
         match name.to_ascii_lowercase().as_str() {
             "fal" => Ok(Box::new(FalMediaProvider::new())),
+            "higgsfield" => Ok(Box::new(HiggsfieldMediaProvider::new())),
             "openrouter" => Ok(Box::new(OpenRouterMediaProvider::new())),
             "replicate" => Ok(Box::new(ReplicateMediaProvider::new())),
             "runway" => Ok(Box::new(RunwayMediaProvider::new())),
@@ -145,6 +147,7 @@ impl MediaProviderFactory {
             "cloudflare",
             "elevenlabs",
             "fal",
+            "higgsfield",
             "openrouter",
             "replicate",
             "runway",

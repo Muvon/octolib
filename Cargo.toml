@@ -162,6 +162,10 @@ name = "media_fal"
 required-features = ["media"]
 
 [[example]]
+name = "media_higgsfield"
+required-features = ["media"]
+
+[[example]]
 name = "media_openrouter"
 required-features = ["media"]
 

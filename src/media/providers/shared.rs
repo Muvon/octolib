@@ -165,14 +165,22 @@ pub(crate) fn source_to_base64(
     source: &MediaSource,
     maximum_bytes: usize,
 ) -> MediaResult<(String, String)> {
+    let (data, media_type) = source_to_bytes(source, maximum_bytes)?;
+    Ok((
+        base64::engine::general_purpose::STANDARD.encode(data),
+        media_type,
+    ))
+}
+
+pub(crate) fn source_to_bytes(
+    source: &MediaSource,
+    maximum_bytes: usize,
+) -> MediaResult<(Vec<u8>, String)> {
     match source {
         MediaSource::Bytes { data, media_type } => {
             validate_media_type(media_type)?;
             check_size(data.len() as u64, maximum_bytes)?;
-            Ok((
-                base64::engine::general_purpose::STANDARD.encode(data),
-                media_type.clone(),
-            ))
+            Ok((data.clone(), media_type.clone()))
         }
         MediaSource::File { path, media_type } => {
             let metadata = std::fs::metadata(path)?;
@@ -184,11 +192,7 @@ pub(crate) fn source_to_base64(
                 ))
             })?;
             validate_media_type(&media_type)?;
-            let data = std::fs::read(path)?;
-            Ok((
-                base64::engine::general_purpose::STANDARD.encode(data),
-                media_type,
-            ))
+            Ok((std::fs::read(path)?, media_type))
         }
         _ => Err(MediaError::InvalidRequest(
             "this endpoint requires inline bytes or a local file; URL download is intentionally opt-in"
@@ -519,7 +523,7 @@ fn validate_uri(value: &str) -> MediaResult<String> {
     Ok(value.to_string())
 }
 
-fn error_message(body: &[u8]) -> String {
+pub(crate) fn error_message(body: &[u8]) -> String {
     const MAX: usize = 16 * 1024;
     let body = &body[..body.len().min(MAX)];
     if let Ok(value) = serde_json::from_slice::<Value>(body) {

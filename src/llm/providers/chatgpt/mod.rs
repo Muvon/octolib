@@ -38,6 +38,7 @@ use crate::llm::types::{
 use anyhow::{Context, Result};
 use serde_json::{json, Value};
 use std::collections::HashMap;
+use std::sync::{LazyLock, Mutex};
 
 const RESPONSES_URL: &str = "https://api.openai.com/v1/responses";
 /// Every function tool is declared in this one namespace, so replayed
@@ -52,6 +53,67 @@ const USAGE_LIMIT_ERROR_PREFIX: &str = "subscription_sharing_usage";
 /// on a cold cache (measured: 0 of 6 repeats cached without it, 12 of 12 with
 /// it, 10 of 12 with `session_id`). Codex sends the same header name.
 const SESSION_HEADER: &str = "session-id";
+/// Echoing the first server token throughout a turn eliminated all measured
+/// cache breaks; later server values must not replace it.
+const TURN_STATE_HEADER: &str = "x-codex-turn-state";
+const TURN_STATE_STORE_CAPACITY: usize = 1_024;
+
+#[derive(Debug)]
+struct TurnStateEntry {
+    cache_key: String,
+    token: String,
+}
+
+#[derive(Debug, Default)]
+struct TurnStateStore {
+    entries: Vec<TurnStateEntry>,
+}
+
+impl TurnStateStore {
+    fn clear(&mut self, cache_key: &str) {
+        if let Some(index) = self
+            .entries
+            .iter()
+            .position(|entry| entry.cache_key == cache_key)
+        {
+            self.entries.remove(index);
+        }
+    }
+
+    fn get(&mut self, cache_key: &str) -> Option<String> {
+        let index = self
+            .entries
+            .iter()
+            .position(|entry| entry.cache_key == cache_key)?;
+        let entry = self.entries.remove(index);
+        let token = entry.token.clone();
+        self.entries.push(entry);
+        Some(token)
+    }
+
+    fn store_first(&mut self, cache_key: &str, token: &str) {
+        if let Some(index) = self
+            .entries
+            .iter()
+            .position(|entry| entry.cache_key == cache_key)
+        {
+            let entry = self.entries.remove(index);
+            self.entries.push(entry);
+            return;
+        }
+
+        if self.entries.len() == TURN_STATE_STORE_CAPACITY {
+            self.entries.remove(0);
+        }
+        self.entries.push(TurnStateEntry {
+            cache_key: cache_key.to_string(),
+            token: token.to_string(),
+        });
+    }
+}
+
+static TURN_STATES: LazyLock<Mutex<TurnStateStore>> =
+    LazyLock::new(|| Mutex::new(TurnStateStore::default()));
 
 /// ChatGPT subscription provider (`chatgpt:<model>`).
 #[derive(Debug, Clone, Default)]
@@ -102,7 +164,7 @@ impl AiProvider for ChatGptProvider {
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
         let request_body = build_request(&params);
-        let extra_headers = request_headers(&params);
+        let extra_headers = request_headers(&params)?;
         let start_time = std::time::Instant::now();
 
         // Errors are retried; `Ok` holds the outcome of a delivered response,
@@ -113,6 +175,7 @@ impl AiProvider for ChatGptProvider {
                 let request_body = request_body.clone();
                 let request_timeout = params.request_timeout;
                 let extra_headers = extra_headers.clone();
+                let capture_turn_state = params.prompt_cache_key.is_some();
                 Box::pin(async move {
                     let request = client.post(RESPONSES_URL).json(&request_body);
                     let captured = match auth::send_authenticated(
@@ -149,9 +212,23 @@ impl AiProvider for ChatGptProvider {
                         )));
                     }
 
+                    let turn_state = if capture_turn_state {
+                        captured
+                            .headers
+                            .get(TURN_STATE_HEADER)
+                            .map(|value| value.to_str())
+                            .transpose()
+                            .context(
+                                "ChatGPT response returned an invalid x-codex-turn-state header",
+                            )?
+                            .map(str::to_owned)
+                    } else {
+                        None
+                    };
+
                     match merge_stream(&captured.body) {
                         Err(e) if e.is::<RetryableStreamError>() => Err(e),
-                        merged => Ok(merged),
+                        merged => Ok(merged.map(|body| (body, turn_state))),
                     }
                 })
             },
@@ -169,6 +246,11 @@ impl AiProvider for ChatGptProvider {
         )
         .await??;
 
+        let (response_json, response_turn_state) = response_json;
+        remember_turn_state(
+            params.prompt_cache_key.as_deref(),
+            response_turn_state.as_deref(),
+        )?;
         let request_time_ms = start_time.elapsed().as_millis() as u64;
 
         openai::parse_responses_api_response(
@@ -218,15 +300,76 @@ fn build_request(params: &ChatCompletionParams) -> Value {
     request
 }
 
-fn request_headers(params: &ChatCompletionParams) -> Option<HashMap<String, String>> {
-    let mut headers = params.extra_headers.clone();
-    if let Some(cache_key) = &params.prompt_cache_key {
-        headers
-            .get_or_insert_with(HashMap::new)
-            .entry(SESSION_HEADER.to_string())
-            .or_insert_with(|| cache_key.clone());
+fn request_headers(params: &ChatCompletionParams) -> Result<Option<HashMap<String, String>>> {
+    if params.prompt_cache_key.is_none() {
+        return Ok(request_headers_without_turn_state(params));
+    }
+    let mut turn_states = TURN_STATES
+        .lock()
+        .map_err(|_| anyhow::anyhow!("ChatGPT turn-state store lock poisoned"))?;
+    Ok(request_headers_with_store(params, &mut turn_states))
+}
+
+fn request_headers_with_store(
+    params: &ChatCompletionParams,
+    turn_states: &mut TurnStateStore,
+) -> Option<HashMap<String, String>> {
+    let mut headers = request_headers_without_turn_state(params);
+
+    let Some(cache_key) = &params.prompt_cache_key else {
+        return headers;
+    };
+
+    let request_headers = headers.get_or_insert_with(HashMap::new);
+    request_headers
+        .entry(SESSION_HEADER.to_string())
+        .or_insert_with(|| cache_key.clone());
+
+    if params
+        .messages
+        .last()
+        .is_some_and(|message| message.role == "user")
+    {
+        turn_states.clear(cache_key);
+    } else if let Some(token) = turn_states.get(cache_key) {
+        request_headers.insert(TURN_STATE_HEADER.to_string(), token);
     }
     headers
+}
+
+fn request_headers_without_turn_state(
+    params: &ChatCompletionParams,
+) -> Option<HashMap<String, String>> {
+    let mut headers = params.extra_headers.clone();
+    remove_header(&mut headers, TURN_STATE_HEADER);
+    headers.filter(|headers| !headers.is_empty())
+}
+
+fn remove_header(headers: &mut Option<HashMap<String, String>>, name: &str) {
+    if let Some(headers) = headers {
+        headers.retain(|header, _| !header.eq_ignore_ascii_case(name));
+    }
+}
+
+fn remember_turn_state(cache_key: Option<&str>, token: Option<&str>) -> Result<()> {
+    let (Some(cache_key), Some(token)) = (cache_key, token) else {
+        return Ok(());
+    };
+    let mut turn_states = TURN_STATES
+        .lock()
+        .map_err(|_| anyhow::anyhow!("ChatGPT turn-state store lock poisoned"))?;
+    remember_turn_state_with_store(Some(cache_key), Some(token), &mut turn_states);
+    Ok(())
+}
+
+fn remember_turn_state_with_store(
+    cache_key: Option<&str>,
+    token: Option<&str>,
+    turn_states: &mut TurnStateStore,
+) {
+    if let (Some(cache_key), Some(token)) = (cache_key, token) {
+        turn_states.store_first(cache_key, token);
+    }
 }
 
 /// The full transcript as Responses API input: each assistant turn preceded by

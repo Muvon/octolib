@@ -14,6 +14,180 @@
 
 use super::*;
 
+fn catalog_fixture() -> Vec<CatalogModel> {
+    serde_json::from_value::<CatalogResponse>(serde_json::json!({
+        "data": [
+            {
+                "id": "google/gemini-3.5-flash-lite",
+                "reasoning": {
+                    "mandatory": true,
+                    "default_enabled": true,
+                    "supported_efforts": ["high", "medium", "low", "minimal"],
+                    "default_effort": "minimal"
+                }
+            },
+            {
+                "id": "google/gemini-3.1-flash-lite",
+                "reasoning": {
+                    "mandatory": false,
+                    "default_enabled": true,
+                    "supported_efforts": ["high", "medium", "low", "minimal"],
+                    "default_effort": "minimal"
+                }
+            },
+            {
+                "id": "deepseek/deepseek-v4.1-flash",
+                "reasoning": {
+                    "mandatory": false,
+                    "default_enabled": true,
+                    "supported_efforts": ["max", "high", "low"],
+                    "default_effort": "high"
+                }
+            },
+            {
+                "id": "example/no-reasoning",
+                "reasoning": null
+            },
+            {
+                "id": "liquid/lfm-2.5-24b-a2b",
+                "reasoning": {
+                    "mandatory": true
+                }
+            },
+            {
+                "id": "example/optional-reasoning-without-levels",
+                "reasoning": {
+                    "mandatory": false
+                }
+            },
+            {
+                "id": "example/malformed-reasoning",
+                "reasoning": {
+                    "mandatory": "unknown",
+                    "supported_efforts": "high"
+                }
+            }
+        ]
+    }))
+    .unwrap()
+    .data
+}
+
+#[test]
+fn catalog_effort_none_uses_mandatory_minimum_or_disables_reasoning() {
+    let catalog = catalog_fixture();
+    let mandatory = catalog_model(&catalog, "google/gemini-3.5-flash-lite").unwrap();
+    assert_eq!(
+        select_effort(mandatory, ReasoningEffort::None),
+        Some(ReasoningSelection::Effort("minimal"))
+    );
+
+    let optional = catalog_model(&catalog, "google/gemini-3.1-flash-lite").unwrap();
+    assert_eq!(
+        select_effort(optional, ReasoningEffort::None),
+        Some(ReasoningSelection::Disabled)
+    );
+}
+
+#[test]
+fn catalog_without_effort_levels_omits_or_disables_reasoning() {
+    let catalog = catalog_fixture();
+    assert_eq!(catalog.len(), 7);
+    assert!(catalog_model(&catalog, "example/malformed-reasoning")
+        .unwrap()
+        .reasoning
+        .is_none());
+
+    let mut mandatory = serde_json::json!({});
+    apply_reasoning_effort(
+        &mut mandatory,
+        Some(&catalog),
+        "liquid/lfm-2.5-24b-a2b",
+        ReasoningEffort::None,
+    );
+    assert_eq!(mandatory, serde_json::json!({}));
+
+    let mut optional = serde_json::json!({});
+    apply_reasoning_effort(
+        &mut optional,
+        Some(&catalog),
+        "example/optional-reasoning-without-levels",
+        ReasoningEffort::None,
+    );
+    assert_eq!(
+        optional,
+        serde_json::json!({"reasoning": {"enabled": false}})
+    );
+
+    let mut requested = serde_json::json!({});
+    apply_reasoning_effort(
+        &mut requested,
+        Some(&catalog),
+        "liquid/lfm-2.5-24b-a2b",
+        ReasoningEffort::XHigh,
+    );
+    assert_eq!(requested, serde_json::json!({"reasoning_effort": "high"}));
+}
+
+#[test]
+fn catalog_effort_maps_to_the_nearest_supported_level_ties_up() {
+    let catalog = catalog_fixture();
+    // low/high/max: the middle request lands on the middle level, not the lowest.
+    let deepseek = catalog_model(&catalog, "deepseek/deepseek-v4.1-flash").unwrap();
+    assert_eq!(
+        select_effort(deepseek, ReasoningEffort::Medium),
+        Some(ReasoningSelection::Effort("high"))
+    );
+    assert_eq!(
+        select_effort(deepseek, ReasoningEffort::XHigh),
+        Some(ReasoningSelection::Effort("max"))
+    );
+    // minimal..high: nothing above "high", so the top requests stay at it.
+    let gemini = catalog_model(&catalog, "google/gemini-3.5-flash-lite").unwrap();
+    assert_eq!(
+        select_effort(gemini, ReasoningEffort::Max),
+        Some(ReasoningSelection::Effort("high"))
+    );
+}
+
+#[test]
+fn catalog_lookup_strips_openrouter_routing_variant() {
+    let catalog = catalog_fixture();
+    assert_eq!(
+        catalog_reasoning_selection(
+            &catalog,
+            "google/gemini-3.5-flash-lite:nitro",
+            ReasoningEffort::None
+        ),
+        Some(ReasoningSelection::Effort("minimal"))
+    );
+}
+
+#[test]
+fn absent_catalog_model_keeps_legacy_reasoning_mapping() {
+    let catalog = catalog_fixture();
+    let mut disabled = serde_json::json!({});
+    apply_reasoning_effort(
+        &mut disabled,
+        Some(&catalog),
+        "unknown/model",
+        ReasoningEffort::None,
+    );
+    assert_eq!(
+        disabled,
+        serde_json::json!({"reasoning": {"enabled": false}})
+    );
+
+    let mut capped = serde_json::json!({});
+    apply_reasoning_effort(
+        &mut capped,
+        Some(&catalog),
+        "unknown/model",
+        ReasoningEffort::Max,
+    );
+    assert_eq!(capped, serde_json::json!({"reasoning_effort": "high"}));
+}
+
 #[test]
 fn test_supports_model() {
     let provider = OpenRouterProvider::new();

@@ -21,13 +21,14 @@ use crate::llm::reference_models::proxy_route_enforces_response_schema;
 use crate::llm::retry;
 use crate::llm::traits::{AiProvider, KeepalivePolicy};
 use crate::llm::types::{
-    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, SamplingSupport,
-    ThinkingBlock, TokenUsage, ToolCall,
+    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, ReasoningEffort,
+    SamplingSupport, ThinkingBlock, TokenUsage, ToolCall,
 };
 use crate::llm::utils::normalize_model_name;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::env;
+use tokio::sync::OnceCell;
 
 /// OpenRouter provider (uses OpenAI-compatible API)
 #[derive(Debug, Clone)]
@@ -48,6 +49,167 @@ impl OpenRouterProvider {
 const OPENROUTER_API_KEY_ENV: &str = "OPENROUTER_API_KEY";
 const OPENROUTER_API_URL_ENV: &str = "OPENROUTER_API_URL";
 const OPENROUTER_API_URL: &str = "https://openrouter.ai/api/v1/chat/completions";
+
+#[derive(Debug, Deserialize)]
+struct CatalogResponse {
+    data: Vec<CatalogModel>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CatalogModel {
+    id: String,
+    #[serde(default, deserialize_with = "deserialize_catalog_reasoning")]
+    reasoning: Option<CatalogReasoning>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CatalogReasoning {
+    mandatory: bool,
+    #[serde(default)]
+    supported_efforts: Vec<String>,
+}
+
+fn deserialize_catalog_reasoning<'de, D>(
+    deserializer: D,
+) -> std::result::Result<Option<CatalogReasoning>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(value.and_then(|value| serde_json::from_value(value).ok()))
+}
+
+static CATALOG: OnceCell<Vec<CatalogModel>> = OnceCell::const_new();
+
+async fn fetch_catalog(api_key: &str, api_url: &str) -> Result<Vec<CatalogModel>> {
+    let api_base = api_url
+        .trim_end_matches('/')
+        .strip_suffix("/chat/completions")
+        .ok_or_else(|| anyhow::anyhow!("OpenRouter API URL must end in /chat/completions"))?;
+    let response = shared::http_client()
+        .get(format!("{api_base}/models"))
+        .header("Authorization", format!("Bearer {api_key}"))
+        .send()
+        .await
+        .context("Failed to fetch OpenRouter model catalog")?;
+    if !response.status().is_success() {
+        let status = response.status();
+        let text = response
+            .text()
+            .await
+            .context("Failed to read OpenRouter model catalog error")?;
+        return Err(anyhow::anyhow!(
+            "OpenRouter models API error {status}: {text}"
+        ));
+    }
+    let catalog: CatalogResponse = response
+        .json()
+        .await
+        .context("Failed to parse OpenRouter model catalog")?;
+    Ok(catalog.data)
+}
+
+fn catalog_model<'a>(catalog: &'a [CatalogModel], model: &str) -> Option<&'a CatalogModel> {
+    let model = model.split_once(':').map_or(model, |(id, _)| id);
+    let normalized = normalize_model_name(model);
+    catalog
+        .iter()
+        .find(|entry| normalize_model_name(&entry.id) == normalized)
+}
+
+const EFFORT_LADDER: [&str; 7] = ["none", "minimal", "low", "medium", "high", "xhigh", "max"];
+
+#[derive(Debug, PartialEq, Eq)]
+enum ReasoningSelection {
+    Disabled,
+    Omit,
+    Effort(&'static str),
+}
+
+fn select_effort(entry: &CatalogModel, effort: ReasoningEffort) -> Option<ReasoningSelection> {
+    let reasoning = entry.reasoning.as_ref()?;
+    let supported = |name: &str| {
+        reasoning
+            .supported_efforts
+            .iter()
+            .any(|supported| supported == name)
+    };
+
+    if effort == ReasoningEffort::None {
+        if !reasoning.mandatory {
+            return Some(ReasoningSelection::Disabled);
+        }
+        if reasoning.supported_efforts.is_empty() {
+            return Some(ReasoningSelection::Omit);
+        }
+        return EFFORT_LADDER[1..]
+            .iter()
+            .copied()
+            .find(|name| supported(name))
+            .map(ReasoningSelection::Effort);
+    }
+
+    let requested = match effort {
+        ReasoningEffort::None => unreachable!("handled above"),
+        ReasoningEffort::Low => "low",
+        ReasoningEffort::Medium => "medium",
+        ReasoningEffort::High => "high",
+        ReasoningEffort::XHigh => "xhigh",
+        ReasoningEffort::Max => "max",
+    };
+    let index = EFFORT_LADDER.iter().position(|level| *level == requested)?;
+    if supported(requested) {
+        return Some(ReasoningSelection::Effort(requested));
+    }
+    // Nearest supported level on the ladder, ties going up: a three-level model
+    // (low/high/max) is asked "medium" as its middle level, not its lowest.
+    // "none" is never a substitute for a requested reasoning level.
+    EFFORT_LADDER
+        .iter()
+        .enumerate()
+        .skip(1)
+        .filter(|(_, name)| supported(name))
+        .min_by_key(|(position, _)| (position.abs_diff(index), std::cmp::Reverse(*position)))
+        .map(|(_, name)| ReasoningSelection::Effort(name))
+}
+
+fn catalog_reasoning_selection(
+    catalog: &[CatalogModel],
+    model: &str,
+    effort: ReasoningEffort,
+) -> Option<ReasoningSelection> {
+    catalog_model(catalog, model).and_then(|entry| select_effort(entry, effort))
+}
+
+fn apply_reasoning_effort(
+    request_body: &mut serde_json::Value,
+    catalog: Option<&[CatalogModel]>,
+    model: &str,
+    effort: ReasoningEffort,
+) {
+    match catalog.and_then(|catalog| catalog_reasoning_selection(catalog, model, effort)) {
+        Some(ReasoningSelection::Disabled) => {
+            request_body["reasoning"] = serde_json::json!({ "enabled": false });
+        }
+        Some(ReasoningSelection::Omit) => {}
+        Some(ReasoningSelection::Effort(value)) => {
+            request_body["reasoning_effort"] = serde_json::json!(value);
+        }
+        None if effort == ReasoningEffort::None => {
+            request_body["reasoning"] = serde_json::json!({ "enabled": false });
+        }
+        None => {
+            let value = match effort {
+                ReasoningEffort::None => unreachable!("handled above"),
+                ReasoningEffort::Low => "low",
+                ReasoningEffort::Medium => "medium",
+                ReasoningEffort::High => "high",
+                ReasoningEffort::XHigh | ReasoningEffort::Max => "high",
+            };
+            request_body["reasoning_effort"] = serde_json::json!(value);
+        }
+    }
+}
 
 #[async_trait::async_trait]
 impl AiProvider for OpenRouterProvider {
@@ -206,6 +368,14 @@ impl AiProvider for OpenRouterProvider {
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
         let api_key = self.get_api_key()?;
+        let api_url =
+            env::var(OPENROUTER_API_URL_ENV).unwrap_or_else(|_| OPENROUTER_API_URL.to_string());
+        let catalog_key = api_key.clone();
+        let catalog_url = api_url.clone();
+        // Catalog failures leave the legacy mapping in charge and retry next call.
+        let _ = CATALOG
+            .get_or_try_init(|| async move { fetch_catalog(&catalog_key, &catalog_url).await })
+            .await;
         let requested_schema = params
             .response_format
             .as_ref()
@@ -253,23 +423,13 @@ impl AiProvider for OpenRouterProvider {
             request_body["max_tokens"] = serde_json::json!(params.max_tokens);
         }
 
-        // Pass-through reasoning_effort (OpenRouter forwards it to the underlying provider).
         if let Some(effort) = params.reasoning_effort {
-            if effort == crate::llm::types::ReasoningEffort::None {
-                // OpenRouter's unified reasoning switch; forwarded to the
-                // underlying provider as its own "thinking off".
-                request_body["reasoning"] = serde_json::json!({ "enabled": false });
-            } else {
-                let s = match effort {
-                    crate::llm::types::ReasoningEffort::None => unreachable!("handled above"),
-                    crate::llm::types::ReasoningEffort::Low => "low",
-                    crate::llm::types::ReasoningEffort::Medium => "medium",
-                    crate::llm::types::ReasoningEffort::High => "high",
-                    crate::llm::types::ReasoningEffort::XHigh => "high",
-                    crate::llm::types::ReasoningEffort::Max => "high",
-                };
-                request_body["reasoning_effort"] = serde_json::json!(s);
-            }
+            apply_reasoning_effort(
+                &mut request_body,
+                CATALOG.get().map(Vec::as_slice),
+                &params.model,
+                effort,
+            );
         }
 
         // Add tools if available (OpenRouter supports OpenAI-compatible tools)
@@ -340,10 +500,6 @@ impl AiProvider for OpenRouterProvider {
                 }
             }
         }
-
-        // Execute the request
-        let api_url =
-            env::var(OPENROUTER_API_URL_ENV).unwrap_or_else(|_| OPENROUTER_API_URL.to_string());
 
         let response = execute_openrouter_request(
             api_key,

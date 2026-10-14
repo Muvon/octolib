@@ -126,6 +126,62 @@ fn replay_puts_encrypted_reasoning_before_namespaced_calls() {
     assert_eq!(input[3]["type"], "function_call_output");
 }
 
+// The plan route caches by rendered prefix: a later request of the same session
+// must start with the earlier request byte-for-byte, or every turn pays its whole
+// history again.
+#[test]
+fn a_grown_transcript_extends_the_previous_request_unchanged() {
+    let meta = serde_json::Map::from_iter([(
+        openai::REASONING_META_KEY.to_string(),
+        json!([{"type": "reasoning", "id": "rs_1", "summary": [], "encrypted_content": "enc"}]),
+    )]);
+    let mut messages = vec![
+        Message::system("rules"),
+        Message::user("go"),
+        assistant_with_call(Some(meta)),
+        Message::tool("ok", "call_1", "view"),
+    ];
+    let request_at = |messages: &[Message]| {
+        let mut params = ChatCompletionParams::new(messages, "gpt-6.1-sol", 0.7, 1.0, 50, 1000)
+            .with_prompt_cache_key("s-1");
+        params.tools = Some(vec![FunctionDefinition {
+            name: "view".to_string(),
+            description: "Read a file".to_string(),
+            parameters: json!({"type": "object", "properties": {"path": {"type": "string"}}}),
+            cache_control: None,
+        }]);
+        build_request(&params)
+    };
+
+    let first = request_at(&messages);
+    assert_eq!(
+        first,
+        request_at(&messages),
+        "request building is deterministic"
+    );
+
+    let mut next_call = assistant_with_call(None);
+    next_call.content = "checking".to_string();
+    messages.push(next_call);
+    messages.push(Message::tool("done", "call_1", "view"));
+    let second = request_at(&messages);
+
+    let (first_input, second_input) = (
+        first["input"].as_array().unwrap(),
+        second["input"].as_array().unwrap(),
+    );
+    assert!(second_input.len() > first_input.len());
+    assert_eq!(&second_input[..first_input.len()], first_input.as_slice());
+    for field in first
+        .as_object()
+        .unwrap()
+        .keys()
+        .filter(|key| *key != "input")
+    {
+        assert_eq!(first[field], second[field], "{field} changed between turns");
+    }
+}
+
 #[test]
 fn stream_folds_into_a_response_that_keeps_reasoning_for_replay() {
     let body = [

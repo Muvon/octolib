@@ -160,6 +160,29 @@ fn test_effort_only_for_m3_1_flash_preview() {
 }
 
 #[test]
+fn test_m3_thinking_enabled_by_any_effort_except_none() {
+    let adaptive = Some(serde_json::json!({ "type": "adaptive" }));
+    for effort in [
+        ReasoningEffort::Low,
+        ReasoningEffort::Medium,
+        ReasoningEffort::High,
+        ReasoningEffort::XHigh,
+        ReasoningEffort::Max,
+    ] {
+        assert_eq!(thinking_value("MiniMax-M3", effort), adaptive);
+    }
+    // Thinking is off by default on M3, so None sends nothing
+    assert_eq!(thinking_value("MiniMax-M3", ReasoningEffort::None), None);
+
+    // Flash-Preview always thinks; M2.x cannot toggle thinking
+    assert_eq!(
+        thinking_value("MiniMax-M3.1-Flash-Preview", ReasoningEffort::High),
+        None
+    );
+    assert_eq!(thinking_value("MiniMax-M2.7", ReasoningEffort::High), None);
+}
+
+#[test]
 fn test_provider_capabilities() {
     let provider = MinimaxProvider::new();
     assert!(provider.supports_caching("MiniMax-M2.1"));

@@ -65,8 +65,27 @@ struct CatalogModel {
 #[derive(Debug, Deserialize)]
 struct CatalogReasoning {
     mandatory: bool,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_supported_efforts")]
     supported_efforts: Vec<String>,
+}
+
+/// An omitted `supported_efforts` means the model exposes no effort selection,
+/// but `null` means "all gateway effort values are accepted" (OpenRouter
+/// reasoning-tokens guide, Oct 2026), so it expands to the whole ladder.
+fn deserialize_supported_efforts<'de, D>(
+    deserializer: D,
+) -> std::result::Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(
+        Option::<Vec<String>>::deserialize(deserializer)?.unwrap_or_else(|| {
+            EFFORT_LADDER
+                .iter()
+                .map(|level| level.to_string())
+                .collect()
+        }),
+    )
 }
 
 fn deserialize_catalog_reasoning<'de, D>(

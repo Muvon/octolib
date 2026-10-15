@@ -78,6 +78,15 @@ fn effort_value(model: &str, effort: ReasoningEffort) -> Option<&'static str> {
     })
 }
 
+/// MiniMax-M3 thinks only when `thinking: {"type": "adaptive"}` is sent (off when
+/// omitted) and documents no `output_config.effort`, so any level except `None`
+/// enables it (platform.minimax.io/docs/api-reference/text-anthropic-api, verified
+/// Oct 2026).
+fn thinking_value(model: &str, effort: ReasoningEffort) -> Option<serde_json::Value> {
+    (is_m3_model(model) && effort != ReasoningEffort::None)
+        .then(|| serde_json::json!({ "type": "adaptive" }))
+}
+
 /// Token usage breakdown for cache-aware pricing
 struct CacheTokenUsage {
     regular_input_tokens: u64,
@@ -276,6 +285,13 @@ impl AiProvider for MinimaxProvider {
             .and_then(|effort| effort_value(&params.model, effort))
         {
             request_body["output_config"] = serde_json::json!({ "effort": effort });
+        }
+
+        if let Some(thinking) = params
+            .reasoning_effort
+            .and_then(|effort| thinking_value(&params.model, effort))
+        {
+            request_body["thinking"] = thinking;
         }
 
         // Add system message with cache control if needed

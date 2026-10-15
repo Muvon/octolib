@@ -68,8 +68,9 @@ pub struct CatalogModel {
     pub pricing: Option<ModelPricing>,
     /// `reasoning_effort.supported_efforts`; empty when the model has no effort knob.
     pub supported_efforts: Vec<String>,
-    /// `reasoning_effort.normalizes_to`: levels Cloudflare maps itself.
-    pub normalized_efforts: Vec<String>,
+    /// `reasoning_effort.normalizes_to` as `(requested, applied)` pairs: levels
+    /// Cloudflare maps itself, possibly upward (GLM-5.3 runs `medium` at `max`).
+    pub normalized_efforts: Vec<(String, String)>,
 }
 
 /// Process-wide catalog, filled by [`preload`] or the first chat call.
@@ -163,7 +164,11 @@ fn parse_catalog(entries: Vec<SearchEntry>) -> Vec<CatalogModel> {
                 normalized_efforts: effort
                     .and_then(|e| e.get("normalizes_to"))
                     .and_then(Value::as_object)
-                    .map(|map| map.keys().cloned().collect())
+                    .map(|map| {
+                        map.iter()
+                            .filter_map(|(from, to)| Some((from.clone(), to.as_str()?.to_string())))
+                            .collect()
+                    })
                     .unwrap_or_default(),
             }
         })
@@ -584,11 +589,12 @@ const EFFORT_LADDER: [(ReasoningEffort, &str); 6] = [
 ];
 
 /// The `reasoning_effort` value to send for a catalog entry. A supported level
-/// goes verbatim, and so does one Cloudflare documents it normalizes itself
-/// (the catalog lists e.g. `medium -> max` for GLM-5.3). Anything else floors
-/// to the nearest supported level below, or the lowest supported level when
-/// nothing is below. `None` when the model has no effort knob, which leaves
-/// the shared ladder in charge.
+/// goes verbatim, and so does one Cloudflare documents it normalizes to the
+/// same or a lower level (Kimi K2.6 runs `max` at `high`). A level the catalog
+/// maps upward (GLM-5.3 runs `medium` and `xhigh` at `max`, live catalog
+/// Oct 2026) is never sent: it floors to the nearest supported level below,
+/// or the lowest supported level when nothing is below. `None` when the model
+/// has no effort knob, which leaves the shared ladder in charge.
 fn select_effort(entry: &CatalogModel, effort: ReasoningEffort) -> Option<&'static str> {
     if entry.supported_efforts.is_empty() {
         return None;
@@ -598,17 +604,33 @@ fn select_effort(entry: &CatalogModel, effort: ReasoningEffort) -> Option<&'stat
         .iter()
         .position(|(level, _)| *level == effort)?;
     let requested = EFFORT_LADDER[index].1;
-    // "none" means no reasoning. Only a model that lists it as a level gets it;
-    // a documented normalization does not count (GLM-5.3 normalizes "none" to
-    // "max"), and neither does flooring to the lowest supported level — no
-    // effort field at all is the honest translation.
-    if effort == ReasoningEffort::None {
-        return supported(requested).then_some(requested);
-    }
-    if supported(requested) || entry.normalized_efforts.iter().any(|s| s == requested) {
+    if supported(requested) {
         return Some(requested);
     }
-    EFFORT_LADDER[..index]
+    // "none" means no reasoning. A model that does not list it cannot stop
+    // thinking (GLM-5.3 is `mandatory` and normalizes "none" to its `max`
+    // default; Qwen3.8-27B omits it and defaults to `xhigh`, live catalog
+    // Oct 2026), so an omitted effort would run at the default. The lowest
+    // supported level is the closest the model gets to no reasoning.
+    if effort == ReasoningEffort::None {
+        return EFFORT_LADDER[1..]
+            .iter()
+            .map(|(_, name)| *name)
+            .find(|name| supported(name));
+    }
+    let normalized_at_or_below = entry.normalized_efforts.iter().any(|(from, to)| {
+        from == requested
+            && EFFORT_LADDER
+                .iter()
+                .position(|(_, name)| *name == to.as_str())
+                .is_some_and(|rank| (1..=index).contains(&rank))
+    });
+    if normalized_at_or_below {
+        return Some(requested);
+    }
+    // Flooring stays among reasoning levels: a caller asking for some effort
+    // never gets "none".
+    EFFORT_LADDER[1..index]
         .iter()
         .rev()
         .chain(EFFORT_LADDER[index + 1..].iter())

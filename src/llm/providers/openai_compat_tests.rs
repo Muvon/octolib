@@ -644,6 +644,258 @@ fn test_alibaba_no_reasoning_uses_the_switch_or_the_lowest_level() {
     );
 }
 
+/// Request fields a requested effort produces on `provider_name`.
+fn effort_body(provider_name: &str, model: &str, effort: Effort) -> serde_json::Value {
+    let mut request_body = serde_json::json!({});
+    apply_reasoning_effort(&mut request_body, provider_name, model, Some(effort));
+    request_body
+}
+
+/// Asserts the `reasoning_effort` sent for each `(requested, sent)` pair.
+fn assert_effort_ladder(provider_name: &str, model: &str, ladder: &[(Effort, &str)]) {
+    for (effort, expected) in ladder {
+        assert_eq!(
+            effort_body(provider_name, model, *effort),
+            serde_json::json!({ "reasoning_effort": expected }),
+            "{provider_name} {model} {effort:?}"
+        );
+    }
+}
+
+/// Ollama Cloud resolves an unlisted effort name to the model default, so
+/// every request floors to a level `/api/show` lists, and no reasoning sends
+/// "none" only where the model lists `false`.
+#[test]
+fn test_ollama_reasoning_effort_follows_api_show_levels() {
+    use Effort::{High, Low, Max, Medium, None, XHigh};
+
+    for model in ["kimi-k3", "deepseek-v4.1-flash", "deepseek-v4-pro"] {
+        assert_effort_ladder(
+            "ollama",
+            model,
+            &[
+                (None, "none"),
+                (Low, "low"),
+                (Medium, "low"),
+                (High, "high"),
+                (XHigh, "high"),
+                (Max, "max"),
+            ],
+        );
+    }
+    assert_effort_ladder(
+        "ollama",
+        "glm-5.2",
+        &[
+            (None, "none"),
+            (Low, "high"),
+            (Medium, "high"),
+            (Max, "max"),
+        ],
+    );
+    // gpt-oss has no level above high: "max" ran at its medium default.
+    assert_effort_ladder(
+        "ollama",
+        "gpt-oss:120b",
+        &[
+            (None, "none"),
+            (Medium, "medium"),
+            (XHigh, "high"),
+            (Max, "high"),
+        ],
+    );
+    // Boolean models map any recognized level to thinking on.
+    for model in [
+        "kimi-k2.6",
+        "kimi-k2.7-code",
+        "nemotron-3-super",
+        "gemma4:31b",
+    ] {
+        assert_effort_ladder("ollama", model, &[(None, "none"), (Max, "high")]);
+    }
+    // minimax-m2.7 lists only `true`: no reasoning keeps the default.
+    assert_eq!(
+        effort_body("ollama", "minimax-m2.7", None),
+        serde_json::json!({})
+    );
+    // Models without thinking metadata keep the compatibility aliases.
+    assert_eq!(
+        effort_body("ollama", "minimax-m3", None),
+        serde_json::json!({})
+    );
+    assert_effort_ladder("ollama", "minimax-m3", &[(Max, "max")]);
+}
+
+/// Fireworks collapses the five levels onto each model's tiers itself, so
+/// they pass verbatim where documented, and "none" turns thinking off except
+/// on gpt-oss and MiniMax M2, which reject it.
+#[test]
+fn test_fireworks_reasoning_effort_reaches_documented_tiers() {
+    use Effort::{High, Low, Max, Medium, None, XHigh};
+
+    for model in [
+        "accounts/fireworks/models/kimi-k3",
+        "accounts/fireworks/models/qwen3p8-max",
+        "accounts/fireworks/models/deepseek-v4p1-flash",
+        "accounts/fireworks/models/glm-5p2",
+    ] {
+        assert_effort_ladder(
+            "fireworks",
+            model,
+            &[
+                (None, "none"),
+                (Medium, "medium"),
+                (XHigh, "xhigh"),
+                (Max, "max"),
+            ],
+        );
+    }
+    assert_effort_ladder(
+        "fireworks",
+        "accounts/fireworks/models/glm-5p1",
+        &[(None, "none"), (Max, "high")],
+    );
+    // glm-5p3 and qwen3p8-2p4t-a95b list no off toggle.
+    assert_effort_ladder(
+        "fireworks",
+        "accounts/fireworks/models/glm-5p3-fast",
+        &[
+            (None, "low"),
+            (Medium, "low"),
+            (XHigh, "high"),
+            (Max, "max"),
+        ],
+    );
+    assert_effort_ladder(
+        "fireworks",
+        "accounts/fireworks/models/qwen3p8-2p4t-a95b",
+        &[(None, "low"), (High, "medium"), (Max, "xhigh")],
+    );
+    for model in [
+        "accounts/fireworks/models/gpt-oss-120b",
+        "accounts/fireworks/models/minimax-m2p5",
+    ] {
+        assert_eq!(effort_body("fireworks", model, None), serde_json::json!({}));
+        assert_effort_ladder("fireworks", model, &[(Low, "low"), (Max, "high")]);
+    }
+}
+
+#[test]
+fn test_nvidia_reasoning_effort_follows_model_levels() {
+    use Effort::{High, Low, Max, Medium, None, XHigh};
+
+    // glm-5.3 cannot stop thinking and defaults to max.
+    assert_effort_ladder(
+        "nvidia",
+        "z-ai/glm-5.3",
+        &[
+            (None, "low"),
+            (Medium, "low"),
+            (High, "high"),
+            (XHigh, "high"),
+            (Max, "max"),
+        ],
+    );
+    assert_effort_ladder(
+        "nvidia",
+        "deepseek-ai/deepseek-v4.1-flash",
+        &[(None, "none"), (Medium, "low"), (Max, "max")],
+    );
+    assert_effort_ladder(
+        "nvidia",
+        "deepseek-ai/deepseek-v4-pro",
+        &[(None, "none"), (Low, "high"), (Max, "max")],
+    );
+    // Nemotron 3 has no effort field; the chat template switches thinking off.
+    assert_eq!(
+        effort_body("nvidia", "nvidia/nemotron-3-super-120b-a12b", None),
+        serde_json::json!({ "chat_template_kwargs": { "enable_thinking": false } })
+    );
+}
+
+#[test]
+fn test_opencode_reasoning_effort_follows_catalog_levels() {
+    use Effort::{High, Low, Max, Medium, None, XHigh};
+
+    for provider_name in ["opencode-zen", "opencode-go"] {
+        assert_effort_ladder(
+            provider_name,
+            "glm-5.3",
+            &[
+                (None, "low"),
+                (Medium, "low"),
+                (XHigh, "high"),
+                (Max, "max"),
+            ],
+        );
+        assert_effort_ladder(
+            provider_name,
+            "deepseek-v4-pro",
+            &[(Low, "high"), (Medium, "high"), (Max, "max")],
+        );
+        assert_effort_ladder(
+            provider_name,
+            "deepseek-v4.1-flash",
+            &[(Medium, "low"), (High, "high"), (Max, "max")],
+        );
+        assert_effort_ladder(
+            provider_name,
+            "qwen3.8-max",
+            &[
+                (Medium, "medium"),
+                (High, "medium"),
+                (XHigh, "xhigh"),
+                (Max, "xhigh"),
+            ],
+        );
+        assert_effort_ladder(provider_name, "glm-5.2", &[(Low, "high"), (Max, "max")]);
+        // No documented off level: nothing is sent.
+        assert_eq!(
+            effort_body(provider_name, "deepseek-v4-pro", None),
+            serde_json::json!({})
+        );
+    }
+}
+
+/// Cerebras and Groq disable Qwen3.8 reasoning with "none"; gpt-oss has no
+/// off level there, so nothing is sent.
+#[test]
+fn test_qwen_3_8_no_reasoning_sends_none_on_cerebras_and_groq() {
+    assert_effort_ladder("cerebras", "qwen-3.8-27b", &[(Effort::None, "none")]);
+    assert_effort_ladder("groq", "qwen/qwen3.8-27b", &[(Effort::None, "none")]);
+    assert_eq!(
+        effort_body("cerebras", "gpt-oss-120b", Effort::None),
+        serde_json::json!({})
+    );
+    assert_eq!(
+        effort_body("groq", "openai/gpt-oss-120b", Effort::None),
+        serde_json::json!({})
+    );
+}
+
+/// Model Studio's thinking-only models reject the off switch: kimi-k3 and
+/// qwen3.8-2.4t-a95b run at their lowest level, and the Qwen3.7 Max snapshots,
+/// which document no effort level, keep their default.
+#[test]
+fn test_alibaba_thinking_only_models_never_send_the_off_switch() {
+    for model in ["kimi-k3", "qwen3.8-2.4t-a95b"] {
+        assert_eq!(
+            effort_body("alibaba", model, Effort::None),
+            serde_json::json!({ "reasoning_effort": "low" })
+        );
+    }
+    for model in ["qwen3.7-max-preview", "qwen3.7-max-2026-05-17"] {
+        assert_eq!(
+            effort_body("alibaba", model, Effort::None),
+            serde_json::json!({})
+        );
+    }
+    assert_eq!(
+        effort_body("alibaba", "qwen3.7-max", Effort::None),
+        serde_json::json!({ "enable_thinking": false })
+    );
+}
+
 #[test]
 fn test_openai_compat_transport_drops_thinking_by_default() {
     // The shared transport family (Alibaba except GLM, Ollama minus Kimi,

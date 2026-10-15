@@ -232,3 +232,84 @@ fn tool_images_follow_tool_results_without_losing_call_association() {
         "data:image/png;base64,aW1hZ2U="
     );
 }
+
+fn reasoning_request(model: &str, effort: Option<ReasoningEffort>) -> serde_json::Value {
+    let mut body = serde_json::json!({ "model": model });
+    apply_reasoning_effort(&mut body, model, effort);
+    body
+}
+
+#[test]
+fn unset_effort_sends_no_reasoning_fields() {
+    let body = reasoning_request("moonshotai/Kimi-K3", None);
+    assert!(body.get("reasoning_effort").is_none());
+    assert!(body.get("reasoning").is_none());
+}
+
+#[test]
+fn reasoning_off_disables_thinking_on_hybrid_models() {
+    for model in [
+        "moonshotai/Kimi-K3",
+        "deepseek-ai/DeepSeek-V4-Pro-0813",
+        "zai-org/GLM-5.2",
+        "MiniMaxAI/MiniMax-M3",
+        "Qwen/Qwen3.6-Plus",
+        "Qwen/Qwen3.5-9B",
+    ] {
+        let body = reasoning_request(model, Some(ReasoningEffort::None));
+        assert_eq!(
+            body["reasoning"],
+            serde_json::json!({ "enabled": false }),
+            "{model}"
+        );
+        assert!(body.get("reasoning_effort").is_none(), "{model}");
+    }
+}
+
+#[test]
+fn reasoning_off_runs_glm_5_3_at_low_and_leaves_gpt_oss_alone() {
+    // GLM-5.3 cannot stop thinking; low is the documented closest equivalent.
+    for model in ["zai-org/GLM-5.3", "zai-org/GLM-5.3-Flash"] {
+        let body = reasoning_request(model, Some(ReasoningEffort::None));
+        assert_eq!(body["reasoning_effort"], "low", "{model}");
+        assert!(body.get("reasoning").is_none(), "{model}");
+    }
+    // GPT-OSS cannot be disabled and has no switch: nothing is sent.
+    let body = reasoning_request("openai/gpt-oss-120b", Some(ReasoningEffort::None));
+    assert!(body.get("reasoning_effort").is_none());
+    assert!(body.get("reasoning").is_none());
+}
+
+#[test]
+fn effort_levels_follow_each_model_ladder() {
+    let effort = |model: &str, level: ReasoningEffort| {
+        reasoning_request(model, Some(level))["reasoning_effort"].clone()
+    };
+
+    // Kimi K3 and GLM-5.3: low|medium|high|max; xhigh floors to high.
+    for model in ["moonshotai/Kimi-K3", "zai-org/GLM-5.3"] {
+        assert_eq!(effort(model, ReasoningEffort::Low), "low");
+        assert_eq!(effort(model, ReasoningEffort::Medium), "medium");
+        assert_eq!(effort(model, ReasoningEffort::High), "high");
+        assert_eq!(effort(model, ReasoningEffort::XHigh), "high");
+        assert_eq!(effort(model, ReasoningEffort::Max), "max");
+    }
+
+    // DeepSeek V4 Pro: high|max only.
+    let deepseek = "deepseek-ai/DeepSeek-V4-Pro-0813";
+    assert_eq!(effort(deepseek, ReasoningEffort::Low), "high");
+    assert_eq!(effort(deepseek, ReasoningEffort::High), "high");
+    assert_eq!(effort(deepseek, ReasoningEffort::XHigh), "max");
+    assert_eq!(effort(deepseek, ReasoningEffort::Max), "max");
+
+    // GPT-OSS tops out at high.
+    let gpt_oss = "openai/gpt-oss-120b";
+    assert_eq!(effort(gpt_oss, ReasoningEffort::Medium), "medium");
+    assert_eq!(effort(gpt_oss, ReasoningEffort::Max), "high");
+
+    // Undocumented models keep the OpenAI low|medium|high ladder.
+    assert_eq!(effort("Qwen/Qwen3.8-Flash", ReasoningEffort::Max), "high");
+    let body = reasoning_request("Qwen/Qwen3.8-Flash", Some(ReasoningEffort::None));
+    assert!(body.get("reasoning_effort").is_none());
+    assert!(body.get("reasoning").is_none());
+}

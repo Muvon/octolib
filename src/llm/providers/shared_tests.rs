@@ -23,28 +23,36 @@ fn test_maybe_ephemeral_cache_control() {
     );
 }
 
-/// GLM-5.3 has no off level on Model Studio or Z.AI; every other model and host
+/// GLM-5.3 has no off level on any verified host, nor do Model Studio's
+/// thinking-only kimi-k3 and qwen3.8-2.4t-a95b; every other model and host
 /// keeps the requested effort.
 #[test]
-fn test_supported_reasoning_effort_floors_only_glm_5_3_on_verified_hosts() {
+fn test_supported_reasoning_effort_floors_only_models_that_always_think() {
     let off = ReasoningEffort::None;
-    assert_eq!(
-        supported_reasoning_effort("alibaba", "glm-5.3", off),
-        ReasoningEffort::Low
-    );
-    assert_eq!(
-        supported_reasoning_effort("zai", "GLM-5.3-Flash", off),
-        ReasoningEffort::Low
-    );
-    assert_eq!(
-        supported_reasoning_effort("ollama", "glm-5.3:cloud", off),
-        ReasoningEffort::Low
-    );
+    for (provider_name, model) in [
+        ("alibaba", "glm-5.3"),
+        ("alibaba", "kimi-k3"),
+        ("alibaba", "qwen3.8-2.4t-a95b"),
+        ("zai", "GLM-5.3-Flash"),
+        ("ollama", "glm-5.3:cloud"),
+        ("nvidia", "z-ai/glm-5.3"),
+        ("opencode-zen", "glm-5.3"),
+        ("opencode-go", "glm-5.3-flash"),
+        ("fireworks", "accounts/fireworks/models/glm-5p3"),
+        ("fireworks", "accounts/fireworks/models/qwen3p8-2p4t-a95b"),
+    ] {
+        assert_eq!(
+            supported_reasoning_effort(provider_name, model, off),
+            ReasoningEffort::Low,
+            "{provider_name} {model}"
+        );
+    }
     assert_eq!(
         supported_reasoning_effort("alibaba", "glm-5.3", ReasoningEffort::High),
         ReasoningEffort::High
     );
     assert_eq!(supported_reasoning_effort("alibaba", "glm-5.2", off), off);
+    assert_eq!(supported_reasoning_effort("ollama", "kimi-k3", off), off);
     assert_eq!(
         supported_reasoning_effort("together", "zai-org/glm-5.3", off),
         off

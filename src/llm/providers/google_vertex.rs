@@ -61,6 +61,10 @@ impl GoogleVertexProvider {
 /// Matching is substring-based and first-match-wins: keep "-lite"/"-pro" variants
 /// before their shorter prefixes.
 pub(super) const PRICING: &[PricingTuple] = &[
+    // Gemini 4 Argon — introductory pricing through Nov 30, 2026 (verified Oct 15, 2026);
+    // standard rates from Dec 1, 2026: input $4.00, output $20.00, cache read $0.20.
+    // Implicit caching only; flat rates at every context length.
+    ("gemini-4-argon", 2.00, 10.00, 2.00, 0.10),
     // Gemini 3.8 / 3.7 / 3.6 series — introductory pricing through Dec 31, 2026;
     // standard rates from Jan 1, 2027: input $1.50, output $7.50, cache read $0.15
     ("gemini-3.8-flash", 0.75, 3.75, 0.75, 0.075),
@@ -229,8 +233,11 @@ pub(super) fn get_cached_input_limit(
 /// Fallback input-token limits for Gemini models (shared with the google-studio provider)
 pub(super) fn gemini_max_input_tokens(model: &str) -> usize {
     let normalized = normalize_model_name(model);
-    if normalized.contains("gemini-3") || normalized.contains("gemini-2") {
-        1_048_576 // Gemini 2.x/3.x has ~1M context
+    if normalized.contains("gemini-4")
+        || normalized.contains("gemini-3")
+        || normalized.contains("gemini-2")
+    {
+        1_048_576 // Gemini 2.x/3.x/4.x has ~1M context
     } else if normalized.contains("gemini-1.5") {
         1_000_000 // Gemini 1.5 has 1M context
     } else if normalized.contains("gemini-1.0") || normalized.contains("bison-32k") {
@@ -243,10 +250,11 @@ pub(super) fn gemini_max_input_tokens(model: &str) -> usize {
 }
 
 /// Sampling-parameter support for Gemini models (shared with the google-studio
-/// provider). Gemini 3.6/3.7/3.8 dropped temperature/top_p/top_k support.
+/// provider). Gemini 3.6/3.7/3.8 and Gemini 4 ignore temperature/top_p/top_k.
 pub(super) fn gemini_sampling_support(model: &str) -> SamplingSupport {
     let normalized = normalize_model_name(model);
-    if normalized.contains("gemini-3.6")
+    if normalized.contains("gemini-4")
+        || normalized.contains("gemini-3.6")
         || normalized.contains("gemini-3.7")
         || normalized.contains("gemini-3.8")
     {
@@ -410,7 +418,9 @@ impl AiProvider for GoogleVertexProvider {
 
     fn supports_caching(&self, model: &str) -> bool {
         let normalized = normalize_model_name(model);
-        normalized.contains("gemini-3") || normalized.contains("gemini-2.5")
+        normalized.contains("gemini-4")
+            || normalized.contains("gemini-3")
+            || normalized.contains("gemini-2.5")
     }
 
     fn supports_vision(&self, model: &str) -> bool {

@@ -87,7 +87,9 @@ impl AiProvider for GoogleStudioProvider {
     // at the cache-read rate — same behavior as the Vertex lane.
     fn supports_caching(&self, model: &str) -> bool {
         let normalized = normalize_model_name(model);
-        normalized.contains("gemini-3") || normalized.contains("gemini-2.5")
+        normalized.contains("gemini-4")
+            || normalized.contains("gemini-3")
+            || normalized.contains("gemini-2.5")
     }
 
     fn supports_vision(&self, model: &str) -> bool {

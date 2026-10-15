@@ -38,6 +38,12 @@ fn test_supports_caching() {
 fn test_model_pricing() {
     let provider = GoogleVertexProvider::new();
 
+    // Intro rate through Nov 30, 2026
+    let p = provider.get_model_pricing("gemini-4-argon").unwrap();
+    assert_eq!(p.input_price_per_1m, 2.00);
+    assert_eq!(p.output_price_per_1m, 10.00);
+    assert_eq!(p.cache_read_price_per_1m, 0.10);
+
     let p = provider.get_model_pricing("gemini-3.1-pro").unwrap();
     assert_eq!(p.input_price_per_1m, 2.00);
     assert_eq!(p.output_price_per_1m, 12.00);
@@ -106,6 +112,7 @@ fn test_model_pricing() {
 #[test]
 fn test_max_input_tokens_fallback() {
     let provider = GoogleVertexProvider::new();
+    assert_eq!(provider.get_max_input_tokens("gemini-4-argon"), 1_048_576);
     assert_eq!(provider.get_max_input_tokens("gemini-3-flash"), 1_048_576);
     assert_eq!(provider.get_max_input_tokens("gemini-2.5-pro"), 1_048_576);
     assert_eq!(provider.get_max_input_tokens("gemini-1.5-pro"), 1_000_000);
@@ -115,6 +122,10 @@ fn test_max_input_tokens_fallback() {
 #[test]
 fn test_sampling_params() {
     let provider = GoogleVertexProvider::new();
+    assert_eq!(
+        provider.supported_sampling_params("gemini-4-argon"),
+        SamplingSupport::NONE
+    );
     assert_eq!(
         provider.supported_sampling_params("gemini-3.8-flash"),
         SamplingSupport::NONE

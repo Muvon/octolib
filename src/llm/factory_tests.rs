@@ -77,6 +77,7 @@ fn test_supported_providers() {
     assert!(providers.contains(&"meta"));
     assert!(providers.contains(&"xai"));
     assert!(providers.contains(&"tinker"));
+    assert!(providers.contains(&"webwright"));
     assert!(providers.contains(&"cli"));
 }
 
@@ -112,6 +113,7 @@ fn test_create_provider() {
     assert!(ProviderFactory::create_provider("xai").is_ok());
     assert!(ProviderFactory::create_provider("meta").is_ok());
     assert!(ProviderFactory::create_provider("tinker").is_ok());
+    assert!(ProviderFactory::create_provider("webwright").is_ok());
     assert!(ProviderFactory::create_provider("cli").is_err());
 
     // Test case insensitive

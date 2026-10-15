@@ -77,6 +77,7 @@ Cross-provider tool call standardization:
 - Alibaba Model Studio (Qwen models, with context caching)
 - NVIDIA NIM
 - Ollama
+- WebWright
 - Together AI
 - DeepSeek
 - Moonshot AI (Kimi) - with thinking support

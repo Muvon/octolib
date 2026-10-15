@@ -83,6 +83,7 @@ Each provider requires its specific API key:
 - `BYTEPLUS_API_KEY`: BytePlus API key
 - `ALIBABA_API_KEY`: Alibaba Cloud Model Studio (DashScope) API key
 - `NVIDIA_API_KEY`: NVIDIA NIM API key
+- `WEBWRIGHT_API_KEY`: WebWright API key
 - `CLOUDFLARE_API_KEY`: Cloudflare API key
 - `TOGETHER_API_KEY`: Together AI API key
 - `OCTOHUB_API_KEY`: OctoHub API key
@@ -108,6 +109,7 @@ All providers support custom API URLs via environment variables. If not set, def
 | Moonshot | `MOONSHOT_API_KEY` | `MOONSHOT_API_URL` | `https://api.moonshot.cn/v1/chat/completions` |
 | Z.ai | `ZAI_API_KEY` | `ZAI_API_URL` | `https://api.z.ai/v1/llm/chat/completions` |
 | NVIDIA NIM | `NVIDIA_API_KEY` | `NVIDIA_API_URL` | `https://integrate.api.nvidia.com/v1/chat/completions` |
+| WebWright | `WEBWRIGHT_API_KEY` | `WEBWRIGHT_API_URL` | `https://webwright.ai/v1/chat/completions` |
 | Together AI | `TOGETHER_API_KEY` | `TOGETHER_API_URL` | `https://api.together.xyz/v1/chat/completions` |
 | Cerebras | `CEREBRAS_API_KEY` | `CEREBRAS_API_URL` | `https://api.cerebras.ai/v1/chat/completions` |
 | OctoHub | `OCTOHUB_API_KEY` | `OCTOHUB_API_URL` | `http://127.0.0.1:8080` |

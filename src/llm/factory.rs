@@ -21,7 +21,7 @@ use crate::llm::providers::{
     GroqProvider, HetznerProvider, InceptionProvider, LocalProvider, MetaProvider, MinimaxProvider,
     MoonshotProvider, NvidiaProvider, OctoHubProvider, OllamaProvider, OpenAiProvider,
     OpenCodeGoProvider, OpenCodeZenProvider, OpenRouterProvider, TinkerProvider, TogetherProvider,
-    XaiProvider, ZaiProvider,
+    WebWrightProvider, XaiProvider, ZaiProvider,
 };
 use crate::llm::traits::AiProvider;
 use anyhow::Result;
@@ -84,12 +84,13 @@ impl ProviderFactory {
             "opencode-go" => Ok(Box::new(OpenCodeGoProvider::new())),
             "tinker" => Ok(Box::new(TinkerProvider::new())),
             "together" => Ok(Box::new(TogetherProvider::new())),
+            "webwright" => Ok(Box::new(WebWrightProvider::new())),
             "xai" => Ok(Box::new(XaiProvider::new())),
             "zai" => Ok(Box::new(ZaiProvider::new())),
             "cli" => Err(anyhow::anyhow!(
                 "CLI provider requires a model string like 'cli:<backend>/<model>'. Use ProviderFactory::get_provider_for_model instead."
             )),
-            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported: openai, chatgpt, anthropic, openrouter, cerebras, local, ollama, google-vertex, google-studio, groq, alibaba, amazon, cloudflare, deepseek, featherless, fireworks, hetzner, inception, meta, minimax, moonshot, nvidia, octohub, opencode-zen, opencode-go, tinker, together, xai, zai, byteplus, cli", provider_name))
+            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported: openai, chatgpt, anthropic, openrouter, cerebras, local, ollama, google-vertex, google-studio, groq, alibaba, amazon, cloudflare, deepseek, featherless, fireworks, hetzner, inception, meta, minimax, moonshot, nvidia, octohub, opencode-zen, opencode-go, tinker, together, webwright, xai, zai, byteplus, cli", provider_name))
         }
     }
 
@@ -144,6 +145,7 @@ impl ProviderFactory {
             "opencode-go",
             "tinker",
             "together",
+            "webwright",
             "xai",
             "zai",
             "byteplus",

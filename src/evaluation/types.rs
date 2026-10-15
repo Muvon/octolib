@@ -13,10 +13,52 @@
 // limitations under the License.
 
 use super::errors::{EvaluationError, EvaluationResult};
+use super::image;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::time::Duration;
+
+/// Supported still-image formats for evaluation assets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EvaluationImageFormat {
+    #[serde(rename = "png")]
+    Png,
+    #[serde(rename = "jpg")]
+    Jpeg,
+}
+
+impl EvaluationImageFormat {
+    pub fn mime(&self) -> &'static str {
+        match self {
+            Self::Png => "image/png",
+            Self::Jpeg => "image/jpeg",
+        }
+    }
+}
+
+/// Bytes are sent as-is and must already satisfy Jev's image limits; EXIF orientation is ignored upstream, so rotate pixels upright first.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ImageAsset {
+    pub data: Vec<u8>,
+    pub format: EvaluationImageFormat,
+}
+
+impl ImageAsset {
+    pub fn png(data: Vec<u8>) -> Self {
+        Self {
+            data,
+            format: EvaluationImageFormat::Png,
+        }
+    }
+
+    pub fn jpeg(data: Vec<u8>) -> Self {
+        Self {
+            data,
+            format: EvaluationImageFormat::Jpeg,
+        }
+    }
+}
 
 /// Optional meaning of the two ends of a yes/no question.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -49,6 +91,8 @@ pub enum Question {
         instructions: Value,
         criteria: Vec<Value>,
     },
+    /// Locate a region in an image.
+    Box { instructions: Value },
 }
 
 impl Question {
@@ -101,11 +145,56 @@ impl Question {
         }
     }
 
+    pub fn bounding_box(instructions: impl Into<Value>) -> Self {
+        Self::Box {
+            instructions: instructions.into(),
+        }
+    }
+
+    fn references_image(&self, reference: &str) -> bool {
+        match self {
+            Self::Noul {
+                instructions,
+                criteria,
+            } => {
+                contains_reference(instructions, reference)
+                    || criteria.as_ref().is_some_and(|criteria| {
+                        criteria
+                            .yes
+                            .iter()
+                            .chain(&criteria.no)
+                            .any(|value| contains_reference(value, reference))
+                    })
+            }
+            Self::Choice {
+                instructions,
+                criteria,
+            } => {
+                contains_reference(instructions, reference)
+                    || criteria
+                        .values()
+                        .flatten()
+                        .any(|value| contains_reference(value, reference))
+            }
+            Self::Score {
+                instructions,
+                criteria,
+            } => {
+                contains_reference(instructions, reference)
+                    || criteria
+                        .iter()
+                        .any(|value| contains_reference(value, reference))
+            }
+            Self::Box { instructions } => contains_reference(instructions, reference),
+        }
+    }
+
     fn validate(&self, id: &str) -> EvaluationResult<()> {
         let instructions = match self {
             Self::Noul { instructions, .. }
             | Self::Choice { instructions, .. }
-            | Self::Score { instructions, .. } => instructions,
+            | Self::Score { instructions, .. }
+            | Self::Box { instructions } => instructions,
         };
         if instructions.is_null()
             || instructions
@@ -157,6 +246,24 @@ pub enum Answer {
         probabilities: BTreeMap<String, f64>,
         confidence: f64,
     },
+    Box {
+        #[serde(rename = "box")]
+        bounds: BoundingBox,
+        confidence: f64,
+    },
+}
+
+/// Edges as fractions from 0 to 1, with the origin at the image's top-left.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BoundingBox {
+    /// Fraction of image height from the top edge.
+    pub top: f64,
+    /// Fraction of image height from the top edge.
+    pub bottom: f64,
+    /// Fraction of image width from the left edge.
+    pub left: f64,
+    /// Fraction of image width from the left edge.
+    pub right: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -167,6 +274,9 @@ pub struct EvaluationRequest {
     pub state: Value,
     /// Questions keyed by the ids their answers come back under.
     pub questions: BTreeMap<String, Question>,
+    /// References are plain text substituted wherever they appear in string values.
+    /// Use a unique token such as a UUID: `cat` also matches inside `category`.
+    pub assets: BTreeMap<String, ImageAsset>,
     /// Retries on 429, 529 and 5xx. Evaluations have no side effects, so a
     /// replay cannot duplicate work.
     pub max_retries: u32,
@@ -180,6 +290,7 @@ impl EvaluationRequest {
             model: String::new(),
             state: state.into(),
             questions: BTreeMap::new(),
+            assets: BTreeMap::new(),
             max_retries: 2,
             timeout: Duration::from_secs(30),
         }
@@ -193,6 +304,21 @@ impl EvaluationRequest {
     pub fn with_question(mut self, id: impl Into<String>, question: Question) -> Self {
         self.questions.insert(id.into(), question);
         self
+    }
+
+    /// The reference is plain text substituted wherever it appears in string values.
+    /// Use a unique token such as a UUID: `cat` also matches inside `category`.
+    pub fn with_image(mut self, reference: impl Into<String>, asset: ImageAsset) -> Self {
+        self.assets.insert(reference.into(), asset);
+        self
+    }
+
+    pub(crate) fn uses_images(&self) -> bool {
+        !self.assets.is_empty()
+            || self
+                .questions
+                .values()
+                .any(|question| matches!(question, Question::Box { .. }))
     }
 
     pub(crate) fn validate(&self) -> EvaluationResult<()> {
@@ -214,7 +340,75 @@ impl EvaluationRequest {
             }
             question.validate(id)?;
         }
+        for (reference, asset) in &self.assets {
+            if reference.trim().is_empty() {
+                return Err(EvaluationError::InvalidRequest(
+                    "image asset reference must not be empty".to_string(),
+                ));
+            }
+            if asset.data.is_empty() {
+                return Err(EvaluationError::InvalidRequest(format!(
+                    "image asset '{reference}' has empty data"
+                )));
+            }
+            if !contains_reference(&self.state, reference)
+                && !self
+                    .questions
+                    .values()
+                    .any(|question| question.references_image(reference))
+            {
+                return Err(EvaluationError::InvalidRequest(format!(
+                    "image asset '{reference}' is not referenced in state, instructions or criteria"
+                )));
+            }
+            if asset.data.len() > image::MAX_FILE_BYTES {
+                return Err(EvaluationError::InvalidRequest(format!(
+                    "image asset '{reference}' exceeds the file size limit of {} bytes (16 MiB): {} bytes",
+                    image::MAX_FILE_BYTES,
+                    asset.data.len()
+                )));
+            }
+            let (format, (width, height)) = image::detect(&asset.data).map_err(|error| {
+                EvaluationError::InvalidRequest(format!("image asset '{reference}': {error}"))
+            })?;
+            if format != asset.format {
+                return Err(EvaluationError::InvalidRequest(format!(
+                    "image asset '{reference}' declares {:?} but detected {format:?}; formats must match",
+                    asset.format
+                )));
+            }
+            for (side, value) in [("width", width), ("height", height)] {
+                if !(image::MIN_SIDE..=image::MAX_SIDE).contains(&value) {
+                    return Err(EvaluationError::InvalidRequest(format!(
+                        "image asset '{reference}' {side} must be {}..={} px: {value} px",
+                        image::MIN_SIDE,
+                        image::MAX_SIDE
+                    )));
+                }
+            }
+            let pixels = u64::from(width) * u64::from(height);
+            if !(image::MIN_PIXELS..=image::MAX_PIXELS).contains(&pixels) {
+                return Err(EvaluationError::InvalidRequest(format!(
+                    "image asset '{reference}' total pixels must be {}..={}: {pixels} ({width}x{height})",
+                    image::MIN_PIXELS,
+                    image::MAX_PIXELS
+                )));
+            }
+        }
         Ok(())
+    }
+}
+
+fn contains_reference(value: &Value, reference: &str) -> bool {
+    match value {
+        Value::String(text) => text.contains(reference),
+        Value::Array(values) => values
+            .iter()
+            .any(|value| contains_reference(value, reference)),
+        Value::Object(values) => values
+            .values()
+            .any(|value| contains_reference(value, reference)),
+        _ => false,
     }
 }
 
@@ -249,144 +443,5 @@ pub struct EvaluationResponse {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn questions_serialize_to_the_documented_wire_shape() {
-        let request = EvaluationRequest::new("Help! My payouts have been failing for 3 days.")
-            .with_question(
-                "is_urgent",
-                Question::noul_with_criteria(
-                    "Does this convey urgency?",
-                    "Explicitly time-sensitive",
-                    "No urgency expressed",
-                ),
-            )
-            .with_question(
-                "department",
-                Question::choice(
-                    "Which team should handle this?",
-                    [
-                        ("billing", "Payments, invoicing, refunds"),
-                        ("technical", "Bugs, outages, integrations"),
-                    ],
-                ),
-            )
-            .with_question(
-                "frustration",
-                Question::score(
-                    "How frustrated is the customer?",
-                    ["Calm", "Frustrated", "Very angry"],
-                ),
-            );
-        assert_eq!(
-            serde_json::to_value(&request.questions).unwrap(),
-            json!({
-                "is_urgent": {
-                    "type": "noul",
-                    "instructions": "Does this convey urgency?",
-                    "criteria": {"true": "Explicitly time-sensitive", "false": "No urgency expressed"}
-                },
-                "department": {
-                    "type": "choice",
-                    "instructions": "Which team should handle this?",
-                    "criteria": {
-                        "billing": "Payments, invoicing, refunds",
-                        "technical": "Bugs, outages, integrations"
-                    }
-                },
-                "frustration": {
-                    "type": "score",
-                    "instructions": "How frustrated is the customer?",
-                    "criteria": ["Calm", "Frustrated", "Very angry"]
-                }
-            })
-        );
-        // A bare noul carries no criteria key at all.
-        assert_eq!(
-            serde_json::to_value(Question::noul("Is it urgent?")).unwrap(),
-            json!({"type": "noul", "instructions": "Is it urgent?"})
-        );
-    }
-
-    #[test]
-    fn answers_parse_from_the_live_response_shape() {
-        let answers: BTreeMap<String, Answer> = serde_json::from_value(json!({
-            "is_urgent": {"type": "noul", "noul": 0.96},
-            "department": {
-                "type": "choice",
-                "choice": "billing",
-                "probabilities": {"sales": 0, "billing": 0.93, "technical": 0.07},
-                "confidence": 0.89
-            },
-            "frustration": {
-                "type": "score",
-                "score": 1.39,
-                "legend": {"0": "Calm", "1": "Frustrated", "2": "Very angry"},
-                "probabilities": {"0": 0, "1": 0.61, "2": 0.39},
-                "confidence": 0.41
-            }
-        }))
-        .unwrap();
-        assert_eq!(answers["is_urgent"], Answer::Noul { noul: 0.96 });
-        match &answers["department"] {
-            Answer::Choice {
-                choice,
-                probabilities,
-                confidence,
-            } => {
-                assert_eq!(choice, "billing");
-                assert_eq!(probabilities["billing"], 0.93);
-                assert_eq!(*confidence, 0.89);
-            }
-            other => panic!("unexpected {other:?}"),
-        }
-        match &answers["frustration"] {
-            Answer::Score { score, legend, .. } => {
-                assert_eq!(*score, 1.39);
-                assert_eq!(legend["2"], "Very angry");
-            }
-            other => panic!("unexpected {other:?}"),
-        }
-    }
-
-    #[test]
-    fn requests_are_validated_before_they_leave() {
-        let empty = EvaluationRequest::new("state").with_model("jev-latest");
-        assert!(empty.validate().is_err());
-
-        let no_model = EvaluationRequest::new("state").with_question("q", Question::noul("Yes?"));
-        assert!(no_model.validate().is_err());
-
-        let one_level = EvaluationRequest::new("state")
-            .with_model("jev-latest")
-            .with_question("q", Question::score("Rate it", ["only"]));
-        assert!(one_level.validate().is_err());
-
-        let one_option = EvaluationRequest::new("state")
-            .with_model("jev-latest")
-            .with_question("q", Question::choice("Pick", [("a", "A")]));
-        assert!(one_option.validate().is_err());
-
-        let blank = EvaluationRequest::new("state")
-            .with_model("jev-latest")
-            .with_question("q", Question::noul("   "));
-        assert!(blank.validate().is_err());
-
-        let ok = EvaluationRequest::new(json!({"ticket": {"subject": "Duplicate charge"}}))
-            .with_model("jev-latest")
-            .with_question("q", Question::noul("Refund requested?"));
-        assert!(ok.validate().is_ok());
-    }
-
-    #[test]
-    fn pricing_bills_input_only_when_output_is_free() {
-        let pricing = EvaluationPricing {
-            input_price_per_1m: 0.042,
-            output_price_per_1m: 0.0,
-        };
-        assert!((pricing.cost(429, 73) - 0.000_018_018).abs() < 1e-12);
-    }
-}
+#[path = "types_tests.rs"]
+mod tests;

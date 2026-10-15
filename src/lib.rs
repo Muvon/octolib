@@ -172,8 +172,9 @@ pub use errors::{
 };
 #[cfg(feature = "evaluation")]
 pub use evaluation::{
-    evaluate, Answer, EvaluationError, EvaluationProvider, EvaluationProviderFactory,
-    EvaluationRequest, EvaluationResponse, EvaluationResult, EvaluationUsage, Question,
+    evaluate, Answer, BoundingBox, EvaluationError, EvaluationImageFormat, EvaluationProvider,
+    EvaluationProviderFactory, EvaluationRequest, EvaluationResponse, EvaluationResult,
+    EvaluationUsage, ImageAsset, Question,
 };
 #[cfg(feature = "llm")]
 pub use llm::{

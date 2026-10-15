@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.42.0] - 2026-10-15
+
+### 📋 Release Summary
+
+Evaluation now supports image assets and bounding-box questions. Provider reasoning efforts are normalized, and Ollama GLM-5.3 effort levels are floored.
+
+### ✨ New Features & Enhancements
+
+- **evaluation**: support image assets and bounding-box questions `3cfc65e9`
+
+### 🐛 Bug Fixes & Stability
+
+- **providers**: normalize provider reasoning efforts `a6acf0a3`
+- **providers**: floor Ollama GLM-5.3 effort levels `11e8915a`
+
 ## [0.41.16] - 2026-10-14
 
 ### 📋 Release Summary

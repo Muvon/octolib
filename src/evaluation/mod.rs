@@ -29,6 +29,7 @@
 
 pub mod errors;
 pub mod factory;
+pub(crate) mod image;
 pub mod providers;
 pub mod traits;
 pub mod types;
@@ -40,8 +41,8 @@ pub use providers::{
 };
 pub use traits::EvaluationProvider;
 pub use types::{
-    Answer, EvaluationPricing, EvaluationRequest, EvaluationResponse, EvaluationUsage,
-    NoulCriteria, Question,
+    Answer, BoundingBox, EvaluationImageFormat, EvaluationPricing, EvaluationRequest,
+    EvaluationResponse, EvaluationUsage, ImageAsset, NoulCriteria, Question,
 };
 
 /// Evaluate `request` on `provider:model`, e.g. `typesafe:jev-latest`.

@@ -16,8 +16,9 @@
 //!
 //! `POST {base}/v1/systemone` with `{state, model, questions}` returns
 //! `{model, answers, usage}`. Models are the `jev-*` family: `jev-latest`
-//! and `jev-preview` are moving aliases, `jev-1.13.0` is the current
-//! versioned id; the response's `model` reports which version answered.
+//! and `jev-preview` are moving aliases. `jev-1.14.0` is the preview version;
+//! `jev-latest` still points to `jev-1.13.0`. The response's `model` reports
+//! which version answered.
 //!
 //! Pricing (models page, Sep 2026): $0.042 per 1M input tokens, output free.
 //!
@@ -29,6 +30,7 @@ use super::shared;
 use crate::evaluation::errors::{EvaluationError, EvaluationResult};
 use crate::evaluation::traits::EvaluationProvider;
 use crate::evaluation::types::{EvaluationPricing, EvaluationRequest, EvaluationResponse};
+use reqwest::multipart::{Form, Part};
 use serde_json::{json, Value};
 
 const PROVIDER: &str = "typesafe";
@@ -63,11 +65,44 @@ fn is_jev(model: &str) -> bool {
 }
 
 pub(crate) fn request_body(request: &EvaluationRequest) -> Value {
-    json!({
+    let mut body = json!({
         "state": request.state,
         "model": request.model.trim(),
         "questions": request.questions,
-    })
+    });
+    if !request.assets.is_empty() {
+        body["assets"] = request
+            .assets
+            .iter()
+            .enumerate()
+            .map(|(index, (reference, asset))| {
+                (
+                    reference.clone(),
+                    json!({
+                        "type": "image",
+                        "part": format!("image-{index}"),
+                        "format": asset.format,
+                    }),
+                )
+            })
+            .collect();
+    }
+    body
+}
+
+fn file_parts(request: &EvaluationRequest) -> Vec<(String, &'static str, Vec<u8>)> {
+    request
+        .assets
+        .values()
+        .enumerate()
+        .map(|(index, asset)| {
+            (
+                format!("image-{index}"),
+                asset.format.mime(),
+                asset.data.clone(),
+            )
+        })
+        .collect()
 }
 
 #[async_trait::async_trait]
@@ -95,11 +130,27 @@ impl EvaluationProvider for TypeSafeEvaluationProvider {
         let key = shared::api_key(API_KEY_ENV)?;
         let url = self.endpoint();
         let body = request_body(&request);
+        let files = file_parts(&request);
         let response = shared::send(PROVIDER, &request, || {
-            crate::http::http_client()
-                .post(&url)
-                .bearer_auth(&key)
-                .json(&body)
+            let mut builder = crate::http::http_client().post(&url).bearer_auth(&key);
+            if request.uses_images() {
+                builder = builder.header("TypeSafe-Danger-Zone-Images", "true");
+            }
+            if files.is_empty() {
+                return Ok(builder.json(&body));
+            }
+            // Forms are consumed by reqwest, so each retry needs a fresh one.
+            let mut form = Form::new().part(
+                "request",
+                Part::text(body.to_string()).mime_str("application/json")?,
+            );
+            for (name, mime, bytes) in &files {
+                let part = Part::bytes(bytes.clone())
+                    .file_name(name.clone())
+                    .mime_str(mime)?;
+                form = form.part(name.clone(), part);
+            }
+            Ok(builder.multipart(form))
         })
         .await?;
         let payload = shared::parse_json(PROVIDER, &response)?;
@@ -108,48 +159,5 @@ impl EvaluationProvider for TypeSafeEvaluationProvider {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::evaluation::types::Question;
-
-    #[test]
-    fn body_matches_the_documented_request() {
-        let request = EvaluationRequest::new("Help! My payouts have been failing for 3 days.")
-            .with_model("jev-latest")
-            .with_question("is_urgent", Question::noul("Does this convey urgency?"));
-        assert_eq!(
-            request_body(&request),
-            json!({
-                "state": "Help! My payouts have been failing for 3 days.",
-                "model": "jev-latest",
-                "questions": {
-                    "is_urgent": {"type": "noul", "instructions": "Does this convey urgency?"}
-                }
-            })
-        );
-    }
-
-    #[test]
-    fn only_the_jev_family_is_served_and_priced() {
-        let provider = TypeSafeEvaluationProvider::new();
-        for model in ["jev-latest", "jev-preview", "jev-1.13.0"] {
-            assert!(provider.supports_model(model));
-            assert_eq!(provider.get_model_pricing(model), Some(JEV_PRICING));
-        }
-        assert!(!provider.supports_model("typesafe/jev"));
-        assert!(!provider.supports_model("jev-latest/../models"));
-        assert!(provider.get_model_pricing("gpt-5").is_none());
-    }
-
-    #[test]
-    fn endpoint_honours_the_base_url_override() {
-        let provider = TypeSafeEvaluationProvider::new();
-        std::env::set_var(API_BASE_ENV, "https://proxy.example/typesafe/");
-        assert_eq!(
-            provider.endpoint(),
-            "https://proxy.example/typesafe/v1/systemone"
-        );
-        std::env::remove_var(API_BASE_ENV);
-        assert_eq!(provider.endpoint(), "https://api.typesafe.ai/v1/systemone");
-    }
-}
+#[path = "typesafe_tests.rs"]
+mod tests;

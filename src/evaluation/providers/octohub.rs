@@ -24,7 +24,7 @@
 //! - `OCTOHUB_API_URL`: optional base, default `https://hub.octomind.run`
 
 use super::shared;
-use crate::evaluation::errors::EvaluationResult;
+use crate::evaluation::errors::{EvaluationError, EvaluationResult};
 use crate::evaluation::traits::EvaluationProvider;
 use crate::evaluation::types::{EvaluationPricing, EvaluationRequest, EvaluationResponse};
 use serde_json::{json, Value};
@@ -72,15 +72,20 @@ impl EvaluationProvider for OctoHubEvaluationProvider {
     }
 
     async fn evaluate(&self, request: EvaluationRequest) -> EvaluationResult<EvaluationResponse> {
+        if request.uses_images() {
+            return Err(EvaluationError::InvalidRequest(
+                "images and box questions are only supported on the typesafe provider".to_string(),
+            ));
+        }
         request.validate()?;
         let key = shared::api_key(API_KEY_ENV)?;
         let url = self.endpoint();
         let body = request_body(&request);
         let response = shared::send(PROVIDER, &request, || {
-            crate::http::http_client()
+            Ok(crate::http::http_client()
                 .post(&url)
                 .bearer_auth(&key)
-                .json(&body)
+                .json(&body))
         })
         .await?;
         let payload = shared::parse_json(PROVIDER, &response)?;
@@ -91,45 +96,5 @@ impl EvaluationProvider for OctoHubEvaluationProvider {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::evaluation::types::Question;
-
-    #[test]
-    fn body_sends_the_alias_state_and_questions_flat() {
-        let request = EvaluationRequest::new("Help!")
-            .with_model("jev")
-            .with_question("is_urgent", Question::noul("Does this convey urgency?"));
-        assert_eq!(
-            request_body(&request),
-            json!({
-                "model": "jev",
-                "state": "Help!",
-                "questions": {
-                    "is_urgent": {"type": "noul", "instructions": "Does this convey urgency?"}
-                }
-            })
-        );
-    }
-
-    #[test]
-    fn any_alias_is_accepted_and_pricing_is_left_to_the_hub() {
-        let provider = OctoHubEvaluationProvider::new();
-        assert!(provider.supports_model("jev"));
-        assert!(provider.supports_model("typesafe:jev-latest"));
-        assert!(!provider.supports_model("  "));
-        assert!(provider.get_model_pricing("jev").is_none());
-    }
-
-    #[test]
-    fn endpoint_honours_the_base_url_override() {
-        let provider = OctoHubEvaluationProvider::new();
-        std::env::set_var(API_URL_ENV, "http://127.0.0.1:8080/");
-        assert_eq!(provider.endpoint(), "http://127.0.0.1:8080/v1/evaluations");
-        std::env::remove_var(API_URL_ENV);
-        assert_eq!(
-            provider.endpoint(),
-            "https://hub.octomind.run/v1/evaluations"
-        );
-    }
-}
+#[path = "octohub_tests.rs"]
+mod tests;

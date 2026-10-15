@@ -154,6 +154,27 @@ async fn triage() -> octolib::EvaluationResult<()> {
 
 Jev bills input tokens only ($0.042 per 1M, output free) and has a 32k context, so trim the state to what the questions need. The response's `model` field reports the versioned model that answered.
 
+Use an image reference in the state and ask for a bounding box:
+
+```rust
+use octolib::{evaluate, EvaluationRequest, EvaluationResult, ImageAsset, Question};
+
+async fn locate(image: Vec<u8>) -> EvaluationResult<()> {
+    let request = EvaluationRequest::new("Find the cat in 6de04501-7e48-45ac-bff3-43a6e93a391e")
+        .with_image("6de04501-7e48-45ac-bff3-43a6e93a391e", ImageAsset::png(image))
+        .with_question("cat", Question::bounding_box("Locate the cat's bounding box."));
+    let response = evaluate("typesafe:jev-preview", request).await?;
+    if let octolib::Answer::Box { bounds, confidence } = &response.answers["cat"] {
+        tracing::info!(?bounds, confidence, "Located cat");
+    }
+    Ok(())
+}
+```
+
+Image limits are checked before sending (PNG/JPEG still images, at most 16 MiB each, sides 256–1568 px, and 78,400–2,458,624 total pixels, all inclusive); images are never resized, padded or rotated for the caller.
+
+TypeSafe flags images and box questions as not production-ready; only the `typesafe` provider supports them.
+
 ### 📋 Structured Output
 
 Get structured JSON responses with schema validation:

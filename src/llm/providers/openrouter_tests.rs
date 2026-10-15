@@ -189,6 +189,50 @@ fn absent_catalog_model_keeps_legacy_reasoning_mapping() {
 }
 
 #[test]
+fn null_supported_efforts_accepts_every_gateway_level() {
+    // `supported_efforts: null` means all gateway efforts are accepted; it must
+    // not drop the reasoning entry and with it the `mandatory` flag.
+    let catalog = serde_json::from_value::<CatalogResponse>(serde_json::json!({
+        "data": [
+            {
+                "id": "example/mandatory-any-effort",
+                "reasoning": {"mandatory": true, "supported_efforts": null}
+            },
+            {
+                "id": "example/optional-any-effort",
+                "reasoning": {"mandatory": false, "supported_efforts": null}
+            }
+        ]
+    }))
+    .unwrap()
+    .data;
+
+    let mandatory = catalog_model(&catalog, "example/mandatory-any-effort").unwrap();
+    assert_eq!(
+        mandatory.reasoning.as_ref().unwrap().supported_efforts,
+        EFFORT_LADDER
+    );
+    assert_eq!(
+        select_effort(mandatory, ReasoningEffort::None),
+        Some(ReasoningSelection::Effort("minimal"))
+    );
+    assert_eq!(
+        select_effort(mandatory, ReasoningEffort::Max),
+        Some(ReasoningSelection::Effort("max"))
+    );
+
+    let optional = catalog_model(&catalog, "example/optional-any-effort").unwrap();
+    assert_eq!(
+        select_effort(optional, ReasoningEffort::None),
+        Some(ReasoningSelection::Disabled)
+    );
+    assert_eq!(
+        select_effort(optional, ReasoningEffort::XHigh),
+        Some(ReasoningSelection::Effort("xhigh"))
+    );
+}
+
+#[test]
 fn test_supports_model() {
     let provider = OpenRouterProvider::new();
 

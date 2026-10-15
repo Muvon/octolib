@@ -158,7 +158,9 @@ fn ticks_to_usd(ticks: u64) -> f64 {
 }
 
 fn reasoning_effort(model: &str, effort: Option<ReasoningEffort>) -> Option<&'static str> {
-    // Only grok-4.3 documents a "none" effort; elsewhere None sends nothing, like unset.
+    // Only grok-4.3 documents a "none" effort. grok-4.7/4.6/4.5 always reason and
+    // default to "high" ("Reasoning cannot be disabled", docs.x.ai/docs/guides/reasoning,
+    // verified Oct 2026), so None floors to "low" there; elsewhere it sends nothing.
     let effort = effort?;
     let family = model_family(model)?;
     let normalized = model.to_ascii_lowercase();
@@ -182,6 +184,11 @@ fn reasoning_effort(model: &str, effort: Option<ReasoningEffort>) -> Option<&'st
         {
             Some("none")
         }
+        (
+            ModelFamily::Grok47 | ModelFamily::Grok46 | ModelFamily::Grok45,
+            _,
+            ReasoningEffort::None,
+        ) if is_configurable_single_agent => Some("low"),
         (
             ModelFamily::Grok47 | ModelFamily::Grok46 | ModelFamily::Grok45 | ModelFamily::Grok43,
             _,

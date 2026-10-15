@@ -186,7 +186,7 @@ fn catalog_fixture() -> Vec<SearchEntry> {
                 {"property_id": "reasoning_effort", "value": {
                     "supported_efforts": ["max", "high", "low"],
                     "default_effort": "max",
-                    "normalizes_to": {"none": "max", "medium": "max", "null": "max"},
+                    "normalizes_to": {"none": "max", "minimal": "max", "medium": "max", "xhigh": "max", "null": "max"},
                     "mandatory": true,
                     "default_enabled": true
                 }},
@@ -292,24 +292,27 @@ fn catalog_entries_without_price_or_context_stay_open() {
 }
 
 #[test]
-fn catalog_effort_prefers_supported_then_documented_normalization_then_floor() {
+fn catalog_effort_prefers_supported_then_downward_normalization_then_floor() {
     use crate::llm::types::ReasoningEffort;
     let catalog = parse_catalog(catalog_fixture());
 
-    // GLM-5.3: max|high|low supported; medium is documented as normalized.
+    // GLM-5.3: max|high|low supported; medium and xhigh normalize up to max.
     let glm = catalog_model(&catalog, "@cf/zai-org/glm-5.3").unwrap();
     assert_eq!(glm.supported_efforts, ["max", "high", "low"]);
+    let medium_to_max = ("medium".to_string(), "max".to_string());
+    assert!(glm.normalized_efforts.contains(&medium_to_max));
     assert_eq!(select_effort(glm, ReasoningEffort::Max), Some("max"));
     assert_eq!(select_effort(glm, ReasoningEffort::Low), Some("low"));
-    assert_eq!(select_effort(glm, ReasoningEffort::Medium), Some("medium"));
-    // xhigh is neither supported nor normalized, so it floors to high.
+    // Sending medium or xhigh would run at max: floor to the level below instead.
+    assert_eq!(select_effort(glm, ReasoningEffort::Medium), Some("low"));
     assert_eq!(select_effort(glm, ReasoningEffort::XHigh), Some("high"));
 
-    // Kimi K2.6: only high (and none); everything Cloudflare normalizes goes verbatim.
+    // Kimi K2.6: only high (and none). max normalizes down to high, so it goes
+    // verbatim; low normalizes up and floors to the lowest reasoning level.
     let kimi = catalog_model(&catalog, "@cf/moonshotai/kimi-k2.6").unwrap();
     assert_eq!(select_effort(kimi, ReasoningEffort::Max), Some("max"));
-    assert_eq!(select_effort(kimi, ReasoningEffort::Low), Some("low"));
-    // xhigh is undocumented there too; high is the only ladder level supported.
+    assert_eq!(select_effort(kimi, ReasoningEffort::Low), Some("high"));
+    // xhigh is undocumented there; high is the only reasoning level supported.
     assert_eq!(select_effort(kimi, ReasoningEffort::XHigh), Some("high"));
 
     // No effort knob at all: the shared ladder stays in charge.
@@ -337,11 +340,57 @@ fn catalog_effort_prefers_supported_then_documented_normalization_then_floor() {
 }
 
 #[test]
-fn catalog_effort_none_is_sent_only_where_the_model_lists_it() {
+fn catalog_effort_floor_never_turns_reasoning_off() {
+    use crate::llm::types::ReasoningEffort;
+    // GLM-5.2 (live catalog Oct 2026): low normalizes up to high, and "none" is
+    // listed — a Low request must still reason, at the lowest reasoning level.
+    let glm_52 = CatalogModel {
+        id: "@cf/zai-org/glm-5.2".to_string(),
+        context_window: None,
+        vision: false,
+        function_calling: true,
+        pricing: None,
+        supported_efforts: vec!["max".to_string(), "high".to_string(), "none".to_string()],
+        normalized_efforts: vec![
+            ("low".to_string(), "high".to_string()),
+            ("medium".to_string(), "high".to_string()),
+            ("xhigh".to_string(), "max".to_string()),
+        ],
+    };
+    assert_eq!(select_effort(&glm_52, ReasoningEffort::Low), Some("high"));
+    assert_eq!(
+        select_effort(&glm_52, ReasoningEffort::Medium),
+        Some("high")
+    );
+    assert_eq!(select_effort(&glm_52, ReasoningEffort::XHigh), Some("high"));
+    assert_eq!(select_effort(&glm_52, ReasoningEffort::None), Some("none"));
+}
+
+#[test]
+fn catalog_effort_none_runs_at_the_lowest_level_without_an_off_switch() {
     use crate::llm::types::ReasoningEffort;
     let catalog = parse_catalog(catalog_fixture());
-    // GLM-5.3 lists max|high|low: "none" is not an effort there, and it must
-    // not floor to "low" — no reasoning means no effort field at all.
+    // GLM-5.3 lists max|high|low and normalizes "none" to its max default, so
+    // omitting the field would run at max: the lowest level is the closest to off.
     let glm = catalog_model(&catalog, "@cf/zai-org/glm-5.3").unwrap();
-    assert_eq!(select_effort(glm, ReasoningEffort::None), None);
+    assert_eq!(select_effort(glm, ReasoningEffort::None), Some("low"));
+
+    // Kimi K2.6 lists "none" as a level and gets it verbatim.
+    let kimi = catalog_model(&catalog, "@cf/moonshotai/kimi-k2.6").unwrap();
+    assert_eq!(select_effort(kimi, ReasoningEffort::None), Some("none"));
+
+    // Qwen3.8-27B (live catalog Oct 2026): xhigh|medium|low, default xhigh, no
+    // "none". Unsupported levels floor to the next level down.
+    let qwen = CatalogModel {
+        id: "@cf/qwen/qwen3.8-27b".to_string(),
+        context_window: None,
+        vision: true,
+        function_calling: true,
+        pricing: None,
+        supported_efforts: vec!["xhigh".to_string(), "medium".to_string(), "low".to_string()],
+        normalized_efforts: vec![("null".to_string(), "xhigh".to_string())],
+    };
+    assert_eq!(select_effort(&qwen, ReasoningEffort::None), Some("low"));
+    assert_eq!(select_effort(&qwen, ReasoningEffort::High), Some("medium"));
+    assert_eq!(select_effort(&qwen, ReasoningEffort::Max), Some("xhigh"));
 }

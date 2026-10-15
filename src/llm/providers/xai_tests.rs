@@ -201,11 +201,31 @@ fn none_effort_is_sent_only_to_grok_4_3() {
     );
     assert_eq!(reasoning_effort("grok-4.3", None), None);
     assert_eq!(
-        reasoning_effort("grok-4.7", Some(ReasoningEffort::None)),
+        reasoning_effort("grok-4.20-multi-agent-0309", Some(ReasoningEffort::None)),
         None
     );
+}
+
+#[test]
+fn none_effort_floors_to_low_where_reasoning_cannot_be_disabled() {
+    for model in [
+        "grok-4.7",
+        "grok-4.7-latest",
+        "grok-4.6",
+        "grok-4.6-latest",
+        "grok-4.5",
+        "grok-4.5-latest",
+        "grok-build-latest",
+    ] {
+        assert_eq!(
+            reasoning_effort(model, Some(ReasoningEffort::None)),
+            Some("low"),
+            "{model}"
+        );
+        assert_eq!(reasoning_effort(model, None), None, "{model}");
+    }
     assert_eq!(
-        reasoning_effort("grok-4.20-multi-agent-0309", Some(ReasoningEffort::None)),
+        reasoning_effort("grok-build-0.1", Some(ReasoningEffort::None)),
         None
     );
 }

@@ -284,6 +284,30 @@ fn effort_value(model: &str, effort: ReasoningEffort, supports_adaptive: bool) -
     }
 }
 
+/// Apply `ReasoningEffort::None` (thinking off) for models whose thinking is
+/// not off by default. Per the per-model table in
+/// https://platform.claude.com/docs/en/build-with-claude/thinking-troubleshooting
+/// and https://platform.claude.com/docs/en/build-with-claude/effort (verified Oct 2026):
+///   - Opus 5.5, Fable/Mythos 5 and 5.1 always think; `"disabled"` is a 400.
+///     The lowest setting is effort "low" with `thinking` omitted.
+///   - Sonnet 5.5 rejects `"disabled"`; `"between_tools"` turns off up-front
+///     thinking at effort high or below (its default is high).
+///   - Opus 5, Sonnet 5 and Haiku 5.5 think by default and accept `"disabled"`
+///     at effort high or below (their defaults are high, high and medium).
+///   - Opus 4.8 and earlier default to off, so nothing is sent.
+fn apply_thinking_off(model: &str, request_body: &mut serde_json::Value) {
+    // "opus-5-5" must be matched before the "opus-5" substring below.
+    const ALWAYS_ON_MODELS: &[&str] = &["opus-5-5", "fable-5", "mythos-5"];
+    const DISABLE_MODELS: &[&str] = &["opus-5", "sonnet-5", "haiku-5-5"];
+    if ALWAYS_ON_MODELS.iter().any(|p| model.contains(p)) {
+        request_body["output_config"] = serde_json::json!({"effort": "low"});
+    } else if model.contains("sonnet-5-5") {
+        request_body["thinking"] = serde_json::json!({"type": "between_tools"});
+    } else if DISABLE_MODELS.iter().any(|p| model.contains(p)) {
+        request_body["thinking"] = serde_json::json!({"type": "disabled"});
+    }
+}
+
 /// Anthropic provider
 #[derive(Debug, Clone)]
 pub struct AnthropicProvider;
@@ -613,6 +637,8 @@ impl AiProvider for AnthropicProvider {
                     let effort_str = effort_value(&params.model, effort, supports_adaptive);
                     request_body["output_config"] = serde_json::json!({"effort": effort_str});
                 }
+            } else if effort == ReasoningEffort::None {
+                apply_thinking_off(&params.model, &mut request_body);
             }
         }
 

@@ -23,8 +23,8 @@ use crate::llm::reference_models::proxy_route_enforces_response_schema;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, SamplingSupport,
-    ThinkingBlock, TokenUsage, ToolCall,
+    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, ReasoningEffort,
+    SamplingSupport, ThinkingBlock, TokenUsage, ToolCall,
 };
 use crate::llm::utils::{get_model_pricing, PricingTuple};
 use anyhow::Result;
@@ -112,6 +112,85 @@ fn together_model_context(model: &str) -> Option<usize> {
     } else {
         None
     }
+}
+
+/// Together's documented reasoning controls (docs.together.ai, Oct 2026).
+enum ReasoningFamily {
+    /// Kimi K3: `reasoning_effort` low|medium|high|max (default max); thinking
+    /// turns off with `reasoning: {enabled: false}` (kimi-k3-quickstart).
+    KimiK3,
+    /// GLM-5.3 and GLM-5.3-Flash: low|medium|high|max; "Thinking cannot be
+    /// disabled entirely", `low` is the closest equivalent (glm-5.3-quickstart).
+    Glm53,
+    /// DeepSeek V4 Pro 0813: high (default) and max only, low/medium normalize up
+    /// to high and xhigh to max; hybrid, so `reasoning: {enabled: false}` turns
+    /// thinking off (deepseek-v4-quickstart, inference/chat/reasoning).
+    DeepSeekV4Pro,
+    /// GPT-OSS: low|medium|high (default medium); reasoning cannot be disabled
+    /// (gpt-oss).
+    GptOss,
+    /// Hybrid serverless models listed as "Hybrid (on by default)" with no
+    /// documented effort ladder: thinking turns off with `reasoning: {enabled:
+    /// false}` (inference/chat/reasoning).
+    Hybrid,
+    /// Anything else: effort passes through on the OpenAI low|medium|high ladder.
+    Other,
+}
+
+fn reasoning_family(model: &str) -> ReasoningFamily {
+    let normalized = model.to_ascii_lowercase();
+    if normalized.contains("moonshotai/kimi-k3") {
+        ReasoningFamily::KimiK3
+    } else if normalized.contains("zai-org/glm-5.3") {
+        ReasoningFamily::Glm53
+    } else if normalized.contains("deepseek-ai/deepseek-v4-pro") {
+        ReasoningFamily::DeepSeekV4Pro
+    } else if normalized.contains("openai/gpt-oss") {
+        ReasoningFamily::GptOss
+    } else if normalized.contains("minimaxai/minimax-m3")
+        || normalized.contains("zai-org/glm-5.2")
+        || normalized.contains("qwen/qwen3.6-plus")
+        || normalized.contains("qwen/qwen3.5-9b")
+    {
+        ReasoningFamily::Hybrid
+    } else {
+        ReasoningFamily::Other
+    }
+}
+
+/// Map the caller's effort onto Together's per-model reasoning controls.
+/// Levels a model does not document floor to the nearest one below (or its
+/// lowest level when nothing is below), since Together accepts invalid effort
+/// strings silently instead of rejecting them.
+/// `ReasoningEffort::None` turns thinking off where the model has a switch,
+/// runs at the lowest level where it cannot stop thinking, and sends nothing
+/// for models with neither.
+fn apply_reasoning_effort(
+    request_body: &mut serde_json::Value,
+    model: &str,
+    effort: Option<ReasoningEffort>,
+) {
+    let Some(effort) = effort else {
+        return;
+    };
+    let value = match (reasoning_family(model), effort) {
+        (
+            ReasoningFamily::KimiK3 | ReasoningFamily::DeepSeekV4Pro | ReasoningFamily::Hybrid,
+            ReasoningEffort::None,
+        ) => {
+            request_body["reasoning"] = serde_json::json!({ "enabled": false });
+            return;
+        }
+        (ReasoningFamily::GptOss | ReasoningFamily::Other, ReasoningEffort::None) => return,
+        (ReasoningFamily::Glm53, ReasoningEffort::None) => "low",
+        (ReasoningFamily::KimiK3 | ReasoningFamily::Glm53, ReasoningEffort::Max) => "max",
+        (ReasoningFamily::DeepSeekV4Pro, ReasoningEffort::XHigh | ReasoningEffort::Max) => "max",
+        (ReasoningFamily::DeepSeekV4Pro, _) => "high",
+        (_, ReasoningEffort::Low) => "low",
+        (_, ReasoningEffort::Medium) => "medium",
+        (_, ReasoningEffort::High | ReasoningEffort::XHigh | ReasoningEffort::Max) => "high",
+    };
+    request_body["reasoning_effort"] = serde_json::json!(value);
 }
 
 #[derive(Debug, Clone, Default)]
@@ -203,23 +282,7 @@ impl AiProvider for TogetherProvider {
         request_body["stream"] = serde_json::json!(true);
         request_body["stream_options"] = serde_json::json!({ "include_usage": true });
 
-        // Pass-through reasoning_effort for Together's OpenAI-compatible thinking models
-        // (e.g. DeepSeek-R1, Qwen3-Thinking). Models without it ignore the field.
-        // None has no Together-side switch: the field is omitted, as when unset.
-        if let Some(effort) = params
-            .reasoning_effort
-            .filter(|effort| *effort != crate::llm::types::ReasoningEffort::None)
-        {
-            let s = match effort {
-                crate::llm::types::ReasoningEffort::None => unreachable!("filtered above"),
-                crate::llm::types::ReasoningEffort::Low => "low",
-                crate::llm::types::ReasoningEffort::Medium => "medium",
-                crate::llm::types::ReasoningEffort::High => "high",
-                crate::llm::types::ReasoningEffort::XHigh => "high",
-                crate::llm::types::ReasoningEffort::Max => "high",
-            };
-            request_body["reasoning_effort"] = serde_json::json!(s);
-        }
+        apply_reasoning_effort(&mut request_body, &params.model, params.reasoning_effort);
 
         // Tools (OpenAI-compatible)
         if let Some(tools) = &params.tools {

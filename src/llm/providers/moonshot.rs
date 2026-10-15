@@ -326,29 +326,37 @@ pub(crate) fn preserves_historical_thinking(model: &str) -> bool {
         || contains_ignore_ascii_case(model, "kimi-k3")
 }
 
-fn thinking_config(model: &str) -> Option<serde_json::Value> {
-    contains_ignore_ascii_case(model, "kimi-k2.6").then(|| {
-        serde_json::json!({
+/// Kimi K2.6 `thinking` block. Thinking is on by default; an explicit
+/// `ReasoningEffort::None` sends `{"type": "disabled"}` (platform.kimi.ai
+/// docs/guide/use-kimi-k2-thinking-model, verified Oct 2026).
+fn thinking_config(model: &str, effort: Option<ReasoningEffort>) -> Option<serde_json::Value> {
+    contains_ignore_ascii_case(model, "kimi-k2.6").then(|| match effort {
+        Some(ReasoningEffort::None) => serde_json::json!({ "type": "disabled" }),
+        _ => serde_json::json!({
             "type": "enabled",
             "keep": "all"
-        })
+        }),
     })
 }
 
 /// Map generic ReasoningEffort to Kimi K3's `reasoning_effort` string.
 /// K3 supports only "low" / "high" / "max" (default "max" when the field is
 /// omitted), so intermediate levels floor to the nearest supported lower
-/// effort. Returns None for non-K3 models and when the caller leaves the
-/// effort unset (K3 then applies its own default).
+/// effort. K3 documents no way to disable reasoning, so an explicit `None`
+/// runs at "low" (platform.kimi.ai/docs/guide/use-kimi-k3, verified Oct 2026).
+/// Returns None for non-K3 models and when the caller leaves the effort unset
+/// (K3 then applies its own default).
 fn k3_reasoning_effort(model: &str, effort: Option<ReasoningEffort>) -> Option<&'static str> {
     if !contains_ignore_ascii_case(model, "kimi-k3") {
         return None;
     }
     match effort {
-        Some(ReasoningEffort::Low) | Some(ReasoningEffort::Medium) => Some("low"),
+        Some(ReasoningEffort::None)
+        | Some(ReasoningEffort::Low)
+        | Some(ReasoningEffort::Medium) => Some("low"),
         Some(ReasoningEffort::High) | Some(ReasoningEffort::XHigh) => Some("high"),
         Some(ReasoningEffort::Max) => Some("max"),
-        Some(ReasoningEffort::None) | None => None,
+        None => None,
     }
 }
 
@@ -670,7 +678,7 @@ impl AiProvider for MoonshotProvider {
             response_format: None,
             tools: None,
             tool_choice: None,
-            thinking: thinking_config(&params.model),
+            thinking: thinking_config(&params.model, params.reasoning_effort),
         };
 
         // Add tools if available (Moonshot is OpenAI-compatible)

@@ -983,6 +983,63 @@ fn test_reasoning_off_floors_to_each_family_lowest_level() {
 }
 
 #[test]
+fn test_unset_reasoning_effort_uses_model_default() {
+    for model in ["gpt-5.1", "gpt-5.5-pro", "gpt-5.6-sol", "gpt-6-astra", "o3"] {
+        assert_eq!(reasoning_effort(model, None), None, "{model}");
+    }
+}
+
+#[test]
+fn test_reasoning_effort_snaps_to_each_model_supported_levels() {
+    use ReasoningEffort::{High, Low, Max, Medium, None as Off, XHigh};
+    let levels = |model: &str| {
+        [Off, Low, Medium, High, XHigh, Max].map(|effort| reasoning_effort(model, Some(effort)))
+    };
+
+    // gpt-5-pro only supports "high".
+    for model in ["gpt-5-pro", "gpt-5-pro-2025-10-06"] {
+        assert_eq!(levels(model), [Some("high"); 6], "{model}");
+    }
+    // Pro models from 5.2 support medium, high, xhigh.
+    for model in ["gpt-5.2-pro", "gpt-5.4-pro", "gpt-5.5-pro"] {
+        assert_eq!(
+            levels(model),
+            ["medium", "medium", "medium", "high", "xhigh", "xhigh"].map(Some),
+            "{model}"
+        );
+    }
+    // gpt-5 supports minimal, low, medium, high.
+    for model in ["gpt-5", "gpt-5-2025-08-07"] {
+        assert_eq!(
+            levels(model),
+            ["minimal", "low", "medium", "high", "high", "high"].map(Some),
+            "{model}"
+        );
+    }
+    // gpt-5.1 supports none, low, medium, high.
+    for model in ["gpt-5.1", "gpt-5.1-2025-11-13"] {
+        assert_eq!(
+            levels(model),
+            ["none", "low", "medium", "high", "high", "high"].map(Some),
+            "{model}"
+        );
+    }
+    // Variants keep the general mapping.
+    assert_eq!(
+        levels("gpt-5.5"),
+        ["none", "low", "medium", "high", "xhigh", "xhigh"].map(Some)
+    );
+    assert_eq!(
+        levels("gpt-5.6-sol"),
+        ["none", "low", "medium", "high", "xhigh", "max"].map(Some)
+    );
+    assert_eq!(
+        levels("gpt-6-astra"),
+        ["low", "low", "medium", "high", "xhigh", "max"].map(Some)
+    );
+}
+
+#[test]
 fn test_gpt_6_sol_and_luna_provider_and_reference_support() {
     let provider = OpenAiProvider::new();
     for (model, input, output, cache_write, cache_read) in [

@@ -16,6 +16,7 @@ use super::shared;
 use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
+use crate::llm::types::ReasoningEffort as Effort;
 use crate::llm::types::{
     ChatCompletionParams, Message, ProviderExchange, ProviderResponse, SamplingSupport,
     ThinkingBlock, TokenUsage, ToolCall, ToolChoice,
@@ -45,22 +46,6 @@ fn reasoning_effort_value(
     model: &str,
     effort: crate::llm::types::ReasoningEffort,
 ) -> &'static str {
-    if is_alibaba_deepseek_v4(provider_name, model) {
-        use crate::llm::types::ReasoningEffort;
-
-        // Model Studio accepts the OpenAI-standard five values for DeepSeek V4
-        // and owns the model-specific collapse between them. Preserve the
-        // caller's level verbatim instead of applying the generic high ceiling.
-        return match effort {
-            ReasoningEffort::None => "none",
-            ReasoningEffort::Low => "low",
-            ReasoningEffort::Medium => "medium",
-            ReasoningEffort::High => "high",
-            ReasoningEffort::XHigh => "xhigh",
-            ReasoningEffort::Max => "max",
-        };
-    }
-
     // Workers AI publishes each model's accepted levels in its catalog, which
     // is more specific than the low|medium|high the page schemas advertise.
     if provider_name.eq_ignore_ascii_case("cloudflare") {
@@ -71,8 +56,8 @@ fn reasoning_effort_value(
         }
     }
 
-    if let Some(value) = glm_reasoning_effort(provider_name, model, effort) {
-        return value;
+    if let Some(levels) = hosted_effort_levels(provider_name, model) {
+        return levels.value(effort);
     }
 
     match effort {
@@ -94,16 +79,10 @@ fn reasoning_effort_value(
             "xhigh"
         }
         crate::llm::types::ReasoningEffort::XHigh => "high",
+        // Ollama models without thinking metadata keep its compatibility
+        // aliases, where "max" is the top level; listed models resolve through
+        // `hosted_effort_levels` above.
         crate::llm::types::ReasoningEffort::Max if provider_name.eq_ignore_ascii_case("ollama") => {
-            "max"
-        }
-        // OpenCode routers forward the field verbatim to Moonshot, whose K3
-        // top tier is "max" — keep it instead of the generic "high" downgrade.
-        // Intermediate levels are floored by opencode::adjust_reasoning_effort.
-        crate::llm::types::ReasoningEffort::Max
-            if provider_name.starts_with("opencode")
-                && crate::llm::utils::contains_ignore_ascii_case(model, "kimi-k3") =>
-        {
             "max"
         }
         // Meta has no level above xhigh; collapse Max onto that ceiling.
@@ -123,75 +102,165 @@ fn is_alibaba_deepseek_v4(provider_name: &str, model: &str) -> bool {
         && crate::llm::utils::contains_ignore_ascii_case(model, "deepseek-v4")
 }
 
-/// GLM hosts that validate `reasoning_effort` per model, where the generic
-/// `low|medium|high` ladder is either rejected or silently capped.
-///
-/// Model Studio (GLM page, Sep 2026): an unsupported value returns
-/// `invalid_parameter_error`. glm-5.3 accepts only `low|high|max`, so `none`
-/// floors to `low` like any unsupported level; glm-5.2 (and -fast-preview)
-/// accepts the full ladder through `max`; glm-5.1 accepts
-/// through `xhigh` (`max` is not supported). Older GLM models are not listed,
-/// so they keep the generic ladder. Intermediate levels floor to the next
-/// supported one, matching the K3 handling in `opencode`.
-///
-/// Ollama Cloud (`/api/show`, Oct 2026): glm-5.3 lists `low|high|max` with
-/// default `max`, and an unsupported name resolves to that default, so an
-/// unmapped `medium` silently ran at max. It follows the Model Studio floor.
-///
-/// Fireworks (chat-completions reference): GLM 5.2 exposes two tiers, High and
-/// Max. `low`/`medium` collapse to High, `xhigh`/`max` select Max, which is
-/// also the model default, so capping to `high` lowered effort.
-fn glm_reasoning_effort(
-    provider_name: &str,
-    model: &str,
-    effort: crate::llm::types::ReasoningEffort,
-) -> Option<&'static str> {
-    use crate::llm::types::ReasoningEffort;
+/// Model Studio's thinking-only Qwen3.7 Max snapshots (deep-thinking page,
+/// Oct 2026) cannot stop thinking and document no effort level, so a request
+/// for no reasoning leaves them at their default instead of sending a switch
+/// they do not honour.
+fn alibaba_thinking_only_without_levels(model: &str) -> bool {
     use crate::llm::utils::contains_ignore_ascii_case;
 
-    let verbatim = match effort {
-        ReasoningEffort::None => "none",
-        ReasoningEffort::Low => "low",
-        ReasoningEffort::Medium => "medium",
-        ReasoningEffort::High => "high",
-        ReasoningEffort::XHigh => "xhigh",
-        ReasoningEffort::Max => "max",
-    };
+    contains_ignore_ascii_case(model, "qwen3.7-max-preview")
+        || contains_ignore_ascii_case(model, "qwen3.7-max-2026-05-17")
+}
 
-    let glm_5_3_floor = |effort| match effort {
-        ReasoningEffort::None | ReasoningEffort::Low | ReasoningEffort::Medium => "low",
-        ReasoningEffort::High | ReasoningEffort::XHigh => "high",
-        ReasoningEffort::Max => "max",
-    };
+/// NVIDIA NIM Nemotron 3 (nemotron-3-super-120b-a12b reference, Oct 2026)
+/// has no effort field: thinking is on by default and only
+/// `chat_template_kwargs.enable_thinking=false` switches it off.
+fn nvidia_nemotron_3(provider_name: &str, model: &str) -> bool {
+    provider_name.eq_ignore_ascii_case("nvidia")
+        && crate::llm::utils::contains_ignore_ascii_case(model, "nemotron-3")
+}
 
-    if provider_name.eq_ignore_ascii_case("ollama") && contains_ignore_ascii_case(model, "glm-5.3")
-    {
-        return Some(glm_5_3_floor(effort));
-    }
+/// The named effort levels a host accepts for one model, lowest first.
+struct EffortLevels {
+    levels: &'static [Effort],
+    /// `reasoning_effort: "none"` switches thinking off. Without it a request
+    /// for no reasoning sends nothing; models that cannot stop thinking are
+    /// floored to their lowest level by `shared::supported_reasoning_effort`.
+    none: bool,
+}
 
-    if provider_name.eq_ignore_ascii_case("alibaba") {
-        if contains_ignore_ascii_case(model, "glm-5.3") {
-            return Some(glm_5_3_floor(effort));
+impl EffortLevels {
+    /// The level to send: `none` where the model takes it, otherwise the
+    /// highest listed level not above the request, or the lowest listed one.
+    /// Hosts resolve an unlisted name to the model default (often its top
+    /// level), so an intermediate request must never reach them verbatim.
+    fn value(&self, effort: Effort) -> &'static str {
+        if effort == Effort::None && self.none {
+            return "none";
         }
-        if contains_ignore_ascii_case(model, "glm-5.2") {
-            return Some(verbatim);
+        let level = self
+            .levels
+            .iter()
+            .rev()
+            .copied()
+            .find(|level| *level as u8 <= effort as u8)
+            .or(self.levels.first().copied())
+            .unwrap_or(effort);
+        match level {
+            Effort::None => "none",
+            Effort::Low => "low",
+            Effort::Medium => "medium",
+            Effort::High => "high",
+            Effort::XHigh => "xhigh",
+            Effort::Max => "max",
         }
-        if contains_ignore_ascii_case(model, "glm-5.1") {
-            return Some(match effort {
-                ReasoningEffort::Max => "xhigh",
-                _ => verbatim,
-            });
-        }
-        return None;
     }
+}
 
-    if provider_name.eq_ignore_ascii_case("fireworks")
-        && contains_ignore_ascii_case(model, "glm-5p2")
-    {
-        return Some(verbatim);
-    }
+const LOW_HIGH_MAX: &[Effort] = &[Effort::Low, Effort::High, Effort::Max];
+const HIGH_MAX: &[Effort] = &[Effort::High, Effort::Max];
+const LOW_MEDIUM_HIGH: &[Effort] = &[Effort::Low, Effort::Medium, Effort::High];
+const LOW_MEDIUM_XHIGH: &[Effort] = &[Effort::Low, Effort::Medium, Effort::XHigh];
+const UP_TO_XHIGH: &[Effort] = &[Effort::Low, Effort::Medium, Effort::High, Effort::XHigh];
+const FULL: &[Effort] = &[
+    Effort::Low,
+    Effort::Medium,
+    Effort::High,
+    Effort::XHigh,
+    Effort::Max,
+];
 
-    None
+const fn levels(levels: &'static [Effort], none: bool) -> EffortLevels {
+    EffortLevels { levels, none }
+}
+
+/// Per-model effort levels on hosts that validate `reasoning_effort` per
+/// model, or resolve an unlisted name to the model default, so the generic
+/// `low|medium|high` ladder is rejected, silently raised, or capped below a
+/// supported `max`. Rows are `(host, model substring, levels)`; the first
+/// match wins, so specific substrings precede their family. Host `opencode`
+/// covers both the Zen and Go routers.
+///
+/// - Model Studio (GLM page, Sep 2026): an unsupported value returns
+///   `invalid_parameter_error`. glm-5.3 accepts only `low|high|max`; glm-5.2
+///   (and -fast-preview) the full ladder; glm-5.1 through `xhigh`. Older GLM
+///   models are not listed, so they keep the generic ladder. Thinking is
+///   switched off with `enable_thinking`, not a `none` level. DeepSeek V4
+///   accepts the OpenAI-standard five values and owns the model-specific
+///   collapse between them, so the caller's level passes verbatim.
+/// - Ollama Cloud (`/api/show` thinking values, Oct 2026; docs.ollama.com
+///   OpenAI compatibility): supported names apply exactly, unsupported names
+///   resolve to the model default, and `"none"` requests no thinking. Live
+///   (Oct 2026), `"none"` returned no reasoning on kimi-k3, glm-5.2 and
+///   deepseek-v4.1-flash. Boolean-only models map any recognized level to
+///   thinking on.
+/// - Fireworks (chat-completions reference, Oct 2026): Qwen3.8, DeepSeek
+///   V4/V4.1, GLM 5.2 and Kimi K3 collapse the five levels onto their own
+///   tiers; DeepSeek V3.2 and GLM 4.5-5.1 are on/off. All of them take
+///   `"none"`; gpt-oss and MiniMax M2 reject it and keep the generic ladder.
+///   glm-5p3 and qwen3p8-2p4t-a95b are not in the reference; models.dev
+///   lists their levels without an off toggle.
+/// - NVIDIA NIM (z-ai-glm-5-3 reference: `low|high|max`, default `max`;
+///   models.dev `nvidia` catalog, Oct 2026, for the other rows).
+/// - OpenCode Zen/Go (models.dev `opencode`/`opencode-go`, Oct 2026). kimi-k3
+///   was verified live: Go returns 400 "must be one of: low, high, max".
+/// - Cerebras (reasoning guide, Oct 2026): qwen-3.8-27b thinks at `high` by
+///   default; `"none"` disables it.
+/// - Groq (reasoning guide, Oct 2026): qwen3.8-27b takes `"none"` to disable
+///   reasoning; `low|medium|high` enable it.
+const HOSTED_EFFORT_LEVELS: &[(&str, &str, EffortLevels)] = &[
+    ("alibaba", "deepseek-v4", levels(FULL, true)),
+    ("alibaba", "glm-5.3", levels(LOW_HIGH_MAX, false)),
+    ("alibaba", "glm-5.2", levels(FULL, true)),
+    ("alibaba", "glm-5.1", levels(UP_TO_XHIGH, true)),
+    ("ollama", "glm-5.3", levels(LOW_HIGH_MAX, false)),
+    ("ollama", "glm-5.2", levels(HIGH_MAX, true)),
+    ("ollama", "kimi-k3", levels(LOW_HIGH_MAX, true)),
+    ("ollama", "deepseek-v4", levels(LOW_HIGH_MAX, true)),
+    ("ollama", "gpt-oss", levels(LOW_MEDIUM_HIGH, true)),
+    ("ollama", "kimi-k2.6", levels(LOW_MEDIUM_HIGH, true)),
+    ("ollama", "kimi-k2.7", levels(LOW_MEDIUM_HIGH, true)),
+    ("ollama", "nemotron-3", levels(LOW_MEDIUM_HIGH, true)),
+    ("ollama", "gemma4", levels(LOW_MEDIUM_HIGH, true)),
+    ("ollama", "minimax-m2.7", levels(LOW_MEDIUM_HIGH, false)),
+    ("fireworks", "glm-5p3", levels(LOW_HIGH_MAX, false)),
+    ("fireworks", "glm-5p2", levels(FULL, true)),
+    ("fireworks", "glm-5p1", levels(LOW_MEDIUM_HIGH, true)),
+    ("fireworks", "glm-4p5", levels(LOW_MEDIUM_HIGH, true)),
+    ("fireworks", "glm-4p6", levels(LOW_MEDIUM_HIGH, true)),
+    ("fireworks", "glm-4p7", levels(LOW_MEDIUM_HIGH, true)),
+    ("fireworks", "qwen3p8-2p4t", levels(LOW_MEDIUM_XHIGH, false)),
+    ("fireworks", "qwen3p8", levels(FULL, true)),
+    ("fireworks", "deepseek-v4", levels(FULL, true)),
+    ("fireworks", "deepseek-v3p2", levels(LOW_MEDIUM_HIGH, true)),
+    ("fireworks", "kimi-k3", levels(FULL, true)),
+    ("nvidia", "glm-5.3", levels(LOW_HIGH_MAX, false)),
+    ("nvidia", "deepseek-v4.1", levels(LOW_HIGH_MAX, true)),
+    ("nvidia", "deepseek-v4", levels(HIGH_MAX, true)),
+    ("nvidia", "kimi-k3", levels(LOW_HIGH_MAX, false)),
+    ("opencode", "kimi-k3", levels(LOW_HIGH_MAX, false)),
+    ("opencode", "glm-5.3", levels(LOW_HIGH_MAX, false)),
+    ("opencode", "glm-5.2", levels(HIGH_MAX, false)),
+    ("opencode", "deepseek-v4-pro", levels(HIGH_MAX, false)),
+    ("opencode", "deepseek-v4", levels(LOW_HIGH_MAX, false)),
+    ("opencode", "qwen3.8", levels(LOW_MEDIUM_XHIGH, false)),
+    ("cerebras", "qwen-3.8", levels(LOW_MEDIUM_HIGH, true)),
+    ("groq", "qwen3.8", levels(LOW_MEDIUM_HIGH, true)),
+];
+
+fn hosted_effort_levels(provider_name: &str, model: &str) -> Option<&'static EffortLevels> {
+    HOSTED_EFFORT_LEVELS
+        .iter()
+        .find(|(host, pattern, _)| {
+            let host_matches = if *host == "opencode" {
+                provider_name.starts_with("opencode")
+            } else {
+                provider_name.eq_ignore_ascii_case(host)
+            };
+            host_matches && crate::llm::utils::contains_ignore_ascii_case(model, pattern)
+        })
+        .map(|(_, _, levels)| levels)
 }
 
 pub(crate) fn openai_tool_choice_value(choice: Option<&ToolChoice>) -> serde_json::Value {
@@ -388,13 +457,19 @@ fn apply_reasoning_effort(
     match effort.map(|effort| shared::supported_reasoning_effort(provider_name, model, effort)) {
         Some(ReasoningEffort::None) => {
             // Thinking off. Model Studio's hybrid models (DeepSeek V4, GLM, Qwen3)
-            // think by default and only `enable_thinking=false` stops it; a
-            // Workers AI model that lists "none" takes it as an effort. Other
+            // think by default and only `enable_thinking=false` stops it. Workers
+            // AI resolves the request against its catalog: "none" where a model
+            // lists it, otherwise the model's lowest level. Hosts with a "none"
+            // level for the model (`hosted_effort_levels`) get it, and NVIDIA's
+            // Nemotron 3 switches thinking off through its chat template. Other
             // OpenAI-compatible hosts have no switch: nothing is sent, as for an
             // unset effort — sending "none" to a host that validates the ladder
-            // is a 400 (Meta), and the default there is no thinking anyway.
+            // is a 400 (Meta, Fireworks gpt-oss), and the default there is no
+            // thinking anyway.
             if provider_name.eq_ignore_ascii_case("alibaba") {
-                request_body["enable_thinking"] = serde_json::json!(false);
+                if !alibaba_thinking_only_without_levels(model) {
+                    request_body["enable_thinking"] = serde_json::json!(false);
+                }
             } else if provider_name.eq_ignore_ascii_case("cloudflare") {
                 if let Some(value) = crate::llm::providers::cloudflare::catalog_reasoning_effort(
                     model,
@@ -402,6 +477,11 @@ fn apply_reasoning_effort(
                 ) {
                     request_body["reasoning_effort"] = serde_json::json!(value);
                 }
+            } else if hosted_effort_levels(provider_name, model).is_some_and(|levels| levels.none) {
+                request_body["reasoning_effort"] = serde_json::json!("none");
+            } else if nvidia_nemotron_3(provider_name, model) {
+                request_body["chat_template_kwargs"] =
+                    serde_json::json!({ "enable_thinking": false });
             }
         }
         Some(effort) => {

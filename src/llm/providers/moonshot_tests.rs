@@ -402,11 +402,24 @@ fn test_preserved_thinking_model_contract() {
     assert!(preserves_historical_thinking("kimi-k3"));
 
     assert_eq!(
-        thinking_config("kimi-k2.6"),
+        thinking_config("kimi-k2.6", None),
         Some(serde_json::json!({"type": "enabled", "keep": "all"}))
     );
-    assert!(thinking_config("kimi-k2.7-code").is_none());
-    assert!(thinking_config("kimi-k3").is_none());
+    assert_eq!(
+        thinking_config("kimi-k2.6", Some(ReasoningEffort::High)),
+        Some(serde_json::json!({"type": "enabled", "keep": "all"}))
+    );
+    assert!(thinking_config("kimi-k2.7-code", None).is_none());
+    assert!(thinking_config("kimi-k3", None).is_none());
+}
+
+#[test]
+fn test_k26_reasoning_effort_none_disables_thinking() {
+    assert_eq!(
+        thinking_config("kimi-k2.6", Some(ReasoningEffort::None)),
+        Some(serde_json::json!({"type": "disabled"}))
+    );
+    assert!(thinking_config("kimi-k2.7-code", Some(ReasoningEffort::None)).is_none());
 }
 
 #[test]
@@ -503,10 +516,11 @@ fn test_replays_thinking_follows_the_preserve_thinking_models() {
 }
 
 #[test]
-fn test_k3_reasoning_effort_none_sends_no_level() {
+fn test_k3_reasoning_effort_none_floors_to_low() {
+    // K3 cannot disable reasoning; omitting the field would run at "max"
     assert_eq!(
         k3_reasoning_effort("kimi-k3", Some(ReasoningEffort::None)),
-        None
+        Some("low")
     );
 }
 

@@ -376,21 +376,44 @@ pub(crate) fn parse_structured_output_from_text(content: &str) -> Option<serde_j
     }
 }
 
-/// The effort `provider_name` can run `model` at. GLM-5.3 cannot stop thinking:
-/// Model Studio rejects `enable_thinking=false` ("restricted to True") and
-/// `reasoning_effort="none"`, and Z.AI's `thinking: disabled` still reasons
-/// (verified live, Sep 2026). Ollama Cloud lists no `false` level for it and
-/// runs an omitted effort at its `max` default (`/api/show`, Oct 2026). On
-/// those hosts a request for no reasoning runs at the lowest level instead.
+/// `(host, model substring)` pairs whose thinking cannot be switched off.
+///
+/// GLM-5.3: Model Studio rejects `enable_thinking=false` ("restricted to
+/// True") and `reasoning_effort="none"`, and Z.AI's `thinking: disabled`
+/// still reasons (verified live, Sep 2026). Ollama Cloud lists no `false`
+/// level for it and runs an omitted effort at its `max` default (`/api/show`,
+/// Oct 2026); NVIDIA NIM documents `low|high|max` with default `max`
+/// (z-ai-glm-5-3 reference, Oct 2026); models.dev lists the same levels with
+/// no off toggle on OpenCode Zen/Go and Fireworks (Oct 2026).
+///
+/// Model Studio (deep-thinking and Kimi pages, Oct 2026): kimi-k3 and
+/// qwen3.8-2.4t-a95b are thinking-only. Fireworks' qwen3p8-2p4t-a95b lists
+/// `low|medium|xhigh` with no off toggle (models.dev, Oct 2026).
+const ALWAYS_THINKS: &[(&str, &str)] = &[
+    ("alibaba", "glm-5.3"),
+    ("alibaba", "kimi-k3"),
+    ("alibaba", "qwen3.8-2.4t-a95b"),
+    ("zai", "glm-5.3"),
+    ("ollama", "glm-5.3"),
+    ("nvidia", "glm-5.3"),
+    ("opencode-zen", "glm-5.3"),
+    ("opencode-go", "glm-5.3"),
+    ("fireworks", "glm-5p3"),
+    ("fireworks", "qwen3p8-2p4t"),
+];
+
+/// The effort `provider_name` can run `model` at. On a model in
+/// [`ALWAYS_THINKS`] a request for no reasoning runs at the lowest level
+/// instead.
 pub(super) fn supported_reasoning_effort(
     provider_name: &str,
     model: &str,
     effort: ReasoningEffort,
 ) -> ReasoningEffort {
-    let always_thinks = (provider_name.eq_ignore_ascii_case("alibaba")
-        || provider_name.eq_ignore_ascii_case("zai")
-        || provider_name.eq_ignore_ascii_case("ollama"))
-        && crate::llm::utils::contains_ignore_ascii_case(model, "glm-5.3");
+    let always_thinks = ALWAYS_THINKS.iter().any(|(host, pattern)| {
+        provider_name.eq_ignore_ascii_case(host)
+            && crate::llm::utils::contains_ignore_ascii_case(model, pattern)
+    });
     if always_thinks && effort == ReasoningEffort::None {
         ReasoningEffort::Low
     } else {

@@ -407,11 +407,20 @@ fn apply_explicit_cache_options(
 
 /// Responses API `reasoning.effort` for reasoning models (o1/o3/o4/gpt-5/gpt-6/daybreak);
 /// `None` for models without one. GPT-5.6 and later additionally accept "max".
-/// Default when caller omits is "medium" (per OpenAI guidance).
+/// An unset effort is omitted so the model's own default applies; defaults vary
+/// by model (gpt-5.1 "none", gpt-5.6 "medium", gpt-5.5-pro "high").
+///
+/// Levels a model lacks snap to its nearest supported one. Per-model sets from
+/// https://developers.openai.com/api/docs/models/<model> (verified Oct 2026):
+///   - gpt-5-pro: "high" only
+///   - gpt-5.2-pro / gpt-5.4-pro / gpt-5.5-pro: medium, high, xhigh
+///   - gpt-5: minimal, low, medium, high
+///   - gpt-5.1: none, low, medium, high
 pub(super) fn reasoning_effort(
     model: &str,
     effort: Option<ReasoningEffort>,
 ) -> Option<&'static str> {
+    let effort = effort?;
     let is_reasoning_model = model.starts_with("o1")
         || model.starts_with("o3")
         || model.starts_with("o4")
@@ -422,21 +431,50 @@ pub(super) fn reasoning_effort(
         return None;
     }
 
-    let is_gpt_5_6_plus = is_gpt_5_6_or_later(&normalize_model_name(model));
+    let normalized = normalize_model_name(model);
+    if normalized.starts_with("gpt-5-pro") {
+        return Some("high");
+    }
+    if ["gpt-5.2-pro", "gpt-5.4-pro", "gpt-5.5-pro"]
+        .iter()
+        .any(|p| normalized.starts_with(p))
+    {
+        return Some(match effort {
+            ReasoningEffort::None | ReasoningEffort::Low | ReasoningEffort::Medium => "medium",
+            ReasoningEffort::High => "high",
+            ReasoningEffort::XHigh | ReasoningEffort::Max => "xhigh",
+        });
+    }
+    // The base model or a dated snapshot (`gpt-5-2025-08-07`), not its variants.
+    let is_base = |base: &str| {
+        normalized
+            .strip_prefix(base)
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with("-20"))
+    };
+    if is_base("gpt-5") || is_base("gpt-5.1") {
+        return Some(match effort {
+            ReasoningEffort::None if is_base("gpt-5") => "minimal",
+            ReasoningEffort::None => "none",
+            ReasoningEffort::Low => "low",
+            ReasoningEffort::Medium => "medium",
+            ReasoningEffort::High | ReasoningEffort::XHigh | ReasoningEffort::Max => "high",
+        });
+    }
+
+    let is_gpt_5_6_plus = is_gpt_5_6_or_later(&normalized);
     Some(match effort {
         // GPT-5.x accepts "none" (no reasoning); the o-series and GPT-6 do not
         // (GPT-6 answers "none" with a 400 listing low..max), so "low" is
         // their floor.
-        Some(ReasoningEffort::None) if model.starts_with("gpt-6") => "low",
-        Some(ReasoningEffort::None) if model.starts_with("gpt-") => "none",
-        Some(ReasoningEffort::None) => "low",
-        Some(ReasoningEffort::Low) => "low",
-        Some(ReasoningEffort::Medium) => "medium",
-        Some(ReasoningEffort::High) => "high",
-        Some(ReasoningEffort::XHigh) => "xhigh",
-        Some(ReasoningEffort::Max) if is_gpt_5_6_plus => "max",
-        Some(ReasoningEffort::Max) => "xhigh",
-        None => "medium",
+        ReasoningEffort::None if model.starts_with("gpt-6") => "low",
+        ReasoningEffort::None if model.starts_with("gpt-") => "none",
+        ReasoningEffort::None => "low",
+        ReasoningEffort::Low => "low",
+        ReasoningEffort::Medium => "medium",
+        ReasoningEffort::High => "high",
+        ReasoningEffort::XHigh => "xhigh",
+        ReasoningEffort::Max if is_gpt_5_6_plus => "max",
+        ReasoningEffort::Max => "xhigh",
     })
 }
 

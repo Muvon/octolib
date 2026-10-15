@@ -379,15 +379,17 @@ pub(crate) fn parse_structured_output_from_text(content: &str) -> Option<serde_j
 /// The effort `provider_name` can run `model` at. GLM-5.3 cannot stop thinking:
 /// Model Studio rejects `enable_thinking=false` ("restricted to True") and
 /// `reasoning_effort="none"`, and Z.AI's `thinking: disabled` still reasons
-/// (verified live, Sep 2026). On those hosts a request for no reasoning runs at
-/// the lowest level instead.
+/// (verified live, Sep 2026). Ollama Cloud lists no `false` level for it and
+/// runs an omitted effort at its `max` default (`/api/show`, Oct 2026). On
+/// those hosts a request for no reasoning runs at the lowest level instead.
 pub(super) fn supported_reasoning_effort(
     provider_name: &str,
     model: &str,
     effort: ReasoningEffort,
 ) -> ReasoningEffort {
     let always_thinks = (provider_name.eq_ignore_ascii_case("alibaba")
-        || provider_name.eq_ignore_ascii_case("zai"))
+        || provider_name.eq_ignore_ascii_case("zai")
+        || provider_name.eq_ignore_ascii_case("ollama"))
         && crate::llm::utils::contains_ignore_ascii_case(model, "glm-5.3");
     if always_thinks && effort == ReasoningEffort::None {
         ReasoningEffort::Low

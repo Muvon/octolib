@@ -437,6 +437,32 @@ fn test_alibaba_glm_reasoning_effort_follows_model_studio_ladder() {
     );
 }
 
+/// Ollama Cloud resolves an unsupported effort name to the model default, which
+/// is `max` for glm-5.3 (`/api/show` values `low|high|max`), so the generic
+/// ladder must not send `medium` there.
+#[test]
+fn test_ollama_glm_5_3_reasoning_effort_floors_to_listed_levels() {
+    use crate::llm::types::ReasoningEffort;
+
+    for (effort, expected) in [
+        (ReasoningEffort::None, "low"),
+        (ReasoningEffort::Low, "low"),
+        (ReasoningEffort::Medium, "low"),
+        (ReasoningEffort::High, "high"),
+        (ReasoningEffort::XHigh, "high"),
+        (ReasoningEffort::Max, "max"),
+    ] {
+        assert_eq!(
+            reasoning_effort_value("ollama", "glm-5.3:cloud", effort),
+            expected
+        );
+    }
+
+    let mut body = serde_json::json!({});
+    apply_reasoning_effort(&mut body, "ollama", "glm-5.3", Some(ReasoningEffort::None));
+    assert_eq!(body["reasoning_effort"], "low");
+}
+
 #[test]
 fn test_fireworks_glm_5_2_reasoning_effort_reaches_max_tier() {
     use crate::llm::types::ReasoningEffort;

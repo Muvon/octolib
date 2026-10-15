@@ -134,6 +134,10 @@ fn is_alibaba_deepseek_v4(provider_name: &str, model: &str) -> bool {
 /// so they keep the generic ladder. Intermediate levels floor to the next
 /// supported one, matching the K3 handling in `opencode`.
 ///
+/// Ollama Cloud (`/api/show`, Oct 2026): glm-5.3 lists `low|high|max` with
+/// default `max`, and an unsupported name resolves to that default, so an
+/// unmapped `medium` silently ran at max. It follows the Model Studio floor.
+///
 /// Fireworks (chat-completions reference): GLM 5.2 exposes two tiers, High and
 /// Max. `low`/`medium` collapse to High, `xhigh`/`max` select Max, which is
 /// also the model default, so capping to `high` lowered effort.
@@ -154,13 +158,20 @@ fn glm_reasoning_effort(
         ReasoningEffort::Max => "max",
     };
 
+    let glm_5_3_floor = |effort| match effort {
+        ReasoningEffort::None | ReasoningEffort::Low | ReasoningEffort::Medium => "low",
+        ReasoningEffort::High | ReasoningEffort::XHigh => "high",
+        ReasoningEffort::Max => "max",
+    };
+
+    if provider_name.eq_ignore_ascii_case("ollama") && contains_ignore_ascii_case(model, "glm-5.3")
+    {
+        return Some(glm_5_3_floor(effort));
+    }
+
     if provider_name.eq_ignore_ascii_case("alibaba") {
         if contains_ignore_ascii_case(model, "glm-5.3") {
-            return Some(match effort {
-                ReasoningEffort::None | ReasoningEffort::Low | ReasoningEffort::Medium => "low",
-                ReasoningEffort::High | ReasoningEffort::XHigh => "high",
-                ReasoningEffort::Max => "max",
-            });
+            return Some(glm_5_3_floor(effort));
         }
         if contains_ignore_ascii_case(model, "glm-5.2") {
             return Some(verbatim);

@@ -37,6 +37,10 @@ fn test_supported_reasoning_effort_floors_only_glm_5_3_on_verified_hosts() {
         ReasoningEffort::Low
     );
     assert_eq!(
+        supported_reasoning_effort("ollama", "glm-5.3:cloud", off),
+        ReasoningEffort::Low
+    );
+    assert_eq!(
         supported_reasoning_effort("alibaba", "glm-5.3", ReasoningEffort::High),
         ReasoningEffort::High
     );

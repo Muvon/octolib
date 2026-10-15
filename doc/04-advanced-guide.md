@@ -23,6 +23,7 @@
 | Amazon Bedrock | ✅ Supported | Cloud AI Services |
 | Cloudflare Workers AI | ✅ Supported | Edge AI Compute |
 | Local LLM | ✅ Supported | Ollama, LM Studio, LocalAI, Jan, vLLM |
+| WebWright | ✅ Supported | OpenAI-Compatible Chat, Caching |
 | CLI Proxy | ✅ Supported | Codex, Claude, Gemini, Cursor |
 
 ## 🚀 Key Features
@@ -89,6 +90,7 @@ Each provider requires its specific API key:
 - `GOOGLE_VERTEX_CREDENTIAL_FILE` (or `GOOGLE_APPLICATION_CREDENTIALS`): Google Vertex AI credentials
 - `GOOGLE_VERTEX_PROJECT_ID`, `GOOGLE_VERTEX_LOCATION`: Optional Vertex project/location overrides (default location: `us-central1`)
 - `GOOGLE_STUDIO_API_KEY`: Google AI Studio (Gemini API) key
+- `WEBWRIGHT_API_KEY`: WebWright API key
 - `AWS_ACCESS_KEY_ID` & `AWS_SECRET_ACCESS_KEY`: Amazon Bedrock credentials
 
 ### Custom API Endpoints (Optional)
@@ -113,6 +115,7 @@ All providers support custom API URLs via environment variables. If not set, def
 | OctoHub | `OCTOHUB_API_KEY` | `OCTOHUB_API_URL` | `http://127.0.0.1:8080` |
 | Google Studio | `GOOGLE_STUDIO_API_KEY` | `GOOGLE_STUDIO_API_URL` | `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions` |
 | Google Vertex | `GOOGLE_VERTEX_CREDENTIAL_FILE` (service account) | `GOOGLE_VERTEX_API_URL` | Derived from `GOOGLE_VERTEX_PROJECT_ID`/`GOOGLE_VERTEX_LOCATION` |
+| WebWright | `WEBWRIGHT_API_KEY` | `WEBWRIGHT_API_URL` | `https://webwright.ai/v1/chat/completions` |
 
 Example usage with custom endpoints:
 

@@ -187,7 +187,7 @@ pub use llm::{
     ProviderExchange, ProviderFactory, ProviderResponse, ProviderStrategy, ProviderToolCalls,
     ReasoningEffort, ResponseMode, SamplingSupport, SourceType, StrategyFactory,
     StructuredOutputRequest, ThinkingBlock, TogetherProvider, TokenUsage, ToolCall, ToolChoice,
-    ToolResult, VideoAttachment, VideoData, XaiProvider, ZaiProvider,
+    ToolResult, VideoAttachment, VideoData, WebWrightProvider, XaiProvider, ZaiProvider,
 };
 #[cfg(feature = "media")]
 pub use media::{

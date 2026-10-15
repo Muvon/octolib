@@ -77,6 +77,7 @@ fn test_supported_providers() {
     assert!(providers.contains(&"meta"));
     assert!(providers.contains(&"xai"));
     assert!(providers.contains(&"tinker"));
+    assert!(providers.contains(&"webwright"));
     assert!(providers.contains(&"cli"));
 }
 
@@ -112,6 +113,7 @@ fn test_create_provider() {
     assert!(ProviderFactory::create_provider("xai").is_ok());
     assert!(ProviderFactory::create_provider("meta").is_ok());
     assert!(ProviderFactory::create_provider("tinker").is_ok());
+    assert!(ProviderFactory::create_provider("webwright").is_ok());
     assert!(ProviderFactory::create_provider("cli").is_err());
 
     // Test case insensitive
@@ -302,6 +304,15 @@ fn test_get_provider_for_model() {
     assert_eq!(provider.name(), "tinker");
     assert_eq!(model, "thinkingmachines/Inkling:peft:262144");
     assert!(provider.supports_model(&model));
+
+    // Test WebWright provider (OpenAI-compatible proxy)
+    let result = ProviderFactory::get_provider_for_model("webwright:wren-r1");
+    assert!(result.is_ok());
+    let (provider, model) = result.unwrap();
+    assert_eq!(provider.name(), "webwright");
+    assert_eq!(model, "wren-r1");
+    assert!(provider.supports_model(&model));
+    assert!(provider.supports_caching(&model));
 
     // Test invalid format
     let result = ProviderFactory::get_provider_for_model("gpt-4o");

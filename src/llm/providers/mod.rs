@@ -44,6 +44,7 @@ pub mod openrouter;
 pub(crate) mod shared;
 pub mod tinker;
 pub mod together;
+pub mod webwright;
 pub mod xai;
 pub mod zai;
 
@@ -78,5 +79,6 @@ pub use opencode::{OpenCodeGoProvider, OpenCodeZenProvider};
 pub use openrouter::OpenRouterProvider;
 pub use tinker::TinkerProvider;
 pub use together::TogetherProvider;
+pub use webwright::WebWrightProvider;
 pub use xai::XaiProvider;
 pub use zai::ZaiProvider;

@@ -930,3 +930,24 @@ fn tool_images_follow_plain_tool_content_in_an_attributed_user_turn() {
         );
     }
 }
+
+#[test]
+fn test_webwright_reasoning_effort_standard_ceiling() {
+    // WebWright's Standard tier includes low and medium reasoning only, so a
+    // higher request collapses onto "medium" and a no-reasoning request floors
+    // to "low".
+    let cases = [
+        (crate::llm::types::ReasoningEffort::None, "low"),
+        (crate::llm::types::ReasoningEffort::Low, "low"),
+        (crate::llm::types::ReasoningEffort::Medium, "medium"),
+        (crate::llm::types::ReasoningEffort::High, "medium"),
+        (crate::llm::types::ReasoningEffort::XHigh, "medium"),
+        (crate::llm::types::ReasoningEffort::Max, "medium"),
+    ];
+    for (effort, expected) in cases {
+        assert_eq!(
+            reasoning_effort_value("webwright", "wren-r1", effort),
+            expected
+        );
+    }
+}

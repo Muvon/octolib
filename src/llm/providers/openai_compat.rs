@@ -160,6 +160,7 @@ impl EffortLevels {
 
 const LOW_HIGH_MAX: &[Effort] = &[Effort::Low, Effort::High, Effort::Max];
 const HIGH_MAX: &[Effort] = &[Effort::High, Effort::Max];
+const LOW_MEDIUM: &[Effort] = &[Effort::Low, Effort::Medium];
 const LOW_MEDIUM_HIGH: &[Effort] = &[Effort::Low, Effort::Medium, Effort::High];
 const LOW_MEDIUM_XHIGH: &[Effort] = &[Effort::Low, Effort::Medium, Effort::XHigh];
 const UP_TO_XHIGH: &[Effort] = &[Effort::Low, Effort::Medium, Effort::High, Effort::XHigh];
@@ -209,6 +210,10 @@ const fn levels(levels: &'static [Effort], none: bool) -> EffortLevels {
 ///   default; `"none"` disables it.
 /// - Groq (reasoning guide, Oct 2026): qwen3.8-27b takes `"none"` to disable
 ///   reasoning; `low|medium|high` enable it.
+/// - WebWright (pricing page, Oct 2026): the Standard tier includes low and
+///   medium reasoning only, and high-to-max requires Premium. The client
+///   cannot see the account tier, so wren-r1 clamps to low/medium; higher
+///   requests collapse onto `medium`.
 const HOSTED_EFFORT_LEVELS: &[(&str, &str, EffortLevels)] = &[
     ("alibaba", "deepseek-v4", levels(FULL, true)),
     ("alibaba", "glm-5.3", levels(LOW_HIGH_MAX, false)),
@@ -247,6 +252,7 @@ const HOSTED_EFFORT_LEVELS: &[(&str, &str, EffortLevels)] = &[
     ("opencode", "qwen3.8", levels(LOW_MEDIUM_XHIGH, false)),
     ("cerebras", "qwen-3.8", levels(LOW_MEDIUM_HIGH, true)),
     ("groq", "qwen3.8", levels(LOW_MEDIUM_HIGH, true)),
+    ("webwright", "wren-r1", levels(LOW_MEDIUM, false)),
 ];
 
 fn hosted_effort_levels(provider_name: &str, model: &str) -> Option<&'static EffortLevels> {

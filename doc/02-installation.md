@@ -74,6 +74,7 @@ export CLOUDFLARE_API_KEY="your_cloudflare_api_key"
 export TOGETHER_API_KEY="your_together_api_key"
 export OCTOHUB_API_KEY="your_octohub_api_key"
 export GOOGLE_STUDIO_API_KEY="your_google_studio_api_key"
+export WEBWRIGHT_API_KEY="your_webwright_api_key"
 
 # Embedding Providers
 export JINA_API_KEY="your_jina_api_key"

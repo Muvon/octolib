@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.42.1] - 2026-10-15
+
+### 📋 Release Summary
+
+Google providers now support Gemini 4 models.
+
+### ✨ New Features & Enhancements
+
+- **llm**: support Gemini 4 models in Google providers `2a58bfb9`
+
 ## [0.42.0] - 2026-10-15
 
 ### 📋 Release Summary

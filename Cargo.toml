@@ -52,22 +52,22 @@ cuda = ["fastembed?/cuda", "candle-core?/cuda", "candle-nn?/cuda"]
 cudnn = ["fastembed?/cudnn", "candle-core?/cudnn", "candle-nn?/cudnn"]
 
 [dependencies]
-async-trait = "0.1.89"
-anyhow = "1.0.102"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.149"
+async-trait = "0.1.92"
+anyhow = "1.0.104"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
 reqwest = { version = "0.12", features = ["json", "multipart", "rustls-tls", "gzip", "brotli", "zstd", "deflate", "http2", "charset"], default-features = false }
-tokio = { version = "1.52.3", features = ["time", "sync", "macros", "rt-multi-thread", "net", "io-util"] }
+tokio = { version = "1.53.3", features = ["time", "sync", "macros", "rt-multi-thread", "net", "io-util"] }
 arc-swap = "1"
 base64 = { version = "0.22", optional = true }
-thiserror = "2.0.18"
+thiserror = "2.0.21"
 tracing = "0.1.44"
 dirs = "7.0.0"
 jsonwebtoken = { version = "10", optional = true }
 # Schema validation only — no $ref resolution over HTTP/file needed (client
 # schemas are self-contained), so default features (which pull in a second
 # reqwest/rustls stack) are disabled.
-jsonschema = { version = "0.46.9", default-features = false, optional = true }
+jsonschema = { version = "0.46.10", default-features = false, optional = true }
 
 sha2 = "0.10"
 hex = "0.4"
@@ -75,7 +75,7 @@ hex = "0.4"
 # Configuration file handling (utils::config_migration / utils::config_file):
 # toml_edit preserves user comments and formatting across migrations, fs4 gives
 # the cross-platform advisory lock, uuid names the atomic-write temp file.
-toml_edit = "0.25.13"
+toml_edit = "0.25.17"
 fs4 = "0.8.4"
 uuid = { version = "1", features = ["v4"] }
 
@@ -85,7 +85,7 @@ tiktoken-rs = { version = "0.9.1", optional = true }
 # Pinned to the exact version fastembed depends on so one ort links; the
 # runtime binary comes through fastembed's download feature.
 ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "api-24"], optional = true }
-candle-transformers = { version = "0.10.2", optional = true }
+candle-transformers = { version = "0.11.0", optional = true }
 tokenizers = { version = "0.22.2", optional = true }
 # HuggingFace Hub - use rustls-tls to avoid native-tls dependency
 # Pinned to 0.4.x to share single version with fastembed (which uses hf-hub 0.4.1)
@@ -192,7 +192,7 @@ required-features = ["reranker"]
 [dev-dependencies]
 # Examples encode local media inline regardless of which features are on.
 base64 = "0.22"
-serial_test = "3.4.0"
+serial_test = "3.5.0"
 tracing-subscriber = "0.3"
 # Migration tests assert on the parsed result, not on the edited document.
 toml = "1.1"
@@ -205,11 +205,17 @@ codegen-units = 1      # max optimization, slower compile
 strip = "symbols"
 # Keep Apple dependencies off other platforms without a separate helper crate.
 [target.'cfg(target_os = "macos")'.dependencies]
-fastembed = { version = "5.13.4", default-features = false, features = ["hf-hub-rustls-tls", "ort-download-binaries-rustls-tls", "metal"], optional = true }
-candle-core = { version = "0.10.2", features = ["metal"], optional = true }
-candle-nn = { version = "0.10.2", features = ["metal"], optional = true }
+fastembed = { version = "5.17.4", default-features = false, features = ["hf-hub-rustls-tls", "ort-download-binaries-rustls-tls", "metal"], optional = true }
+candle-core = { version = "0.11.0", features = ["metal"], optional = true }
+candle-nn = { version = "0.11.0", features = ["metal"], optional = true }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
-fastembed = { version = "5.13.4", default-features = false, features = ["hf-hub-rustls-tls", "ort-download-binaries-rustls-tls"], optional = true }
-candle-core = { version = "0.10.2", optional = true }
-candle-nn = { version = "0.10.2", optional = true }
+fastembed = { version = "5.17.4", default-features = false, features = ["hf-hub-rustls-tls", "ort-download-binaries-rustls-tls"], optional = true }
+candle-core = { version = "0.11.0", optional = true }
+candle-nn = { version = "0.11.0", optional = true }
+
+# ZIP 9 fix pending a Candle release: https://github.com/huggingface/candle/pull/4041.
+[patch.crates-io]
+candle-core = { git = "https://github.com/huggingface/candle.git", rev = "70f72e9cfdbfc570846ca363ead2135394af3e9a" }
+candle-nn = { git = "https://github.com/huggingface/candle.git", rev = "70f72e9cfdbfc570846ca363ead2135394af3e9a" }
+candle-transformers = { git = "https://github.com/huggingface/candle.git", rev = "70f72e9cfdbfc570846ca363ead2135394af3e9a" }

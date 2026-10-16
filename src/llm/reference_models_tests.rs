@@ -28,12 +28,67 @@ fn reference_model_id_names_one_model_across_hosts() {
         assert_eq!(reference_model_id(model), Some("kimi-k2.7-code"), "{model}");
     }
     assert_eq!(reference_model_id("kimi-2.6"), Some("kimi-k2.6"));
+    for model in ["muse-wonder-1.0", "meta/muse-wonder"] {
+        assert_eq!(reference_model_id(model), Some("muse-wonder-1.0"));
+    }
     assert_eq!(
         reference_model_id("kimi-k2.7-code-highspeed"),
         Some("kimi-k2.7-code-highspeed")
     );
     assert_eq!(reference_model_id("deepseek-v4.1-flash:cloud"), None);
     assert_eq!(reference_model_id("no-such-model"), None);
+}
+
+#[test]
+fn october_2026_models_resolve_with_documented_capabilities_and_pricing() {
+    for (model, capabilities, pricing) in [
+        (
+            "meta/muse-wonder",
+            caps(true, true, true, 1_048_576),
+            pricing(4.00, 20.00, 4.00, 0.20),
+        ),
+        (
+            "meta/muse-spark-open",
+            caps(true, true, true, 1_048_576),
+            pricing(1.25, 4.25, 1.25, 0.15),
+        ),
+        (
+            "nvidia/nemotron-3.5-super-vl",
+            caps(true, true, true, 1_048_576),
+            pricing(0.15, 0.50, 0.15, 0.02),
+        ),
+        (
+            "liquid/lfm-2.5-24b-a2b",
+            caps(false, false, true, 128_000),
+            pricing(0.05, 0.70, 0.05, 0.025),
+        ),
+        (
+            "stepfun/step-5-preview",
+            caps(true, true, true, 1_048_576),
+            pricing(1.00, 2.70, 1.00, 0.10),
+        ),
+        (
+            "moondream/moondream3.1-9b-a2b",
+            caps(true, false, false, 32_000),
+            pricing(0.30, 2.50, 0.30, 0.30),
+        ),
+        (
+            "moondream/moondream3-preview",
+            caps(true, false, false, 32_000),
+            pricing(0.30, 2.50, 0.30, 0.30),
+        ),
+    ] {
+        assert_same_capabilities(
+            get_reference_capabilities(model).unwrap(),
+            capabilities.unwrap(),
+        );
+        assert_same_pricing(get_reference_pricing(model).unwrap(), pricing.unwrap());
+        assert_eq!(
+            proxy_route_enforces_response_schema(model),
+            capabilities.unwrap().structured_output,
+        );
+        assert!(reference_model_id(model).is_some(), "{model}");
+    }
 }
 
 /// The verifier route the completion gate runs on. The openrouter catalogue

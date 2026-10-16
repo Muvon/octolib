@@ -78,6 +78,49 @@ const fn pricing(
 /// Unified reference table. Entries are sorted by pattern specificity so
 /// substring matching resolves aliases such as `gpt-4o-mini` before `gpt-4o`.
 const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
+    // Oct 2026 additions: Meta Model API and OpenRouter's public model catalog.
+    ReferenceModelEntry {
+        pattern: "muse-wonder-1.0",
+        capabilities: caps(true, true, true, 1_048_576),
+        pricing: pricing(4.00, 20.00, 4.00, 0.20),
+    },
+    ReferenceModelEntry {
+        // OpenRouter uses the unversioned name for Meta's Muse Wonder 1.0.
+        pattern: "muse-wonder",
+        capabilities: caps(true, true, true, 1_048_576),
+        pricing: pricing(4.00, 20.00, 4.00, 0.20),
+    },
+    ReferenceModelEntry {
+        // Open weights hosted by inference providers, not Meta Model API.
+        pattern: "muse-spark-open",
+        capabilities: caps(true, true, true, 1_048_576),
+        pricing: pricing(1.25, 4.25, 1.25, 0.15),
+    },
+    ReferenceModelEntry {
+        pattern: "nemotron-3.5-super-vl",
+        capabilities: caps(true, true, true, 1_048_576),
+        pricing: pricing(0.15, 0.50, 0.15, 0.02),
+    },
+    ReferenceModelEntry {
+        pattern: "lfm-2.5-24b-a2b",
+        capabilities: caps(false, false, true, 128_000),
+        pricing: pricing(0.05, 0.70, 0.05, 0.025),
+    },
+    ReferenceModelEntry {
+        pattern: "step-5-preview",
+        capabilities: caps(true, true, true, 1_048_576),
+        pricing: pricing(1.00, 2.70, 1.00, 0.10),
+    },
+    ReferenceModelEntry {
+        pattern: "moondream3.1-9b-a2b",
+        capabilities: caps(true, false, false, 32_000),
+        pricing: pricing(0.30, 2.50, 0.30, 0.30),
+    },
+    ReferenceModelEntry {
+        pattern: "moondream3-preview",
+        capabilities: caps(true, false, false, 32_000),
+        pricing: pricing(0.30, 2.50, 0.30, 0.30),
+    },
     ReferenceModelEntry {
         // Amazon Nova 2 Lite via US geo cross-region routing (`us.` model ID
         // prefix): bills 10% above the global tier per the AWS Price List API.
@@ -2279,6 +2322,7 @@ fn normalized_model(model: &str) -> String {
 
 /// Twin entries that spell one model two ways, mapped to the entry they mirror.
 const TWINS: &[(&str, &str)] = &[
+    ("muse-wonder", "muse-wonder-1.0"),
     ("gpt-chat-latest", "chat-latest"),
     ("kimi-2.7-code", "kimi-k2.7-code"),
     ("kimi-2.6", "kimi-k2.6"),

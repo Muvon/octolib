@@ -59,7 +59,7 @@ const MODEL_API_KEY_ENV: &str = "MODEL_API_KEY";
 const META_API_URL_ENV: &str = "META_API_URL";
 const META_API_URL: &str = "https://api.meta.ai/v1/chat/completions";
 
-// Meta Model API pricing (per 1M tokens in USD) - Sep 2026
+// Meta Model API pricing (per 1M tokens in USD) - Oct 2026
 // Source: https://dev.meta.ai/docs/pricing-rate-limits
 // Format: (model, input, output, cache_write, cache_read)
 // Prompt caching is implicit: writes bill at the input rate, hits at the
@@ -67,6 +67,7 @@ const META_API_URL: &str = "https://api.meta.ai/v1/chat/completions";
 // for permission to train on prompts/completions. Contributor patterns must
 // stay before their base versions because matching is substring-based.
 const PRICING: &[PricingTuple] = &[
+    ("muse-wonder-1.0", 4.00, 20.00, 4.00, 0.20),
     // Contributor tier (1.3 / 1.2): $0.10 in / $0.20 out / $0.002 cached
     ("muse-spark-1.3-contributor", 0.10, 0.20, 0.10, 0.002),
     ("muse-spark-1.2-contributor", 0.10, 0.20, 0.10, 0.002),
@@ -76,7 +77,7 @@ const PRICING: &[PricingTuple] = &[
     ("muse-spark-1.1", 1.25, 4.25, 1.25, 0.15),
 ];
 
-/// Context window shared by every Muse Spark version.
+/// Context window shared by Muse Wonder and every Muse Spark version.
 const MAX_INPUT_TOKENS: usize = 1_048_576;
 
 #[async_trait::async_trait]
@@ -85,7 +86,7 @@ impl AiProvider for MetaProvider {
         "meta"
     }
 
-    /// Closed first-party catalog: only priced Muse Spark models are accepted.
+    /// Closed first-party catalog: only priced Model API models are accepted.
     fn supports_model(&self, model: &str) -> bool {
         is_model_in_pricing_table(model, PRICING)
     }
@@ -107,7 +108,7 @@ impl AiProvider for MetaProvider {
         true
     }
 
-    /// Text, image, video, audio and PDF input on every Muse Spark version.
+    /// Text, image, video, audio and PDF input on Muse Wonder and Muse Spark.
     fn supports_vision(&self, _model: &str) -> bool {
         true
     }

@@ -17,6 +17,7 @@ use super::*;
 #[test]
 fn test_supports_model() {
     let provider = MetaProvider::new();
+    assert!(provider.supports_model("muse-wonder-1.0"));
     assert!(provider.supports_model("muse-spark-1.3"));
     assert!(provider.supports_model("muse-spark-1.3-contributor"));
     assert!(provider.supports_model("muse-spark-1.2"));
@@ -24,6 +25,8 @@ fn test_supports_model() {
     assert!(provider.supports_model("muse-spark-1.1"));
     // Closed catalog: unknown and legacy models are rejected
     assert!(!provider.supports_model("muse-spark-1.4"));
+    assert!(!provider.supports_model("muse-spark-open"));
+    assert!(!provider.supports_model("muse-wonder-full"));
     assert!(!provider.supports_model("llama-4-maverick"));
     assert!(!provider.supports_model(""));
 }
@@ -32,7 +35,7 @@ fn test_supports_model() {
 fn test_capabilities() {
     let provider = MetaProvider::new();
     assert_eq!(provider.name(), "meta");
-    for model in ["muse-spark-1.3", "muse-spark-1.1"] {
+    for model in ["muse-wonder-1.0", "muse-spark-1.3", "muse-spark-1.1"] {
         assert!(provider.supports_caching(model));
         assert!(provider.supports_vision(model));
         assert!(provider.supports_video(model));
@@ -52,6 +55,32 @@ fn test_pricing_standard_tier() {
         assert_eq!(p.output_price_per_1m, 4.25);
         assert_eq!(p.cache_write_price_per_1m, 1.25);
         assert_eq!(p.cache_read_price_per_1m, 0.15);
+    }
+}
+
+#[test]
+fn test_muse_wonder_pricing_matches_reference() {
+    let provider = MetaProvider::new();
+    let pricing = provider.get_model_pricing("muse-wonder-1.0").unwrap();
+    assert_eq!(pricing.input_price_per_1m, 4.00);
+    assert_eq!(pricing.output_price_per_1m, 20.00);
+    assert_eq!(pricing.cache_write_price_per_1m, 4.00);
+    assert_eq!(pricing.cache_read_price_per_1m, 0.20);
+    let cost = pricing.calculate_cost(500_000, 0, 500_000, 100_000);
+    assert!((cost - 4.10).abs() < 1e-10);
+
+    for model in ["muse-wonder-1.0", "meta/muse-wonder"] {
+        let reference = crate::llm::reference_models::get_reference_pricing(model).unwrap();
+        assert_eq!(reference.input_price_per_1m, pricing.input_price_per_1m);
+        assert_eq!(reference.output_price_per_1m, pricing.output_price_per_1m);
+        assert_eq!(
+            reference.cache_write_price_per_1m,
+            pricing.cache_write_price_per_1m
+        );
+        assert_eq!(
+            reference.cache_read_price_per_1m,
+            pricing.cache_read_price_per_1m
+        );
     }
 }
 

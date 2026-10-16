@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.42.2] - 2026-10-16
+
+### 📋 Release Summary
+
+Additional Meta and reference models are now supported.
+
+### ✨ New Features & Enhancements
+
+- **llm**: support additional Meta and reference models `e422ef62`
+
+### 🔧 Improvements & Optimizations
+
+- **dependencies**: upgrade dependencies and pin Candle revision `db8afcd3`
+
+### 🐛 Bug Fixes & Stability
+
+- **cargo**: pin Candle dependencies to the ZIP 9 fix `9853aedd`
+
 ## [0.42.1] - 2026-10-15
 
 ### 📋 Release Summary

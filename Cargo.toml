@@ -86,7 +86,7 @@ tiktoken-rs = { version = "0.9.1", optional = true }
 # runtime binary comes through fastembed's download feature.
 ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "api-24"], optional = true }
 # ZIP 9 fix pending a Candle release: https://github.com/huggingface/candle/pull/4041.
-candle-transformers = { git = "https://github.com/huggingface/candle.git", rev = "70f72e9cfdbfc570846ca363ead2135394af3e9a", optional = true }
+candle-transformers = { version = "0.11.0", git = "https://github.com/huggingface/candle.git", rev = "70f72e9cfdbfc570846ca363ead2135394af3e9a", optional = true }
 tokenizers = { version = "0.22.2", optional = true }
 # HuggingFace Hub - use rustls-tls to avoid native-tls dependency
 # Pinned to 0.4.x to share single version with fastembed (which uses hf-hub 0.4.1)
@@ -207,10 +207,10 @@ strip = "symbols"
 # Keep Apple dependencies off other platforms without a separate helper crate.
 [target.'cfg(target_os = "macos")'.dependencies]
 fastembed = { version = "5.17.4", default-features = false, features = ["hf-hub-rustls-tls", "ort-download-binaries-rustls-tls"], optional = true }
-candle-core = { git = "https://github.com/huggingface/candle.git", rev = "70f72e9cfdbfc570846ca363ead2135394af3e9a", features = ["metal"], optional = true }
-candle-nn = { git = "https://github.com/huggingface/candle.git", rev = "70f72e9cfdbfc570846ca363ead2135394af3e9a", features = ["metal"], optional = true }
+candle-core = { version = "0.11.0", git = "https://github.com/huggingface/candle.git", rev = "70f72e9cfdbfc570846ca363ead2135394af3e9a", features = ["metal"], optional = true }
+candle-nn = { version = "0.11.0", git = "https://github.com/huggingface/candle.git", rev = "70f72e9cfdbfc570846ca363ead2135394af3e9a", features = ["metal"], optional = true }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 fastembed = { version = "5.17.4", default-features = false, features = ["hf-hub-rustls-tls", "ort-download-binaries-rustls-tls"], optional = true }
-candle-core = { git = "https://github.com/huggingface/candle.git", rev = "70f72e9cfdbfc570846ca363ead2135394af3e9a", optional = true }
-candle-nn = { git = "https://github.com/huggingface/candle.git", rev = "70f72e9cfdbfc570846ca363ead2135394af3e9a", optional = true }
+candle-core = { version = "0.11.0", git = "https://github.com/huggingface/candle.git", rev = "70f72e9cfdbfc570846ca363ead2135394af3e9a", optional = true }
+candle-nn = { version = "0.11.0", git = "https://github.com/huggingface/candle.git", rev = "70f72e9cfdbfc570846ca363ead2135394af3e9a", optional = true }

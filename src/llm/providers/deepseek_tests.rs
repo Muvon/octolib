@@ -169,6 +169,7 @@ fn test_build_request_uses_native_thinking_tool_contract() {
 
 #[test]
 fn test_zero_max_tokens_is_omitted() {
+    use crate::llm::types::Message;
     let messages = [Message::user("hi")];
 
     let params = ChatCompletionParams::new(&messages, "deepseek-flash", 0.7, 0.9, 40, 0);

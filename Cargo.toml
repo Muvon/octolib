@@ -159,6 +159,10 @@ name = "xai"
 required-features = ["llm"]
 
 [[example]]
+name = "webwright_chat"
+required-features = ["llm"]
+
+[[example]]
 name = "media_fal"
 required-features = ["media"]
 

@@ -69,14 +69,9 @@ const OPENCODE_SESSION_HEADER: &str = "x-opencode-session";
 /// `extra_headers` instead.
 static OPENCODE_SESSION_ID: LazyLock<String> = LazyLock::new(|| uuid::Uuid::new_v4().to_string());
 
-fn get_opencode_api_key(provider_label: &str) -> Result<String> {
-    env::var(OPENCODE_API_KEY_ENV).map_err(|_| {
-        anyhow::anyhow!(
-            "{} API key not found in environment variable: {}",
-            provider_label,
-            OPENCODE_API_KEY_ENV
-        )
-    })
+fn get_opencode_api_key(provider: &str) -> Result<String> {
+    env::var(OPENCODE_API_KEY_ENV)
+        .map_err(|_| crate::errors::missing_api_key(provider, OPENCODE_API_KEY_ENV).into())
 }
 
 /// Upstream sampling restrictions for models routed through the proxy.
@@ -275,7 +270,7 @@ impl AiProvider for OpenCodeZenProvider {
     }
 
     fn get_api_key(&self) -> Result<String> {
-        get_opencode_api_key("OpenCode Zen")
+        get_opencode_api_key("opencode-zen")
     }
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
@@ -321,7 +316,7 @@ impl AiProvider for OpenCodeGoProvider {
     }
 
     fn get_api_key(&self) -> Result<String> {
-        get_opencode_api_key("OpenCode Go")
+        get_opencode_api_key("opencode-go")
     }
 
     async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {

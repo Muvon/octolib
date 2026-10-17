@@ -88,12 +88,8 @@ impl AiProvider for GroqProvider {
     }
 
     fn get_api_key(&self) -> Result<String> {
-        env::var(GROQ_API_KEY_ENV).map_err(|_| {
-            anyhow::anyhow!(
-                "Groq API key not found in environment variable: {}",
-                GROQ_API_KEY_ENV
-            )
-        })
+        env::var(GROQ_API_KEY_ENV)
+            .map_err(|_| crate::errors::missing_api_key("groq", GROQ_API_KEY_ENV).into())
     }
 
     fn supports_caching(&self, model: &str) -> bool {

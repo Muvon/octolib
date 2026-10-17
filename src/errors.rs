@@ -75,8 +75,8 @@ pub enum ProviderError {
     #[error("Model not supported by provider {provider}: {model}")]
     ModelNotSupported { provider: String, model: String },
 
-    #[error("API key not found for provider: {provider}")]
-    ApiKeyNotFound { provider: String },
+    #[error("API key not found for provider {provider}: set {env_var}")]
+    ApiKeyNotFound { provider: String, env_var: String },
 
     #[error("Invalid API key for provider: {provider}")]
     InvalidApiKey { provider: String },
@@ -226,6 +226,14 @@ pub fn api_error(provider: &str, status: u16, message: &str) -> ProviderError {
 pub fn config_error(message: &str) -> ProviderError {
     ProviderError::ConfigurationError {
         message: message.to_string(),
+    }
+}
+
+/// Helper function to create missing API key errors
+pub fn missing_api_key(provider: &str, env_var: &str) -> ProviderError {
+    ProviderError::ApiKeyNotFound {
+        provider: provider.to_string(),
+        env_var: env_var.to_string(),
     }
 }
 

@@ -217,12 +217,8 @@ impl AiProvider for TogetherProvider {
     }
 
     fn get_api_key(&self) -> Result<String> {
-        env::var(TOGETHER_API_KEY_ENV).map_err(|_| {
-            anyhow::anyhow!(
-                "Together.ai API key not found. Set {} environment variable.",
-                TOGETHER_API_KEY_ENV
-            )
-        })
+        env::var(TOGETHER_API_KEY_ENV)
+            .map_err(|_| crate::errors::missing_api_key("together", TOGETHER_API_KEY_ENV).into())
     }
 
     fn supports_caching(&self, _model: &str) -> bool {

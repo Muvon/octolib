@@ -313,7 +313,7 @@ impl AiProvider for ZaiProvider {
 
     fn get_api_key(&self) -> Result<String> {
         env::var(ZAI_API_KEY_ENV)
-            .map_err(|_| anyhow::anyhow!("{} not found in environment", ZAI_API_KEY_ENV))
+            .map_err(|_| crate::errors::missing_api_key("zai", ZAI_API_KEY_ENV).into())
     }
     /// Z.AI documents that historical `reasoning_content` must be returned
     /// unmodified (Preserved Thinking); `convert_messages` replays every turn.
@@ -538,7 +538,7 @@ fn convert_tools(tools: &[crate::llm::types::FunctionDefinition]) -> serde_json:
 /// Returns (api_key, api_url) tuple
 fn get_api_key_and_url() -> Result<(String, String)> {
     let api_key = env::var(ZAI_API_KEY_ENV)
-        .map_err(|_| anyhow::anyhow!("{} not found in environment", ZAI_API_KEY_ENV))?;
+        .map_err(|_| crate::errors::missing_api_key("zai", ZAI_API_KEY_ENV))?;
 
     // Use custom URL if configured, otherwise use default
     let api_url = env::var(ZAI_API_URL_ENV).unwrap_or_else(|_| ZAI_API_URL.to_string());

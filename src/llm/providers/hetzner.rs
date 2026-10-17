@@ -92,12 +92,8 @@ impl AiProvider for HetznerProvider {
     }
 
     fn get_api_key(&self) -> Result<String> {
-        env::var(HETZNER_API_KEY_ENV).map_err(|_| {
-            anyhow::anyhow!(
-                "Hetzner API key not found in environment variable: {}",
-                HETZNER_API_KEY_ENV
-            )
-        })
+        env::var(HETZNER_API_KEY_ENV)
+            .map_err(|_| crate::errors::missing_api_key("hetzner", HETZNER_API_KEY_ENV).into())
     }
 
     fn supports_structured_output(&self, _model: &str) -> bool {

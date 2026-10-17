@@ -153,10 +153,7 @@ impl AiProvider for FeatherlessProvider {
 
     fn get_api_key(&self) -> Result<String> {
         env::var(FEATHERLESS_API_KEY_ENV).map_err(|_| {
-            anyhow::anyhow!(
-                "Featherless API key not found in environment variable: {}",
-                FEATHERLESS_API_KEY_ENV
-            )
+            crate::errors::missing_api_key("featherless", FEATHERLESS_API_KEY_ENV).into()
         })
     }
 

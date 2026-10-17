@@ -567,13 +567,8 @@ impl AiProvider for MoonshotProvider {
     }
 
     fn get_api_key(&self) -> Result<String> {
-        match env::var(MOONSHOT_API_KEY_ENV) {
-            Ok(key) => Ok(key),
-            Err(_) => Err(anyhow::anyhow!(
-                "Moonshot AI API key not found in environment variable: {}",
-                MOONSHOT_API_KEY_ENV
-            )),
-        }
+        env::var(MOONSHOT_API_KEY_ENV)
+            .map_err(|_| crate::errors::missing_api_key("moonshot", MOONSHOT_API_KEY_ENV).into())
     }
 
     /// Kimi K2.6+/K3 preserve reasoning across every assistant turn; older

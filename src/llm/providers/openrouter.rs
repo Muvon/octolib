@@ -262,13 +262,9 @@ impl AiProvider for OpenRouterProvider {
     }
 
     fn get_api_key(&self) -> Result<String> {
-        match env::var(OPENROUTER_API_KEY_ENV) {
-            Ok(key) => Ok(key),
-            Err(_) => Err(anyhow::anyhow!(
-                "OpenRouter API key not found in environment variable: {}",
-                OPENROUTER_API_KEY_ENV
-            )),
-        }
+        env::var(OPENROUTER_API_KEY_ENV).map_err(|_| {
+            crate::errors::missing_api_key("openrouter", OPENROUTER_API_KEY_ENV).into()
+        })
     }
 
     fn supports_caching(&self, model: &str) -> bool {

@@ -70,3 +70,19 @@ fn test_api_error() {
         panic!("Expected ApiError");
     }
 }
+
+#[test]
+fn test_missing_api_key() {
+    let error = missing_api_key("webwright", "WEBWRIGHT_API_KEY");
+
+    assert_eq!(
+        error.to_string(),
+        "API key not found for provider webwright: set WEBWRIGHT_API_KEY"
+    );
+    if let ProviderError::ApiKeyNotFound { provider, env_var } = error {
+        assert_eq!(provider, "webwright");
+        assert_eq!(env_var, "WEBWRIGHT_API_KEY");
+    } else {
+        panic!("Expected ApiKeyNotFound");
+    }
+}

@@ -130,12 +130,8 @@ impl AiProvider for BytePlusProvider {
     }
 
     fn get_api_key(&self) -> Result<String> {
-        env::var(BYTEPLUS_API_KEY_ENV).map_err(|_| {
-            anyhow::anyhow!(
-                "BytePlus API key not found in environment variable: {}",
-                BYTEPLUS_API_KEY_ENV
-            )
-        })
+        env::var(BYTEPLUS_API_KEY_ENV)
+            .map_err(|_| crate::errors::missing_api_key("byteplus", BYTEPLUS_API_KEY_ENV).into())
     }
 
     fn supports_caching(&self, _model: &str) -> bool {

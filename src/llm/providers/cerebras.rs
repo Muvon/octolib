@@ -102,12 +102,8 @@ impl AiProvider for CerebrasProvider {
     }
 
     fn get_api_key(&self) -> Result<String> {
-        env::var(CEREBRAS_API_KEY_ENV).map_err(|_| {
-            anyhow::anyhow!(
-                "Cerebras API key not found in environment variable: {}",
-                CEREBRAS_API_KEY_ENV
-            )
-        })
+        env::var(CEREBRAS_API_KEY_ENV)
+            .map_err(|_| crate::errors::missing_api_key("cerebras", CEREBRAS_API_KEY_ENV).into())
     }
 
     fn supports_caching(&self, _model: &str) -> bool {

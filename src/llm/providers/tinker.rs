@@ -292,12 +292,8 @@ impl AiProvider for TinkerProvider {
     }
 
     fn get_api_key(&self) -> Result<String> {
-        env::var(TINKER_API_KEY_ENV).map_err(|_| {
-            anyhow::anyhow!(
-                "Tinker API key not found in environment variable: {}",
-                TINKER_API_KEY_ENV
-            )
-        })
+        env::var(TINKER_API_KEY_ENV)
+            .map_err(|_| crate::errors::missing_api_key("tinker", TINKER_API_KEY_ENV).into())
     }
 
     fn supports_vision(&self, _model: &str) -> bool {

@@ -462,13 +462,8 @@ impl AiProvider for DeepSeekProvider {
     }
 
     fn get_api_key(&self) -> Result<String> {
-        match env::var(DEEPSEEK_API_KEY_ENV) {
-            Ok(key) => Ok(key),
-            Err(_) => Err(anyhow::anyhow!(
-                "DeepSeek API key not found in environment variable: {}",
-                DEEPSEEK_API_KEY_ENV
-            )),
-        }
+        env::var(DEEPSEEK_API_KEY_ENV)
+            .map_err(|_| crate::errors::missing_api_key("deepseek", DEEPSEEK_API_KEY_ENV).into())
     }
 
     /// DeepSeek's thinking-mode rule replays every prior turn's reasoning on

@@ -123,12 +123,8 @@ impl AiProvider for InceptionProvider {
     }
 
     fn get_api_key(&self) -> Result<String> {
-        env::var(INCEPTION_API_KEY_ENV).map_err(|_| {
-            anyhow::anyhow!(
-                "Inception API key not found in environment variable: {}",
-                INCEPTION_API_KEY_ENV
-            )
-        })
+        env::var(INCEPTION_API_KEY_ENV)
+            .map_err(|_| crate::errors::missing_api_key("inception", INCEPTION_API_KEY_ENV).into())
     }
 
     fn get_model_pricing(&self, model: &str) -> Option<ModelPricing> {

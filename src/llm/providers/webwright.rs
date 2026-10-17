@@ -117,12 +117,8 @@ impl AiProvider for WebWrightProvider {
     }
 
     fn get_api_key(&self) -> Result<String> {
-        env::var(WEBWRIGHT_API_KEY_ENV).map_err(|_| {
-            anyhow::anyhow!(
-                "WebWright API key not found in environment variable: {}",
-                WEBWRIGHT_API_KEY_ENV
-            )
-        })
+        env::var(WEBWRIGHT_API_KEY_ENV)
+            .map_err(|_| crate::errors::missing_api_key("webwright", WEBWRIGHT_API_KEY_ENV).into())
     }
 
     fn get_model_pricing(&self, model: &str) -> Option<ModelPricing> {

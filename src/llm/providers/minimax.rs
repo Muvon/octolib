@@ -187,7 +187,7 @@ impl AiProvider for MinimaxProvider {
 
     fn get_api_key(&self) -> Result<String> {
         env::var(MINIMAX_API_KEY_ENV)
-            .map_err(|_| anyhow::anyhow!("MINIMAX_API_KEY not found in environment"))
+            .map_err(|_| crate::errors::missing_api_key("minimax", MINIMAX_API_KEY_ENV).into())
     }
 
     fn supports_caching(&self, _model: &str) -> bool {

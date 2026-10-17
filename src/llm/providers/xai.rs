@@ -678,12 +678,8 @@ impl AiProvider for XaiProvider {
     }
 
     fn get_api_key(&self) -> Result<String> {
-        env::var(XAI_API_KEY_ENV).map_err(|_| {
-            ProviderError::ApiKeyNotFound {
-                provider: "xai".to_string(),
-            }
-            .into()
-        })
+        env::var(XAI_API_KEY_ENV)
+            .map_err(|_| crate::errors::missing_api_key("xai", XAI_API_KEY_ENV).into())
     }
 
     fn supports_caching(&self, model: &str) -> bool {

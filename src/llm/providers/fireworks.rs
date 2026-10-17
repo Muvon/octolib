@@ -109,12 +109,8 @@ impl AiProvider for FireworksProvider {
     }
 
     fn get_api_key(&self) -> Result<String> {
-        env::var(FIREWORKS_API_KEY_ENV).map_err(|_| {
-            anyhow::anyhow!(
-                "Fireworks API key not found in environment variable: {}",
-                FIREWORKS_API_KEY_ENV
-            )
-        })
+        env::var(FIREWORKS_API_KEY_ENV)
+            .map_err(|_| crate::errors::missing_api_key("fireworks", FIREWORKS_API_KEY_ENV).into())
     }
 
     fn supports_caching(&self, _model: &str) -> bool {

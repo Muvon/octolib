@@ -63,12 +63,8 @@ impl AiProvider for NvidiaProvider {
     }
 
     fn get_api_key(&self) -> Result<String> {
-        env::var(NVIDIA_API_KEY_ENV).map_err(|_| {
-            anyhow::anyhow!(
-                "NVIDIA API key not found in environment variable: {}",
-                NVIDIA_API_KEY_ENV
-            )
-        })
+        env::var(NVIDIA_API_KEY_ENV)
+            .map_err(|_| crate::errors::missing_api_key("nvidia", NVIDIA_API_KEY_ENV).into())
     }
 
     fn supports_caching(&self, _model: &str) -> bool {

@@ -211,7 +211,7 @@ Use `SamplingSupport` constants to declare what a model accepts:
 ```rust
 // ✅ Return typed errors
 Err(ProviderError::UnsupportedProvider(name.to_string()).into())
-Err(ProviderError::MissingApiKey("OPENAI_API_KEY".to_string()).into())
+Err(missing_api_key("openai", "OPENAI_API_KEY").into())   // ProviderError::ApiKeyNotFound
 
 // ✅ Use ErrorContext trait for context
 some_result.with_provider_context("openai")?
@@ -239,11 +239,14 @@ println!()  eprintln!()
 ### API Keys
 
 ```rust
-// ✅ Always from environment
+// ✅ Always from environment; missing key → ProviderError::ApiKeyNotFound via the helper
 fn get_api_key(&self) -> Result<String> {
-    std::env::var("PROVIDER_API_KEY")
-        .map_err(|_| ProviderError::MissingApiKey("PROVIDER_API_KEY".to_string()).into())
+    env::var(PROVIDER_API_KEY_ENV)
+        .map_err(|_| crate::errors::missing_api_key("provider", PROVIDER_API_KEY_ENV).into())
 }
+// The first argument matches `name()`. Never hand-roll `anyhow!("... not found ...")`.
+// Exception: providers with several credential paths or setup steps (Anthropic/OpenAI
+// OAuth, Amazon, Cloudflare, Google Vertex/Studio, Meta) keep their custom messages.
 
 // For optional keys (Ollama, local):
 fn get_api_key(&self) -> Result<String> {

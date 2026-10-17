@@ -177,12 +177,8 @@ impl AiProvider for AlibabaProvider {
     }
 
     fn get_api_key(&self) -> Result<String> {
-        env::var(ALIBABA_API_KEY_ENV).map_err(|_| {
-            anyhow::anyhow!(
-                "Alibaba API key not found in environment variable: {}",
-                ALIBABA_API_KEY_ENV
-            )
-        })
+        env::var(ALIBABA_API_KEY_ENV)
+            .map_err(|_| crate::errors::missing_api_key("alibaba", ALIBABA_API_KEY_ENV).into())
     }
 
     fn supports_caching(&self, _model: &str) -> bool {

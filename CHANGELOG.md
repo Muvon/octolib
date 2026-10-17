@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.43.1] - 2026-10-17
+
+### 📋 Release Summary
+
+Providers now configure parallel tool calls, and Webwright uses reported response costs when available.
+
+### 🐛 Bug Fixes & Stability
+
+- **providers**: configure provider parallel tool calls `919f14ae`
+- **webwright**: use reported response costs when available `356bdcf1`
+
 ## [0.43.0] - 2026-10-17
 
 ### 📋 Release Summary

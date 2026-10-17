@@ -584,3 +584,18 @@ fn thinking_off_follows_each_model_switch() {
         assert_eq!(off(model), serde_json::json!({}), "{model}");
     }
 }
+
+#[test]
+fn test_effective_max_tokens() {
+    // An explicit cap always wins.
+    assert_eq!(effective_max_tokens("claude-opus-5-5", 1024), 1024);
+
+    // 0 = no limit: the model's output ceiling, never an omitted field.
+    assert_eq!(effective_max_tokens("claude-opus-5-5", 0), 128_000);
+    assert_eq!(effective_max_tokens("claude-sonnet-4-6", 0), 128_000);
+    assert_eq!(effective_max_tokens("claude-opus-4-5", 0), 64_000);
+    assert_eq!(effective_max_tokens("claude-sonnet-4-5", 0), 64_000);
+    assert_eq!(effective_max_tokens("claude-haiku-4-5", 0), 64_000);
+    assert_eq!(effective_max_tokens("claude-opus-4-1", 0), 32_000);
+    assert_eq!(effective_max_tokens("claude-3-haiku", 0), 4_096);
+}

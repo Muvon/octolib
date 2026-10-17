@@ -432,7 +432,8 @@ fn build_request(params: &ChatCompletionParams) -> DeepSeekRequest {
     DeepSeekRequest {
         model: params.model.clone(),
         messages,
-        max_tokens: Some(params.max_tokens),
+        // 0 = provider default: omit rather than send a literal zero cap.
+        max_tokens: (params.max_tokens > 0).then_some(params.max_tokens),
         stream: Some(false),
         response_format,
         tools,

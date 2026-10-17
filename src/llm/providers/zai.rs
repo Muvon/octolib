@@ -407,7 +407,8 @@ impl AiProvider for ZaiProvider {
             do_sample: Some(sampling.temperature.is_some_and(|t| t > 0.0)),
             temperature,
             top_p,
-            max_tokens: Some(params.max_tokens),
+            // 0 = provider default: omit rather than send a literal zero cap.
+            max_tokens: (params.max_tokens > 0).then_some(params.max_tokens),
             stream: Some(false),
             stop: None,
             tools: params.tools.as_ref().map(|t| convert_tools(t)),

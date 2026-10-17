@@ -183,6 +183,43 @@ const NO_TOP_P_MODELS: &[&str] = &[
     "opus-4-6",
 ];
 
+/// Output ceiling per model family, used when the caller leaves `max_tokens`
+/// at 0 ("no limit"): the Messages API requires the field, so omitting it is a
+/// 400. Checked in order, so specific prefixes must precede the general ones
+/// they contain (`opus-4-6` before `opus-4`).
+const MAX_OUTPUT_TOKENS: &[(&str, u32)] = &[
+    ("fable-5", 128_000),
+    ("mythos-5", 128_000),
+    ("opus-5", 128_000),
+    ("opus-4-8", 128_000),
+    ("opus-4-7", 128_000),
+    ("opus-4-6", 128_000),
+    ("sonnet-5", 128_000),
+    ("sonnet-4-6", 128_000),
+    ("haiku-5-5", 128_000),
+    ("opus-4-5", 64_000),
+    ("sonnet-4", 64_000),
+    ("haiku-4-5", 64_000),
+    ("sonnet-3-7", 64_000),
+    ("opus-4", 32_000),
+];
+
+/// Fallback for models missing from [`MAX_OUTPUT_TOKENS`]; the lowest ceiling
+/// any served Claude model has, so it never exceeds the model's cap.
+const FALLBACK_MAX_OUTPUT_TOKENS: u32 = 4_096;
+
+/// Effective `max_tokens` for the request: the caller's cap, or the model's
+/// output ceiling when the caller passed 0.
+fn effective_max_tokens(model: &str, requested: u32) -> u32 {
+    if requested > 0 {
+        return requested;
+    }
+    MAX_OUTPUT_TOKENS
+        .iter()
+        .find(|(prefix, _)| model.contains(prefix))
+        .map_or(FALLBACK_MAX_OUTPUT_TOKENS, |&(_, max)| max)
+}
+
 /// Calculate cost for Anthropic models with cache-aware pricing (case-insensitive)
 /// - cache_creation_tokens: charged at 1.25x normal price (5m cache)
 /// - cache_creation_tokens_1h: charged at 2x normal price (1h cache)
@@ -519,10 +556,10 @@ impl AiProvider for AnthropicProvider {
             }
         }
 
-        // Add max_tokens if specified (0 means don't include it in request)
-        if params.max_tokens > 0 {
-            request_body["max_tokens"] = serde_json::json!(params.max_tokens);
-        }
+        // The Messages API requires max_tokens; 0 means "no limit", so send the
+        // model's output ceiling instead of omitting the field.
+        let max_tokens = effective_max_tokens(&params.model, params.max_tokens);
+        request_body["max_tokens"] = serde_json::json!(max_tokens);
 
         // Add system message with cache control if needed
         if system_cached {
@@ -617,11 +654,8 @@ impl AiProvider for AnthropicProvider {
                         ReasoningEffort::XHigh => 32_768,
                         ReasoningEffort::Max => 65_536,
                     };
-                    if params.max_tokens > 0 {
-                        let max = params.max_tokens;
-                        if budget >= max {
-                            budget = max.saturating_sub(1024).max(1024);
-                        }
+                    if budget >= max_tokens {
+                        budget = max_tokens.saturating_sub(1024).max(1024);
                     }
                     request_body["thinking"] = serde_json::json!({
                         "type": "enabled",

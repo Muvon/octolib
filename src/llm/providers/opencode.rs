@@ -220,6 +220,7 @@ async fn opencode_chat_completion(
             use_response_cost: true,
             enforces_response_schema: true,
             supports_required_tool_choice: false,
+            supports_parallel_tool_calls: true,
         },
         sampling_support(&model),
         api_key,

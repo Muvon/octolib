@@ -31,6 +31,9 @@ pub(crate) struct OpenAiCompatConfig {
     pub use_response_cost: bool,
     pub enforces_response_schema: bool,
     pub supports_required_tool_choice: bool,
+    /// Send `parallel_tool_calls: true` with tool requests. False for hosts
+    /// whose routing rejects the parameter.
+    pub supports_parallel_tool_calls: bool,
 }
 
 pub(crate) fn get_optional_api_key(env_name: &str) -> String {
@@ -436,7 +439,9 @@ async fn chat_completion_raw(
             request_body["tool_choice"] = openai_tool_choice_value(tool_choice.as_ref());
             // Explicit: ensures proxied backends honor parallel function calling
             // rather than falling back to their own defaults (which may differ).
-            request_body["parallel_tool_calls"] = serde_json::json!(true);
+            if config.supports_parallel_tool_calls {
+                request_body["parallel_tool_calls"] = serde_json::json!(true);
+            }
         }
     }
 

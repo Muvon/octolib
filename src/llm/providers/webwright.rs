@@ -143,6 +143,10 @@ impl AiProvider for WebWrightProvider {
                 use_response_cost: true,
                 enforces_response_schema: false,
                 supports_required_tool_choice: false,
+                // OpenRouter routing behind WebWright has no wren-r1 endpoint
+                // that accepts `parallel_tool_calls`; sending it returns 404
+                // "No endpoints found that can handle the requested parameters".
+                supports_parallel_tool_calls: false,
             },
             api_key,
             api_url,

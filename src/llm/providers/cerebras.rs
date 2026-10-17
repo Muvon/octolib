@@ -165,6 +165,7 @@ impl AiProvider for CerebrasProvider {
                 use_response_cost: true,
                 enforces_response_schema: true,
                 supports_required_tool_choice: false,
+                supports_parallel_tool_calls: true,
             },
             api_key,
             api_url,

@@ -233,6 +233,7 @@ impl AiProvider for AlibabaProvider {
                 // therefore uses auto plus explicit prompt guidance and local
                 // validation instead of an unsupported required policy.
                 supports_required_tool_choice: false,
+                supports_parallel_tool_calls: true,
             },
             api_key,
             api_url,

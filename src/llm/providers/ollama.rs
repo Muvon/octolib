@@ -104,6 +104,7 @@ impl AiProvider for OllamaProvider {
                 use_response_cost: true,
                 enforces_response_schema: false,
                 supports_required_tool_choice: true,
+                supports_parallel_tool_calls: true,
             },
             api_key,
             api_url,

@@ -775,6 +775,7 @@ impl AiProvider for CloudflareWorkersAiProvider {
                 use_response_cost: true,
                 enforces_response_schema: self.enforces_response_schema(&model),
                 supports_required_tool_choice: self.supports_required_tool_choice(&model),
+                supports_parallel_tool_calls: true,
             },
             api_key,
             api_url,

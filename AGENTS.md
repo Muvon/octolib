@@ -119,10 +119,11 @@ files declare them with `#[cfg(test)]`, `#[path = "<name>_tests.rs"]`, and
 - `supports_model()` uses `is_model_in_pricing_table()` — strict, unknown models rejected
 
 **Proxy / OpenAI-compatible** (NVIDIA, Cerebras, Ollama, Local, Cloudflare, Featherless, Hetzner, OpenCode Zen/Go, Google Vertex, Google Studio, plus provider-owned adapters such as Alibaba/Amazon/BytePlus/Groq):
-- Delegates to `openai_compat_chat_completion(OpenAiCompatConfig { provider_name, usage_fallback_cost, use_response_cost, enforces_response_schema, supports_required_tool_choice }, api_key, api_url, params)`
+- Delegates to `openai_compat_chat_completion(OpenAiCompatConfig { provider_name, usage_fallback_cost, use_response_cost, enforces_response_schema, supports_required_tool_choice, supports_parallel_tool_calls }, api_key, api_url, params)`
 - `OpenAiCompatConfig.use_response_cost = true` → use cost from API response if present; `usage_fallback_cost` → fixed fallback cost (rarely used)
 - `enforces_response_schema` describes upstream constrained decoding; all responses are still validated locally.
 - `supports_required_tool_choice` is true only with provider evidence; otherwise schema repair uses auto tool choice plus prompt guidance.
+- `supports_parallel_tool_calls` controls whether tool requests send `parallel_tool_calls: true`; set false only for hosts that reject the parameter (WebWright).
 - `supports_model()` returns `!model.is_empty()` — accepts anything
 - `get_model_pricing()` → `reference_pricing::get_reference_pricing(model)` (trait default already does this; explicit override is optional)
 - After the call: if `usage.cost.is_none()`, fill it via `reference_pricing::calculate_reference_cost(&model, input_tokens, output_tokens)`

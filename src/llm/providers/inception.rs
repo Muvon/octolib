@@ -149,6 +149,7 @@ impl AiProvider for InceptionProvider {
                 use_response_cost: false,
                 enforces_response_schema: true,
                 supports_required_tool_choice: true,
+                supports_parallel_tool_calls: true,
             },
             self.supported_sampling_params(&model),
             api_key,

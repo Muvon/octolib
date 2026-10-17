@@ -196,6 +196,7 @@ impl AiProvider for AmazonBedrockProvider {
                 use_response_cost: true,
                 enforces_response_schema: self.enforces_response_schema(&params.model),
                 supports_required_tool_choice: false,
+                supports_parallel_tool_calls: true,
             },
             api_key,
             api_url,

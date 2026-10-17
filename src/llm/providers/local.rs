@@ -90,6 +90,7 @@ impl AiProvider for LocalProvider {
                 use_response_cost: false,
                 enforces_response_schema: false,
                 supports_required_tool_choice: false,
+                supports_parallel_tool_calls: true,
             },
             api_key,
             api_url,

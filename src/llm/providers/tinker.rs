@@ -333,6 +333,7 @@ impl AiProvider for TinkerProvider {
                 use_response_cost: true,
                 enforces_response_schema: false,
                 supports_required_tool_choice: false,
+                supports_parallel_tool_calls: true,
             },
             self.supported_sampling_params(&model),
             api_key,

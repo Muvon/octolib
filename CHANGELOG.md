@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.43.0] - 2026-10-17
+
+### 📋 Release Summary
+
+Added the WebWright provider. Provider handling now supports zero max_tokens values, and missing API key errors are standardized.
+
+### ✨ New Features & Enhancements
+
+- **llm**: add WebWright provider `d25291ec`
+
+### 🔧 Improvements & Optimizations
+
+- **deepseek**: fix Message type resolution in test `83793453`
+- **cargo**: register the webwright_chat example `02ebdf9b`
+
+### 🐛 Bug Fixes & Stability
+
+- **llm-providers**: handle zero max_tokens per provider `e1b08c23`
+- **errors**: standardize missing API key errors `b532db37`
+
 ## [0.42.2] - 2026-10-16
 
 ### 📋 Release Summary

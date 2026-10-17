@@ -140,7 +140,7 @@ impl AiProvider for WebWrightProvider {
             OpenAiCompatConfig {
                 provider_name: "webwright",
                 usage_fallback_cost: None,
-                use_response_cost: false,
+                use_response_cost: true,
                 enforces_response_schema: false,
                 supports_required_tool_choice: false,
             },
@@ -150,7 +150,8 @@ impl AiProvider for WebWrightProvider {
         )
         .await?;
 
-        // WebWright does not return a cost; derive it from the pricing table.
+        // WebWright reports the billed cost in `usage.cost`; fall back to the
+        // pricing table only when a response omits it.
         if let Some(ref mut usage) = response.exchange.usage {
             if usage.cost.is_none() {
                 if let Some(pricing) = self.get_model_pricing(&model) {

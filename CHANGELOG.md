@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.43.2] - 2026-10-20
+
+### 📋 Release Summary
+
+LLM model pricing now supports expanded pricing information.
+
+### ✨ New Features & Enhancements
+
+- **llm**: support expanded LLM model pricing `5398340d`
+
+### 🔧 Improvements & Optimizations
+
+- format Rust code at 120 columns `5109b80f`
+
 ## [0.43.1] - 2026-10-17
 
 ### 📋 Release Summary

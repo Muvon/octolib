@@ -28,7 +28,7 @@
 //! - `GROQ_API_URL`: Optional endpoint override
 
 use crate::llm::providers::openai_compat::{
-    chat_completion as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
+	chat_completion as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
 };
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderResponse};
@@ -41,15 +41,15 @@ use std::env;
 pub struct GroqProvider;
 
 impl Default for GroqProvider {
-    fn default() -> Self {
-        Self::new()
-    }
+	fn default() -> Self {
+		Self::new()
+	}
 }
 
 impl GroqProvider {
-    pub fn new() -> Self {
-        Self
-    }
+	pub fn new() -> Self {
+		Self
+	}
 }
 
 const GROQ_API_KEY_ENV: &str = "GROQ_API_KEY";
@@ -61,103 +61,100 @@ const GROQ_API_URL: &str = "https://api.groq.com/openai/v1/chat/completions";
 // Format: (model, input, output, cache_write, cache_read)
 // cache_write priced at input rate (Groq does not bill a separate write fee)
 const PRICING: &[PricingTuple] = &[
-    // GPT-OSS — cached input billed at 50% of input
-    ("openai/gpt-oss-120b", 0.15, 0.60, 0.15, 0.075),
-    ("openai/gpt-oss-20b", 0.075, 0.30, 0.075, 0.0375),
-    ("openai/gpt-oss-safeguard-20b", 0.075, 0.30, 0.075, 0.0375),
-    // Qwen3.8-27B (Aug 2026) — multimodal; no cached-input discount published
-    ("qwen/qwen3.8-27b", 0.80, 4.00, 0.80, 0.80),
+	// GPT-OSS — cached input billed at 50% of input
+	("openai/gpt-oss-120b", 0.15, 0.60, 0.15, 0.075),
+	("openai/gpt-oss-20b", 0.075, 0.30, 0.075, 0.0375),
+	("openai/gpt-oss-safeguard-20b", 0.075, 0.30, 0.075, 0.0375),
+	// Qwen3.8-27B (Aug 2026) — multimodal; no cached-input discount published
+	("qwen/qwen3.8-27b", 0.80, 4.00, 0.80, 0.80),
 ];
 
 // Models with documented prompt-caching support on Groq.
 // Source: https://console.groq.com/docs/prompt-caching
 const CACHED_INPUT_MODELS: &[&str] = &[
-    "openai/gpt-oss-120b",
-    "openai/gpt-oss-20b",
-    "openai/gpt-oss-safeguard-20b",
+	"openai/gpt-oss-120b",
+	"openai/gpt-oss-20b",
+	"openai/gpt-oss-safeguard-20b",
 ];
 
 #[async_trait::async_trait]
 impl AiProvider for GroqProvider {
-    fn name(&self) -> &str {
-        "groq"
-    }
+	fn name(&self) -> &str {
+		"groq"
+	}
 
-    fn supports_model(&self, model: &str) -> bool {
-        !model.is_empty()
-    }
+	fn supports_model(&self, model: &str) -> bool {
+		!model.is_empty()
+	}
 
-    fn get_api_key(&self) -> Result<String> {
-        env::var(GROQ_API_KEY_ENV)
-            .map_err(|_| crate::errors::missing_api_key("groq", GROQ_API_KEY_ENV).into())
-    }
+	fn get_api_key(&self) -> Result<String> {
+		env::var(GROQ_API_KEY_ENV).map_err(|_| crate::errors::missing_api_key("groq", GROQ_API_KEY_ENV).into())
+	}
 
-    fn supports_caching(&self, model: &str) -> bool {
-        let lower = model.to_ascii_lowercase();
-        CACHED_INPUT_MODELS
-            .iter()
-            .any(|m| lower.contains(&m.to_ascii_lowercase()))
-    }
+	fn supports_caching(&self, model: &str) -> bool {
+		let lower = model.to_ascii_lowercase();
+		CACHED_INPUT_MODELS
+			.iter()
+			.any(|m| lower.contains(&m.to_ascii_lowercase()))
+	}
 
-    fn supports_structured_output(&self, _model: &str) -> bool {
-        true
-    }
+	fn supports_structured_output(&self, _model: &str) -> bool {
+		true
+	}
 
-    fn enforces_response_schema(&self, _model: &str) -> bool {
-        true
-    }
+	fn enforces_response_schema(&self, _model: &str) -> bool {
+		true
+	}
 
-    fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
-        // Try Groq-specific pricing first
-        if let Some((input, output, cache_write, cache_read)) =
-            crate::llm::utils::get_model_pricing(model, PRICING)
-        {
-            return Some(crate::llm::types::ModelPricing::new(
-                input,
-                output,
-                cache_write,
-                cache_read,
-            ));
-        }
-        crate::llm::reference_models::get_reference_pricing(model)
-    }
+	fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
+		// Try Groq-specific pricing first
+		if let Some((input, output, cache_write, cache_read)) = crate::llm::utils::get_model_pricing(model, PRICING) {
+			return Some(crate::llm::types::ModelPricing::new(
+				input,
+				output,
+				cache_write,
+				cache_read,
+			));
+		}
+		crate::llm::reference_models::get_reference_pricing(model)
+	}
 
-    async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-        let api_key = self.get_api_key()?;
-        let api_url = get_api_url(GROQ_API_URL_ENV, GROQ_API_URL);
-        let model = params.model.clone();
+	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
+		let api_key = self.get_api_key()?;
+		let api_url = get_api_url(GROQ_API_URL_ENV, GROQ_API_URL);
+		let model = params.model.clone();
 
-        let mut response = openai_compat_chat_completion(
-            OpenAiCompatConfig {
-                provider_name: "groq",
-                usage_fallback_cost: None,
-                use_response_cost: true,
-                enforces_response_schema: true,
-                supports_required_tool_choice: false,
-                supports_parallel_tool_calls: true,
-            },
-            api_key,
-            api_url,
-            params,
-        )
-        .await?;
+		let mut response = openai_compat_chat_completion(
+			OpenAiCompatConfig {
+				provider_name: "groq",
+				usage_fallback_cost: None,
+				use_response_cost: true,
+				enforces_response_schema: true,
+				supports_required_tool_choice: false,
+				supports_parallel_tool_calls: true,
+			},
+			api_key,
+			api_url,
+			params,
+		)
+		.await?;
 
-        // Derive cost from pricing if not returned in the response
-        if let Some(ref mut usage) = response.exchange.usage {
-            if usage.cost.is_none() {
-                if let Some(pricing) = self.get_model_pricing(&model) {
-                    usage.cost = Some(pricing.calculate_cost(
-                        usage.input_tokens,
-                        usage.cache_write_tokens,
-                        usage.cache_read_tokens,
-                        usage.billable_output_tokens(),
-                    ));
-                }
-            }
-        }
+		// Derive cost from pricing if not returned in the response
+		if let Some(ref mut usage) = response.exchange.usage {
+			if usage.cost.is_none() {
+				if let Some(pricing) = self.get_model_pricing(&model) {
+					usage.cost = Some(pricing.calculate_cost(
+						usage.input_tokens,
+						usage.cache_write_tokens,
+						usage.cache_read_tokens,
+						usage.billable_output_tokens(),
+					));
+				}
+			}
+		}
 
-        Ok(response)
-    }
+		Ok(response)
+	}
 }
 
 #[cfg(test)]

@@ -36,125 +36,113 @@ const LOCAL_RERANK_API_URL: &str = "http://localhost:8012/v1/rerank";
 
 /// Local reranker provider for OpenAI-compatible servers.
 pub struct LocalRerankerProvider {
-    model_name: String,
+	model_name: String,
 }
 
 impl LocalRerankerProvider {
-    pub fn new(model: &str) -> Result<Self> {
-        if model.is_empty() {
-            return Err(anyhow::anyhow!("Model name cannot be empty"));
-        }
-        Ok(Self {
-            model_name: model.to_string(),
-        })
-    }
+	pub fn new(model: &str) -> Result<Self> {
+		if model.is_empty() {
+			return Err(anyhow::anyhow!("Model name cannot be empty"));
+		}
+		Ok(Self {
+			model_name: model.to_string(),
+		})
+	}
 
-    fn api_url() -> String {
-        std::env::var(LOCAL_RERANK_API_URL_ENV).unwrap_or_else(|_| LOCAL_RERANK_API_URL.to_string())
-    }
+	fn api_url() -> String {
+		std::env::var(LOCAL_RERANK_API_URL_ENV).unwrap_or_else(|_| LOCAL_RERANK_API_URL.to_string())
+	}
 
-    fn api_key() -> Option<String> {
-        std::env::var(LOCAL_RERANK_API_KEY_ENV).ok()
-    }
+	fn api_key() -> Option<String> {
+		std::env::var(LOCAL_RERANK_API_KEY_ENV).ok()
+	}
 }
 
 #[derive(Debug, Deserialize)]
 struct LocalRerankResponse {
-    results: Vec<LocalRerankResult>,
-    #[serde(default)]
-    usage: Option<LocalRerankUsage>,
+	results: Vec<LocalRerankResult>,
+	#[serde(default)]
+	usage: Option<LocalRerankUsage>,
 }
 
 #[derive(Debug, Deserialize)]
 struct LocalRerankResult {
-    index: usize,
-    #[serde(default)]
-    relevance_score: f64,
+	index: usize,
+	#[serde(default)]
+	relevance_score: f64,
 }
 
 #[derive(Debug, Deserialize)]
 struct LocalRerankUsage {
-    #[serde(default)]
-    total_tokens: usize,
+	#[serde(default)]
+	total_tokens: usize,
 }
 
 #[async_trait::async_trait]
 impl RerankProvider for LocalRerankerProvider {
-    async fn rerank(
-        &self,
-        query: &str,
-        documents: Vec<String>,
-        top_k: Option<usize>,
-        _truncation: bool,
-    ) -> Result<RerankResponse> {
-        let url = Self::api_url();
+	async fn rerank(
+		&self,
+		query: &str,
+		documents: Vec<String>,
+		top_k: Option<usize>,
+		_truncation: bool,
+	) -> Result<RerankResponse> {
+		let url = Self::api_url();
 
-        let mut body = json!({
-            "model": self.model_name,
-            "query": query,
-            "documents": documents,
-        });
+		let mut body = json!({
+			"model": self.model_name,
+			"query": query,
+			"documents": documents,
+		});
 
-        if let Some(k) = top_k {
-            body["top_n"] = json!(k);
-        }
+		if let Some(k) = top_k {
+			body["top_n"] = json!(k);
+		}
 
-        let mut req = HTTP_CLIENT
-            .post(&url)
-            .header("Content-Type", "application/json");
+		let mut req = HTTP_CLIENT.post(&url).header("Content-Type", "application/json");
 
-        if let Some(key) = Self::api_key() {
-            req = req.header("Authorization", format!("Bearer {}", key));
-        }
+		if let Some(key) = Self::api_key() {
+			req = req.header("Authorization", format!("Bearer {}", key));
+		}
 
-        let response = req
-            .json(&body)
-            .send()
-            .await
-            .with_context(|| format!("Failed to connect to local rerank server at {}", url))?;
+		let response = req
+			.json(&body)
+			.send()
+			.await
+			.with_context(|| format!("Failed to connect to local rerank server at {}", url))?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(anyhow::anyhow!(
-                "Local rerank API error ({}): {}",
-                status,
-                error_text
-            ));
-        }
+		if !response.status().is_success() {
+			let status = response.status();
+			let error_text = response.text().await.unwrap_or_default();
+			return Err(anyhow::anyhow!("Local rerank API error ({}): {}", status, error_text));
+		}
 
-        let result: LocalRerankResponse = response
-            .json()
-            .await
-            .context("Failed to parse local rerank response")?;
+		let result: LocalRerankResponse = response.json().await.context("Failed to parse local rerank response")?;
 
-        let mut results: Vec<RerankResult> = result
-            .results
-            .into_iter()
-            .map(|r| RerankResult {
-                index: r.index,
-                document: documents.get(r.index).cloned().unwrap_or_default(),
-                relevance_score: r.relevance_score,
-            })
-            .collect();
+		let mut results: Vec<RerankResult> = result
+			.results
+			.into_iter()
+			.map(|r| RerankResult {
+				index: r.index,
+				document: documents.get(r.index).cloned().unwrap_or_default(),
+				relevance_score: r.relevance_score,
+			})
+			.collect();
 
-        results.sort_by(|a, b| {
-            b.relevance_score
-                .partial_cmp(&a.relevance_score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+		results.sort_by(|a, b| {
+			b.relevance_score
+				.partial_cmp(&a.relevance_score)
+				.unwrap_or(std::cmp::Ordering::Equal)
+		});
 
-        let total_tokens = result.usage.map(|u| u.total_tokens).unwrap_or(0);
+		let total_tokens = result.usage.map(|u| u.total_tokens).unwrap_or(0);
 
-        Ok(RerankResponse {
-            results,
-            total_tokens,
-        })
-    }
+		Ok(RerankResponse { results, total_tokens })
+	}
 
-    fn is_model_supported(&self) -> bool {
-        !self.model_name.is_empty()
-    }
+	fn is_model_supported(&self) -> bool {
+		!self.model_name.is_empty()
+	}
 }
 
 #[cfg(test)]

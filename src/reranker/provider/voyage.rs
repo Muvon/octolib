@@ -23,62 +23,60 @@ use super::{RerankProvider, HTTP_CLIENT};
 
 /// Voyage provider implementation for trait
 pub struct VoyageProviderImpl {
-    model_name: String,
+	model_name: String,
 }
 
 impl VoyageProviderImpl {
-    pub fn new(model: &str) -> Result<Self> {
-        // Validate model first - fail fast if unsupported
-        let supported_models = [
-            "rerank-3",
-            "rerank-3-lite",
-            "rerank-2.5",
-            "rerank-2.5-lite",
-            "rerank-2",
-            "rerank-2-lite",
-            "rerank-1",
-            "rerank-lite-1",
-        ];
+	pub fn new(model: &str) -> Result<Self> {
+		// Validate model first - fail fast if unsupported
+		let supported_models = [
+			"rerank-3",
+			"rerank-3-lite",
+			"rerank-2.5",
+			"rerank-2.5-lite",
+			"rerank-2",
+			"rerank-2-lite",
+			"rerank-1",
+			"rerank-lite-1",
+		];
 
-        if !supported_models.contains(&model) {
-            return Err(anyhow::anyhow!(
-                "Unsupported Voyage reranker model: '{}'. Supported models: {:?}",
-                model,
-                supported_models
-            ));
-        }
+		if !supported_models.contains(&model) {
+			return Err(anyhow::anyhow!(
+				"Unsupported Voyage reranker model: '{}'. Supported models: {:?}",
+				model,
+				supported_models
+			));
+		}
 
-        Ok(Self {
-            model_name: model.to_string(),
-        })
-    }
+		Ok(Self {
+			model_name: model.to_string(),
+		})
+	}
 }
 
 #[async_trait::async_trait]
 impl RerankProvider for VoyageProviderImpl {
-    async fn rerank(
-        &self,
-        query: &str,
-        documents: Vec<String>,
-        top_k: Option<usize>,
-        truncation: bool,
-    ) -> Result<RerankResponse> {
-        VoyageProvider::rerank(query, documents, &self.model_name, top_k, truncation).await
-    }
+	async fn rerank(
+		&self,
+		query: &str,
+		documents: Vec<String>,
+		top_k: Option<usize>,
+		truncation: bool,
+	) -> Result<RerankResponse> {
+		VoyageProvider::rerank(query, documents, &self.model_name, top_k, truncation).await
+	}
 
-    fn is_model_supported(&self) -> bool {
-        matches!(
-            self.model_name.as_str(),
-            "rerank-3"
-                | "rerank-3-lite"
-                | "rerank-2.5"
-                | "rerank-2.5-lite"
-                | "rerank-2"
-                | "rerank-2-lite"
-                | "rerank-1"
-                | "rerank-lite-1"
-        )
-    }
+	fn is_model_supported(&self) -> bool {
+		matches!(
+			self.model_name.as_str(),
+			"rerank-3"
+				| "rerank-3-lite"
+				| "rerank-2.5"
+				| "rerank-2.5-lite"
+				| "rerank-2" | "rerank-2-lite"
+				| "rerank-1" | "rerank-lite-1"
+		)
+	}
 }
 
 /// Voyage AI provider implementation
@@ -86,77 +84,76 @@ pub struct VoyageProvider;
 
 #[derive(Debug, Deserialize)]
 struct VoyageRerankResult {
-    index: usize,
-    relevance_score: f64,
+	index: usize,
+	relevance_score: f64,
 }
 
 #[derive(Debug, Deserialize)]
 struct VoyageUsage {
-    total_tokens: usize,
+	total_tokens: usize,
 }
 
 #[derive(Debug, Deserialize)]
 struct VoyageRerankResponse {
-    data: Vec<VoyageRerankResult>,
-    usage: VoyageUsage,
+	data: Vec<VoyageRerankResult>,
+	usage: VoyageUsage,
 }
 
 impl VoyageProvider {
-    pub async fn rerank(
-        query: &str,
-        documents: Vec<String>,
-        model: &str,
-        top_k: Option<usize>,
-        truncation: bool,
-    ) -> Result<RerankResponse> {
-        let voyage_api_key = std::env::var("VOYAGE_API_KEY")
-            .context("VOYAGE_API_KEY environment variable not set")?;
+	pub async fn rerank(
+		query: &str,
+		documents: Vec<String>,
+		model: &str,
+		top_k: Option<usize>,
+		truncation: bool,
+	) -> Result<RerankResponse> {
+		let voyage_api_key = std::env::var("VOYAGE_API_KEY").context("VOYAGE_API_KEY environment variable not set")?;
 
-        // Build request body
-        let mut request_body = json!({
-            "query": query,
-            "documents": documents,
-            "model": model,
-            "truncation": truncation,
-        });
+		// Build request body
+		let mut request_body = json!({
+			"query": query,
+			"documents": documents,
+			"model": model,
+			"truncation": truncation,
+		});
 
-        // Add top_k if specified
-        if let Some(k) = top_k {
-            request_body["top_k"] = json!(k);
-        }
+		// Add top_k if specified
+		if let Some(k) = top_k {
+			request_body["top_k"] = json!(k);
+		}
 
-        let response = HTTP_CLIENT
-            .post("https://api.voyageai.com/v1/rerank")
-            .header("Authorization", format!("Bearer {}", voyage_api_key))
-            .header("Content-Type", "application/json")
-            .json(&request_body)
-            .send()
-            .await?;
+		let response = HTTP_CLIENT
+			.post("https://api.voyageai.com/v1/rerank")
+			.header("Authorization", format!("Bearer {}", voyage_api_key))
+			.header("Content-Type", "application/json")
+			.json(&request_body)
+			.send()
+			.await?;
 
-        if !response.status().is_success() {
-            let error_text = response.text().await?;
-            return Err(anyhow::anyhow!("Voyage API error: {}", error_text));
-        }
+		if !response.status().is_success() {
+			let error_text = response.text().await?;
+			return Err(anyhow::anyhow!("Voyage API error: {}", error_text));
+		}
 
-        let voyage_response: VoyageRerankResponse = response.json().await?;
+		let voyage_response: VoyageRerankResponse = response.json().await?;
 
-        // Convert to our response format
-        // Voyage returns no document text in response - map back from input by index
-        let results = voyage_response
-            .data
-            .into_iter()
-            .map(|r| RerankResult {
-                document: documents.get(r.index).cloned().unwrap_or_default(),
-                index: r.index,
-                relevance_score: r.relevance_score,
-            })
-            .collect();
+		// Convert to our response format
+		// Voyage returns no document text in response - map back from input by index
+		let results = voyage_response
+			.data
+			.into_iter()
+			.map(|r| RerankResult {
+				document: documents.get(r.index).cloned().unwrap_or_default(),
+				index: r.index,
+				relevance_score: r.relevance_score,
+			})
+			.collect();
 
-        Ok(RerankResponse {
-            results,
-            total_tokens: voyage_response.usage.total_tokens,
-        })
-    }
+		Ok(RerankResponse {
+			results,
+			total_tokens: voyage_response.usage.total_tokens,
+		})
+	}
 }
 
 #[cfg(test)]

@@ -31,27 +31,27 @@ use serde::{Deserialize, Serialize};
 /// recomputing tokens + cost themselves.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EmbeddingUsage {
-    pub input_tokens: u64,
-    pub cost: Option<f64>,
+	pub input_tokens: u64,
+	pub cost: Option<f64>,
 }
 
 impl EmbeddingUsage {
-    /// From the provider's own reported token count (the accurate path — the
-    /// provider's tokenizer, not a tiktoken guess). Cost from the reference table.
-    pub fn from_tokens(model: &str, input_tokens: u64) -> Self {
-        Self {
-            input_tokens,
-            cost: calculate_embedding_cost(model, input_tokens),
-        }
-    }
+	/// From the provider's own reported token count (the accurate path — the
+	/// provider's tokenizer, not a tiktoken guess). Cost from the reference table.
+	pub fn from_tokens(model: &str, input_tokens: u64) -> Self {
+		Self {
+			input_tokens,
+			cost: calculate_embedding_cost(model, input_tokens),
+		}
+	}
 
-    /// Fallback for providers that report no token count (local: fastembed,
-    /// in-process huggingface) — estimate with tiktoken. These models are
-    /// unpriced, so `cost` is `None` and the estimate is informational only.
-    pub fn estimate(model: &str, texts: &[String]) -> Self {
-        let input_tokens: u64 = texts.iter().map(|t| super::count_tokens(t) as u64).sum();
-        Self::from_tokens(model, input_tokens)
-    }
+	/// Fallback for providers that report no token count (local: fastembed,
+	/// in-process huggingface) — estimate with tiktoken. These models are
+	/// unpriced, so `cost` is `None` and the estimate is informational only.
+	pub fn estimate(model: &str, texts: &[String]) -> Self {
+		let input_tokens: u64 = texts.iter().map(|t| super::count_tokens(t) as u64).sum();
+		Self::from_tokens(model, input_tokens)
+	}
 }
 
 /// `(model, USD per 1,000,000 input tokens)`.
@@ -66,50 +66,50 @@ pub type EmbeddingPricingTuple = (&'static str, f64);
 /// tables and `spec/pricing.md`). These are the raw *provider list* prices; any
 /// margin is applied downstream by the billing layer.
 pub const EMBEDDING_PRICING: &[EmbeddingPricingTuple] = &[
-    // ── Voyage (verified: docs.voyageai.com, 2026-10) ──
-    ("voyage-4-large", 0.12),
-    ("voyage-4", 0.06),
-    ("voyage-4-lite", 0.02),
-    ("voyage-3-large", 0.18),
-    ("voyage-3.5", 0.06),
-    ("voyage-3.5-lite", 0.02),
-    ("voyage-code-4", 0.12), // verified: blog.voyageai.com 2026-08-13
-    ("voyage-code-3", 0.18),
-    ("voyage-code-2", 0.12),
-    ("voyage-context-4", 0.12), // verified: blog.voyageai.com 2026-06-29
-    ("voyage-context-3", 0.18),
-    ("voyage-finance-2", 0.12),
-    ("voyage-law-2", 0.12),
-    ("voyage-2", 0.10),
-    // ── OpenAI (verified: openai.com/pricing) ──
-    ("text-embedding-3-small", 0.02),
-    ("text-embedding-3-large", 0.13),
-    ("text-embedding-ada-002", 0.10),
-    // ── Jina (verified: api.jina.ai/v1/models, 2026-10) ──
-    ("jina-embeddings-v5-omni-small", 0.05),
-    ("jina-embeddings-v5-omni-nano", 0.02),
-    ("jina-embeddings-v5-text-small", 0.05),
-    ("jina-embeddings-v5-text-nano", 0.02),
-    ("jina-embeddings-v3", 0.05),
-    ("jina-embeddings-v4", 0.05),
-    ("jina-embeddings-v2-base-code", 0.05),
-    ("jina-embeddings-v2-base-en", 0.05),
-    ("jina-code-embeddings-1.5b", 0.05),
-    ("jina-code-embeddings-0.5b", 0.05),
-    // ── Google (estimate — verify before launch) ──
-    ("gemini-embedding-2", 0.20), // text tokens only; image/audio/video are billed higher
-    ("gemini-embedding-001", 0.15), // estimate
+	// ── Voyage (verified: docs.voyageai.com, 2026-10) ──
+	("voyage-4-large", 0.12),
+	("voyage-4", 0.06),
+	("voyage-4-lite", 0.02),
+	("voyage-3-large", 0.18),
+	("voyage-3.5", 0.06),
+	("voyage-3.5-lite", 0.02),
+	("voyage-code-4", 0.12), // verified: blog.voyageai.com 2026-08-13
+	("voyage-code-3", 0.18),
+	("voyage-code-2", 0.12),
+	("voyage-context-4", 0.12), // verified: blog.voyageai.com 2026-06-29
+	("voyage-context-3", 0.18),
+	("voyage-finance-2", 0.12),
+	("voyage-law-2", 0.12),
+	("voyage-2", 0.10),
+	// ── OpenAI (verified: openai.com/pricing) ──
+	("text-embedding-3-small", 0.02),
+	("text-embedding-3-large", 0.13),
+	("text-embedding-ada-002", 0.10),
+	// ── Jina (verified: api.jina.ai/v1/models, 2026-10) ──
+	("jina-embeddings-v5-omni-small", 0.05),
+	("jina-embeddings-v5-omni-nano", 0.02),
+	("jina-embeddings-v5-text-small", 0.05),
+	("jina-embeddings-v5-text-nano", 0.02),
+	("jina-embeddings-v3", 0.05),
+	("jina-embeddings-v4", 0.05),
+	("jina-embeddings-v2-base-code", 0.05),
+	("jina-embeddings-v2-base-en", 0.05),
+	("jina-code-embeddings-1.5b", 0.05),
+	("jina-code-embeddings-0.5b", 0.05),
+	// ── Google (estimate — verify before launch) ──
+	("gemini-embedding-2", 0.20),   // text tokens only; image/audio/video are billed higher
+	("gemini-embedding-001", 0.15), // estimate
 ];
 
 /// Cost in USD for `input_tokens` of an embedding `model`, or `None` when the
 /// model has no reference rate (unpriced — local/self-hosted, or a model we
 /// don't offer). Matches the resolved model name case-insensitively.
 pub fn calculate_embedding_cost(model: &str, input_tokens: u64) -> Option<f64> {
-    let m = model.trim();
-    EMBEDDING_PRICING
-        .iter()
-        .find(|(name, _)| name.eq_ignore_ascii_case(m))
-        .map(|(_, per_mtok)| (input_tokens as f64 / 1_000_000.0) * per_mtok)
+	let m = model.trim();
+	EMBEDDING_PRICING
+		.iter()
+		.find(|(name, _)| name.eq_ignore_ascii_case(m))
+		.map(|(_, per_mtok)| (input_tokens as f64 / 1_000_000.0) * per_mtok)
 }
 
 #[cfg(test)]

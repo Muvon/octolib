@@ -16,134 +16,130 @@ use super::*;
 
 #[test]
 fn test_supports_model_before_cache() {
-    let provider = GoogleVertexProvider::new();
+	let provider = GoogleVertexProvider::new();
 
-    // Before cache is populated, accept any non-empty model
-    assert!(provider.supports_model("gemini-1.5-pro"));
-    assert!(provider.supports_model("gemini-3.5-flash"));
-    assert!(provider.supports_model("anything-goes"));
-    assert!(!provider.supports_model(""));
+	// Before cache is populated, accept any non-empty model
+	assert!(provider.supports_model("gemini-1.5-pro"));
+	assert!(provider.supports_model("gemini-3.5-flash"));
+	assert!(provider.supports_model("anything-goes"));
+	assert!(!provider.supports_model(""));
 }
 
 #[test]
 fn test_supports_caching() {
-    let provider = GoogleVertexProvider::new();
-    assert!(provider.supports_caching("gemini-3-flash"));
-    assert!(provider.supports_caching("gemini-2.5-pro"));
-    assert!(provider.supports_caching("gemini-2.5-flash"));
-    assert!(!provider.supports_caching("gemini-1.5-pro"));
+	let provider = GoogleVertexProvider::new();
+	assert!(provider.supports_caching("gemini-3-flash"));
+	assert!(provider.supports_caching("gemini-2.5-pro"));
+	assert!(provider.supports_caching("gemini-2.5-flash"));
+	assert!(!provider.supports_caching("gemini-1.5-pro"));
 }
 
 #[test]
 fn test_model_pricing() {
-    let provider = GoogleVertexProvider::new();
+	let provider = GoogleVertexProvider::new();
 
-    // Intro rate through Nov 30, 2026
-    let p = provider.get_model_pricing("gemini-4-argon").unwrap();
-    assert_eq!(p.input_price_per_1m, 2.00);
-    assert_eq!(p.output_price_per_1m, 10.00);
-    assert_eq!(p.cache_read_price_per_1m, 0.10);
+	// Intro rate through Nov 30, 2026
+	let p = provider.get_model_pricing("gemini-4-argon").unwrap();
+	assert_eq!(p.input_price_per_1m, 2.00);
+	assert_eq!(p.output_price_per_1m, 10.00);
+	assert_eq!(p.cache_read_price_per_1m, 0.10);
 
-    let p = provider.get_model_pricing("gemini-3.1-pro").unwrap();
-    assert_eq!(p.input_price_per_1m, 2.00);
-    assert_eq!(p.output_price_per_1m, 12.00);
+	let p = provider.get_model_pricing("gemini-3.1-pro").unwrap();
+	assert_eq!(p.input_price_per_1m, 2.00);
+	assert_eq!(p.output_price_per_1m, 12.00);
 
-    let p = provider.get_model_pricing("gemini-3.5-flash").unwrap();
-    assert_eq!(p.input_price_per_1m, 1.50);
-    assert_eq!(p.output_price_per_1m, 9.00);
+	let p = provider.get_model_pricing("gemini-3.5-flash").unwrap();
+	assert_eq!(p.input_price_per_1m, 1.50);
+	assert_eq!(p.output_price_per_1m, 9.00);
 
-    let p = provider.get_model_pricing("gemini-3.8-flash").unwrap();
-    assert_eq!(p.input_price_per_1m, 0.75);
-    assert_eq!(p.output_price_per_1m, 3.75);
+	let p = provider.get_model_pricing("gemini-3.8-flash").unwrap();
+	assert_eq!(p.input_price_per_1m, 0.75);
+	assert_eq!(p.output_price_per_1m, 3.75);
 
-    let p = provider.get_model_pricing("gemini-3.7-flash").unwrap();
-    assert_eq!(p.input_price_per_1m, 0.75);
-    assert_eq!(p.output_price_per_1m, 3.75);
+	let p = provider.get_model_pricing("gemini-3.7-flash").unwrap();
+	assert_eq!(p.input_price_per_1m, 0.75);
+	assert_eq!(p.output_price_per_1m, 3.75);
 
-    // Intro rate applies to 3.6 Flash too, through Dec 31, 2026
-    let p = provider.get_model_pricing("gemini-3.6-flash").unwrap();
-    assert_eq!(p.input_price_per_1m, 0.75);
-    assert_eq!(p.output_price_per_1m, 3.75);
+	// Intro rate applies to 3.6 Flash too, through Dec 31, 2026
+	let p = provider.get_model_pricing("gemini-3.6-flash").unwrap();
+	assert_eq!(p.input_price_per_1m, 0.75);
+	assert_eq!(p.output_price_per_1m, 3.75);
 
-    let p = provider.get_model_pricing("gemini-2.5-flash").unwrap();
-    assert_eq!(p.input_price_per_1m, 0.30);
-    assert_eq!(p.output_price_per_1m, 2.50);
+	let p = provider.get_model_pricing("gemini-2.5-flash").unwrap();
+	assert_eq!(p.input_price_per_1m, 0.30);
+	assert_eq!(p.output_price_per_1m, 2.50);
 
-    // "-lite" variants must not be shadowed by their shorter prefixes
-    let p = provider.get_model_pricing("gemini-3.1-flash-lite").unwrap();
-    assert_eq!(p.input_price_per_1m, 0.25);
-    assert_eq!(p.output_price_per_1m, 1.50);
+	// "-lite" variants must not be shadowed by their shorter prefixes
+	let p = provider.get_model_pricing("gemini-3.1-flash-lite").unwrap();
+	assert_eq!(p.input_price_per_1m, 0.25);
+	assert_eq!(p.output_price_per_1m, 1.50);
 
-    let p = provider.get_model_pricing("gemini-3.5-flash-lite").unwrap();
-    assert_eq!(p.input_price_per_1m, 0.30);
-    assert_eq!(p.output_price_per_1m, 2.50);
+	let p = provider.get_model_pricing("gemini-3.5-flash-lite").unwrap();
+	assert_eq!(p.input_price_per_1m, 0.30);
+	assert_eq!(p.output_price_per_1m, 2.50);
 
-    let p = provider.get_model_pricing("gemini-3-flash").unwrap();
-    assert_eq!(p.input_price_per_1m, 0.50);
-    assert_eq!(p.output_price_per_1m, 3.00);
+	let p = provider.get_model_pricing("gemini-3-flash").unwrap();
+	assert_eq!(p.input_price_per_1m, 0.50);
+	assert_eq!(p.output_price_per_1m, 3.00);
 
-    let p = provider.get_model_pricing("gemini-omni-1.1-flash").unwrap();
-    assert_eq!(p.input_price_per_1m, 1.50);
-    assert_eq!(p.output_price_per_1m, 9.00);
-    assert!(provider
-        .get_model_pricing("gemini-omni-flash-preview")
-        .is_some());
+	let p = provider.get_model_pricing("gemini-omni-1.1-flash").unwrap();
+	assert_eq!(p.input_price_per_1m, 1.50);
+	assert_eq!(p.output_price_per_1m, 9.00);
+	assert!(provider.get_model_pricing("gemini-omni-flash-preview").is_some());
 
-    let p = provider
-        .get_model_pricing("gemini-robotics-er-2-preview")
-        .unwrap();
-    assert_eq!(p.input_price_per_1m, 1.00);
-    assert_eq!(p.output_price_per_1m, 5.00);
-    assert_eq!(p.cache_read_price_per_1m, 0.10);
-    assert!(provider
-        .get_model_pricing("gemini-robotics-er-2-streaming-preview")
-        .is_some());
+	let p = provider.get_model_pricing("gemini-robotics-er-2-preview").unwrap();
+	assert_eq!(p.input_price_per_1m, 1.00);
+	assert_eq!(p.output_price_per_1m, 5.00);
+	assert_eq!(p.cache_read_price_per_1m, 0.10);
+	assert!(provider
+		.get_model_pricing("gemini-robotics-er-2-streaming-preview")
+		.is_some());
 
-    // Removed from the live pricing page; must not fall through to a neighbouring row
-    assert!(provider.get_model_pricing("gemini-3.1-flash").is_none());
-    assert!(provider.get_model_pricing("gemini-3-pro").is_none());
-    assert!(provider.get_model_pricing("gemini-3-pro-preview").is_none());
-    assert!(provider.get_model_pricing("gemini-2.0-flash").is_none());
+	// Removed from the live pricing page; must not fall through to a neighbouring row
+	assert!(provider.get_model_pricing("gemini-3.1-flash").is_none());
+	assert!(provider.get_model_pricing("gemini-3-pro").is_none());
+	assert!(provider.get_model_pricing("gemini-3-pro-preview").is_none());
+	assert!(provider.get_model_pricing("gemini-2.0-flash").is_none());
 
-    // Unknown models return None (no fallback to zero)
-    assert!(provider.get_model_pricing("gemma-3-27b").is_none());
+	// Unknown models return None (no fallback to zero)
+	assert!(provider.get_model_pricing("gemma-3-27b").is_none());
 }
 
 #[test]
 fn test_max_input_tokens_fallback() {
-    let provider = GoogleVertexProvider::new();
-    assert_eq!(provider.get_max_input_tokens("gemini-4-argon"), 1_048_576);
-    assert_eq!(provider.get_max_input_tokens("gemini-3-flash"), 1_048_576);
-    assert_eq!(provider.get_max_input_tokens("gemini-2.5-pro"), 1_048_576);
-    assert_eq!(provider.get_max_input_tokens("gemini-1.5-pro"), 1_000_000);
-    assert_eq!(provider.get_max_input_tokens("text-bison"), 8_192);
+	let provider = GoogleVertexProvider::new();
+	assert_eq!(provider.get_max_input_tokens("gemini-4-argon"), 1_048_576);
+	assert_eq!(provider.get_max_input_tokens("gemini-3-flash"), 1_048_576);
+	assert_eq!(provider.get_max_input_tokens("gemini-2.5-pro"), 1_048_576);
+	assert_eq!(provider.get_max_input_tokens("gemini-1.5-pro"), 1_000_000);
+	assert_eq!(provider.get_max_input_tokens("text-bison"), 8_192);
 }
 
 #[test]
 fn test_sampling_params() {
-    let provider = GoogleVertexProvider::new();
-    assert_eq!(
-        provider.supported_sampling_params("gemini-4-argon"),
-        SamplingSupport::NONE
-    );
-    assert_eq!(
-        provider.supported_sampling_params("gemini-3.8-flash"),
-        SamplingSupport::NONE
-    );
-    assert_eq!(
-        provider.supported_sampling_params("gemini-3.7-flash"),
-        SamplingSupport::NONE
-    );
-    assert_eq!(
-        provider.supported_sampling_params("gemini-3.6-flash"),
-        SamplingSupport::NONE
-    );
-    assert_eq!(
-        provider.supported_sampling_params("gemini-3.5-flash"),
-        SamplingSupport::ALL
-    );
-    assert_eq!(
-        provider.supported_sampling_params("gemini-2.5-pro"),
-        SamplingSupport::ALL
-    );
+	let provider = GoogleVertexProvider::new();
+	assert_eq!(
+		provider.supported_sampling_params("gemini-4-argon"),
+		SamplingSupport::NONE
+	);
+	assert_eq!(
+		provider.supported_sampling_params("gemini-3.8-flash"),
+		SamplingSupport::NONE
+	);
+	assert_eq!(
+		provider.supported_sampling_params("gemini-3.7-flash"),
+		SamplingSupport::NONE
+	);
+	assert_eq!(
+		provider.supported_sampling_params("gemini-3.6-flash"),
+		SamplingSupport::NONE
+	);
+	assert_eq!(
+		provider.supported_sampling_params("gemini-3.5-flash"),
+		SamplingSupport::ALL
+	);
+	assert_eq!(
+		provider.supported_sampling_params("gemini-2.5-pro"),
+		SamplingSupport::ALL
+	);
 }

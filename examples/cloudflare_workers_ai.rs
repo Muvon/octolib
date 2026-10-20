@@ -34,101 +34,99 @@ use std::env;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Check for API token
-    let api_token = env::var("CLOUDFLARE_API_KEY");
-    if api_token.is_err() {
-        eprintln!("Error: CLOUDFLARE_API_KEY environment variable not set");
-        eprintln!("Get your API token from: https://dash.cloudflare.com/profile/api-tokens");
-        std::process::exit(1);
-    }
+	// Check for API token
+	let api_token = env::var("CLOUDFLARE_API_KEY");
+	if api_token.is_err() {
+		eprintln!("Error: CLOUDFLARE_API_KEY environment variable not set");
+		eprintln!("Get your API token from: https://dash.cloudflare.com/profile/api-tokens");
+		std::process::exit(1);
+	}
 
-    // Check for account ID
-    let account_id = env::var("CLOUDFLARE_ACCOUNT_ID");
-    if account_id.is_err() {
-        eprintln!("Error: CLOUDFLARE_ACCOUNT_ID environment variable not set");
-        eprintln!("Get your account ID from: https://dash.cloudflare.com");
-        std::process::exit(1);
-    }
+	// Check for account ID
+	let account_id = env::var("CLOUDFLARE_ACCOUNT_ID");
+	if account_id.is_err() {
+		eprintln!("Error: CLOUDFLARE_ACCOUNT_ID environment variable not set");
+		eprintln!("Get your account ID from: https://dash.cloudflare.com");
+		std::process::exit(1);
+	}
 
-    println!("🚀 Cloudflare Workers AI Example");
-    println!("====================");
+	println!("🚀 Cloudflare Workers AI Example");
+	println!("====================");
 
-    // Example 1: Basic chat completion with Llama 3.1
-    println!("\n📝 Example 1: Llama 3.1 70B Instruct");
-    let (provider, model) =
-        ProviderFactory::get_provider_for_model("cloudflare:@cf/meta/llama-3.1-70b-instruct")?;
-    println!("Provider: {}", provider.name());
-    println!("Model: {}", model);
+	// Example 1: Basic chat completion with Llama 3.1
+	println!("\n📝 Example 1: Llama 3.1 70B Instruct");
+	let (provider, model) = ProviderFactory::get_provider_for_model("cloudflare:@cf/meta/llama-3.1-70b-instruct")?;
+	println!("Provider: {}", provider.name());
+	println!("Model: {}", model);
 
-    let messages = vec![Message::user("What is the capital of France?")];
+	let messages = vec![Message::user("What is the capital of France?")];
 
-    let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000);
+	let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000);
 
-    match provider.chat_completion(params).await {
-        Ok(response) => {
-            println!("Response: {}", response.content);
-            if let Some(usage) = &response.exchange.usage {
-                println!("Input tokens: {}", usage.input_tokens);
-                println!("Output tokens: {}", usage.output_tokens);
-                println!("Total tokens: {}", usage.total_tokens);
-            }
-        }
-        Err(e) => {
-            eprintln!("Error: {}", e);
-        }
-    }
+	match provider.chat_completion(params).await {
+		Ok(response) => {
+			println!("Response: {}", response.content);
+			if let Some(usage) = &response.exchange.usage {
+				println!("Input tokens: {}", usage.input_tokens);
+				println!("Output tokens: {}", usage.output_tokens);
+				println!("Total tokens: {}", usage.total_tokens);
+			}
+		}
+		Err(e) => {
+			eprintln!("Error: {}", e);
+		}
+	}
 
-    // Example 2: Chat completion with Mistral
-    println!("\n📝 Example 2: Mistral 7B Instruct");
-    let (provider, model) =
-        ProviderFactory::get_provider_for_model("cloudflare:mistral-7b-instruct-v0.1")?;
-    println!("Provider: {}", provider.name());
-    println!("Model: {}", model);
+	// Example 2: Chat completion with Mistral
+	println!("\n📝 Example 2: Mistral 7B Instruct");
+	let (provider, model) = ProviderFactory::get_provider_for_model("cloudflare:mistral-7b-instruct-v0.1")?;
+	println!("Provider: {}", provider.name());
+	println!("Model: {}", model);
 
-    let messages = vec![Message::user("Explain quantum computing in simple terms")];
+	let messages = vec![Message::user("Explain quantum computing in simple terms")];
 
-    let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000);
+	let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000);
 
-    match provider.chat_completion(params).await {
-        Ok(response) => {
-            println!("Response: {}", response.content);
-            if let Some(usage) = &response.exchange.usage {
-                println!("Input tokens: {}", usage.input_tokens);
-                println!("Output tokens: {}", usage.output_tokens);
-                println!("Total tokens: {}", usage.total_tokens);
-            }
-        }
-        Err(e) => {
-            eprintln!("Error: {}", e);
-        }
-    }
+	match provider.chat_completion(params).await {
+		Ok(response) => {
+			println!("Response: {}", response.content);
+			if let Some(usage) = &response.exchange.usage {
+				println!("Input tokens: {}", usage.input_tokens);
+				println!("Output tokens: {}", usage.output_tokens);
+				println!("Total tokens: {}", usage.total_tokens);
+			}
+		}
+		Err(e) => {
+			eprintln!("Error: {}", e);
+		}
+	}
 
-    // Example 3: Chat completion with Gemma
-    println!("\n📝 Example 3: Gemma 2 27B IT");
-    let (provider, model) = ProviderFactory::get_provider_for_model("cloudflare:gemma-2-27b-it")?;
-    println!("Provider: {}", provider.name());
-    println!("Model: {}", model);
+	// Example 3: Chat completion with Gemma
+	println!("\n📝 Example 3: Gemma 2 27B IT");
+	let (provider, model) = ProviderFactory::get_provider_for_model("cloudflare:gemma-2-27b-it")?;
+	println!("Provider: {}", provider.name());
+	println!("Model: {}", model);
 
-    let messages = vec![Message::user("Write a short poem about technology")];
+	let messages = vec![Message::user("Write a short poem about technology")];
 
-    let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000);
+	let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000);
 
-    match provider.chat_completion(params).await {
-        Ok(response) => {
-            println!("Response: {}", response.content);
-            if let Some(usage) = &response.exchange.usage {
-                println!("Input tokens: {}", usage.input_tokens);
-                println!("Output tokens: {}", usage.output_tokens);
-                println!("Total tokens: {}", usage.total_tokens);
-            }
-        }
-        Err(e) => {
-            eprintln!("Error: {}", e);
-        }
-    }
+	match provider.chat_completion(params).await {
+		Ok(response) => {
+			println!("Response: {}", response.content);
+			if let Some(usage) = &response.exchange.usage {
+				println!("Input tokens: {}", usage.input_tokens);
+				println!("Output tokens: {}", usage.output_tokens);
+				println!("Total tokens: {}", usage.total_tokens);
+			}
+		}
+		Err(e) => {
+			eprintln!("Error: {}", e);
+		}
+	}
 
-    println!("\n====================");
-    println!("✅ Examples completed!");
+	println!("\n====================");
+	println!("✅ Examples completed!");
 
-    Ok(())
+	Ok(())
 }

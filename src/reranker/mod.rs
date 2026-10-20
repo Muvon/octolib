@@ -166,15 +166,15 @@ pub use types::{parse_provider_model, RerankProviderType, RerankResponse, Rerank
 /// # }
 /// ```
 pub async fn rerank(
-    query: &str,
-    documents: Vec<String>,
-    provider: &str,
-    model: &str,
-    top_k: Option<usize>,
+	query: &str,
+	documents: Vec<String>,
+	provider: &str,
+	model: &str,
+	top_k: Option<usize>,
 ) -> Result<RerankResponse> {
-    let (provider_type, _) = parse_provider_model(&format!("{}:{}", provider, model))?;
-    let provider_impl = create_rerank_provider_from_parts(&provider_type, model).await?;
-    provider_impl.rerank(query, documents, top_k, true).await
+	let (provider_type, _) = parse_provider_model(&format!("{}:{}", provider, model))?;
+	let provider_impl = create_rerank_provider_from_parts(&provider_type, model).await?;
+	provider_impl.rerank(query, documents, top_k, true).await
 }
 
 /// Rerank documents with custom truncation setting
@@ -192,18 +192,16 @@ pub async fn rerank(
 ///
 /// `RerankResponse` containing sorted results with relevance scores
 pub async fn rerank_with_truncation(
-    query: &str,
-    documents: Vec<String>,
-    provider: &str,
-    model: &str,
-    top_k: Option<usize>,
-    truncation: bool,
+	query: &str,
+	documents: Vec<String>,
+	provider: &str,
+	model: &str,
+	top_k: Option<usize>,
+	truncation: bool,
 ) -> Result<RerankResponse> {
-    let (provider_type, _) = parse_provider_model(&format!("{}:{}", provider, model))?;
-    let provider_impl = create_rerank_provider_from_parts(&provider_type, model).await?;
-    provider_impl
-        .rerank(query, documents, top_k, truncation)
-        .await
+	let (provider_type, _) = parse_provider_model(&format!("{}:{}", provider, model))?;
+	let provider_impl = create_rerank_provider_from_parts(&provider_type, model).await?;
+	provider_impl.rerank(query, documents, top_k, truncation).await
 }
 
 #[cfg(test)]

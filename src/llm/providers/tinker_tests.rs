@@ -16,48 +16,48 @@ use super::*;
 
 #[test]
 fn test_short_names_resolve_consistently() {
-    let provider = TinkerProvider::new();
-    // Absolute rates, not "same as whatever the alias resolves to" — comparing
-    // the alias against its own resolution is true for any mapping, including
-    // the wrong one. These are the Serverless Inference rows of the models page.
-    for (alias, canonical, input, output, cached) in [
-        (
-            "inkling",
-            "thinkingmachines/Inkling:peft:262144:sampling-nvfp4",
-            1.00,
-            4.05,
-            0.17,
-        ),
-        (
-            "INKLING",
-            "thinkingmachines/Inkling:peft:262144:sampling-nvfp4",
-            1.00,
-            4.05,
-            0.17,
-        ),
-        (
-            "inkling-small",
-            "thinkingmachines/Inkling-Small:peft:262144:sampling-nvfp4",
-            0.30,
-            1.20,
-            0.06,
-        ),
-        (
-            "INKLING-SMALL",
-            "thinkingmachines/Inkling-Small:peft:262144:sampling-nvfp4",
-            0.30,
-            1.20,
-            0.06,
-        ),
-    ] {
-        assert_eq!(resolve_model(alias), canonical);
-        assert!(provider.supports_model(alias));
-        assert_eq!(provider.get_max_input_tokens(alias), 262_144);
-        let pricing = provider.get_model_pricing(alias).unwrap();
-        assert_eq!(pricing.input_price_per_1m, input);
-        assert_eq!(pricing.output_price_per_1m, output);
-        assert_eq!(pricing.cache_read_price_per_1m, cached);
-    }
+	let provider = TinkerProvider::new();
+	// Absolute rates, not "same as whatever the alias resolves to" — comparing
+	// the alias against its own resolution is true for any mapping, including
+	// the wrong one. These are the Serverless Inference rows of the models page.
+	for (alias, canonical, input, output, cached) in [
+		(
+			"inkling",
+			"thinkingmachines/Inkling:peft:262144:sampling-nvfp4",
+			1.00,
+			4.05,
+			0.17,
+		),
+		(
+			"INKLING",
+			"thinkingmachines/Inkling:peft:262144:sampling-nvfp4",
+			1.00,
+			4.05,
+			0.17,
+		),
+		(
+			"inkling-small",
+			"thinkingmachines/Inkling-Small:peft:262144:sampling-nvfp4",
+			0.30,
+			1.20,
+			0.06,
+		),
+		(
+			"INKLING-SMALL",
+			"thinkingmachines/Inkling-Small:peft:262144:sampling-nvfp4",
+			0.30,
+			1.20,
+			0.06,
+		),
+	] {
+		assert_eq!(resolve_model(alias), canonical);
+		assert!(provider.supports_model(alias));
+		assert_eq!(provider.get_max_input_tokens(alias), 262_144);
+		let pricing = provider.get_model_pricing(alias).unwrap();
+		assert_eq!(pricing.input_price_per_1m, input);
+		assert_eq!(pricing.output_price_per_1m, output);
+		assert_eq!(pricing.cache_read_price_per_1m, cached);
+	}
 }
 
 /// The bare ids are the TRAINING table's spelling of the same two models and
@@ -65,133 +65,116 @@ fn test_short_names_resolve_consistently() {
 /// training tier — the alias fix must not collapse the two.
 #[test]
 fn test_bare_ids_keep_the_training_tier() {
-    let provider = TinkerProvider::new();
-    for (model, input, output, context) in [
-        ("thinkingmachines/Inkling", 1.87, 4.68, 65_536),
-        ("thinkingmachines/Inkling-Small", 0.58, 1.44, 65_536),
-    ] {
-        assert_eq!(resolve_model(model), model);
-        let pricing = provider.get_model_pricing(model).unwrap();
-        assert_eq!(pricing.input_price_per_1m, input);
-        assert_eq!(pricing.output_price_per_1m, output);
-        assert_eq!(provider.get_max_input_tokens(model), context);
-    }
+	let provider = TinkerProvider::new();
+	for (model, input, output, context) in [
+		("thinkingmachines/Inkling", 1.87, 4.68, 65_536),
+		("thinkingmachines/Inkling-Small", 0.58, 1.44, 65_536),
+	] {
+		assert_eq!(resolve_model(model), model);
+		let pricing = provider.get_model_pricing(model).unwrap();
+		assert_eq!(pricing.input_price_per_1m, input);
+		assert_eq!(pricing.output_price_per_1m, output);
+		assert_eq!(provider.get_max_input_tokens(model), context);
+	}
 }
 
 #[test]
 fn test_qualified_model_ids_are_preserved() {
-    for model in [
-        "thinkingmachines/Inkling:peft:262144:sampling-nvfp4",
-        "thinkingmachines/Inkling-Small",
-        "moonshotai/Kimi-K2.6",
-        "tinker://CaseSensitive-ID:train:0/sampler_weights/000080",
-        "unknown-model",
-    ] {
-        assert_eq!(resolve_model(model), model);
-    }
+	for model in [
+		"thinkingmachines/Inkling:peft:262144:sampling-nvfp4",
+		"thinkingmachines/Inkling-Small",
+		"moonshotai/Kimi-K2.6",
+		"tinker://CaseSensitive-ID:train:0/sampler_weights/000080",
+		"unknown-model",
+	] {
+		assert_eq!(resolve_model(model), model);
+	}
 }
 
 #[test]
 fn test_sampling_capabilities() {
-    let provider = TinkerProvider::new();
-    assert_eq!(
-        provider.supported_sampling_params("inkling"),
-        SamplingSupport::TEMPERATURE_AND_TOP_P
-    );
+	let provider = TinkerProvider::new();
+	assert_eq!(
+		provider.supported_sampling_params("inkling"),
+		SamplingSupport::TEMPERATURE_AND_TOP_P
+	);
 }
 
 #[test]
 fn test_supports_model() {
-    let provider = TinkerProvider::new();
-    // Known Tinker IDs (colons intact — the factory splits only the first)
-    assert!(provider.supports_model("thinkingmachines/Inkling"));
-    assert!(provider.supports_model("thinkingmachines/Inkling-Small:peft:262144"));
-    assert!(provider.supports_model("thinkingmachines/Inkling:peft:262144:sampling-nvfp4"));
-    assert!(provider.supports_model("moonshotai/Kimi-K2.6"));
-    // Arbitrary sampler checkpoint paths
-    assert!(provider.supports_model(
-        "tinker://0034d8c9-0a88-52a9-b2b7-bce7cb1e6fef:train:0/sampler_weights/000080"
-    ));
-    assert!(!provider.supports_model(""));
+	let provider = TinkerProvider::new();
+	// Known Tinker IDs (colons intact — the factory splits only the first)
+	assert!(provider.supports_model("thinkingmachines/Inkling"));
+	assert!(provider.supports_model("thinkingmachines/Inkling-Small:peft:262144"));
+	assert!(provider.supports_model("thinkingmachines/Inkling:peft:262144:sampling-nvfp4"));
+	assert!(provider.supports_model("moonshotai/Kimi-K2.6"));
+	// Arbitrary sampler checkpoint paths
+	assert!(provider.supports_model("tinker://0034d8c9-0a88-52a9-b2b7-bce7cb1e6fef:train:0/sampler_weights/000080"));
+	assert!(!provider.supports_model(""));
 }
 
 #[test]
 fn test_pricing_ordering() {
-    let provider = TinkerProvider::new();
+	let provider = TinkerProvider::new();
 
-    // Serverless variant wins over the `:peft:` training ID
-    let serverless = provider
-        .get_model_pricing("thinkingmachines/Inkling-Small:peft:262144:sampling-nvfp4")
-        .unwrap();
-    assert_eq!(serverless.input_price_per_1m, 0.30);
-    assert_eq!(serverless.output_price_per_1m, 1.20);
-    assert_eq!(serverless.cache_read_price_per_1m, 0.06);
+	// Serverless variant wins over the `:peft:` training ID
+	let serverless = provider
+		.get_model_pricing("thinkingmachines/Inkling-Small:peft:262144:sampling-nvfp4")
+		.unwrap();
+	assert_eq!(serverless.input_price_per_1m, 0.30);
+	assert_eq!(serverless.output_price_per_1m, 1.20);
+	assert_eq!(serverless.cache_read_price_per_1m, 0.06);
 
-    // 256K `:peft:` variant wins over the base ID
-    let peft = provider
-        .get_model_pricing("thinkingmachines/Inkling:peft:262144")
-        .unwrap();
-    assert_eq!(peft.input_price_per_1m, 3.74);
-    assert_eq!(peft.output_price_per_1m, 9.36);
+	// 256K `:peft:` variant wins over the base ID
+	let peft = provider
+		.get_model_pricing("thinkingmachines/Inkling:peft:262144")
+		.unwrap();
+	assert_eq!(peft.input_price_per_1m, 3.74);
+	assert_eq!(peft.output_price_per_1m, 9.36);
 
-    // Base IDs
-    let base = provider
-        .get_model_pricing("thinkingmachines/Inkling")
-        .unwrap();
-    assert_eq!(base.input_price_per_1m, 1.87);
-    assert_eq!(base.output_price_per_1m, 4.68);
+	// Base IDs
+	let base = provider.get_model_pricing("thinkingmachines/Inkling").unwrap();
+	assert_eq!(base.input_price_per_1m, 1.87);
+	assert_eq!(base.output_price_per_1m, 4.68);
 
-    // Inkling-Small must not be captured by the Inkling pattern
-    let small = provider
-        .get_model_pricing("thinkingmachines/Inkling-Small")
-        .unwrap();
-    assert_eq!(small.input_price_per_1m, 0.58);
-    assert_eq!(small.output_price_per_1m, 1.44);
+	// Inkling-Small must not be captured by the Inkling pattern
+	let small = provider.get_model_pricing("thinkingmachines/Inkling-Small").unwrap();
+	assert_eq!(small.input_price_per_1m, 0.58);
+	assert_eq!(small.output_price_per_1m, 1.44);
 
-    // `-base` suffix must not be captured by the instruct pattern
-    let base_suffix = provider.get_model_pricing("Qwen/Qwen3.5-9B-Base").unwrap();
-    assert_eq!(base_suffix.input_price_per_1m, 0.66);
+	// `-base` suffix must not be captured by the instruct pattern
+	let base_suffix = provider.get_model_pricing("Qwen/Qwen3.5-9B-Base").unwrap();
+	assert_eq!(base_suffix.input_price_per_1m, 0.66);
 
-    // Unknown checkpoint paths carry no pricing
-    assert!(provider
-        .get_model_pricing(
-            "tinker://0034d8c9-0a88-52a9-b2b7-bce7cb1e6fef:train:0/sampler_weights/000080"
-        )
-        .is_none());
+	// Unknown checkpoint paths carry no pricing
+	assert!(provider
+		.get_model_pricing("tinker://0034d8c9-0a88-52a9-b2b7-bce7cb1e6fef:train:0/sampler_weights/000080")
+		.is_none());
 }
 
 #[test]
 fn test_context_windows() {
-    let provider = TinkerProvider::new();
-    assert_eq!(
-        provider.get_max_input_tokens("thinkingmachines/Inkling"),
-        65_536
-    );
-    assert_eq!(
-        provider.get_max_input_tokens("thinkingmachines/Inkling:peft:262144:sampling-nvfp4"),
-        262_144
-    );
-    assert_eq!(
-        provider.get_max_input_tokens("moonshotai/Kimi-K2.6"),
-        32_768
-    );
-    assert_eq!(
-        provider.get_max_input_tokens("moonshotai/Kimi-K2.6:peft:131072"),
-        131_072
-    );
-    // Unknown checkpoints fall back to the library default
-    assert_eq!(
-        provider.get_max_input_tokens("tinker://some/checkpoint"),
-        262_144
-    );
+	let provider = TinkerProvider::new();
+	assert_eq!(provider.get_max_input_tokens("thinkingmachines/Inkling"), 65_536);
+	assert_eq!(
+		provider.get_max_input_tokens("thinkingmachines/Inkling:peft:262144:sampling-nvfp4"),
+		262_144
+	);
+	assert_eq!(provider.get_max_input_tokens("moonshotai/Kimi-K2.6"), 32_768);
+	assert_eq!(
+		provider.get_max_input_tokens("moonshotai/Kimi-K2.6:peft:131072"),
+		131_072
+	);
+	// Unknown checkpoints fall back to the library default
+	assert_eq!(provider.get_max_input_tokens("tinker://some/checkpoint"), 262_144);
 }
 
 #[test]
 fn test_conservative_capabilities() {
-    let provider = TinkerProvider::new();
-    assert_eq!(provider.name(), "tinker");
-    assert!(!provider.supports_caching("thinkingmachines/Inkling"));
-    assert!(!provider.supports_vision("thinkingmachines/Inkling"));
-    assert!(!provider.supports_structured_output("thinkingmachines/Inkling"));
-    assert!(!provider.enforces_response_schema("thinkingmachines/Inkling"));
+	let provider = TinkerProvider::new();
+	assert_eq!(provider.name(), "tinker");
+	assert!(!provider.supports_caching("thinkingmachines/Inkling"));
+	assert!(!provider.supports_vision("thinkingmachines/Inkling"));
+	assert!(!provider.supports_structured_output("thinkingmachines/Inkling"));
+	assert!(!provider.enforces_response_schema("thinkingmachines/Inkling"));
 }

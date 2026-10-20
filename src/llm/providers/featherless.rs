@@ -31,7 +31,7 @@
 //! - `FEATHERLESS_API_URL`: Optional endpoint override
 
 use crate::llm::providers::openai_compat::{
-    chat_completion as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
+	chat_completion as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
 };
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderResponse};
@@ -44,15 +44,15 @@ use std::env;
 pub struct FeatherlessProvider;
 
 impl Default for FeatherlessProvider {
-    fn default() -> Self {
-        Self::new()
-    }
+	fn default() -> Self {
+		Self::new()
+	}
 }
 
 impl FeatherlessProvider {
-    pub fn new() -> Self {
-        Self
-    }
+	pub fn new() -> Self {
+		Self
+	}
 }
 
 const FEATHERLESS_API_KEY_ENV: &str = "FEATHERLESS_API_KEY";
@@ -64,154 +64,134 @@ const FEATHERLESS_API_URL: &str = "https://api.featherless.ai/v1/chat/completion
 /// cached rate use the input rate.
 /// Format: (model ID pattern, input, output, cache write, cached input).
 const PRICING: &[PricingTuple] = &[
-    ("deepseek-ai/DeepSeek-V4.1-Flash", 0.30, 1.20, 0.30, 0.03),
-    ("deepseek-ai/DeepSeek-V4-Flash-0731", 0.14, 0.28, 0.14, 0.03),
-    ("deepseek-ai/DeepSeek-V4-Flash", 0.14, 0.28, 0.14, 0.03),
-    ("deepseek-ai/DeepSeek-V4-Pro", 1.60, 3.20, 1.60, 0.20),
-    ("deepseek-ai/DeepSeek-V3.2", 0.264, 0.41, 0.264, 0.06),
-    ("zai-org/GLM-5.3-Flash", 0.15, 0.50, 0.15, 0.03),
-    ("zai-org/GLM-5.3", 1.40, 4.40, 1.40, 0.26),
-    ("zai-org/GLM-5.2", 1.40, 4.40, 1.40, 0.15),
-    ("zai-org/GLM-5.1", 1.30, 4.30, 1.30, 0.26),
-    // Must follow every GLM-5.x row: lookup is a first-match substring scan.
-    ("zai-org/GLM-5", 0.95, 3.15, 0.95, 0.19),
-    ("zai-org/GLM-4.7-Flash", 0.0653, 0.40, 0.0653, 0.0131),
-    ("zai-org/GLM-4.7", 0.55, 2.20, 0.55, 0.11),
-    // Pricing doc lists 3.00/15.00 while the model page still lists 2.00/10.00.
-    ("moonshotai/Kimi-K3", 2.00, 10.00, 2.00, 0.30),
-    ("moonshotai/Kimi-K2.7-Code", 0.80, 3.40, 0.80, 0.154),
-    ("moonshotai/Kimi-K2.6", 0.80, 3.40, 0.80, 0.154),
-    ("moonshotai/Kimi-K2.5", 0.80, 3.40, 0.80, 0.154),
-    ("MiniMaxAI/MiniMax-M3", 0.55, 2.20, 0.55, 0.06),
-    ("MiniMaxAI/MiniMax-M2.7", 0.30, 1.20, 0.30, 0.06),
-    ("Qwen/Qwen3.8-2.4T-A95B", 1.00, 4.00, 1.00, 1.00),
-    ("Qwen/Qwen3.8-Flash-Next", 0.15, 0.50, 0.15, 0.03),
-    ("Qwen/Qwen3.8-27B", 0.40, 3.00, 0.40, 0.15),
-    ("Qwen/Qwen3.6-35B-A3B", 0.186, 1.11375, 0.186, 0.032),
-    ("Qwen/Qwen3.6-27B", 0.32, 2.70, 0.32, 0.064),
-    ("Qwen/Qwen3.5-397B-A17B", 0.55, 3.50, 0.55, 0.55),
-    (
-        "Qwen/Qwen3-Coder-480B-A35B-Instruct",
-        0.38,
-        1.55,
-        0.38,
-        0.076,
-    ),
-    (
-        "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16",
-        0.125,
-        1.15,
-        0.125,
-        0.025,
-    ),
-    ("meta-models/Muse-Glimmer-30B", 0.30, 1.10, 0.30, 0.04),
-    ("stepfun-ai/Step-3.7-Flash", 0.20, 1.15, 0.20, 0.04),
-    ("XiaomiMiMo/MiMo-V2.5", 0.149, 0.493, 0.149, 0.028),
-    ("mistralai/Mistral-Medium-3.5-128B", 1.00, 4.00, 1.00, 0.20),
-    ("poolside/Laguna-S-2.1", 1.00, 4.00, 1.00, 0.20),
-    ("tencent/Hy3", 1.00, 4.00, 1.00, 1.00),
-    // QAT builds carry a model-specific price above their class rate.
-    (
-        "google/gemma-4-31B-it-qat-q4_0-unquantized",
-        0.48,
-        1.44,
-        0.48,
-        0.48,
-    ),
-    (
-        "google/gemma-4-26B-A4B-it-qat-q4_0-unquantized",
-        0.40,
-        0.80,
-        0.40,
-        0.40,
-    ),
-    ("google/gemma-4-31B", 0.12, 0.36, 0.12, 0.10),
-    ("google/gemma-4-26B", 0.07, 0.34, 0.07, 0.05),
-    ("openai/gpt-oss-120b", 0.15, 0.60, 0.15, 0.02),
-    ("openai/gpt-oss-20b", 0.04, 0.15, 0.04, 0.04),
+	("deepseek-ai/DeepSeek-V4.1-Flash", 0.30, 1.20, 0.30, 0.03),
+	("deepseek-ai/DeepSeek-V4-Flash-0731", 0.14, 0.28, 0.14, 0.03),
+	("deepseek-ai/DeepSeek-V4-Flash", 0.14, 0.28, 0.14, 0.03),
+	("deepseek-ai/DeepSeek-V4-Pro", 1.60, 3.20, 1.60, 0.20),
+	("deepseek-ai/DeepSeek-V3.2", 0.264, 0.41, 0.264, 0.06),
+	("zai-org/GLM-5.3-Flash", 0.15, 0.50, 0.15, 0.03),
+	("zai-org/GLM-5.3", 1.40, 4.40, 1.40, 0.26),
+	("zai-org/GLM-5.2", 1.40, 4.40, 1.40, 0.15),
+	("zai-org/GLM-5.1", 1.30, 4.30, 1.30, 0.26),
+	// Must follow every GLM-5.x row: lookup is a first-match substring scan.
+	("zai-org/GLM-5", 0.95, 3.15, 0.95, 0.19),
+	("zai-org/GLM-4.7-Flash", 0.0653, 0.40, 0.0653, 0.0131),
+	("zai-org/GLM-4.7", 0.55, 2.20, 0.55, 0.11),
+	// Pricing doc lists 3.00/15.00 while the model page still lists 2.00/10.00.
+	("moonshotai/Kimi-K3", 2.00, 10.00, 2.00, 0.30),
+	("moonshotai/Kimi-K2.7-Code", 0.80, 3.40, 0.80, 0.154),
+	("moonshotai/Kimi-K2.6", 0.80, 3.40, 0.80, 0.154),
+	("moonshotai/Kimi-K2.5", 0.80, 3.40, 0.80, 0.154),
+	("MiniMaxAI/MiniMax-M3", 0.55, 2.20, 0.55, 0.06),
+	("MiniMaxAI/MiniMax-M2.7", 0.30, 1.20, 0.30, 0.06),
+	("Qwen/Qwen3.8-2.4T-A95B", 1.00, 4.00, 1.00, 1.00),
+	("Qwen/Qwen3.8-Flash-Next", 0.15, 0.50, 0.15, 0.03),
+	("Qwen/Qwen3.8-27B", 0.40, 3.00, 0.40, 0.15),
+	("Qwen/Qwen3.6-35B-A3B", 0.186, 1.11375, 0.186, 0.032),
+	("Qwen/Qwen3.6-27B", 0.32, 2.70, 0.32, 0.064),
+	("Qwen/Qwen3.5-397B-A17B", 0.55, 3.50, 0.55, 0.55),
+	("Qwen/Qwen3-Coder-480B-A35B-Instruct", 0.38, 1.55, 0.38, 0.076),
+	(
+		"nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16",
+		0.125,
+		1.15,
+		0.125,
+		0.025,
+	),
+	("meta-models/Muse-Glimmer-30B", 0.30, 1.10, 0.30, 0.04),
+	("stepfun-ai/Step-3.7-Flash", 0.20, 1.15, 0.20, 0.04),
+	("XiaomiMiMo/MiMo-V2.5", 0.149, 0.493, 0.149, 0.028),
+	("mistralai/Mistral-Medium-3.5-128B", 1.00, 4.00, 1.00, 0.20),
+	("poolside/Laguna-S-2.1", 1.00, 4.00, 1.00, 0.20),
+	("tencent/Hy3", 1.00, 4.00, 1.00, 1.00),
+	// QAT builds carry a model-specific price above their class rate.
+	("google/gemma-4-31B-it-qat-q4_0-unquantized", 0.48, 1.44, 0.48, 0.48),
+	("google/gemma-4-26B-A4B-it-qat-q4_0-unquantized", 0.40, 0.80, 0.40, 0.40),
+	("google/gemma-4-31B", 0.12, 0.36, 0.12, 0.10),
+	("google/gemma-4-26B", 0.07, 0.34, 0.07, 0.05),
+	("openai/gpt-oss-120b", 0.15, 0.60, 0.15, 0.02),
+	("openai/gpt-oss-20b", 0.04, 0.15, 0.04, 0.04),
 ];
 
 fn featherless_model_pricing(model: &str) -> Option<crate::llm::types::ModelPricing> {
-    let (input, output, cache_write, cache_read) = get_model_pricing(model, PRICING)?;
-    Some(crate::llm::types::ModelPricing::new(
-        input,
-        output,
-        cache_write,
-        cache_read,
-    ))
+	let (input, output, cache_write, cache_read) = get_model_pricing(model, PRICING)?;
+	Some(crate::llm::types::ModelPricing::new(
+		input,
+		output,
+		cache_write,
+		cache_read,
+	))
 }
 
 #[async_trait::async_trait]
 impl AiProvider for FeatherlessProvider {
-    fn name(&self) -> &str {
-        "featherless"
-    }
+	fn name(&self) -> &str {
+		"featherless"
+	}
 
-    fn supports_model(&self, model: &str) -> bool {
-        !model.is_empty()
-    }
+	fn supports_model(&self, model: &str) -> bool {
+		!model.is_empty()
+	}
 
-    fn get_api_key(&self) -> Result<String> {
-        env::var(FEATHERLESS_API_KEY_ENV).map_err(|_| {
-            crate::errors::missing_api_key("featherless", FEATHERLESS_API_KEY_ENV).into()
-        })
-    }
+	fn get_api_key(&self) -> Result<String> {
+		env::var(FEATHERLESS_API_KEY_ENV)
+			.map_err(|_| crate::errors::missing_api_key("featherless", FEATHERLESS_API_KEY_ENV).into())
+	}
 
-    fn supports_caching(&self, model: &str) -> bool {
-        featherless_model_pricing(model)
-            .map(|pricing| pricing.cache_read_price_per_1m < pricing.input_price_per_1m)
-            .unwrap_or(false)
-    }
+	fn supports_caching(&self, model: &str) -> bool {
+		featherless_model_pricing(model)
+			.map(|pricing| pricing.cache_read_price_per_1m < pricing.input_price_per_1m)
+			.unwrap_or(false)
+	}
 
-    fn supports_structured_output(&self, _model: &str) -> bool {
-        true
-    }
+	fn supports_structured_output(&self, _model: &str) -> bool {
+		true
+	}
 
-    fn enforces_response_schema(&self, _model: &str) -> bool {
-        true
-    }
+	fn enforces_response_schema(&self, _model: &str) -> bool {
+		true
+	}
 
-    fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
-        featherless_model_pricing(model)
-            .or_else(|| crate::llm::reference_models::get_reference_pricing(model))
-    }
+	fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
+		featherless_model_pricing(model).or_else(|| crate::llm::reference_models::get_reference_pricing(model))
+	}
 
-    async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-        let api_key = self.get_api_key()?;
-        let api_url = get_api_url(FEATHERLESS_API_URL_ENV, FEATHERLESS_API_URL);
-        let model = params.model.clone();
+	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
+		let api_key = self.get_api_key()?;
+		let api_url = get_api_url(FEATHERLESS_API_URL_ENV, FEATHERLESS_API_URL);
+		let model = params.model.clone();
 
-        let mut response = openai_compat_chat_completion(
-            OpenAiCompatConfig {
-                provider_name: "featherless",
-                usage_fallback_cost: None,
-                use_response_cost: true,
-                enforces_response_schema: true,
-                supports_required_tool_choice: false,
-                supports_parallel_tool_calls: true,
-            },
-            api_key,
-            api_url,
-            params,
-        )
-        .await?;
+		let mut response = openai_compat_chat_completion(
+			OpenAiCompatConfig {
+				provider_name: "featherless",
+				usage_fallback_cost: None,
+				use_response_cost: true,
+				enforces_response_schema: true,
+				supports_required_tool_choice: false,
+				supports_parallel_tool_calls: true,
+			},
+			api_key,
+			api_url,
+			params,
+		)
+		.await?;
 
-        // Derive cost from Feather Developer pricing, with reference fallback.
-        if let Some(ref mut usage) = response.exchange.usage {
-            if usage.cost.is_none() {
-                if let Some(pricing) = self.get_model_pricing(&model) {
-                    usage.cost = Some(pricing.calculate_cost(
-                        usage.input_tokens,
-                        usage.cache_write_tokens,
-                        usage.cache_read_tokens,
-                        usage.billable_output_tokens(),
-                    ));
-                }
-            }
-        }
+		// Derive cost from Feather Developer pricing, with reference fallback.
+		if let Some(ref mut usage) = response.exchange.usage {
+			if usage.cost.is_none() {
+				if let Some(pricing) = self.get_model_pricing(&model) {
+					usage.cost = Some(pricing.calculate_cost(
+						usage.input_tokens,
+						usage.cache_write_tokens,
+						usage.cache_read_tokens,
+						usage.billable_output_tokens(),
+					));
+				}
+			}
+		}
 
-        Ok(response)
-    }
+		Ok(response)
+	}
 }
 
 #[cfg(test)]

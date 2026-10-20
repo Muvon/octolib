@@ -40,120 +40,114 @@ const API_URL_ENV: &str = "CLOUDFLARE_EVALUATION_API_URL";
 const API_BASE: &str = "https://api.cloudflare.com/client/v4/accounts";
 const JEV_MODEL: &str = "typesafe/jev";
 const JEV_PRICING: EvaluationPricing = EvaluationPricing {
-    input_price_per_1m: 0.042,
-    output_price_per_1m: 0.0,
+	input_price_per_1m: 0.042,
+	output_price_per_1m: 0.0,
 };
 
 #[derive(Debug, Clone, Default)]
 pub struct CloudflareEvaluationProvider;
 
 impl CloudflareEvaluationProvider {
-    pub fn new() -> Self {
-        Self
-    }
+	pub fn new() -> Self {
+		Self
+	}
 
-    fn run_url(&self) -> EvaluationResult<String> {
-        if let Ok(url) = std::env::var(API_URL_ENV) {
-            return Ok(url);
-        }
-        let account = shared::api_key(ACCOUNT_ID_ENV)?;
-        if !account
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
-        {
-            return Err(EvaluationError::InvalidRequest(
-                "CLOUDFLARE_ACCOUNT_ID must be an account identifier".to_string(),
-            ));
-        }
-        Ok(format!("{API_BASE}/{account}/ai/run"))
-    }
+	fn run_url(&self) -> EvaluationResult<String> {
+		if let Ok(url) = std::env::var(API_URL_ENV) {
+			return Ok(url);
+		}
+		let account = shared::api_key(ACCOUNT_ID_ENV)?;
+		if !account.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-') {
+			return Err(EvaluationError::InvalidRequest(
+				"CLOUDFLARE_ACCOUNT_ID must be an account identifier".to_string(),
+			));
+		}
+		Ok(format!("{API_BASE}/{account}/ai/run"))
+	}
 }
 
 fn is_jev(model: &str) -> bool {
-    model.trim().eq_ignore_ascii_case(JEV_MODEL)
+	model.trim().eq_ignore_ascii_case(JEV_MODEL)
 }
 
 pub(crate) fn request_body(request: &EvaluationRequest) -> Value {
-    json!({
-        "model": JEV_MODEL,
-        "input": {
-            "state": request.state,
-            "questions": request.questions,
-        },
-    })
+	json!({
+		"model": JEV_MODEL,
+		"input": {
+			"state": request.state,
+			"questions": request.questions,
+		},
+	})
 }
 
 /// Peel the gateway envelope down to the Jev payload.
 pub(crate) fn unwrap_envelope(value: &Value) -> EvaluationResult<&Value> {
-    let invalid = |message: String| EvaluationError::InvalidResponse {
-        provider: PROVIDER.to_string(),
-        message,
-    };
-    if value.get("success").and_then(Value::as_bool) == Some(false) {
-        return Err(EvaluationError::Api {
-            provider: PROVIDER.to_string(),
-            status: 200,
-            message: shared::error_message(value.to_string().as_bytes()),
-        });
-    }
-    let outer = value
-        .get("result")
-        .ok_or_else(|| invalid("response has no result field".to_string()))?;
-    match outer.get("state").and_then(Value::as_str) {
-        Some("Completed") => {}
-        Some(state) => {
-            return Err(invalid(format!(
-                "gateway reported state '{state}' instead of Completed"
-            )))
-        }
-        None => return Err(invalid("gateway result carries no state".to_string())),
-    }
-    outer
-        .get("result")
-        .ok_or_else(|| invalid("gateway result has no inner result".to_string()))
+	let invalid = |message: String| EvaluationError::InvalidResponse {
+		provider: PROVIDER.to_string(),
+		message,
+	};
+	if value.get("success").and_then(Value::as_bool) == Some(false) {
+		return Err(EvaluationError::Api {
+			provider: PROVIDER.to_string(),
+			status: 200,
+			message: shared::error_message(value.to_string().as_bytes()),
+		});
+	}
+	let outer = value
+		.get("result")
+		.ok_or_else(|| invalid("response has no result field".to_string()))?;
+	match outer.get("state").and_then(Value::as_str) {
+		Some("Completed") => {}
+		Some(state) => {
+			return Err(invalid(format!(
+				"gateway reported state '{state}' instead of Completed"
+			)))
+		}
+		None => return Err(invalid("gateway result carries no state".to_string())),
+	}
+	outer
+		.get("result")
+		.ok_or_else(|| invalid("gateway result has no inner result".to_string()))
 }
 
 #[async_trait::async_trait]
 impl EvaluationProvider for CloudflareEvaluationProvider {
-    fn name(&self) -> &str {
-        PROVIDER
-    }
+	fn name(&self) -> &str {
+		PROVIDER
+	}
 
-    fn supports_model(&self, model: &str) -> bool {
-        is_jev(model)
-    }
+	fn supports_model(&self, model: &str) -> bool {
+		is_jev(model)
+	}
 
-    fn get_model_pricing(&self, model: &str) -> Option<EvaluationPricing> {
-        is_jev(model).then_some(JEV_PRICING)
-    }
+	fn get_model_pricing(&self, model: &str) -> Option<EvaluationPricing> {
+		is_jev(model).then_some(JEV_PRICING)
+	}
 
-    async fn evaluate(&self, request: EvaluationRequest) -> EvaluationResult<EvaluationResponse> {
-        if request.uses_images() {
-            return Err(EvaluationError::InvalidRequest(
-                "images and box questions are only supported on the typesafe provider".to_string(),
-            ));
-        }
-        request.validate()?;
-        if !is_jev(&request.model) {
-            return Err(EvaluationError::UnsupportedModel {
-                provider: PROVIDER.to_string(),
-                model: request.model,
-            });
-        }
-        let key = shared::api_key(API_KEY_ENV)?;
-        let url = self.run_url()?;
-        let body = request_body(&request);
-        let response = shared::send(PROVIDER, &request, || {
-            Ok(crate::http::http_client()
-                .post(&url)
-                .bearer_auth(&key)
-                .json(&body))
-        })
-        .await?;
-        let envelope = shared::parse_json(PROVIDER, &response)?;
-        let payload = unwrap_envelope(&envelope)?;
-        shared::parse_payload(PROVIDER, payload, Some(JEV_PRICING))
-    }
+	async fn evaluate(&self, request: EvaluationRequest) -> EvaluationResult<EvaluationResponse> {
+		if request.uses_images() {
+			return Err(EvaluationError::InvalidRequest(
+				"images and box questions are only supported on the typesafe provider".to_string(),
+			));
+		}
+		request.validate()?;
+		if !is_jev(&request.model) {
+			return Err(EvaluationError::UnsupportedModel {
+				provider: PROVIDER.to_string(),
+				model: request.model,
+			});
+		}
+		let key = shared::api_key(API_KEY_ENV)?;
+		let url = self.run_url()?;
+		let body = request_body(&request);
+		let response = shared::send(PROVIDER, &request, || {
+			Ok(crate::http::http_client().post(&url).bearer_auth(&key).json(&body))
+		})
+		.await?;
+		let envelope = shared::parse_json(PROVIDER, &response)?;
+		let payload = unwrap_envelope(&envelope)?;
+		shared::parse_payload(PROVIDER, payload, Some(JEV_PRICING))
+	}
 }
 
 #[cfg(test)]

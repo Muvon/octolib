@@ -23,8 +23,8 @@ use crate::llm::reference_models::proxy_route_enforces_response_schema;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-    ChatCompletionParams, Message, ProviderExchange, ProviderResponse, ReasoningEffort,
-    SamplingSupport, ThinkingBlock, TokenUsage, ToolCall,
+	ChatCompletionParams, Message, ProviderExchange, ProviderResponse, ReasoningEffort, SamplingSupport, ThinkingBlock,
+	TokenUsage, ToolCall,
 };
 use crate::llm::utils::{get_model_pricing, PricingTuple};
 use anyhow::Result;
@@ -40,122 +40,112 @@ const TOGETHER_API_URL: &str = "https://api.together.xyz/v1/chat/completions";
 /// Format: (model pattern, input, output, cache write, cached input).
 /// Models without a listed cache discount use the normal input rate.
 const PRICING: &[PricingTuple] = &[
-    ("Qwen/Qwen3.8-2.4T-A95B", 2.00, 6.00, 2.00, 0.25),
-    ("Qwen/Qwen3.8-Flash", 0.09, 0.28, 0.09, 0.09),
-    ("Qwen/Qwen3.7-Max", 1.50, 4.50, 1.50, 0.30),
-    ("Qwen/Qwen3.7-Plus", 0.32, 1.28, 0.32, 0.32),
-    ("Qwen/Qwen3.6-Plus", 0.50, 3.00, 0.50, 0.50),
-    ("Qwen/Qwen3.5-9B", 0.17, 0.25, 0.17, 0.17),
-    ("MiniMaxAI/MiniMax-M3", 0.30, 1.20, 0.30, 0.06),
-    ("moonshotai/Kimi-K3", 3.00, 15.00, 3.00, 0.30),
-    ("zai-org/GLM-5.3-Flash", 0.15, 0.50, 0.15, 0.03),
-    ("zai-org/GLM-5.3", 1.40, 4.40, 1.40, 0.26),
-    ("zai-org/GLM-5.2", 1.40, 4.40, 1.40, 0.26),
-    ("deepseek-ai/DeepSeek-V4.1-Flash", 0.30, 1.20, 0.30, 0.006),
-    ("deepseek-ai/DeepSeek-V4-Pro-0813", 1.32, 3.96, 1.32, 0.13),
-    ("deepseek-ai/DeepSeek-V4-Flash-0731", 0.14, 0.28, 0.14, 0.03),
-    ("openai/gpt-oss-120b", 0.15, 0.60, 0.15, 0.15),
-    (
-        "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-        1.04,
-        1.04,
-        1.04,
-        1.04,
-    ),
-    ("google/gemma-4-31B-it", 0.39, 0.97, 0.39, 0.39),
-    ("thinkingmachines/Inkling", 1.00, 4.05, 1.00, 0.17),
-    ("meta-models/Muse-Glimmer-30B", 0.35, 1.50, 0.35, 0.04),
-    // Free serverless model (verified Oct 2, 2026).
-    ("Prism-ML/Ternary-Bonsai-27B", 0.00, 0.00, 0.00, 0.00),
+	("Qwen/Qwen3.8-2.4T-A95B", 2.00, 6.00, 2.00, 0.25),
+	("Qwen/Qwen3.8-Flash", 0.09, 0.28, 0.09, 0.09),
+	("Qwen/Qwen3.7-Max", 1.50, 4.50, 1.50, 0.30),
+	("Qwen/Qwen3.7-Plus", 0.32, 1.28, 0.32, 0.32),
+	("Qwen/Qwen3.6-Plus", 0.50, 3.00, 0.50, 0.50),
+	("Qwen/Qwen3.5-9B", 0.17, 0.25, 0.17, 0.17),
+	("MiniMaxAI/MiniMax-M3", 0.30, 1.20, 0.30, 0.06),
+	("moonshotai/Kimi-K3", 3.00, 15.00, 3.00, 0.30),
+	("zai-org/GLM-5.3-Flash", 0.15, 0.50, 0.15, 0.03),
+	("zai-org/GLM-5.3", 1.40, 4.40, 1.40, 0.26),
+	("zai-org/GLM-5.2", 1.40, 4.40, 1.40, 0.26),
+	("deepseek-ai/DeepSeek-V4.1-Flash", 0.30, 1.20, 0.30, 0.006),
+	("deepseek-ai/DeepSeek-V4-Pro-0813", 1.32, 3.96, 1.32, 0.13),
+	("deepseek-ai/DeepSeek-V4-Flash-0731", 0.14, 0.28, 0.14, 0.03),
+	("openai/gpt-oss-120b", 0.15, 0.60, 0.15, 0.15),
+	("meta-llama/Llama-3.3-70B-Instruct-Turbo", 1.04, 1.04, 1.04, 1.04),
+	("google/gemma-4-31B-it", 0.39, 0.97, 0.39, 0.39),
+	("thinkingmachines/Inkling", 1.00, 4.05, 1.00, 0.17),
+	("meta-models/Muse-Glimmer-30B", 0.35, 1.50, 0.35, 0.04),
+	// Free serverless model (verified Oct 2, 2026).
+	("Prism-ML/Ternary-Bonsai-27B", 0.00, 0.00, 0.00, 0.00),
 ];
 
 fn together_model_pricing(model: &str) -> Option<crate::llm::types::ModelPricing> {
-    let (input, output, cache_write, cache_read) = get_model_pricing(model, PRICING)?;
-    Some(crate::llm::types::ModelPricing::new(
-        input,
-        output,
-        cache_write,
-        cache_read,
-    ))
+	let (input, output, cache_write, cache_read) = get_model_pricing(model, PRICING)?;
+	Some(crate::llm::types::ModelPricing::new(
+		input,
+		output,
+		cache_write,
+		cache_read,
+	))
 }
 
 fn together_model_context(model: &str) -> Option<usize> {
-    let normalized = model.to_ascii_lowercase();
-    if normalized.contains("thinkingmachines/inkling")
-        || normalized.contains("minimaxai/minimax-m3")
-    {
-        Some(524_288)
-    } else if normalized.contains("moonshotai/kimi-k3")
-        || normalized.contains("deepseek-ai/deepseek-v4-pro-0813")
-    {
-        Some(1_048_576)
-    } else if normalized.contains("zai-org/glm-5.3") {
-        Some(1_048_575)
-    } else if normalized.contains("google/gemma-4-31b-it")
-        || normalized.contains("qwen/qwen3.5-9b")
-        || normalized.contains("prism-ml/ternary-bonsai-27b")
-    {
-        Some(262_144)
-    } else if normalized.contains("qwen/qwen3.8-flash")
-        || normalized.contains("qwen/qwen3.7-plus")
-        || normalized.contains("qwen/qwen3.6-plus")
-        || normalized.contains("zai-org/glm-5.2")
-        || normalized.contains("deepseek-ai/deepseek-v4.1-flash")
-        || normalized.contains("deepseek-ai/deepseek-v4-flash-0731")
-    {
-        Some(1_000_000)
-    } else if normalized.contains("openai/gpt-oss-120b")
-        || normalized.contains("meta-llama/llama-3.3-70b-instruct-turbo")
-        || normalized.contains("meta-models/muse-glimmer-30b")
-    {
-        Some(131_072)
-    } else {
-        None
-    }
+	let normalized = model.to_ascii_lowercase();
+	if normalized.contains("thinkingmachines/inkling") || normalized.contains("minimaxai/minimax-m3") {
+		Some(524_288)
+	} else if normalized.contains("moonshotai/kimi-k3") || normalized.contains("deepseek-ai/deepseek-v4-pro-0813") {
+		Some(1_048_576)
+	} else if normalized.contains("zai-org/glm-5.3") {
+		Some(1_048_575)
+	} else if normalized.contains("google/gemma-4-31b-it")
+		|| normalized.contains("qwen/qwen3.5-9b")
+		|| normalized.contains("prism-ml/ternary-bonsai-27b")
+	{
+		Some(262_144)
+	} else if normalized.contains("qwen/qwen3.8-flash")
+		|| normalized.contains("qwen/qwen3.7-plus")
+		|| normalized.contains("qwen/qwen3.6-plus")
+		|| normalized.contains("zai-org/glm-5.2")
+		|| normalized.contains("deepseek-ai/deepseek-v4.1-flash")
+		|| normalized.contains("deepseek-ai/deepseek-v4-flash-0731")
+	{
+		Some(1_000_000)
+	} else if normalized.contains("openai/gpt-oss-120b")
+		|| normalized.contains("meta-llama/llama-3.3-70b-instruct-turbo")
+		|| normalized.contains("meta-models/muse-glimmer-30b")
+	{
+		Some(131_072)
+	} else {
+		None
+	}
 }
 
 /// Together's documented reasoning controls (docs.together.ai, Oct 2026).
 enum ReasoningFamily {
-    /// Kimi K3: `reasoning_effort` low|medium|high|max (default max); thinking
-    /// turns off with `reasoning: {enabled: false}` (kimi-k3-quickstart).
-    KimiK3,
-    /// GLM-5.3 and GLM-5.3-Flash: low|medium|high|max; "Thinking cannot be
-    /// disabled entirely", `low` is the closest equivalent (glm-5.3-quickstart).
-    Glm53,
-    /// DeepSeek V4 Pro 0813: high (default) and max only, low/medium normalize up
-    /// to high and xhigh to max; hybrid, so `reasoning: {enabled: false}` turns
-    /// thinking off (deepseek-v4-quickstart, inference/chat/reasoning).
-    DeepSeekV4Pro,
-    /// GPT-OSS: low|medium|high (default medium); reasoning cannot be disabled
-    /// (gpt-oss).
-    GptOss,
-    /// Hybrid serverless models listed as "Hybrid (on by default)" with no
-    /// documented effort ladder: thinking turns off with `reasoning: {enabled:
-    /// false}` (inference/chat/reasoning).
-    Hybrid,
-    /// Anything else: effort passes through on the OpenAI low|medium|high ladder.
-    Other,
+	/// Kimi K3: `reasoning_effort` low|medium|high|max (default max); thinking
+	/// turns off with `reasoning: {enabled: false}` (kimi-k3-quickstart).
+	KimiK3,
+	/// GLM-5.3 and GLM-5.3-Flash: low|medium|high|max; "Thinking cannot be
+	/// disabled entirely", `low` is the closest equivalent (glm-5.3-quickstart).
+	Glm53,
+	/// DeepSeek V4 Pro 0813: high (default) and max only, low/medium normalize up
+	/// to high and xhigh to max; hybrid, so `reasoning: {enabled: false}` turns
+	/// thinking off (deepseek-v4-quickstart, inference/chat/reasoning).
+	DeepSeekV4Pro,
+	/// GPT-OSS: low|medium|high (default medium); reasoning cannot be disabled
+	/// (gpt-oss).
+	GptOss,
+	/// Hybrid serverless models listed as "Hybrid (on by default)" with no
+	/// documented effort ladder: thinking turns off with `reasoning: {enabled:
+	/// false}` (inference/chat/reasoning).
+	Hybrid,
+	/// Anything else: effort passes through on the OpenAI low|medium|high ladder.
+	Other,
 }
 
 fn reasoning_family(model: &str) -> ReasoningFamily {
-    let normalized = model.to_ascii_lowercase();
-    if normalized.contains("moonshotai/kimi-k3") {
-        ReasoningFamily::KimiK3
-    } else if normalized.contains("zai-org/glm-5.3") {
-        ReasoningFamily::Glm53
-    } else if normalized.contains("deepseek-ai/deepseek-v4-pro") {
-        ReasoningFamily::DeepSeekV4Pro
-    } else if normalized.contains("openai/gpt-oss") {
-        ReasoningFamily::GptOss
-    } else if normalized.contains("minimaxai/minimax-m3")
-        || normalized.contains("zai-org/glm-5.2")
-        || normalized.contains("qwen/qwen3.6-plus")
-        || normalized.contains("qwen/qwen3.5-9b")
-    {
-        ReasoningFamily::Hybrid
-    } else {
-        ReasoningFamily::Other
-    }
+	let normalized = model.to_ascii_lowercase();
+	if normalized.contains("moonshotai/kimi-k3") {
+		ReasoningFamily::KimiK3
+	} else if normalized.contains("zai-org/glm-5.3") {
+		ReasoningFamily::Glm53
+	} else if normalized.contains("deepseek-ai/deepseek-v4-pro") {
+		ReasoningFamily::DeepSeekV4Pro
+	} else if normalized.contains("openai/gpt-oss") {
+		ReasoningFamily::GptOss
+	} else if normalized.contains("minimaxai/minimax-m3")
+		|| normalized.contains("zai-org/glm-5.2")
+		|| normalized.contains("qwen/qwen3.6-plus")
+		|| normalized.contains("qwen/qwen3.5-9b")
+	{
+		ReasoningFamily::Hybrid
+	} else {
+		ReasoningFamily::Other
+	}
 }
 
 /// Map the caller's effort onto Together's per-model reasoning controls.
@@ -165,685 +155,652 @@ fn reasoning_family(model: &str) -> ReasoningFamily {
 /// `ReasoningEffort::None` turns thinking off where the model has a switch,
 /// runs at the lowest level where it cannot stop thinking, and sends nothing
 /// for models with neither.
-fn apply_reasoning_effort(
-    request_body: &mut serde_json::Value,
-    model: &str,
-    effort: Option<ReasoningEffort>,
-) {
-    let Some(effort) = effort else {
-        return;
-    };
-    let value = match (reasoning_family(model), effort) {
-        (
-            ReasoningFamily::KimiK3 | ReasoningFamily::DeepSeekV4Pro | ReasoningFamily::Hybrid,
-            ReasoningEffort::None,
-        ) => {
-            request_body["reasoning"] = serde_json::json!({ "enabled": false });
-            return;
-        }
-        (ReasoningFamily::GptOss | ReasoningFamily::Other, ReasoningEffort::None) => return,
-        (ReasoningFamily::Glm53, ReasoningEffort::None) => "low",
-        (ReasoningFamily::KimiK3 | ReasoningFamily::Glm53, ReasoningEffort::Max) => "max",
-        (ReasoningFamily::DeepSeekV4Pro, ReasoningEffort::XHigh | ReasoningEffort::Max) => "max",
-        (ReasoningFamily::DeepSeekV4Pro, _) => "high",
-        (_, ReasoningEffort::Low) => "low",
-        (_, ReasoningEffort::Medium) => "medium",
-        (_, ReasoningEffort::High | ReasoningEffort::XHigh | ReasoningEffort::Max) => "high",
-    };
-    request_body["reasoning_effort"] = serde_json::json!(value);
+fn apply_reasoning_effort(request_body: &mut serde_json::Value, model: &str, effort: Option<ReasoningEffort>) {
+	let Some(effort) = effort else {
+		return;
+	};
+	let value = match (reasoning_family(model), effort) {
+		(ReasoningFamily::KimiK3 | ReasoningFamily::DeepSeekV4Pro | ReasoningFamily::Hybrid, ReasoningEffort::None) => {
+			request_body["reasoning"] = serde_json::json!({ "enabled": false });
+			return;
+		}
+		(ReasoningFamily::GptOss | ReasoningFamily::Other, ReasoningEffort::None) => return,
+		(ReasoningFamily::Glm53, ReasoningEffort::None) => "low",
+		(ReasoningFamily::KimiK3 | ReasoningFamily::Glm53, ReasoningEffort::Max) => "max",
+		(ReasoningFamily::DeepSeekV4Pro, ReasoningEffort::XHigh | ReasoningEffort::Max) => "max",
+		(ReasoningFamily::DeepSeekV4Pro, _) => "high",
+		(_, ReasoningEffort::Low) => "low",
+		(_, ReasoningEffort::Medium) => "medium",
+		(_, ReasoningEffort::High | ReasoningEffort::XHigh | ReasoningEffort::Max) => "high",
+	};
+	request_body["reasoning_effort"] = serde_json::json!(value);
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct TogetherProvider;
 
 impl TogetherProvider {
-    pub fn new() -> Self {
-        Self
-    }
+	pub fn new() -> Self {
+		Self
+	}
 }
 
 #[async_trait::async_trait]
 impl AiProvider for TogetherProvider {
-    fn name(&self) -> &str {
-        "together"
-    }
+	fn name(&self) -> &str {
+		"together"
+	}
 
-    fn supports_model(&self, model: &str) -> bool {
-        !model.is_empty()
-    }
-    fn supported_sampling_params(&self, _model: &str) -> SamplingSupport {
-        // Together uses OpenAI-compatible API — supports temperature and top_p, not top_k.
-        SamplingSupport::TEMPERATURE_AND_TOP_P
-    }
+	fn supports_model(&self, model: &str) -> bool {
+		!model.is_empty()
+	}
+	fn supported_sampling_params(&self, _model: &str) -> SamplingSupport {
+		// Together uses OpenAI-compatible API — supports temperature and top_p, not top_k.
+		SamplingSupport::TEMPERATURE_AND_TOP_P
+	}
 
-    fn get_api_key(&self) -> Result<String> {
-        env::var(TOGETHER_API_KEY_ENV)
-            .map_err(|_| crate::errors::missing_api_key("together", TOGETHER_API_KEY_ENV).into())
-    }
+	fn get_api_key(&self) -> Result<String> {
+		env::var(TOGETHER_API_KEY_ENV)
+			.map_err(|_| crate::errors::missing_api_key("together", TOGETHER_API_KEY_ENV).into())
+	}
 
-    fn supports_caching(&self, _model: &str) -> bool {
-        // Together performs automatic prompt-prefix caching (no opt-in param)
-        // and reports `cached_tokens` in usage on supported models.
-        true
-    }
+	fn supports_caching(&self, _model: &str) -> bool {
+		// Together performs automatic prompt-prefix caching (no opt-in param)
+		// and reports `cached_tokens` in usage on supported models.
+		true
+	}
 
-    // supports_vision, supports_video, supports_structured_output
-    // are resolved via reference capabilities (trait defaults)
+	// supports_vision, supports_video, supports_structured_output
+	// are resolved via reference capabilities (trait defaults)
 
-    fn enforces_response_schema(&self, model: &str) -> bool {
-        proxy_route_enforces_response_schema(model)
-    }
+	fn enforces_response_schema(&self, model: &str) -> bool {
+		proxy_route_enforces_response_schema(model)
+	}
 
-    fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
-        together_model_pricing(model)
-            .or_else(|| crate::llm::reference_models::get_reference_pricing(model))
-    }
+	fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
+		together_model_pricing(model).or_else(|| crate::llm::reference_models::get_reference_pricing(model))
+	}
 
-    fn get_max_input_tokens(&self, model: &str) -> usize {
-        together_model_context(model).unwrap_or_else(|| {
-            crate::llm::reference_models::get_reference_capabilities(model)
-                .map(|caps| caps.max_input_tokens)
-                .unwrap_or(262_144)
-        })
-    }
+	fn get_max_input_tokens(&self, model: &str) -> usize {
+		together_model_context(model).unwrap_or_else(|| {
+			crate::llm::reference_models::get_reference_capabilities(model)
+				.map(|caps| caps.max_input_tokens)
+				.unwrap_or(262_144)
+		})
+	}
 
-    async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-        let api_key = self.get_api_key()?;
-        let messages = convert_messages(&params.messages)?;
+	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
+		let api_key = self.get_api_key()?;
+		let messages = convert_messages(&params.messages)?;
 
-        // Apply sampling parameters based on model support
-        let sampling = self.effective_sampling_params(&params);
+		// Apply sampling parameters based on model support
+		let sampling = self.effective_sampling_params(&params);
 
-        let mut request_body = serde_json::json!({
-            "model": params.model,
-            "messages": messages,
-        });
-        if let Some(temp) = sampling.temperature {
-            request_body["temperature"] = serde_json::json!(temp);
-        }
-        if let Some(top_p) = sampling.top_p {
-            request_body["top_p"] = serde_json::json!(top_p);
-        }
-        // Note: Together doesn't support top_k
+		let mut request_body = serde_json::json!({
+			"model": params.model,
+			"messages": messages,
+		});
+		if let Some(temp) = sampling.temperature {
+			request_body["temperature"] = serde_json::json!(temp);
+		}
+		if let Some(top_p) = sampling.top_p {
+			request_body["top_p"] = serde_json::json!(top_p);
+		}
+		// Note: Together doesn't support top_k
 
-        if params.max_tokens > 0 {
-            request_body["max_tokens"] = serde_json::json!(params.max_tokens);
-        }
+		if params.max_tokens > 0 {
+			request_body["max_tokens"] = serde_json::json!(params.max_tokens);
+		}
 
-        // Together returns Server-Sent Events, and some models (e.g. large MoE
-        // deployments) ONLY support streaming and reject non-streamed requests with
-        // a 400 `streaming_required`. So always stream and merge the chunks back into
-        // a single response. `include_usage` appends a final usage chunk so token
-        // accounting and cost still work.
-        request_body["stream"] = serde_json::json!(true);
-        request_body["stream_options"] = serde_json::json!({ "include_usage": true });
+		// Together returns Server-Sent Events, and some models (e.g. large MoE
+		// deployments) ONLY support streaming and reject non-streamed requests with
+		// a 400 `streaming_required`. So always stream and merge the chunks back into
+		// a single response. `include_usage` appends a final usage chunk so token
+		// accounting and cost still work.
+		request_body["stream"] = serde_json::json!(true);
+		request_body["stream_options"] = serde_json::json!({ "include_usage": true });
 
-        apply_reasoning_effort(&mut request_body, &params.model, params.reasoning_effort);
+		apply_reasoning_effort(&mut request_body, &params.model, params.reasoning_effort);
 
-        // Tools (OpenAI-compatible)
-        if let Some(tools) = &params.tools {
-            if !tools.is_empty() {
-                let mut sorted_tools = tools.clone();
-                sorted_tools.sort_by(|a, b| a.name.cmp(&b.name));
-                let openai_tools: Vec<serde_json::Value> = sorted_tools
-                    .iter()
-                    .map(|f| {
-                        serde_json::json!({
-                            "type": "function",
-                            "function": {
-                                "name": f.name,
-                                "description": f.description,
-                                "parameters": f.parameters
-                            }
-                        })
-                    })
-                    .collect();
-                request_body["tools"] = serde_json::json!(openai_tools);
-                request_body["tool_choice"] = serde_json::json!("auto");
-            }
-        }
+		// Tools (OpenAI-compatible)
+		if let Some(tools) = &params.tools {
+			if !tools.is_empty() {
+				let mut sorted_tools = tools.clone();
+				sorted_tools.sort_by(|a, b| a.name.cmp(&b.name));
+				let openai_tools: Vec<serde_json::Value> = sorted_tools
+					.iter()
+					.map(|f| {
+						serde_json::json!({
+							"type": "function",
+							"function": {
+								"name": f.name,
+								"description": f.description,
+								"parameters": f.parameters
+							}
+						})
+					})
+					.collect();
+				request_body["tools"] = serde_json::json!(openai_tools);
+				request_body["tool_choice"] = serde_json::json!("auto");
+			}
+		}
 
-        // Structured output (OpenAI-compatible)
-        if let Some(response_format) = &params.response_format {
-            match &response_format.format {
-                crate::llm::types::OutputFormat::Json => {
-                    request_body["response_format"] = serde_json::json!({"type": "json_object"});
-                }
-                crate::llm::types::OutputFormat::JsonSchema => {
-                    if let Some(schema) = &response_format.schema {
-                        // Strict structured outputs need additionalProperties:false on
-                        // every nested object (no-op unless mode is Strict).
-                        let schema = crate::llm::utils::normalize_strict_schema(
-                            schema,
-                            response_format.mode,
-                        );
+		// Structured output (OpenAI-compatible)
+		if let Some(response_format) = &params.response_format {
+			match &response_format.format {
+				crate::llm::types::OutputFormat::Json => {
+					request_body["response_format"] = serde_json::json!({"type": "json_object"});
+				}
+				crate::llm::types::OutputFormat::JsonSchema => {
+					if let Some(schema) = &response_format.schema {
+						// Strict structured outputs need additionalProperties:false on
+						// every nested object (no-op unless mode is Strict).
+						let schema = crate::llm::utils::normalize_strict_schema(schema, response_format.mode);
 
-                        let mut format_obj = serde_json::json!({
-                            "type": "json_schema",
-                            "json_schema": { "name": "response", "schema": schema }
-                        });
-                        if matches!(
-                            response_format.mode,
-                            crate::llm::types::ResponseMode::Strict
-                        ) {
-                            format_obj["json_schema"]["strict"] = serde_json::json!(true);
-                        }
-                        request_body["response_format"] = format_obj;
-                    }
-                }
-            }
-        }
+						let mut format_obj = serde_json::json!({
+							"type": "json_schema",
+							"json_schema": { "name": "response", "schema": schema }
+						});
+						if matches!(response_format.mode, crate::llm::types::ResponseMode::Strict) {
+							format_obj["json_schema"]["strict"] = serde_json::json!(true);
+						}
+						request_body["response_format"] = format_obj;
+					}
+				}
+			}
+		}
 
-        execute_together_request(
-            api_key,
-            request_body,
-            params.max_retries,
-            params.retry_timeout,
-            params.request_timeout,
-            params.cancellation_token.as_ref(),
-            params.extra_headers.clone(),
-        )
-        .await
-    }
+		execute_together_request(
+			api_key,
+			request_body,
+			params.max_retries,
+			params.retry_timeout,
+			params.request_timeout,
+			params.cancellation_token.as_ref(),
+			params.extra_headers.clone(),
+		)
+		.await
+	}
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 struct TogetherMessage {
-    role: String,
-    content: serde_json::Value,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tool_call_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tool_calls: Option<serde_json::Value>,
+	role: String,
+	content: serde_json::Value,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	tool_call_id: Option<String>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	name: Option<String>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	tool_calls: Option<serde_json::Value>,
 }
 
 /// One Server-Sent-Events chunk from Together's streaming response.
 #[derive(Deserialize, Debug)]
 struct TogetherStreamChunk {
-    #[serde(default)]
-    id: Option<String>,
-    #[serde(default)]
-    choices: Vec<TogetherStreamChoice>,
-    /// Present only in the final chunk (stream_options.include_usage = true).
-    #[serde(default)]
-    usage: Option<TogetherUsage>,
+	#[serde(default)]
+	id: Option<String>,
+	#[serde(default)]
+	choices: Vec<TogetherStreamChoice>,
+	/// Present only in the final chunk (stream_options.include_usage = true).
+	#[serde(default)]
+	usage: Option<TogetherUsage>,
 }
 
 #[derive(Deserialize, Debug)]
 struct TogetherStreamChoice {
-    #[serde(default)]
-    delta: TogetherStreamDelta,
-    #[serde(default)]
-    finish_reason: Option<String>,
+	#[serde(default)]
+	delta: TogetherStreamDelta,
+	#[serde(default)]
+	finish_reason: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Default)]
 struct TogetherStreamDelta {
-    #[serde(default)]
-    content: Option<String>,
-    /// Dedicated chain-of-thought field on reasoning models (Qwen3, GPT-OSS, GLM…).
-    /// DeepSeek-R1 instead embeds it as `<think>…</think>` inside `content`.
-    #[serde(default)]
-    reasoning: Option<String>,
-    #[serde(default)]
-    tool_calls: Option<Vec<TogetherStreamToolCall>>,
+	#[serde(default)]
+	content: Option<String>,
+	/// Dedicated chain-of-thought field on reasoning models (Qwen3, GPT-OSS, GLM…).
+	/// DeepSeek-R1 instead embeds it as `<think>…</think>` inside `content`.
+	#[serde(default)]
+	reasoning: Option<String>,
+	#[serde(default)]
+	tool_calls: Option<Vec<TogetherStreamToolCall>>,
 }
 
 /// A streamed tool-call fragment: `id`/`name` arrive once, `arguments` in pieces.
 #[derive(Deserialize, Debug)]
 struct TogetherStreamToolCall {
-    #[serde(default)]
-    index: usize,
-    #[serde(default)]
-    id: Option<String>,
-    #[serde(default)]
-    function: Option<TogetherStreamFunction>,
+	#[serde(default)]
+	index: usize,
+	#[serde(default)]
+	id: Option<String>,
+	#[serde(default)]
+	function: Option<TogetherStreamFunction>,
 }
 
 #[derive(Deserialize, Debug)]
 struct TogetherStreamFunction {
-    #[serde(default)]
-    name: Option<String>,
-    #[serde(default)]
-    arguments: Option<String>,
+	#[serde(default)]
+	name: Option<String>,
+	#[serde(default)]
+	arguments: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Default)]
 struct TogetherUsage {
-    #[serde(default)]
-    prompt_tokens: Option<u64>,
-    #[serde(default)]
-    completion_tokens: Option<u64>,
-    #[serde(default)]
-    total_tokens: Option<u64>,
-    /// Together-only top-level field; may also arrive OpenAI-style nested
-    #[serde(default)]
-    cached_tokens: Option<u64>,
-    #[serde(default)]
-    prompt_tokens_details: Option<TogetherPromptTokensDetails>,
+	#[serde(default)]
+	prompt_tokens: Option<u64>,
+	#[serde(default)]
+	completion_tokens: Option<u64>,
+	#[serde(default)]
+	total_tokens: Option<u64>,
+	/// Together-only top-level field; may also arrive OpenAI-style nested
+	#[serde(default)]
+	cached_tokens: Option<u64>,
+	#[serde(default)]
+	prompt_tokens_details: Option<TogetherPromptTokensDetails>,
 }
 
 #[derive(Deserialize, Debug, Default)]
 struct TogetherPromptTokensDetails {
-    #[serde(default)]
-    cached_tokens: Option<u64>,
+	#[serde(default)]
+	cached_tokens: Option<u64>,
 }
 
 /// A tool call being assembled from streaming deltas.
 #[derive(Default)]
 struct ToolCallBuilder {
-    id: String,
-    name: String,
-    arguments: String,
+	id: String,
+	name: String,
+	arguments: String,
 }
 
 /// All streaming deltas folded into a single logical response.
 #[derive(Default)]
 struct MergedStream {
-    id: Option<String>,
-    content: String,
-    reasoning: String,
-    finish_reason: Option<String>,
-    tool_calls: Vec<ToolCallBuilder>,
-    usage: Option<TogetherUsage>,
-    parsed_any: bool,
+	id: Option<String>,
+	content: String,
+	reasoning: String,
+	finish_reason: Option<String>,
+	tool_calls: Vec<ToolCallBuilder>,
+	usage: Option<TogetherUsage>,
+	parsed_any: bool,
 }
 
 /// Parse Together's SSE body (`data: {json}` lines, terminated by `data: [DONE]`)
 /// and fold every delta into one [`MergedStream`]. Unparseable / keep-alive lines
 /// are skipped; `parsed_any` reports whether at least one real chunk was seen.
 fn merge_sse_stream(body: &str) -> MergedStream {
-    let mut merged = MergedStream::default();
+	let mut merged = MergedStream::default();
 
-    for line in body.lines() {
-        // SSE event lines look like `data: {...}`; skip blanks, comments (`:`), etc.
-        let Some(data) = line.trim_start().strip_prefix("data:") else {
-            continue;
-        };
-        let data = data.trim();
-        if data.is_empty() || data == "[DONE]" {
-            continue;
-        }
-        let Ok(chunk) = serde_json::from_str::<TogetherStreamChunk>(data) else {
-            continue;
-        };
-        merged.parsed_any = true;
+	for line in body.lines() {
+		// SSE event lines look like `data: {...}`; skip blanks, comments (`:`), etc.
+		let Some(data) = line.trim_start().strip_prefix("data:") else {
+			continue;
+		};
+		let data = data.trim();
+		if data.is_empty() || data == "[DONE]" {
+			continue;
+		}
+		let Ok(chunk) = serde_json::from_str::<TogetherStreamChunk>(data) else {
+			continue;
+		};
+		merged.parsed_any = true;
 
-        if merged.id.is_none() {
-            merged.id = chunk.id;
-        }
-        if chunk.usage.is_some() {
-            merged.usage = chunk.usage;
-        }
+		if merged.id.is_none() {
+			merged.id = chunk.id;
+		}
+		if chunk.usage.is_some() {
+			merged.usage = chunk.usage;
+		}
 
-        for choice in chunk.choices {
-            if let Some(c) = choice.delta.content {
-                merged.content.push_str(&c);
-            }
-            if let Some(r) = choice.delta.reasoning {
-                merged.reasoning.push_str(&r);
-            }
-            if choice.finish_reason.is_some() {
-                merged.finish_reason = choice.finish_reason;
-            }
-            for tc in choice.delta.tool_calls.into_iter().flatten() {
-                if merged.tool_calls.len() <= tc.index {
-                    merged
-                        .tool_calls
-                        .resize_with(tc.index + 1, ToolCallBuilder::default);
-                }
-                let slot = &mut merged.tool_calls[tc.index];
-                if let Some(id) = tc.id {
-                    if !id.is_empty() {
-                        slot.id = id;
-                    }
-                }
-                if let Some(f) = tc.function {
-                    if let Some(name) = f.name {
-                        if !name.is_empty() {
-                            slot.name = name;
-                        }
-                    }
-                    if let Some(args) = f.arguments {
-                        slot.arguments.push_str(&args);
-                    }
-                }
-            }
-        }
-    }
+		for choice in chunk.choices {
+			if let Some(c) = choice.delta.content {
+				merged.content.push_str(&c);
+			}
+			if let Some(r) = choice.delta.reasoning {
+				merged.reasoning.push_str(&r);
+			}
+			if choice.finish_reason.is_some() {
+				merged.finish_reason = choice.finish_reason;
+			}
+			for tc in choice.delta.tool_calls.into_iter().flatten() {
+				if merged.tool_calls.len() <= tc.index {
+					merged.tool_calls.resize_with(tc.index + 1, ToolCallBuilder::default);
+				}
+				let slot = &mut merged.tool_calls[tc.index];
+				if let Some(id) = tc.id {
+					if !id.is_empty() {
+						slot.id = id;
+					}
+				}
+				if let Some(f) = tc.function {
+					if let Some(name) = f.name {
+						if !name.is_empty() {
+							slot.name = name;
+						}
+					}
+					if let Some(args) = f.arguments {
+						slot.arguments.push_str(&args);
+					}
+				}
+			}
+		}
+	}
 
-    merged
+	merged
 }
 
 fn convert_messages(messages: &[Message]) -> Result<Vec<TogetherMessage>, ToolCallError> {
-    let messages = shared::chat_completion_messages(messages);
-    let messages = messages.as_ref();
-    let mut result = Vec::new();
+	let messages = shared::chat_completion_messages(messages);
+	let messages = messages.as_ref();
+	let mut result = Vec::new();
 
-    for message in messages {
-        match message.role.as_str() {
-            "tool" => {
-                result.push(TogetherMessage {
-                    role: message.role.clone(),
-                    content: serde_json::json!(message.content),
-                    tool_call_id: message.tool_call_id.clone(),
-                    name: message.name.clone(),
-                    tool_calls: None,
-                });
-            }
-            "assistant" if message.tool_calls.is_some() => {
-                let content = if message.content.trim().is_empty() {
-                    serde_json::Value::Null
-                } else {
-                    serde_json::json!(message.content)
-                };
+	for message in messages {
+		match message.role.as_str() {
+			"tool" => {
+				result.push(TogetherMessage {
+					role: message.role.clone(),
+					content: serde_json::json!(message.content),
+					tool_call_id: message.tool_call_id.clone(),
+					name: message.name.clone(),
+					tool_calls: None,
+				});
+			}
+			"assistant" if message.tool_calls.is_some() => {
+				let content = if message.content.trim().is_empty() {
+					serde_json::Value::Null
+				} else {
+					serde_json::json!(message.content)
+				};
 
-                let Some(tool_calls_value) = message.tool_calls.as_ref() else {
-                    return Err(ToolCallError::MissingField {
-                        field: "tool_calls".to_string(),
-                    });
-                };
-                let generic_calls =
-                    shared::parse_generic_tool_calls_strict(tool_calls_value, "together")?;
+				let Some(tool_calls_value) = message.tool_calls.as_ref() else {
+					return Err(ToolCallError::MissingField {
+						field: "tool_calls".to_string(),
+					});
+				};
+				let generic_calls = shared::parse_generic_tool_calls_strict(tool_calls_value, "together")?;
 
-                let together_calls: Vec<serde_json::Value> = generic_calls
-                    .into_iter()
-                    .map(|call| {
-                        serde_json::json!({
-                            "id": call.id,
-                            "type": "function",
-                            "function": {
-                                "name": call.name,
-                                "arguments": shared::arguments_to_json_string(&call.arguments)
-                            }
-                        })
-                    })
-                    .collect();
+				let together_calls: Vec<serde_json::Value> = generic_calls
+					.into_iter()
+					.map(|call| {
+						serde_json::json!({
+							"id": call.id,
+							"type": "function",
+							"function": {
+								"name": call.name,
+								"arguments": shared::arguments_to_json_string(&call.arguments)
+							}
+						})
+					})
+					.collect();
 
-                result.push(TogetherMessage {
-                    role: message.role.clone(),
-                    content,
-                    tool_call_id: None,
-                    name: None,
-                    tool_calls: Some(serde_json::Value::Array(together_calls)),
-                });
-            }
-            _ => {
-                let mut content_parts = vec![serde_json::json!({
-                    "type": "text",
-                    "text": message.content
-                })];
+				result.push(TogetherMessage {
+					role: message.role.clone(),
+					content,
+					tool_call_id: None,
+					name: None,
+					tool_calls: Some(serde_json::Value::Array(together_calls)),
+				});
+			}
+			_ => {
+				let mut content_parts = vec![serde_json::json!({
+					"type": "text",
+					"text": message.content
+				})];
 
-                if let Some(images) = &message.images {
-                    for image in images {
-                        if let crate::llm::types::ImageData::Base64(data) = &image.data {
-                            content_parts.push(serde_json::json!({
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": format!("data:{};base64,{}", image.media_type, data)
-                                }
-                            }));
-                        }
-                    }
-                }
+				if let Some(images) = &message.images {
+					for image in images {
+						if let crate::llm::types::ImageData::Base64(data) = &image.data {
+							content_parts.push(serde_json::json!({
+								"type": "image_url",
+								"image_url": {
+									"url": format!("data:{};base64,{}", image.media_type, data)
+								}
+							}));
+						}
+					}
+				}
 
-                if let Some(videos) = &message.videos {
-                    for video in videos {
-                        match &video.data {
-                            crate::llm::types::VideoData::Base64(data) => {
-                                content_parts.push(serde_json::json!({
-                                    "type": "video_url",
-                                    "video_url": {
-                                        "url": format!("data:{};base64,{}", video.media_type, data)
-                                    }
-                                }));
-                            }
-                            crate::llm::types::VideoData::Url(url) => {
-                                content_parts.push(serde_json::json!({
-                                    "type": "video_url",
-                                    "video_url": { "url": url }
-                                }));
-                            }
-                        }
-                    }
-                }
+				if let Some(videos) = &message.videos {
+					for video in videos {
+						match &video.data {
+							crate::llm::types::VideoData::Base64(data) => {
+								content_parts.push(serde_json::json!({
+									"type": "video_url",
+									"video_url": {
+										"url": format!("data:{};base64,{}", video.media_type, data)
+									}
+								}));
+							}
+							crate::llm::types::VideoData::Url(url) => {
+								content_parts.push(serde_json::json!({
+									"type": "video_url",
+									"video_url": { "url": url }
+								}));
+							}
+						}
+					}
+				}
 
-                let content = if content_parts.len() == 1 {
-                    content_parts[0]["text"].clone()
-                } else {
-                    serde_json::json!(content_parts)
-                };
+				let content = if content_parts.len() == 1 {
+					content_parts[0]["text"].clone()
+				} else {
+					serde_json::json!(content_parts)
+				};
 
-                result.push(TogetherMessage {
-                    role: message.role.clone(),
-                    content,
-                    tool_call_id: None,
-                    name: None,
-                    tool_calls: None,
-                });
-            }
-        }
-    }
+				result.push(TogetherMessage {
+					role: message.role.clone(),
+					content,
+					tool_call_id: None,
+					name: None,
+					tool_calls: None,
+				});
+			}
+		}
+	}
 
-    Ok(result)
+	Ok(result)
 }
 
 async fn execute_together_request(
-    api_key: String,
-    request_body: serde_json::Value,
-    max_retries: u32,
-    base_timeout: std::time::Duration,
-    request_timeout: Option<std::time::Duration>,
-    cancellation_token: Option<&tokio::sync::watch::Receiver<bool>>,
-    extra_headers: Option<std::collections::HashMap<String, String>>,
+	api_key: String,
+	request_body: serde_json::Value,
+	max_retries: u32,
+	base_timeout: std::time::Duration,
+	request_timeout: Option<std::time::Duration>,
+	cancellation_token: Option<&tokio::sync::watch::Receiver<bool>>,
+	extra_headers: Option<std::collections::HashMap<String, String>>,
 ) -> Result<ProviderResponse> {
-    let start_time = std::time::Instant::now();
+	let start_time = std::time::Instant::now();
 
-    let response = retry::retry_with_exponential_backoff(
-        || {
-            let client = shared::http_client();
-            let extra_headers = extra_headers.clone();
-            let api_key = api_key.clone();
-            let request_body = request_body.clone();
+	let response = retry::retry_with_exponential_backoff(
+		|| {
+			let client = shared::http_client();
+			let extra_headers = extra_headers.clone();
+			let api_key = api_key.clone();
+			let request_body = request_body.clone();
 
-            Box::pin(async move {
-                let req = client
-                    .post(TOGETHER_API_URL)
-                    .header("Content-Type", "application/json")
-                    .header("Authorization", format!("Bearer {}", api_key))
-                    .json(&request_body);
+			Box::pin(async move {
+				let req = client
+					.post(TOGETHER_API_URL)
+					.header("Content-Type", "application/json")
+					.header("Authorization", format!("Bearer {}", api_key))
+					.json(&request_body);
 
-                let captured =
-                    shared::send_and_read(req, request_timeout, extra_headers.as_ref()).await?;
+				let captured = shared::send_and_read(req, request_timeout, extra_headers.as_ref()).await?;
 
-                if retry::is_retryable_status(captured.status.as_u16()) {
-                    return Err(anyhow::anyhow!(
-                        "Together.ai API error {}: {}",
-                        captured.status,
-                        captured.body
-                    ));
-                }
+				if retry::is_retryable_status(captured.status.as_u16()) {
+					return Err(anyhow::anyhow!(
+						"Together.ai API error {}: {}",
+						captured.status,
+						captured.body
+					));
+				}
 
-                Ok(captured)
-            })
-        },
-        max_retries,
-        base_timeout,
-        cancellation_token,
-        || ProviderError::Cancelled.into(),
-        |e| {
-            matches!(
-                e.downcast_ref::<ProviderError>(),
-                Some(ProviderError::Cancelled)
-            )
-        },
-        |e: &anyhow::Error| shared::is_connection_error(e),
-    )
-    .await?;
+				Ok(captured)
+			})
+		},
+		max_retries,
+		base_timeout,
+		cancellation_token,
+		|| ProviderError::Cancelled.into(),
+		|e| matches!(e.downcast_ref::<ProviderError>(), Some(ProviderError::Cancelled)),
+		|e: &anyhow::Error| shared::is_connection_error(e),
+	)
+	.await?;
 
-    let request_time_ms = start_time.elapsed().as_millis() as u64;
+	let request_time_ms = start_time.elapsed().as_millis() as u64;
 
-    if !response.status.is_success() {
-        return Err(anyhow::anyhow!(
-            "Together.ai API error {}: {}",
-            response.status,
-            response.body
-        ));
-    }
+	if !response.status.is_success() {
+		return Err(anyhow::anyhow!(
+			"Together.ai API error {}: {}",
+			response.status,
+			response.body
+		));
+	}
 
-    let merged = merge_sse_stream(&response.body);
-    if !merged.parsed_any {
-        return Err(anyhow::anyhow!(
-            "Together.ai: could not parse streaming response: {}",
-            response.body
-        ));
-    }
+	let merged = merge_sse_stream(&response.body);
+	if !merged.parsed_any {
+		return Err(anyhow::anyhow!(
+			"Together.ai: could not parse streaming response: {}",
+			response.body
+		));
+	}
 
-    // Reasoning models surface chain-of-thought in a dedicated `reasoning` stream or
-    // as inline <think>…</think> tags (DeepSeek-R1). Pull it out, keep content clean.
-    let reasoning = (!merged.reasoning.trim().is_empty()).then_some(merged.reasoning);
-    let (thinking, content) = extract_thinking(&merged.content, reasoning);
+	// Reasoning models surface chain-of-thought in a dedicated `reasoning` stream or
+	// as inline <think>…</think> tags (DeepSeek-R1). Pull it out, keep content clean.
+	let reasoning = (!merged.reasoning.trim().is_empty()).then_some(merged.reasoning);
+	let (thinking, content) = extract_thinking(&merged.content, reasoning);
 
-    let tool_calls: Option<Vec<ToolCall>> = {
-        let calls: Vec<ToolCall> = merged
-            .tool_calls
-            .into_iter()
-            .filter(|b| !b.name.is_empty())
-            .map(|b| ToolCall {
-                id: b.id,
-                name: b.name,
-                arguments: shared::parse_tool_call_arguments_lossy(&b.arguments),
-            })
-            .collect();
-        (!calls.is_empty()).then_some(calls)
-    };
+	let tool_calls: Option<Vec<ToolCall>> = {
+		let calls: Vec<ToolCall> = merged
+			.tool_calls
+			.into_iter()
+			.filter(|b| !b.name.is_empty())
+			.map(|b| ToolCall {
+				id: b.id,
+				name: b.name,
+				arguments: shared::parse_tool_call_arguments_lossy(&b.arguments),
+			})
+			.collect();
+		(!calls.is_empty()).then_some(calls)
+	};
 
-    let usage_data = merged.usage.unwrap_or_default();
-    let prompt_tokens = usage_data.prompt_tokens.unwrap_or(0);
-    let output_tokens = usage_data.completion_tokens.unwrap_or(0);
-    let total_tokens = usage_data
-        .total_tokens
-        .unwrap_or(prompt_tokens.saturating_add(output_tokens));
-    let cache_read_tokens = usage_data
-        .cached_tokens
-        .or_else(|| {
-            usage_data
-                .prompt_tokens_details
-                .as_ref()
-                .and_then(|d| d.cached_tokens)
-        })
-        .unwrap_or(0);
-    let input_tokens = prompt_tokens.saturating_sub(cache_read_tokens);
+	let usage_data = merged.usage.unwrap_or_default();
+	let prompt_tokens = usage_data.prompt_tokens.unwrap_or(0);
+	let output_tokens = usage_data.completion_tokens.unwrap_or(0);
+	let total_tokens = usage_data
+		.total_tokens
+		.unwrap_or(prompt_tokens.saturating_add(output_tokens));
+	let cache_read_tokens = usage_data
+		.cached_tokens
+		.or_else(|| usage_data.prompt_tokens_details.as_ref().and_then(|d| d.cached_tokens))
+		.unwrap_or(0);
+	let input_tokens = prompt_tokens.saturating_sub(cache_read_tokens);
 
-    // Priced on the raw completion counter; the split below only changes how it
-    // is reported. Together exposes no reasoning field, so it is estimated from
-    // the emitted thinking text — text Together billed inside completion_tokens.
-    let cost = request_body
-        .get("model")
-        .and_then(|m| m.as_str())
-        .and_then(|model| {
-            together_model_pricing(model)
-                .or_else(|| crate::llm::reference_models::get_reference_pricing(model))
-        })
-        .map(|pricing| pricing.calculate_cost(input_tokens, 0, cache_read_tokens, output_tokens));
-    let (visible_output_tokens, reasoning_tokens) = TokenUsage::split_output(
-        output_tokens,
-        thinking.as_ref().map(|t| t.tokens).unwrap_or(0),
-    );
+	// Priced on the raw completion counter; the split below only changes how it
+	// is reported. Together exposes no reasoning field, so it is estimated from
+	// the emitted thinking text — text Together billed inside completion_tokens.
+	let cost = request_body
+		.get("model")
+		.and_then(|m| m.as_str())
+		.and_then(|model| {
+			together_model_pricing(model).or_else(|| crate::llm::reference_models::get_reference_pricing(model))
+		})
+		.map(|pricing| pricing.calculate_cost(input_tokens, 0, cache_read_tokens, output_tokens));
+	let (visible_output_tokens, reasoning_tokens) =
+		TokenUsage::split_output(output_tokens, thinking.as_ref().map(|t| t.tokens).unwrap_or(0));
 
-    let usage = TokenUsage {
-        input_tokens,
-        output_tokens: visible_output_tokens,
-        cache_write_tokens: 0,
-        cache_read_tokens,
-        reasoning_tokens,
-        total_tokens,
-        cost,
-        request_time_ms: Some(request_time_ms),
-    };
+	let usage = TokenUsage {
+		input_tokens,
+		output_tokens: visible_output_tokens,
+		cache_write_tokens: 0,
+		cache_read_tokens,
+		reasoning_tokens,
+		total_tokens,
+		cost,
+		request_time_ms: Some(request_time_ms),
+	};
 
-    // Reconstruct a normalized (non-streamed) chat-completion shape for the exchange log.
-    let mut response_json = serde_json::json!({
-        "id": merged.id.clone(),
-        "object": "chat.completion",
-        "choices": [{
-            "index": 0,
-            "message": {
-                "role": "assistant",
-                "content": content.clone(),
-                "reasoning": thinking.as_ref().map(|t| t.content.clone()),
-            },
-            "finish_reason": merged.finish_reason.clone(),
-        }],
-        "usage": {
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": output_tokens,
-            "total_tokens": total_tokens,
-            "cached_tokens": cache_read_tokens,
-        },
-    });
+	// Reconstruct a normalized (non-streamed) chat-completion shape for the exchange log.
+	let mut response_json = serde_json::json!({
+		"id": merged.id.clone(),
+		"object": "chat.completion",
+		"choices": [{
+			"index": 0,
+			"message": {
+				"role": "assistant",
+				"content": content.clone(),
+				"reasoning": thinking.as_ref().map(|t| t.content.clone()),
+			},
+			"finish_reason": merged.finish_reason.clone(),
+		}],
+		"usage": {
+			"prompt_tokens": prompt_tokens,
+			"completion_tokens": output_tokens,
+			"total_tokens": total_tokens,
+			"cached_tokens": cache_read_tokens,
+		},
+	});
 
-    if let Some(ref tc) = tool_calls {
-        shared::set_response_tool_calls(&mut response_json, tc, None);
-    }
+	if let Some(ref tc) = tool_calls {
+		shared::set_response_tool_calls(&mut response_json, tc, None);
+	}
 
-    let exchange = ProviderExchange::new(request_body, response_json, Some(usage), "together");
-    let structured_output = shared::parse_structured_output_from_text(&content);
+	let exchange = ProviderExchange::new(request_body, response_json, Some(usage), "together");
+	let structured_output = shared::parse_structured_output_from_text(&content);
 
-    Ok(ProviderResponse {
-        content,
-        thinking,
-        exchange,
-        tool_calls,
-        finish_reason: merged.finish_reason,
-        structured_output,
-        id: merged.id,
-    })
+	Ok(ProviderResponse {
+		content,
+		thinking,
+		exchange,
+		tool_calls,
+		finish_reason: merged.finish_reason,
+		structured_output,
+		id: merged.id,
+	})
 }
 
 /// Extract thinking content from a dedicated `reasoning` field or inline
 /// `<think>…</think>` tags, returning the thinking block (if any) and the
 /// cleaned content. Mirrors the Z.ai provider's reasoning handling.
 fn extract_thinking(content: &str, reasoning: Option<String>) -> (Option<ThinkingBlock>, String) {
-    // Priority 1: dedicated `reasoning` field (most Together reasoning models)
-    if let Some(ref thinking_str) = reasoning {
-        if !thinking_str.trim().is_empty() {
-            let tokens = (thinking_str.len() / 4) as u64;
-            return (
-                Some(ThinkingBlock {
-                    content: thinking_str.clone(),
-                    tokens,
-                }),
-                content.to_string(),
-            );
-        }
-    }
+	// Priority 1: dedicated `reasoning` field (most Together reasoning models)
+	if let Some(ref thinking_str) = reasoning {
+		if !thinking_str.trim().is_empty() {
+			let tokens = (thinking_str.len() / 4) as u64;
+			return (
+				Some(ThinkingBlock {
+					content: thinking_str.clone(),
+					tokens,
+				}),
+				content.to_string(),
+			);
+		}
+	}
 
-    // Priority 2: inline <think>…</think> tags (DeepSeek-R1 on Together)
-    let think_start = "<think>";
-    let think_end = "</think>";
-    if let Some(start_idx) = content.find(think_start) {
-        if let Some(end_idx) = content.find(think_end) {
-            let thinking_content = &content[start_idx + think_start.len()..end_idx];
-            let before = &content[..start_idx];
-            let after = &content[end_idx + think_end.len()..];
-            let clean = format!("{}{}", before.trim(), after.trim())
-                .trim()
-                .to_string();
-            let tokens = (thinking_content.len() / 4) as u64;
-            return (
-                Some(ThinkingBlock {
-                    content: thinking_content.to_string(),
-                    tokens,
-                }),
-                clean,
-            );
-        }
-    }
+	// Priority 2: inline <think>…</think> tags (DeepSeek-R1 on Together)
+	let think_start = "<think>";
+	let think_end = "</think>";
+	if let Some(start_idx) = content.find(think_start) {
+		if let Some(end_idx) = content.find(think_end) {
+			let thinking_content = &content[start_idx + think_start.len()..end_idx];
+			let before = &content[..start_idx];
+			let after = &content[end_idx + think_end.len()..];
+			let clean = format!("{}{}", before.trim(), after.trim()).trim().to_string();
+			let tokens = (thinking_content.len() / 4) as u64;
+			return (
+				Some(ThinkingBlock {
+					content: thinking_content.to_string(),
+					tokens,
+				}),
+				clean,
+			);
+		}
+	}
 
-    (None, content.to_string())
+	(None, content.to_string())
 }
 
 #[cfg(test)]

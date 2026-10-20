@@ -29,21 +29,20 @@ use super::types::{EmbeddingProviderType, InputType};
 // Shared HTTP client with connection pooling. It is swappable because Tokio
 // tests create independent runtimes; a pooled connection must not retain the
 // dispatcher of a runtime that has already been dropped.
-static HTTP_CLIENT: LazyLock<ArcSwap<Client>> =
-    LazyLock::new(|| ArcSwap::from_pointee(build_http_client()));
+static HTTP_CLIENT: LazyLock<ArcSwap<Client>> = LazyLock::new(|| ArcSwap::from_pointee(build_http_client()));
 
 fn build_http_client() -> Client {
-    Client::builder()
-        .pool_max_idle_per_host(10)
-        .pool_idle_timeout(Duration::from_secs(30))
-        .timeout(Duration::from_secs(120)) // Increased from 60s to 120s for embedding APIs
-        .connect_timeout(Duration::from_secs(10))
-        .build()
-        .expect("Failed to create HTTP client")
+	Client::builder()
+		.pool_max_idle_per_host(10)
+		.pool_idle_timeout(Duration::from_secs(30))
+		.timeout(Duration::from_secs(120)) // Increased from 60s to 120s for embedding APIs
+		.connect_timeout(Duration::from_secs(10))
+		.build()
+		.expect("Failed to create HTTP client")
 }
 
 fn http_client() -> Client {
-    (*HTTP_CLIENT.load_full()).clone()
+	(*HTTP_CLIENT.load_full()).clone()
 }
 
 // Feature-specific provider modules
@@ -79,74 +78,76 @@ pub use voyage::{VoyageProvider, VoyageProviderImpl};
 /// Trait for embedding providers
 #[async_trait::async_trait]
 pub trait EmbeddingProvider: Send + Sync {
-    /// Returns the embedding vector plus usage (real provider token count + cost).
-    async fn generate_embedding(&self, text: &str) -> Result<(Vec<f32>, EmbeddingUsage)>;
-    /// Returns the embedding vectors plus usage for the whole batch.
-    async fn generate_embeddings_batch(
-        &self,
-        texts: Vec<String>,
-        input_type: InputType,
-    ) -> Result<(Vec<Vec<f32>>, EmbeddingUsage)>;
+	/// Returns the embedding vector plus usage (real provider token count + cost).
+	async fn generate_embedding(&self, text: &str) -> Result<(Vec<f32>, EmbeddingUsage)>;
+	/// Returns the embedding vectors plus usage for the whole batch.
+	async fn generate_embeddings_batch(
+		&self,
+		texts: Vec<String>,
+		input_type: InputType,
+	) -> Result<(Vec<Vec<f32>>, EmbeddingUsage)>;
 
-    /// Get the vector dimension for this provider's model
-    fn get_dimension(&self) -> usize;
+	/// Get the vector dimension for this provider's model
+	fn get_dimension(&self) -> usize;
 
-    /// Validate if the model is supported (optional, defaults to true)
-    fn is_model_supported(&self) -> bool {
-        true
-    }
+	/// Validate if the model is supported (optional, defaults to true)
+	fn is_model_supported(&self) -> bool {
+		true
+	}
 
-    /// Identity of the loaded weights (HF commit sha) for in-process models.
-    /// `None` for API providers, whose model versions are not observable.
-    async fn model_revision(&self) -> Result<Option<String>> {
-        Ok(None)
-    }
+	/// Identity of the loaded weights (HF commit sha) for in-process models.
+	/// `None` for API providers, whose model versions are not observable.
+	async fn model_revision(&self) -> Result<Option<String>> {
+		Ok(None)
+	}
 
-    /// The model's own tokenizer for in-process models, so callers can count
-    /// and split tokens exactly as the model does. `None` for API providers.
-    #[cfg(any(feature = "huggingface", feature = "onnx"))]
-    async fn tokenizer(&self) -> Result<Option<std::sync::Arc<tokenizers::Tokenizer>>> {
-        Ok(None)
-    }
+	/// The model's own tokenizer for in-process models, so callers can count
+	/// and split tokens exactly as the model does. `None` for API providers.
+	#[cfg(any(feature = "huggingface", feature = "onnx"))]
+	async fn tokenizer(&self) -> Result<Option<std::sync::Arc<tokenizers::Tokenizer>>> {
+		Ok(None)
+	}
 }
 
 /// Create an embedding provider from provider type and model
 pub async fn create_embedding_provider_from_parts(
-    provider: &EmbeddingProviderType,
-    model: &str,
+	provider: &EmbeddingProviderType,
+	model: &str,
 ) -> Result<Box<dyn EmbeddingProvider>> {
-    match provider {
-        EmbeddingProviderType::FastEmbed => {
-            #[cfg(feature = "fastembed")]
-            {
-                Ok(Box::new(FastEmbedProviderImpl::new(model)?))
-            }
-            #[cfg(not(feature = "fastembed"))]
-            {
-                Err(anyhow::anyhow!("FastEmbed support is not compiled in. Please rebuild with --features fastembed"))
-            }
-        }
-        EmbeddingProviderType::Jina => Ok(Box::new(JinaProviderImpl::new(model)?)),
-        EmbeddingProviderType::Voyage => Ok(Box::new(VoyageProviderImpl::new(model)?)),
-        EmbeddingProviderType::Google => Ok(Box::new(GoogleProviderImpl::new(model)?)),
-        EmbeddingProviderType::OpenAI => Ok(Box::new(OpenAIProviderImpl::new(model)?)),
-        EmbeddingProviderType::OpenRouter => {
-            Ok(Box::new(OpenRouterProviderImpl::new(model).await?))
-        }
-        EmbeddingProviderType::OctoHub => Ok(Box::new(OctoHubEmbeddingProvider::new(model).await?)),
-        EmbeddingProviderType::Local => Ok(Box::new(LocalEmbeddingProvider::new(model).await?)),
-        EmbeddingProviderType::HuggingFace => {
-            #[cfg(feature = "huggingface")]
-            {
-                Ok(Box::new(HuggingFaceProviderImpl::new(model).await?))
-            }
-            #[cfg(not(feature = "huggingface"))]
-            {
-                Err(anyhow::anyhow!("HuggingFace support is not compiled in. Please rebuild with --features huggingface"))
-            }
-        }
-        EmbeddingProviderType::Onnx => Ok(Box::new(OnnxProviderImpl::new(model).await?)),
-    }
+	match provider {
+		EmbeddingProviderType::FastEmbed => {
+			#[cfg(feature = "fastembed")]
+			{
+				Ok(Box::new(FastEmbedProviderImpl::new(model)?))
+			}
+			#[cfg(not(feature = "fastembed"))]
+			{
+				Err(anyhow::anyhow!(
+					"FastEmbed support is not compiled in. Please rebuild with --features fastembed"
+				))
+			}
+		}
+		EmbeddingProviderType::Jina => Ok(Box::new(JinaProviderImpl::new(model)?)),
+		EmbeddingProviderType::Voyage => Ok(Box::new(VoyageProviderImpl::new(model)?)),
+		EmbeddingProviderType::Google => Ok(Box::new(GoogleProviderImpl::new(model)?)),
+		EmbeddingProviderType::OpenAI => Ok(Box::new(OpenAIProviderImpl::new(model)?)),
+		EmbeddingProviderType::OpenRouter => Ok(Box::new(OpenRouterProviderImpl::new(model).await?)),
+		EmbeddingProviderType::OctoHub => Ok(Box::new(OctoHubEmbeddingProvider::new(model).await?)),
+		EmbeddingProviderType::Local => Ok(Box::new(LocalEmbeddingProvider::new(model).await?)),
+		EmbeddingProviderType::HuggingFace => {
+			#[cfg(feature = "huggingface")]
+			{
+				Ok(Box::new(HuggingFaceProviderImpl::new(model).await?))
+			}
+			#[cfg(not(feature = "huggingface"))]
+			{
+				Err(anyhow::anyhow!(
+					"HuggingFace support is not compiled in. Please rebuild with --features huggingface"
+				))
+			}
+		}
+		EmbeddingProviderType::Onnx => Ok(Box::new(OnnxProviderImpl::new(model).await?)),
+	}
 }
 
 #[cfg(test)]

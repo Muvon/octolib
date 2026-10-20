@@ -21,22 +21,17 @@ use crate::llm::types::ModelPricing;
 
 /// Look up baseline cloud-equivalent pricing for a model by fuzzy name matching.
 pub fn get_reference_pricing(model: &str) -> Option<ModelPricing> {
-    crate::llm::reference_models::get_reference_pricing(model)
+	crate::llm::reference_models::get_reference_pricing(model)
 }
 
 /// Calculate cost using reference pricing.
 pub fn calculate_reference_cost(
-    model: &str,
-    input_tokens: u64,
-    cache_read_tokens: u64,
-    output_tokens: u64,
+	model: &str,
+	input_tokens: u64,
+	cache_read_tokens: u64,
+	output_tokens: u64,
 ) -> Option<f64> {
-    crate::llm::reference_models::calculate_reference_cost(
-        model,
-        input_tokens,
-        cache_read_tokens,
-        output_tokens,
-    )
+	crate::llm::reference_models::calculate_reference_cost(model, input_tokens, cache_read_tokens, output_tokens)
 }
 
 #[cfg(test)]

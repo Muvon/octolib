@@ -48,54 +48,54 @@ use tokio::time::sleep;
 
 /// Await a future while honoring an optional cancellation token.
 pub async fn cancellable<F, T, E, C>(
-    future: F,
-    cancellation_token: Option<&watch::Receiver<bool>>,
-    on_cancel: C,
+	future: F,
+	cancellation_token: Option<&watch::Receiver<bool>>,
+	on_cancel: C,
 ) -> Result<T, E>
 where
-    F: Future<Output = Result<T, E>> + Send,
-    C: Fn() -> E + Copy,
+	F: Future<Output = Result<T, E>> + Send,
+	C: Fn() -> E + Copy,
 {
-    if let Some(token) = cancellation_token {
-        if *token.borrow() {
-            return Err(on_cancel());
-        }
+	if let Some(token) = cancellation_token {
+		if *token.borrow() {
+			return Err(on_cancel());
+		}
 
-        let mut token = token.clone();
-        let mut future = Box::pin(future);
+		let mut token = token.clone();
+		let mut future = Box::pin(future);
 
-        loop {
-            tokio::select! {
-                result = &mut future => return result,
-                changed = token.changed() => {
-                    if changed.is_err() || *token.borrow() {
-                        return Err(on_cancel());
-                    }
-                }
-            }
-        }
-    } else {
-        future.await
-    }
+		loop {
+			tokio::select! {
+				result = &mut future => return result,
+				changed = token.changed() => {
+					if changed.is_err() || *token.borrow() {
+						return Err(on_cancel());
+					}
+				}
+			}
+		}
+	} else {
+		future.await
+	}
 }
 
 async fn sleep_cancellable<E, C>(
-    duration: Duration,
-    cancellation_token: Option<&watch::Receiver<bool>>,
-    on_cancel: C,
+	duration: Duration,
+	cancellation_token: Option<&watch::Receiver<bool>>,
+	on_cancel: C,
 ) -> Result<(), E>
 where
-    C: Fn() -> E + Copy,
+	C: Fn() -> E + Copy,
 {
-    cancellable(
-        async {
-            sleep(duration).await;
-            Ok(())
-        },
-        cancellation_token,
-        on_cancel,
-    )
-    .await
+	cancellable(
+		async {
+			sleep(duration).await;
+			Ok(())
+		},
+		cancellation_token,
+		on_cancel,
+	)
+	.await
 }
 
 /// Generic retry logic with exponential backoff for providers that don't have smart retry
@@ -120,73 +120,71 @@ where
 /// * `Ok(T)` - Success result from the operation
 /// * `Err(E)` - The last error encountered after all retries exhausted
 pub async fn retry_with_exponential_backoff<F, T, E>(
-    mut operation: F,
-    max_retries: u32,
-    base_timeout: Duration,
-    cancellation_token: Option<&watch::Receiver<bool>>,
-    on_cancel: impl Fn() -> E + Copy,
-    is_cancelled: impl Fn(&E) -> bool + Copy,
-    on_connection_error: impl Fn(&E) -> bool + Copy,
+	mut operation: F,
+	max_retries: u32,
+	base_timeout: Duration,
+	cancellation_token: Option<&watch::Receiver<bool>>,
+	on_cancel: impl Fn() -> E + Copy,
+	is_cancelled: impl Fn(&E) -> bool + Copy,
+	on_connection_error: impl Fn(&E) -> bool + Copy,
 ) -> Result<T, E>
 where
-    F: FnMut() -> Pin<Box<dyn Future<Output = Result<T, E>> + Send>>,
-    E: std::fmt::Display,
+	F: FnMut() -> Pin<Box<dyn Future<Output = Result<T, E>> + Send>>,
+	E: std::fmt::Display,
 {
-    let mut last_error = None;
+	let mut last_error = None;
 
-    for attempt in 0..=max_retries {
-        // Check for cancellation before each attempt
-        if let Some(token) = cancellation_token {
-            if *token.borrow() {
-                return Err(on_cancel());
-            }
-        }
+	for attempt in 0..=max_retries {
+		// Check for cancellation before each attempt
+		if let Some(token) = cancellation_token {
+			if *token.borrow() {
+				return Err(on_cancel());
+			}
+		}
 
-        match cancellable(operation(), cancellation_token, on_cancel).await {
-            Ok(result) => return Ok(result),
-            Err(e) => {
-                if is_cancelled(&e) {
-                    return Err(e);
-                }
+		match cancellable(operation(), cancellation_token, on_cancel).await {
+			Ok(result) => return Ok(result),
+			Err(e) => {
+				if is_cancelled(&e) {
+					return Err(e);
+				}
 
-                // Simple debug logging without external dependencies
-                tracing::debug!("API request attempt {} failed: {}", attempt + 1, e);
+				// Simple debug logging without external dependencies
+				tracing::debug!("API request attempt {} failed: {}", attempt + 1, e);
 
-                // On connection errors, refresh the shared HTTP client so the
-                // next retry uses a fresh connection pool instead of stale/broken
-                // connections from the old pool.
-                if on_connection_error(&e) {
-                    tracing::debug!(
-                        "Connection error detected, refreshing HTTP client before retry"
-                    );
-                    crate::llm::providers::shared::refresh_http_client();
-                }
+				// On connection errors, refresh the shared HTTP client so the
+				// next retry uses a fresh connection pool instead of stale/broken
+				// connections from the old pool.
+				if on_connection_error(&e) {
+					tracing::debug!("Connection error detected, refreshing HTTP client before retry");
+					crate::llm::providers::shared::refresh_http_client();
+				}
 
-                last_error = Some(e);
+				last_error = Some(e);
 
-                // Don't sleep after the last attempt
-                if attempt < max_retries {
-                    // Exponential backoff: base_timeout * 2^attempt
-                    let delay = base_timeout * 2_u32.pow(attempt);
-                    // Cap at 5 minutes for safety
-                    let delay = std::cmp::min(delay, Duration::from_secs(300));
+				// Don't sleep after the last attempt
+				if attempt < max_retries {
+					// Exponential backoff: base_timeout * 2^attempt
+					let delay = base_timeout * 2_u32.pow(attempt);
+					// Cap at 5 minutes for safety
+					let delay = std::cmp::min(delay, Duration::from_secs(300));
 
-                    tracing::debug!("Waiting {:?} before retry attempt {}", delay, attempt + 2);
+					tracing::debug!("Waiting {:?} before retry attempt {}", delay, attempt + 2);
 
-                    sleep_cancellable(delay, cancellation_token, on_cancel).await?;
-                }
-            }
-        }
-    }
+					sleep_cancellable(delay, cancellation_token, on_cancel).await?;
+				}
+			}
+		}
+	}
 
-    Err(last_error.unwrap())
+	Err(last_error.unwrap())
 }
 
 /// Returns true for HTTP status codes that should trigger a retry.
 /// Retries on 429 (rate limit) and all 5xx server errors.
 /// Does NOT retry on 4xx client errors (400, 401, 403, 404, etc.) since those won't resolve.
 pub fn is_retryable_status(status: u16) -> bool {
-    status == 429 || status >= 500
+	status == 429 || status >= 500
 }
 
 /// Helper to wrap HTTP requests in retry logic
@@ -194,27 +192,27 @@ pub fn is_retryable_status(status: u16) -> bool {
 /// This is a convenience wrapper that creates the appropriate closure for HTTP requests.
 /// It handles cloning of necessary data for each retry attempt.
 pub async fn retry_http_request<T, E>(
-    max_retries: u32,
-    base_timeout: Duration,
-    cancellation_token: Option<&watch::Receiver<bool>>,
-    on_cancel: impl Fn() -> E + Copy,
-    is_cancelled: impl Fn(&E) -> bool + Copy,
-    on_connection_error: impl Fn(&E) -> bool + Copy,
-    request_builder: impl Fn() -> Pin<Box<dyn Future<Output = Result<T, E>> + Send>>,
+	max_retries: u32,
+	base_timeout: Duration,
+	cancellation_token: Option<&watch::Receiver<bool>>,
+	on_cancel: impl Fn() -> E + Copy,
+	is_cancelled: impl Fn(&E) -> bool + Copy,
+	on_connection_error: impl Fn(&E) -> bool + Copy,
+	request_builder: impl Fn() -> Pin<Box<dyn Future<Output = Result<T, E>> + Send>>,
 ) -> Result<T, E>
 where
-    E: std::fmt::Display,
+	E: std::fmt::Display,
 {
-    retry_with_exponential_backoff(
-        || request_builder(),
-        max_retries,
-        base_timeout,
-        cancellation_token,
-        on_cancel,
-        is_cancelled,
-        on_connection_error,
-    )
-    .await
+	retry_with_exponential_backoff(
+		|| request_builder(),
+		max_retries,
+		base_timeout,
+		cancellation_token,
+		on_cancel,
+		is_cancelled,
+		on_connection_error,
+	)
+	.await
 }
 #[cfg(test)]
 #[path = "retry_tests.rs"]

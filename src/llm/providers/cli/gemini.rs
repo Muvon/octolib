@@ -16,34 +16,34 @@ use crate::llm::providers::cli::CliProvider;
 use anyhow::Result;
 
 pub(crate) fn build_args(provider: &CliProvider, model: &str, prompt: &str) -> Vec<String> {
-    let mut args = Vec::new();
+	let mut args = Vec::new();
 
-    if !model.is_empty() {
-        args.push(provider.model_flag.clone());
-        args.push(model.to_string());
-    }
+	if !model.is_empty() {
+		args.push(provider.model_flag.clone());
+		args.push(model.to_string());
+	}
 
-    args.extend(provider.extra_args.clone());
+	args.extend(provider.extra_args.clone());
 
-    args.push(provider.prompt_flag.clone());
-    args.push(prompt.to_string());
-    args.push("--yolo".to_string());
+	args.push(provider.prompt_flag.clone());
+	args.push(prompt.to_string());
+	args.push("--yolo".to_string());
 
-    args
+	args
 }
 
 pub(crate) fn parse_response(lines: &[String]) -> Result<String> {
-    let filtered = lines
-        .iter()
-        .filter(|line| !line.starts_with("Loaded cached credentials"))
-        .cloned()
-        .collect::<Vec<_>>();
+	let filtered = lines
+		.iter()
+		.filter(|line| !line.starts_with("Loaded cached credentials"))
+		.cloned()
+		.collect::<Vec<_>>();
 
-    let response_text = filtered.join("\n");
+	let response_text = filtered.join("\n");
 
-    if response_text.trim().is_empty() {
-        return Err(anyhow::anyhow!("Empty response from Gemini CLI"));
-    }
+	if response_text.trim().is_empty() {
+		return Err(anyhow::anyhow!("Empty response from Gemini CLI"));
+	}
 
-    Ok(response_text)
+	Ok(response_text)
 }

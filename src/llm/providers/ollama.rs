@@ -22,8 +22,7 @@
 //! - `OLLAMA_API_URL`: Override endpoint
 
 use crate::llm::providers::openai_compat::{
-    chat_completion as openai_compat_chat_completion, get_api_url, get_optional_api_key,
-    OpenAiCompatConfig,
+	chat_completion as openai_compat_chat_completion, get_api_url, get_optional_api_key, OpenAiCompatConfig,
 };
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderResponse};
@@ -34,15 +33,15 @@ use anyhow::Result;
 pub struct OllamaProvider;
 
 impl Default for OllamaProvider {
-    fn default() -> Self {
-        Self::new()
-    }
+	fn default() -> Self {
+		Self::new()
+	}
 }
 
 impl OllamaProvider {
-    pub fn new() -> Self {
-        Self
-    }
+	pub fn new() -> Self {
+		Self
+	}
 }
 
 const OLLAMA_API_KEY_ENV: &str = "OLLAMA_API_KEY";
@@ -51,81 +50,81 @@ const OLLAMA_API_URL: &str = "https://ollama.com/v1/chat/completions";
 
 #[async_trait::async_trait]
 impl AiProvider for OllamaProvider {
-    fn name(&self) -> &str {
-        "ollama"
-    }
+	fn name(&self) -> &str {
+		"ollama"
+	}
 
-    fn supports_model(&self, model: &str) -> bool {
-        !model.is_empty()
-    }
+	fn supports_model(&self, model: &str) -> bool {
+		!model.is_empty()
+	}
 
-    fn get_api_key(&self) -> Result<String> {
-        Ok(get_optional_api_key(OLLAMA_API_KEY_ENV))
-    }
+	fn get_api_key(&self) -> Result<String> {
+		Ok(get_optional_api_key(OLLAMA_API_KEY_ENV))
+	}
 
-    /// Ollama's OpenAI layer replays reasoning for the trailing assistant
-    /// message only, except Kimi models that preserve it across every turn.
-    fn replays_thinking(&self, model: &str) -> bool {
-        crate::llm::providers::moonshot::preserves_historical_thinking(model)
-    }
+	/// Ollama's OpenAI layer replays reasoning for the trailing assistant
+	/// message only, except Kimi models that preserve it across every turn.
+	fn replays_thinking(&self, model: &str) -> bool {
+		crate::llm::providers::moonshot::preserves_historical_thinking(model)
+	}
 
-    fn supports_caching(&self, _model: &str) -> bool {
-        false
-    }
+	fn supports_caching(&self, _model: &str) -> bool {
+		false
+	}
 
-    fn supports_video(&self, _model: &str) -> bool {
-        false
-    }
+	fn supports_video(&self, _model: &str) -> bool {
+		false
+	}
 
-    // supports_vision, supports_video, supports_structured_output, get_max_input_tokens
-    // are resolved via reference capabilities (trait defaults)
+	// supports_vision, supports_video, supports_structured_output, get_max_input_tokens
+	// are resolved via reference capabilities (trait defaults)
 
-    /// Ollama Cloud does not constrain decoding: a schema reaches the model only
-    /// as a forced tool call, which it may answer with the wrong shape. Routers
-    /// read this flag to send structured requests to a lane that guarantees it.
-    fn enforces_response_schema(&self, _model: &str) -> bool {
-        false
-    }
+	/// Ollama Cloud does not constrain decoding: a schema reaches the model only
+	/// as a forced tool call, which it may answer with the wrong shape. Routers
+	/// read this flag to send structured requests to a lane that guarantees it.
+	fn enforces_response_schema(&self, _model: &str) -> bool {
+		false
+	}
 
-    fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
-        // Try reference pricing for cloud-equivalent cost estimation
-        crate::llm::reference_models::get_reference_pricing(model)
-    }
+	fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
+		// Try reference pricing for cloud-equivalent cost estimation
+		crate::llm::reference_models::get_reference_pricing(model)
+	}
 
-    async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-        let api_key = self.get_api_key()?;
-        let api_url = get_api_url(OLLAMA_API_URL_ENV, OLLAMA_API_URL);
-        let model = params.model.clone();
+	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
+		let api_key = self.get_api_key()?;
+		let api_url = get_api_url(OLLAMA_API_URL_ENV, OLLAMA_API_URL);
+		let model = params.model.clone();
 
-        let mut response = openai_compat_chat_completion(
-            OpenAiCompatConfig {
-                provider_name: "ollama",
-                usage_fallback_cost: None,
-                use_response_cost: true,
-                enforces_response_schema: false,
-                supports_required_tool_choice: true,
-                supports_parallel_tool_calls: true,
-            },
-            api_key,
-            api_url,
-            params,
-        )
-        .await?;
+		let mut response = openai_compat_chat_completion(
+			OpenAiCompatConfig {
+				provider_name: "ollama",
+				usage_fallback_cost: None,
+				use_response_cost: true,
+				enforces_response_schema: false,
+				supports_required_tool_choice: true,
+				supports_parallel_tool_calls: true,
+			},
+			api_key,
+			api_url,
+			params,
+		)
+		.await?;
 
-        // Fill cost from reference pricing if the API didn't return one
-        if let Some(ref mut usage) = response.exchange.usage {
-            if usage.cost.is_none() {
-                usage.cost = crate::llm::reference_models::calculate_reference_cost(
-                    &model,
-                    usage.input_tokens,
-                    usage.cache_read_tokens,
-                    usage.billable_output_tokens(),
-                );
-            }
-        }
+		// Fill cost from reference pricing if the API didn't return one
+		if let Some(ref mut usage) = response.exchange.usage {
+			if usage.cost.is_none() {
+				usage.cost = crate::llm::reference_models::calculate_reference_cost(
+					&model,
+					usage.input_tokens,
+					usage.cache_read_tokens,
+					usage.billable_output_tokens(),
+				);
+			}
+		}
 
-        Ok(response)
-    }
+		Ok(response)
+	}
 }
 
 #[cfg(test)]

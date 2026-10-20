@@ -29,184 +29,174 @@ static SUPPORTED_MODELS: OnceLock<Vec<String>> = OnceLock::new();
 /// Fetch the list of supported embedding model IDs from OpenRouter.
 /// Returns an empty vec on failure so callers degrade gracefully.
 async fn fetch_supported_models() -> Vec<String> {
-    let Ok(api_key) = std::env::var("OPENROUTER_API_KEY") else {
-        return Vec::new();
-    };
+	let Ok(api_key) = std::env::var("OPENROUTER_API_KEY") else {
+		return Vec::new();
+	};
 
-    let Ok(response) = http_client()
-        .get("https://openrouter.ai/api/v1/embeddings/models")
-        .header("Authorization", format!("Bearer {}", api_key))
-        .send()
-        .await
-    else {
-        return Vec::new();
-    };
+	let Ok(response) = http_client()
+		.get("https://openrouter.ai/api/v1/embeddings/models")
+		.header("Authorization", format!("Bearer {}", api_key))
+		.send()
+		.await
+	else {
+		return Vec::new();
+	};
 
-    let Ok(json) = response.json::<Value>().await else {
-        return Vec::new();
-    };
+	let Ok(json) = response.json::<Value>().await else {
+		return Vec::new();
+	};
 
-    json["data"]
-        .as_array()
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|m| m["id"].as_str().map(str::to_string))
-                .collect()
-        })
-        .unwrap_or_default()
+	json["data"]
+		.as_array()
+		.map(|arr| {
+			arr.iter()
+				.filter_map(|m| m["id"].as_str().map(str::to_string))
+				.collect()
+		})
+		.unwrap_or_default()
 }
 
 /// Returns the cached model list, fetching it on first call.
 async fn supported_models() -> &'static Vec<String> {
-    // OnceLock only supports sync init, so we check and set manually for async.
-    if let Some(models) = SUPPORTED_MODELS.get() {
-        return models;
-    }
-    let models = fetch_supported_models().await;
-    // Another task may have raced us — ignore the error if already set.
-    let _ = SUPPORTED_MODELS.set(models);
-    SUPPORTED_MODELS.get().unwrap()
+	// OnceLock only supports sync init, so we check and set manually for async.
+	if let Some(models) = SUPPORTED_MODELS.get() {
+		return models;
+	}
+	let models = fetch_supported_models().await;
+	// Another task may have raced us — ignore the error if already set.
+	let _ = SUPPORTED_MODELS.set(models);
+	SUPPORTED_MODELS.get().unwrap()
 }
 
 /// OpenRouter provider implementation for trait.
 /// The supported model list is fetched once from the API and cached.
 /// Dimension is probed at construction time since the API does not expose it.
 pub struct OpenRouterProviderImpl {
-    model_name: String,
-    dimension: usize,
+	model_name: String,
+	dimension: usize,
 }
 
 impl OpenRouterProviderImpl {
-    pub async fn new(model: &str) -> Result<Self> {
-        // Populate the model cache and validate in one shot
-        let models = supported_models().await;
-        // Only reject if the cache is non-empty and the model isn't in it.
-        // Empty cache means the API was unreachable — allow through to let the
-        // actual embedding call surface the real error.
-        if !models.is_empty() && !models.iter().any(|m| m == model) {
-            return Err(anyhow::anyhow!(
+	pub async fn new(model: &str) -> Result<Self> {
+		// Populate the model cache and validate in one shot
+		let models = supported_models().await;
+		// Only reject if the cache is non-empty and the model isn't in it.
+		// Empty cache means the API was unreachable — allow through to let the
+		// actual embedding call surface the real error.
+		if !models.is_empty() && !models.iter().any(|m| m == model) {
+			return Err(anyhow::anyhow!(
                 "Unsupported OpenRouter embedding model '{}'. Run `curl https://openrouter.ai/api/v1/embeddings/models` to see available models.",
                 model
             ));
-        }
+		}
 
-        // Probe the actual dimension — the API has no dimension field.
-        let probe = OpenRouterProvider::generate_embeddings("probe", model).await?;
-        let dimension = probe.0.len();
-        if dimension == 0 {
-            return Err(anyhow::anyhow!(
-                "OpenRouter model '{}' returned zero-length embedding",
-                model
-            ));
-        }
+		// Probe the actual dimension — the API has no dimension field.
+		let probe = OpenRouterProvider::generate_embeddings("probe", model).await?;
+		let dimension = probe.0.len();
+		if dimension == 0 {
+			return Err(anyhow::anyhow!(
+				"OpenRouter model '{}' returned zero-length embedding",
+				model
+			));
+		}
 
-        Ok(Self {
-            model_name: model.to_string(),
-            dimension,
-        })
-    }
+		Ok(Self {
+			model_name: model.to_string(),
+			dimension,
+		})
+	}
 }
 
 #[async_trait::async_trait]
 impl EmbeddingProvider for OpenRouterProviderImpl {
-    async fn generate_embedding(&self, text: &str) -> Result<(Vec<f32>, EmbeddingUsage)> {
-        OpenRouterProvider::generate_embeddings(text, &self.model_name).await
-    }
+	async fn generate_embedding(&self, text: &str) -> Result<(Vec<f32>, EmbeddingUsage)> {
+		OpenRouterProvider::generate_embeddings(text, &self.model_name).await
+	}
 
-    async fn generate_embeddings_batch(
-        &self,
-        texts: Vec<String>,
-        input_type: InputType,
-    ) -> Result<(Vec<Vec<f32>>, EmbeddingUsage)> {
-        OpenRouterProvider::generate_embeddings_batch(texts, &self.model_name, input_type).await
-    }
+	async fn generate_embeddings_batch(
+		&self,
+		texts: Vec<String>,
+		input_type: InputType,
+	) -> Result<(Vec<Vec<f32>>, EmbeddingUsage)> {
+		OpenRouterProvider::generate_embeddings_batch(texts, &self.model_name, input_type).await
+	}
 
-    fn get_dimension(&self) -> usize {
-        self.dimension
-    }
+	fn get_dimension(&self) -> usize {
+		self.dimension
+	}
 
-    fn is_model_supported(&self) -> bool {
-        // Checked at construction time against the live model list
-        !self.model_name.is_empty()
-    }
+	fn is_model_supported(&self) -> bool {
+		// Checked at construction time against the live model list
+		!self.model_name.is_empty()
+	}
 }
 
 /// OpenRouter provider implementation
 pub struct OpenRouterProvider;
 
 impl OpenRouterProvider {
-    pub async fn generate_embeddings(
-        contents: &str,
-        model: &str,
-    ) -> Result<(Vec<f32>, EmbeddingUsage)> {
-        let (vectors, usage) =
-            Self::generate_embeddings_batch(vec![contents.to_string()], model, InputType::None)
-                .await?;
-        let first = vectors
-            .into_iter()
-            .next()
-            .ok_or_else(|| anyhow::anyhow!("No embeddings returned"))?;
-        Ok((first, usage))
-    }
+	pub async fn generate_embeddings(contents: &str, model: &str) -> Result<(Vec<f32>, EmbeddingUsage)> {
+		let (vectors, usage) =
+			Self::generate_embeddings_batch(vec![contents.to_string()], model, InputType::None).await?;
+		let first = vectors
+			.into_iter()
+			.next()
+			.ok_or_else(|| anyhow::anyhow!("No embeddings returned"))?;
+		Ok((first, usage))
+	}
 
-    pub async fn generate_embeddings_batch(
-        texts: Vec<String>,
-        model: &str,
-        input_type: InputType,
-    ) -> Result<(Vec<Vec<f32>>, EmbeddingUsage)> {
-        let api_key = std::env::var("OPENROUTER_API_KEY")
-            .context("OPENROUTER_API_KEY environment variable not set")?;
+	pub async fn generate_embeddings_batch(
+		texts: Vec<String>,
+		model: &str,
+		input_type: InputType,
+	) -> Result<(Vec<Vec<f32>>, EmbeddingUsage)> {
+		let api_key = std::env::var("OPENROUTER_API_KEY").context("OPENROUTER_API_KEY environment variable not set")?;
 
-        // Apply input type prefixes - OpenRouter does not have a native input_type field
-        let processed_texts: Vec<String> = texts
-            .into_iter()
-            .map(|text| input_type.apply_prefix(&text))
-            .collect();
-        let est_tokens: u64 = processed_texts
-            .iter()
-            .map(|t| crate::embedding::count_tokens(t) as u64)
-            .sum();
+		// Apply input type prefixes - OpenRouter does not have a native input_type field
+		let processed_texts: Vec<String> = texts.into_iter().map(|text| input_type.apply_prefix(&text)).collect();
+		let est_tokens: u64 = processed_texts
+			.iter()
+			.map(|t| crate::embedding::count_tokens(t) as u64)
+			.sum();
 
-        let request_body = json!({
-            "model": model,
-            "input": processed_texts,
-            "encoding_format": "float"
-        });
+		let request_body = json!({
+			"model": model,
+			"input": processed_texts,
+			"encoding_format": "float"
+		});
 
-        let response = http_client()
-            .post("https://openrouter.ai/api/v1/embeddings")
-            .header("Authorization", format!("Bearer {}", api_key))
-            .header("Content-Type", "application/json")
-            .json(&request_body)
-            .send()
-            .await?;
+		let response = http_client()
+			.post("https://openrouter.ai/api/v1/embeddings")
+			.header("Authorization", format!("Bearer {}", api_key))
+			.header("Content-Type", "application/json")
+			.json(&request_body)
+			.send()
+			.await?;
 
-        if !response.status().is_success() {
-            let error_text = response.text().await?;
-            return Err(anyhow::anyhow!("OpenRouter API error: {}", error_text));
-        }
+		if !response.status().is_success() {
+			let error_text = response.text().await?;
+			return Err(anyhow::anyhow!("OpenRouter API error: {}", error_text));
+		}
 
-        let response_json: Value = response.json().await?;
+		let response_json: Value = response.json().await?;
 
-        let embeddings = response_json["data"]
-            .as_array()
-            .context("Failed to get embeddings array from OpenRouter response")?
-            .iter()
-            .map(|data| {
-                data["embedding"]
-                    .as_array()
-                    .unwrap_or(&Vec::new())
-                    .iter()
-                    .map(|v| v.as_f64().unwrap_or_default() as f32)
-                    .collect()
-            })
-            .collect();
+		let embeddings = response_json["data"]
+			.as_array()
+			.context("Failed to get embeddings array from OpenRouter response")?
+			.iter()
+			.map(|data| {
+				data["embedding"]
+					.as_array()
+					.unwrap_or(&Vec::new())
+					.iter()
+					.map(|v| v.as_f64().unwrap_or_default() as f32)
+					.collect()
+			})
+			.collect();
 
-        let input_tokens = response_json["usage"]["total_tokens"]
-            .as_u64()
-            .unwrap_or(est_tokens);
-        Ok((embeddings, EmbeddingUsage::from_tokens(model, input_tokens)))
-    }
+		let input_tokens = response_json["usage"]["total_tokens"].as_u64().unwrap_or(est_tokens);
+		Ok((embeddings, EmbeddingUsage::from_tokens(model, input_tokens)))
+	}
 }
 
 #[cfg(test)]

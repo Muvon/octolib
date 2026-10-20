@@ -38,61 +38,58 @@ const DEFAULT_BASE_URL: &str = "https://hub.octomind.run";
 pub struct OctoHubEvaluationProvider;
 
 impl OctoHubEvaluationProvider {
-    pub fn new() -> Self {
-        Self
-    }
+	pub fn new() -> Self {
+		Self
+	}
 
-    fn endpoint(&self) -> String {
-        let base = std::env::var(API_URL_ENV).unwrap_or_else(|_| DEFAULT_BASE_URL.to_string());
-        format!("{}/v1/evaluations", base.trim_end_matches('/'))
-    }
+	fn endpoint(&self) -> String {
+		let base = std::env::var(API_URL_ENV).unwrap_or_else(|_| DEFAULT_BASE_URL.to_string());
+		format!("{}/v1/evaluations", base.trim_end_matches('/'))
+	}
 }
 
 pub(crate) fn request_body(request: &EvaluationRequest) -> Value {
-    json!({
-        "model": request.model.trim(),
-        "state": request.state,
-        "questions": request.questions,
-    })
+	json!({
+		"model": request.model.trim(),
+		"state": request.state,
+		"questions": request.questions,
+	})
 }
 
 #[async_trait::async_trait]
 impl EvaluationProvider for OctoHubEvaluationProvider {
-    fn name(&self) -> &str {
-        PROVIDER
-    }
+	fn name(&self) -> &str {
+		PROVIDER
+	}
 
-    fn supports_model(&self, model: &str) -> bool {
-        !model.trim().is_empty()
-    }
+	fn supports_model(&self, model: &str) -> bool {
+		!model.trim().is_empty()
+	}
 
-    /// The hub prices the call itself and reports it in `usage.cost`.
-    fn get_model_pricing(&self, _model: &str) -> Option<EvaluationPricing> {
-        None
-    }
+	/// The hub prices the call itself and reports it in `usage.cost`.
+	fn get_model_pricing(&self, _model: &str) -> Option<EvaluationPricing> {
+		None
+	}
 
-    async fn evaluate(&self, request: EvaluationRequest) -> EvaluationResult<EvaluationResponse> {
-        if request.uses_images() {
-            return Err(EvaluationError::InvalidRequest(
-                "images and box questions are only supported on the typesafe provider".to_string(),
-            ));
-        }
-        request.validate()?;
-        let key = shared::api_key(API_KEY_ENV)?;
-        let url = self.endpoint();
-        let body = request_body(&request);
-        let response = shared::send(PROVIDER, &request, || {
-            Ok(crate::http::http_client()
-                .post(&url)
-                .bearer_auth(&key)
-                .json(&body))
-        })
-        .await?;
-        let payload = shared::parse_json(PROVIDER, &response)?;
-        let mut parsed = shared::parse_payload(PROVIDER, &payload, None)?;
-        parsed.usage.cost = payload.pointer("/usage/cost").and_then(Value::as_f64);
-        Ok(parsed)
-    }
+	async fn evaluate(&self, request: EvaluationRequest) -> EvaluationResult<EvaluationResponse> {
+		if request.uses_images() {
+			return Err(EvaluationError::InvalidRequest(
+				"images and box questions are only supported on the typesafe provider".to_string(),
+			));
+		}
+		request.validate()?;
+		let key = shared::api_key(API_KEY_ENV)?;
+		let url = self.endpoint();
+		let body = request_body(&request);
+		let response = shared::send(PROVIDER, &request, || {
+			Ok(crate::http::http_client().post(&url).bearer_auth(&key).json(&body))
+		})
+		.await?;
+		let payload = shared::parse_json(PROVIDER, &response)?;
+		let mut parsed = shared::parse_payload(PROVIDER, &payload, None)?;
+		parsed.usage.cost = payload.pointer("/usage/cost").and_then(Value::as_f64);
+		Ok(parsed)
+	}
 }
 
 #[cfg(test)]

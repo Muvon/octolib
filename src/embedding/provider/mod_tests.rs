@@ -16,147 +16,133 @@ use crate::embedding::create_embedding_provider_from_parts;
 use crate::embedding::types::*;
 
 pub(crate) fn refresh_http_client() {
-    super::HTTP_CLIENT.store(std::sync::Arc::new(super::build_http_client()));
+	super::HTTP_CLIENT.store(std::sync::Arc::new(super::build_http_client()));
 }
 
 #[tokio::test]
 async fn test_create_jina_provider() {
-    let result =
-        create_embedding_provider_from_parts(&EmbeddingProviderType::Jina, "jina-embeddings-v4")
-            .await;
+	let result = create_embedding_provider_from_parts(&EmbeddingProviderType::Jina, "jina-embeddings-v4").await;
 
-    match result {
-        Ok(provider) => {
-            assert_eq!(provider.get_dimension(), 2048);
-            assert!(provider.is_model_supported());
-        }
-        Err(e) => {
-            // Expected if no API key is set
-            assert!(e.to_string().contains("API key") || e.to_string().contains("JINA_API_KEY"));
-        }
-    }
+	match result {
+		Ok(provider) => {
+			assert_eq!(provider.get_dimension(), 2048);
+			assert!(provider.is_model_supported());
+		}
+		Err(e) => {
+			// Expected if no API key is set
+			assert!(e.to_string().contains("API key") || e.to_string().contains("JINA_API_KEY"));
+		}
+	}
 }
 
 #[tokio::test]
 async fn test_create_voyage_provider() {
-    let result =
-        create_embedding_provider_from_parts(&EmbeddingProviderType::Voyage, "voyage-3.5-lite")
-            .await;
+	let result = create_embedding_provider_from_parts(&EmbeddingProviderType::Voyage, "voyage-3.5-lite").await;
 
-    match result {
-        Ok(provider) => {
-            assert!(provider.get_dimension() > 0);
-            assert!(provider.is_model_supported());
-        }
-        Err(e) => {
-            // Expected if no API key is set
-            assert!(e.to_string().contains("API key") || e.to_string().contains("VOYAGE_API_KEY"));
-        }
-    }
+	match result {
+		Ok(provider) => {
+			assert!(provider.get_dimension() > 0);
+			assert!(provider.is_model_supported());
+		}
+		Err(e) => {
+			// Expected if no API key is set
+			assert!(e.to_string().contains("API key") || e.to_string().contains("VOYAGE_API_KEY"));
+		}
+	}
 }
 
 #[tokio::test]
 async fn test_create_google_provider() {
-    let result = create_embedding_provider_from_parts(
-        &EmbeddingProviderType::Google,
-        "gemini-embedding-001",
-    )
-    .await;
+	let result = create_embedding_provider_from_parts(&EmbeddingProviderType::Google, "gemini-embedding-001").await;
 
-    match result {
-        Ok(provider) => {
-            assert_eq!(provider.get_dimension(), 3072);
-            assert!(provider.is_model_supported());
-        }
-        Err(e) => {
-            // Expected if no API key is set
-            assert!(e.to_string().contains("API key") || e.to_string().contains("GOOGLE_API_KEY"));
-        }
-    }
+	match result {
+		Ok(provider) => {
+			assert_eq!(provider.get_dimension(), 3072);
+			assert!(provider.is_model_supported());
+		}
+		Err(e) => {
+			// Expected if no API key is set
+			assert!(e.to_string().contains("API key") || e.to_string().contains("GOOGLE_API_KEY"));
+		}
+	}
 }
 
 #[tokio::test]
 async fn test_create_openai_provider() {
-    let result = create_embedding_provider_from_parts(
-        &EmbeddingProviderType::OpenAI,
-        "text-embedding-3-small",
-    )
-    .await;
+	let result = create_embedding_provider_from_parts(&EmbeddingProviderType::OpenAI, "text-embedding-3-small").await;
 
-    match result {
-        Ok(provider) => {
-            assert_eq!(provider.get_dimension(), 1536);
-            assert!(provider.is_model_supported());
-        }
-        Err(e) => {
-            // Expected if no API key is set
-            assert!(e.to_string().contains("API key") || e.to_string().contains("OPENAI_API_KEY"));
-        }
-    }
+	match result {
+		Ok(provider) => {
+			assert_eq!(provider.get_dimension(), 1536);
+			assert!(provider.is_model_supported());
+		}
+		Err(e) => {
+			// Expected if no API key is set
+			assert!(e.to_string().contains("API key") || e.to_string().contains("OPENAI_API_KEY"));
+		}
+	}
 }
 
 #[tokio::test]
 #[cfg(feature = "fastembed")]
 async fn test_create_fastembed_provider() {
-    let result = create_embedding_provider_from_parts(
-        &EmbeddingProviderType::FastEmbed,
-        "sentence-transformers/all-MiniLM-L6-v2",
-    )
-    .await;
+	let result = create_embedding_provider_from_parts(
+		&EmbeddingProviderType::FastEmbed,
+		"sentence-transformers/all-MiniLM-L6-v2",
+	)
+	.await;
 
-    match result {
-        Ok(provider) => {
-            assert!(provider.get_dimension() > 0);
-            assert!(provider.is_model_supported());
-        }
-        Err(e) => {
-            // FastEmbed might fail due to model download issues in CI
-            println!("FastEmbed test failed (expected in CI): {}", e);
-        }
-    }
+	match result {
+		Ok(provider) => {
+			assert!(provider.get_dimension() > 0);
+			assert!(provider.is_model_supported());
+		}
+		Err(e) => {
+			// FastEmbed might fail due to model download issues in CI
+			println!("FastEmbed test failed (expected in CI): {}", e);
+		}
+	}
 }
 
 #[tokio::test]
 #[cfg(feature = "huggingface")]
 async fn test_create_huggingface_provider() {
-    let result = create_embedding_provider_from_parts(
-        &EmbeddingProviderType::HuggingFace,
-        "sentence-transformers/all-MiniLM-L6-v2",
-    )
-    .await;
+	let result = create_embedding_provider_from_parts(
+		&EmbeddingProviderType::HuggingFace,
+		"sentence-transformers/all-MiniLM-L6-v2",
+	)
+	.await;
 
-    match result {
-        Ok(provider) => {
-            assert!(provider.get_dimension() > 0);
-            assert!(provider.is_model_supported());
-        }
-        Err(e) => {
-            // HuggingFace might fail due to model download issues in CI
-            println!("HuggingFace test failed (expected in CI): {}", e);
-        }
-    }
+	match result {
+		Ok(provider) => {
+			assert!(provider.get_dimension() > 0);
+			assert!(provider.is_model_supported());
+		}
+		Err(e) => {
+			// HuggingFace might fail due to model download issues in CI
+			println!("HuggingFace test failed (expected in CI): {}", e);
+		}
+	}
 }
 
 #[tokio::test]
 #[cfg(feature = "huggingface")]
 async fn test_create_huggingface_qwen2_provider() {
-    // Test Qwen2 model loading (jina-code-embeddings-1.5b uses Qwen2 architecture)
-    let result = create_embedding_provider_from_parts(
-        &EmbeddingProviderType::HuggingFace,
-        "jinaai/jina-code-embeddings-1.5b",
-    )
-    .await;
+	// Test Qwen2 model loading (jina-code-embeddings-1.5b uses Qwen2 architecture)
+	let result =
+		create_embedding_provider_from_parts(&EmbeddingProviderType::HuggingFace, "jinaai/jina-code-embeddings-1.5b")
+			.await;
 
-    match result {
-        Ok(provider) => {
-            assert!(provider.get_dimension() > 0);
-            assert!(provider.is_model_supported());
-        }
-        Err(e) => {
-            // HuggingFace might fail due to model download issues in CI
-            println!("HuggingFace Qwen2 test failed (expected in CI): {}", e);
-        }
-    }
+	match result {
+		Ok(provider) => {
+			assert!(provider.get_dimension() > 0);
+			assert!(provider.is_model_supported());
+		}
+		Err(e) => {
+			// HuggingFace might fail due to model download issues in CI
+			println!("HuggingFace Qwen2 test failed (expected in CI): {}", e);
+		}
+	}
 }
 
 /// True when a HuggingFace model-load error is environmental (anonymous CI
@@ -164,566 +150,508 @@ async fn test_create_huggingface_qwen2_provider() {
 /// in this crate — such tests skip instead of failing.
 #[cfg(feature = "huggingface")]
 fn hf_download_unavailable(e: &anyhow::Error) -> bool {
-    let chain = e
-        .chain()
-        .map(|cause| cause.to_string().to_ascii_lowercase())
-        .collect::<String>();
-    chain.contains("429")
-        || chain.contains("too many requests")
-        || chain.contains("rate limit")
-        || chain.contains("request error")
+	let chain = e
+		.chain()
+		.map(|cause| cause.to_string().to_ascii_lowercase())
+		.collect::<String>();
+	chain.contains("429")
+		|| chain.contains("too many requests")
+		|| chain.contains("rate limit")
+		|| chain.contains("request error")
 }
 #[tokio::test]
 #[cfg(feature = "huggingface")]
 async fn test_load_qwen3_embedding_model() {
-    let model =
-        match crate::embedding::provider::huggingface::HuggingFaceProvider::get_model_for_test(
-            "Qwen/Qwen3-Embedding-0.6B",
-        )
-        .await
-        {
-            Ok(model) => model,
-            Err(e) if hf_download_unavailable(&e) => {
-                println!(
-                    "HuggingFace Qwen3 test skipped (model download unavailable in CI): {}",
-                    e
-                );
-                return;
-            }
-            Err(e) => panic!("Qwen3 embedding model must load: {e}"),
-        };
-    let embedding = model
-        .encode("Qwen3 embedding regression test")
-        .expect("Qwen3 embedding model must encode");
+	let model = match crate::embedding::provider::huggingface::HuggingFaceProvider::get_model_for_test(
+		"Qwen/Qwen3-Embedding-0.6B",
+	)
+	.await
+	{
+		Ok(model) => model,
+		Err(e) if hf_download_unavailable(&e) => {
+			println!(
+				"HuggingFace Qwen3 test skipped (model download unavailable in CI): {}",
+				e
+			);
+			return;
+		}
+		Err(e) => panic!("Qwen3 embedding model must load: {e}"),
+	};
+	let embedding = model
+		.encode("Qwen3 embedding regression test")
+		.expect("Qwen3 embedding model must encode");
 
-    assert_eq!(embedding.len(), 1024);
-    assert!(embedding.iter().all(|value| value.is_finite()));
+	assert_eq!(embedding.len(), 1024);
+	assert!(embedding.iter().all(|value| value.is_finite()));
 }
 
 #[tokio::test]
 #[cfg(feature = "huggingface")]
 async fn test_qwen3_batch_embeddings_match_single_inputs() {
-    let model =
-        match crate::embedding::provider::huggingface::HuggingFaceProvider::get_model_for_test(
-            "Qwen/Qwen3-Embedding-0.6B",
-        )
-        .await
-        {
-            Ok(model) => model,
-            Err(e) if hf_download_unavailable(&e) => {
-                println!(
-                    "HuggingFace Qwen3 test skipped (model download unavailable in CI): {}",
-                    e
-                );
-                return;
-            }
-            Err(e) => panic!("Qwen3 embedding model must load: {e}"),
-        };
-    let texts = [
-        "Generate a normalized embedding for this short Rust function.",
-        "Batch inference must preserve each source text's vector.",
-    ];
+	let model = match crate::embedding::provider::huggingface::HuggingFaceProvider::get_model_for_test(
+		"Qwen/Qwen3-Embedding-0.6B",
+	)
+	.await
+	{
+		Ok(model) => model,
+		Err(e) if hf_download_unavailable(&e) => {
+			println!(
+				"HuggingFace Qwen3 test skipped (model download unavailable in CI): {}",
+				e
+			);
+			return;
+		}
+		Err(e) => panic!("Qwen3 embedding model must load: {e}"),
+	};
+	let texts = [
+		"Generate a normalized embedding for this short Rust function.",
+		"Batch inference must preserve each source text's vector.",
+	];
 
-    let singles: Vec<_> = texts
-        .iter()
-        .map(|text| {
-            model
-                .encode(text)
-                .expect("single Qwen3 embedding must encode")
-        })
-        .collect();
-    let batch = model
-        .encode_batch(&texts.iter().map(ToString::to_string).collect::<Vec<_>>())
-        .expect("batched Qwen3 embeddings must encode");
+	let singles: Vec<_> = texts
+		.iter()
+		.map(|text| model.encode(text).expect("single Qwen3 embedding must encode"))
+		.collect();
+	let batch = model
+		.encode_batch(&texts.iter().map(ToString::to_string).collect::<Vec<_>>())
+		.expect("batched Qwen3 embeddings must encode");
 
-    assert_eq!(batch.len(), singles.len());
-    for (index, (single, batched)) in singles.iter().zip(&batch).enumerate() {
-        assert_eq!(batched.len(), 1024);
-        let cosine: f32 = single.iter().zip(batched).map(|(a, b)| a * b).sum();
-        assert!(cosine > 0.999, "batch embedding {index} diverged: {cosine}");
-    }
+	assert_eq!(batch.len(), singles.len());
+	for (index, (single, batched)) in singles.iter().zip(&batch).enumerate() {
+		assert_eq!(batched.len(), 1024);
+		let cosine: f32 = single.iter().zip(batched).map(|(a, b)| a * b).sum();
+		assert!(cosine > 0.999, "batch embedding {index} diverged: {cosine}");
+	}
 }
 
 #[test]
 #[cfg(feature = "huggingface")]
 fn test_embedding_device_matches_acceleration_feature() {
-    let device = crate::embedding::provider::huggingface::embedding_device().unwrap();
+	let device = crate::embedding::provider::huggingface::embedding_device().unwrap();
 
-    #[cfg(all(feature = "metal", target_os = "macos"))]
-    assert!(device.is_metal());
-    #[cfg(not(all(feature = "metal", target_os = "macos")))]
-    assert!(!device.is_metal());
+	#[cfg(all(feature = "metal", target_os = "macos"))]
+	assert!(device.is_metal());
+	#[cfg(not(all(feature = "metal", target_os = "macos")))]
+	assert!(!device.is_metal());
 }
 
 #[test]
 #[cfg(feature = "huggingface")]
 fn test_model_architecture_detection() {
-    use serde_json::json;
+	use serde_json::json;
 
-    // Test BERT detection
-    let bert_config = json!({
-        "architectures": ["BertModel"],
-        "position_embedding_type": "absolute"
-    });
-    let config_str = serde_json::to_string(&bert_config).unwrap();
-    let parsed: crate::embedding::provider::huggingface::ModelConfig =
-        serde_json::from_str(&config_str).unwrap();
-    let arch = crate::embedding::provider::huggingface::ModelArchitecture::from_config(&parsed);
-    assert!(matches!(
-        arch,
-        Ok(crate::embedding::provider::huggingface::ModelArchitecture::Bert)
-    ));
+	// Test BERT detection
+	let bert_config = json!({
+		"architectures": ["BertModel"],
+		"position_embedding_type": "absolute"
+	});
+	let config_str = serde_json::to_string(&bert_config).unwrap();
+	let parsed: crate::embedding::provider::huggingface::ModelConfig = serde_json::from_str(&config_str).unwrap();
+	let arch = crate::embedding::provider::huggingface::ModelArchitecture::from_config(&parsed);
+	assert!(matches!(
+		arch,
+		Ok(crate::embedding::provider::huggingface::ModelArchitecture::Bert)
+	));
 
-    // Test JinaBert detection (via position_embedding_type)
-    let jina_config = json!({
-        "architectures": ["BertModel"],
-        "position_embedding_type": "alibi"
-    });
-    let config_str = serde_json::to_string(&jina_config).unwrap();
-    let parsed: crate::embedding::provider::huggingface::ModelConfig =
-        serde_json::from_str(&config_str).unwrap();
-    let arch = crate::embedding::provider::huggingface::ModelArchitecture::from_config(&parsed);
-    assert!(matches!(
-        arch,
-        Ok(crate::embedding::provider::huggingface::ModelArchitecture::JinaBert)
-    ));
+	// Test JinaBert detection (via position_embedding_type)
+	let jina_config = json!({
+		"architectures": ["BertModel"],
+		"position_embedding_type": "alibi"
+	});
+	let config_str = serde_json::to_string(&jina_config).unwrap();
+	let parsed: crate::embedding::provider::huggingface::ModelConfig = serde_json::from_str(&config_str).unwrap();
+	let arch = crate::embedding::provider::huggingface::ModelArchitecture::from_config(&parsed);
+	assert!(matches!(
+		arch,
+		Ok(crate::embedding::provider::huggingface::ModelArchitecture::JinaBert)
+	));
 
-    // Test RoBERTa detection
-    let roberta_config = json!({
-        "architectures": ["RobertaModel"]
-    });
-    let config_str = serde_json::to_string(&roberta_config).unwrap();
-    let parsed: crate::embedding::provider::huggingface::ModelConfig =
-        serde_json::from_str(&config_str).unwrap();
-    let arch = crate::embedding::provider::huggingface::ModelArchitecture::from_config(&parsed);
-    assert!(matches!(
-        arch,
-        Ok(crate::embedding::provider::huggingface::ModelArchitecture::Roberta)
-    ));
+	// Test RoBERTa detection
+	let roberta_config = json!({
+		"architectures": ["RobertaModel"]
+	});
+	let config_str = serde_json::to_string(&roberta_config).unwrap();
+	let parsed: crate::embedding::provider::huggingface::ModelConfig = serde_json::from_str(&config_str).unwrap();
+	let arch = crate::embedding::provider::huggingface::ModelArchitecture::from_config(&parsed);
+	assert!(matches!(
+		arch,
+		Ok(crate::embedding::provider::huggingface::ModelArchitecture::Roberta)
+	));
 
-    // Test XLMRoberta detection
-    let xlm_roberta_config = json!({
-        "architectures": ["XLMRobertaModel"]
-    });
-    let config_str = serde_json::to_string(&xlm_roberta_config).unwrap();
-    let parsed: crate::embedding::provider::huggingface::ModelConfig =
-        serde_json::from_str(&config_str).unwrap();
-    let arch = crate::embedding::provider::huggingface::ModelArchitecture::from_config(&parsed);
-    assert!(matches!(
-        arch,
-        Ok(crate::embedding::provider::huggingface::ModelArchitecture::Roberta)
-    ));
+	// Test XLMRoberta detection
+	let xlm_roberta_config = json!({
+		"architectures": ["XLMRobertaModel"]
+	});
+	let config_str = serde_json::to_string(&xlm_roberta_config).unwrap();
+	let parsed: crate::embedding::provider::huggingface::ModelConfig = serde_json::from_str(&config_str).unwrap();
+	let arch = crate::embedding::provider::huggingface::ModelArchitecture::from_config(&parsed);
+	assert!(matches!(
+		arch,
+		Ok(crate::embedding::provider::huggingface::ModelArchitecture::Roberta)
+	));
 
-    // Test JinaCodeBert detection (via BertModel + alibi + qk-post-norm _name_or_path)
-    let jina_code_config = json!({
-        "architectures": ["BertModel"],
-        "position_embedding_type": "alibi",
-        "_name_or_path": "jinaai/jina-bert-v2-qk-post-norm"
-    });
-    let config_str = serde_json::to_string(&jina_code_config).unwrap();
-    let parsed: crate::embedding::provider::huggingface::ModelConfig =
-        serde_json::from_str(&config_str).unwrap();
-    let arch = crate::embedding::provider::huggingface::ModelArchitecture::from_config(&parsed);
-    assert!(matches!(
-        arch,
-        Ok(crate::embedding::provider::huggingface::ModelArchitecture::JinaCodeBert)
-    ));
+	// Test JinaCodeBert detection (via BertModel + alibi + qk-post-norm _name_or_path)
+	let jina_code_config = json!({
+		"architectures": ["BertModel"],
+		"position_embedding_type": "alibi",
+		"_name_or_path": "jinaai/jina-bert-v2-qk-post-norm"
+	});
+	let config_str = serde_json::to_string(&jina_code_config).unwrap();
+	let parsed: crate::embedding::provider::huggingface::ModelConfig = serde_json::from_str(&config_str).unwrap();
+	let arch = crate::embedding::provider::huggingface::ModelArchitecture::from_config(&parsed);
+	assert!(matches!(
+		arch,
+		Ok(crate::embedding::provider::huggingface::ModelArchitecture::JinaCodeBert)
+	));
 
-    // Test JinaCodeBert detection (via explicit JinaBertModel + qk-post-norm)
-    let jina_code_explicit_config = json!({
-        "architectures": ["JinaBertModel"],
-        "_name_or_path": "jinaai/jina-bert-v2-qk-post-norm"
-    });
-    let config_str = serde_json::to_string(&jina_code_explicit_config).unwrap();
-    let parsed: crate::embedding::provider::huggingface::ModelConfig =
-        serde_json::from_str(&config_str).unwrap();
-    let arch = crate::embedding::provider::huggingface::ModelArchitecture::from_config(&parsed);
-    assert!(matches!(
-        arch,
-        Ok(crate::embedding::provider::huggingface::ModelArchitecture::JinaCodeBert)
-    ));
+	// Test JinaCodeBert detection (via explicit JinaBertModel + qk-post-norm)
+	let jina_code_explicit_config = json!({
+		"architectures": ["JinaBertModel"],
+		"_name_or_path": "jinaai/jina-bert-v2-qk-post-norm"
+	});
+	let config_str = serde_json::to_string(&jina_code_explicit_config).unwrap();
+	let parsed: crate::embedding::provider::huggingface::ModelConfig = serde_json::from_str(&config_str).unwrap();
+	let arch = crate::embedding::provider::huggingface::ModelArchitecture::from_config(&parsed);
+	assert!(matches!(
+		arch,
+		Ok(crate::embedding::provider::huggingface::ModelArchitecture::JinaCodeBert)
+	));
 
-    // Test that JinaBert (non-qk-post-norm) is NOT detected as JinaCodeBert
-    let jina_standard_config = json!({
-        "architectures": ["BertModel"],
-        "position_embedding_type": "alibi",
-        "_name_or_path": "jinaai/jina-embeddings-v2-base-en"
-    });
-    let config_str = serde_json::to_string(&jina_standard_config).unwrap();
-    let parsed: crate::embedding::provider::huggingface::ModelConfig =
-        serde_json::from_str(&config_str).unwrap();
-    let arch = crate::embedding::provider::huggingface::ModelArchitecture::from_config(&parsed);
-    assert!(matches!(
-        arch,
-        Ok(crate::embedding::provider::huggingface::ModelArchitecture::JinaBert)
-    ));
+	// Test that JinaBert (non-qk-post-norm) is NOT detected as JinaCodeBert
+	let jina_standard_config = json!({
+		"architectures": ["BertModel"],
+		"position_embedding_type": "alibi",
+		"_name_or_path": "jinaai/jina-embeddings-v2-base-en"
+	});
+	let config_str = serde_json::to_string(&jina_standard_config).unwrap();
+	let parsed: crate::embedding::provider::huggingface::ModelConfig = serde_json::from_str(&config_str).unwrap();
+	let arch = crate::embedding::provider::huggingface::ModelArchitecture::from_config(&parsed);
+	assert!(matches!(
+		arch,
+		Ok(crate::embedding::provider::huggingface::ModelArchitecture::JinaBert)
+	));
 
-    // Test Qwen2 detection
-    let qwen2_config = json!({
-        "architectures": ["Qwen2ForCausalLM"]
-    });
-    let config_str = serde_json::to_string(&qwen2_config).unwrap();
-    let parsed: crate::embedding::provider::huggingface::ModelConfig =
-        serde_json::from_str(&config_str).unwrap();
-    let arch = crate::embedding::provider::huggingface::ModelArchitecture::from_config(&parsed);
-    assert!(matches!(
-        arch,
-        Ok(crate::embedding::provider::huggingface::ModelArchitecture::Qwen2)
-    ));
+	// Test Qwen2 detection
+	let qwen2_config = json!({
+		"architectures": ["Qwen2ForCausalLM"]
+	});
+	let config_str = serde_json::to_string(&qwen2_config).unwrap();
+	let parsed: crate::embedding::provider::huggingface::ModelConfig = serde_json::from_str(&config_str).unwrap();
+	let arch = crate::embedding::provider::huggingface::ModelArchitecture::from_config(&parsed);
+	assert!(matches!(
+		arch,
+		Ok(crate::embedding::provider::huggingface::ModelArchitecture::Qwen2)
+	));
 
-    // Test Qwen3 detection
-    let qwen3_config = json!({
-        "architectures": ["Qwen3ForCausalLM"]
-    });
-    let config_str = serde_json::to_string(&qwen3_config).unwrap();
-    let parsed: crate::embedding::provider::huggingface::ModelConfig =
-        serde_json::from_str(&config_str).unwrap();
-    let arch = crate::embedding::provider::huggingface::ModelArchitecture::from_config(&parsed);
-    assert!(matches!(
-        arch,
-        Ok(crate::embedding::provider::huggingface::ModelArchitecture::Qwen3)
-    ));
+	// Test Qwen3 detection
+	let qwen3_config = json!({
+		"architectures": ["Qwen3ForCausalLM"]
+	});
+	let config_str = serde_json::to_string(&qwen3_config).unwrap();
+	let parsed: crate::embedding::provider::huggingface::ModelConfig = serde_json::from_str(&config_str).unwrap();
+	let arch = crate::embedding::provider::huggingface::ModelArchitecture::from_config(&parsed);
+	assert!(matches!(
+		arch,
+		Ok(crate::embedding::provider::huggingface::ModelArchitecture::Qwen3)
+	));
 
-    // Test MPNet detection (MPNetModel)
-    let mpnet_config = json!({
-        "architectures": ["MPNetModel"]
-    });
-    let config_str = serde_json::to_string(&mpnet_config).unwrap();
-    let parsed: crate::embedding::provider::huggingface::ModelConfig =
-        serde_json::from_str(&config_str).unwrap();
-    let arch = crate::embedding::provider::huggingface::ModelArchitecture::from_config(&parsed);
-    assert!(matches!(
-        arch,
-        Ok(crate::embedding::provider::huggingface::ModelArchitecture::MPNet)
-    ));
+	// Test MPNet detection (MPNetModel)
+	let mpnet_config = json!({
+		"architectures": ["MPNetModel"]
+	});
+	let config_str = serde_json::to_string(&mpnet_config).unwrap();
+	let parsed: crate::embedding::provider::huggingface::ModelConfig = serde_json::from_str(&config_str).unwrap();
+	let arch = crate::embedding::provider::huggingface::ModelArchitecture::from_config(&parsed);
+	assert!(matches!(
+		arch,
+		Ok(crate::embedding::provider::huggingface::ModelArchitecture::MPNet)
+	));
 
-    // Test MPNet detection (MPNetForMaskedLM)
-    let mpnet_mlm_config = json!({
-        "architectures": ["MPNetForMaskedLM"]
-    });
-    let config_str = serde_json::to_string(&mpnet_mlm_config).unwrap();
-    let parsed: crate::embedding::provider::huggingface::ModelConfig =
-        serde_json::from_str(&config_str).unwrap();
-    let arch = crate::embedding::provider::huggingface::ModelArchitecture::from_config(&parsed);
-    assert!(matches!(
-        arch,
-        Ok(crate::embedding::provider::huggingface::ModelArchitecture::MPNet)
-    ));
+	// Test MPNet detection (MPNetForMaskedLM)
+	let mpnet_mlm_config = json!({
+		"architectures": ["MPNetForMaskedLM"]
+	});
+	let config_str = serde_json::to_string(&mpnet_mlm_config).unwrap();
+	let parsed: crate::embedding::provider::huggingface::ModelConfig = serde_json::from_str(&config_str).unwrap();
+	let arch = crate::embedding::provider::huggingface::ModelArchitecture::from_config(&parsed);
+	assert!(matches!(
+		arch,
+		Ok(crate::embedding::provider::huggingface::ModelArchitecture::MPNet)
+	));
 }
 
 #[tokio::test]
 #[cfg(not(feature = "fastembed"))]
 async fn test_fastembed_disabled() {
-    let result =
-        create_embedding_provider_from_parts(&EmbeddingProviderType::FastEmbed, "any-model").await;
+	let result = create_embedding_provider_from_parts(&EmbeddingProviderType::FastEmbed, "any-model").await;
 
-    assert!(result.is_err());
-    assert!(result.err().unwrap().to_string().contains("not compiled"));
+	assert!(result.is_err());
+	assert!(result.err().unwrap().to_string().contains("not compiled"));
 }
 
 #[tokio::test]
 #[cfg(not(feature = "huggingface"))]
 async fn test_huggingface_disabled() {
-    let result =
-        create_embedding_provider_from_parts(&EmbeddingProviderType::HuggingFace, "any-model")
-            .await;
+	let result = create_embedding_provider_from_parts(&EmbeddingProviderType::HuggingFace, "any-model").await;
 
-    assert!(result.is_err());
-    assert!(result.err().unwrap().to_string().contains("not compiled"));
+	assert!(result.is_err());
+	assert!(result.err().unwrap().to_string().contains("not compiled"));
 }
 
 #[tokio::test]
 #[cfg(feature = "huggingface")]
 async fn test_huggingface_qwen2_embedding_generation() {
-    // Test actual embedding generation with Qwen2 model
-    // This test downloads the model on first run
-    let result = create_embedding_provider_from_parts(
-        &EmbeddingProviderType::HuggingFace,
-        "jinaai/jina-code-embeddings-1.5b",
-    )
-    .await;
+	// Test actual embedding generation with Qwen2 model
+	// This test downloads the model on first run
+	let result =
+		create_embedding_provider_from_parts(&EmbeddingProviderType::HuggingFace, "jinaai/jina-code-embeddings-1.5b")
+			.await;
 
-    match result {
-        Ok(provider) => {
-            eprintln!("Provider created successfully");
-            // Test single embedding
-            let text = "fn main() { println!(\"Hello, world!\"); }";
-            let embedding = provider.generate_embedding(text).await;
+	match result {
+		Ok(provider) => {
+			eprintln!("Provider created successfully");
+			// Test single embedding
+			let text = "fn main() { println!(\"Hello, world!\"); }";
+			let embedding = provider.generate_embedding(text).await;
 
-            match embedding {
-                Ok((vec, _usage)) => {
-                    assert!(!vec.is_empty(), "Embedding should not be empty");
-                    assert!(
-                        vec.iter().all(|v| v.is_finite()),
-                        "All values should be finite"
-                    );
-                    println!(
-                        "✓ Qwen2 embedding generated successfully, dimension: {}",
-                        vec.len()
-                    );
-                }
-                Err(e) => {
-                    // Model loading can fail in CI due to network/resource constraints
-                    eprintln!("Embedding generation failed:");
-                    for cause in e.chain() {
-                        eprintln!("  Caused by: {}", cause);
-                    }
-                }
-            }
-        }
-        Err(e) => {
-            // HuggingFace might fail due to model download issues in CI
-            eprintln!("HuggingFace provider creation failed:");
-            for cause in e.chain() {
-                eprintln!("  Caused by: {}", cause);
-            }
-        }
-    }
+			match embedding {
+				Ok((vec, _usage)) => {
+					assert!(!vec.is_empty(), "Embedding should not be empty");
+					assert!(vec.iter().all(|v| v.is_finite()), "All values should be finite");
+					println!("✓ Qwen2 embedding generated successfully, dimension: {}", vec.len());
+				}
+				Err(e) => {
+					// Model loading can fail in CI due to network/resource constraints
+					eprintln!("Embedding generation failed:");
+					for cause in e.chain() {
+						eprintln!("  Caused by: {}", cause);
+					}
+				}
+			}
+		}
+		Err(e) => {
+			// HuggingFace might fail due to model download issues in CI
+			eprintln!("HuggingFace provider creation failed:");
+			for cause in e.chain() {
+				eprintln!("  Caused by: {}", cause);
+			}
+		}
+	}
 }
 
 #[tokio::test]
 #[cfg(feature = "huggingface")]
 async fn test_huggingface_bert_embedding_generation() {
-    // Test actual embedding generation with BERT model
-    let result = create_embedding_provider_from_parts(
-        &EmbeddingProviderType::HuggingFace,
-        "sentence-transformers/all-MiniLM-L6-v2",
-    )
-    .await;
+	// Test actual embedding generation with BERT model
+	let result = create_embedding_provider_from_parts(
+		&EmbeddingProviderType::HuggingFace,
+		"sentence-transformers/all-MiniLM-L6-v2",
+	)
+	.await;
 
-    match result {
-        Ok(provider) => {
-            // Test single embedding
-            let text = "This is a test sentence for embedding.";
-            let embedding = provider.generate_embedding(text).await;
+	match result {
+		Ok(provider) => {
+			// Test single embedding
+			let text = "This is a test sentence for embedding.";
+			let embedding = provider.generate_embedding(text).await;
 
-            match embedding {
-                Ok((vec, _usage)) => {
-                    assert!(!vec.is_empty(), "Embedding should not be empty");
-                    assert!(
-                        vec.iter().all(|v| v.is_finite()),
-                        "All values should be finite"
-                    );
-                    println!(
-                        "✓ BERT embedding generated successfully, dimension: {}",
-                        vec.len()
-                    );
-                }
-                Err(e) => {
-                    println!("Embedding generation failed: {}", e);
-                    panic!("Embedding generation should succeed for BERT model");
-                }
-            }
-        }
-        Err(e) => {
-            // HuggingFace might fail due to model download issues in CI
-            println!(
-                "HuggingFace BERT embedding test failed (expected in CI): {}",
-                e
-            );
-        }
-    }
+			match embedding {
+				Ok((vec, _usage)) => {
+					assert!(!vec.is_empty(), "Embedding should not be empty");
+					assert!(vec.iter().all(|v| v.is_finite()), "All values should be finite");
+					println!("✓ BERT embedding generated successfully, dimension: {}", vec.len());
+				}
+				Err(e) => {
+					println!("Embedding generation failed: {}", e);
+					panic!("Embedding generation should succeed for BERT model");
+				}
+			}
+		}
+		Err(e) => {
+			// HuggingFace might fail due to model download issues in CI
+			println!("HuggingFace BERT embedding test failed (expected in CI): {}", e);
+		}
+	}
 }
 
 #[tokio::test]
 #[cfg(feature = "huggingface")]
 async fn test_create_huggingface_jina_code_bert_provider() {
-    // Test JinaCodeBert model loading (jina-embeddings-v2-base-code uses QK-post-norm architecture)
-    let result = create_embedding_provider_from_parts(
-        &EmbeddingProviderType::HuggingFace,
-        "jinaai/jina-embeddings-v2-base-code",
-    )
-    .await;
+	// Test JinaCodeBert model loading (jina-embeddings-v2-base-code uses QK-post-norm architecture)
+	let result = create_embedding_provider_from_parts(
+		&EmbeddingProviderType::HuggingFace,
+		"jinaai/jina-embeddings-v2-base-code",
+	)
+	.await;
 
-    match result {
-        Ok(provider) => {
-            assert!(provider.get_dimension() > 0);
-            assert!(provider.is_model_supported());
-        }
-        Err(e) => {
-            // HuggingFace might fail due to model download issues in CI
-            println!(
-                "HuggingFace JinaCodeBert test failed (expected in CI): {}",
-                e
-            );
-        }
-    }
+	match result {
+		Ok(provider) => {
+			assert!(provider.get_dimension() > 0);
+			assert!(provider.is_model_supported());
+		}
+		Err(e) => {
+			// HuggingFace might fail due to model download issues in CI
+			println!("HuggingFace JinaCodeBert test failed (expected in CI): {}", e);
+		}
+	}
 }
 
 #[tokio::test]
 #[cfg(feature = "huggingface")]
 async fn test_huggingface_jina_code_bert_embedding_generation() {
-    // Test actual embedding generation with JinaCodeBert (QK-post-norm) model
-    // This test downloads the model on first run
-    let result = create_embedding_provider_from_parts(
-        &EmbeddingProviderType::HuggingFace,
-        "jinaai/jina-embeddings-v2-base-code",
-    )
-    .await;
+	// Test actual embedding generation with JinaCodeBert (QK-post-norm) model
+	// This test downloads the model on first run
+	let result = create_embedding_provider_from_parts(
+		&EmbeddingProviderType::HuggingFace,
+		"jinaai/jina-embeddings-v2-base-code",
+	)
+	.await;
 
-    match result {
-        Ok(provider) => {
-            eprintln!("JinaCodeBert provider created successfully");
-            // Test single embedding with code snippet
-            let text = "fn main() { println!(\"Hello, world!\"); }";
-            let embedding = provider.generate_embedding(text).await;
+	match result {
+		Ok(provider) => {
+			eprintln!("JinaCodeBert provider created successfully");
+			// Test single embedding with code snippet
+			let text = "fn main() { println!(\"Hello, world!\"); }";
+			let embedding = provider.generate_embedding(text).await;
 
-            match embedding {
-                Ok((vec, _usage)) => {
-                    assert!(!vec.is_empty(), "Embedding should not be empty");
-                    assert_eq!(
-                        vec.len(),
-                        768,
-                        "jina-embeddings-v2-base-code should produce 768-dim vectors"
-                    );
-                    assert!(
-                        vec.iter().all(|v| v.is_finite()),
-                        "All values should be finite"
-                    );
-                    // Verify the embedding is normalized (L2 norm ≈ 1.0)
-                    let norm: f32 = vec.iter().map(|v| v * v).sum::<f32>().sqrt();
-                    assert!(
-                        (norm - 1.0).abs() < 0.01,
-                        "Embedding should be L2-normalized, got norm: {}",
-                        norm
-                    );
-                    println!(
-                        "✓ JinaCodeBert embedding generated successfully, dimension: {}",
-                        vec.len()
-                    );
-                }
-                Err(e) => {
-                    // Model loading can fail in CI due to network/resource constraints
-                    eprintln!("JinaCodeBert embedding generation failed:");
-                    for cause in e.chain() {
-                        eprintln!("  Caused by: {}", cause);
-                    }
-                }
-            }
-        }
-        Err(e) => {
-            // HuggingFace might fail due to model download issues in CI
-            eprintln!("HuggingFace JinaCodeBert provider creation failed:");
-            for cause in e.chain() {
-                eprintln!("  Caused by: {}", cause);
-            }
-        }
-    }
+			match embedding {
+				Ok((vec, _usage)) => {
+					assert!(!vec.is_empty(), "Embedding should not be empty");
+					assert_eq!(
+						vec.len(),
+						768,
+						"jina-embeddings-v2-base-code should produce 768-dim vectors"
+					);
+					assert!(vec.iter().all(|v| v.is_finite()), "All values should be finite");
+					// Verify the embedding is normalized (L2 norm ≈ 1.0)
+					let norm: f32 = vec.iter().map(|v| v * v).sum::<f32>().sqrt();
+					assert!(
+						(norm - 1.0).abs() < 0.01,
+						"Embedding should be L2-normalized, got norm: {}",
+						norm
+					);
+					println!(
+						"✓ JinaCodeBert embedding generated successfully, dimension: {}",
+						vec.len()
+					);
+				}
+				Err(e) => {
+					// Model loading can fail in CI due to network/resource constraints
+					eprintln!("JinaCodeBert embedding generation failed:");
+					for cause in e.chain() {
+						eprintln!("  Caused by: {}", cause);
+					}
+				}
+			}
+		}
+		Err(e) => {
+			// HuggingFace might fail due to model download issues in CI
+			eprintln!("HuggingFace JinaCodeBert provider creation failed:");
+			for cause in e.chain() {
+				eprintln!("  Caused by: {}", cause);
+			}
+		}
+	}
 }
 
 #[tokio::test]
 #[cfg(feature = "huggingface")]
 async fn test_create_huggingface_mpnet_provider() {
-    // Test MPNet model loading (all-mpnet-base-v2 uses MPNet architecture)
-    let result = create_embedding_provider_from_parts(
-        &EmbeddingProviderType::HuggingFace,
-        "sentence-transformers/all-mpnet-base-v2",
-    )
-    .await;
+	// Test MPNet model loading (all-mpnet-base-v2 uses MPNet architecture)
+	let result = create_embedding_provider_from_parts(
+		&EmbeddingProviderType::HuggingFace,
+		"sentence-transformers/all-mpnet-base-v2",
+	)
+	.await;
 
-    match result {
-        Ok(provider) => {
-            assert_eq!(provider.get_dimension(), 768);
-            assert!(provider.is_model_supported());
-        }
-        Err(e) => {
-            // HuggingFace might fail due to model download issues in CI
-            println!("HuggingFace MPNet test failed (expected in CI): {}", e);
-        }
-    }
+	match result {
+		Ok(provider) => {
+			assert_eq!(provider.get_dimension(), 768);
+			assert!(provider.is_model_supported());
+		}
+		Err(e) => {
+			// HuggingFace might fail due to model download issues in CI
+			println!("HuggingFace MPNet test failed (expected in CI): {}", e);
+		}
+	}
 }
 
 #[tokio::test]
 #[cfg(feature = "huggingface")]
 async fn test_huggingface_mpnet_embedding_generation() {
-    // Test actual embedding generation with MPNet model
-    // This test downloads the model on first run
-    let result = create_embedding_provider_from_parts(
-        &EmbeddingProviderType::HuggingFace,
-        "sentence-transformers/all-mpnet-base-v2",
-    )
-    .await;
+	// Test actual embedding generation with MPNet model
+	// This test downloads the model on first run
+	let result = create_embedding_provider_from_parts(
+		&EmbeddingProviderType::HuggingFace,
+		"sentence-transformers/all-mpnet-base-v2",
+	)
+	.await;
 
-    match result {
-        Ok(provider) => {
-            eprintln!("MPNet provider created successfully");
-            // Test single embedding
-            let text = "This is a test sentence for MPNet embedding.";
-            let embedding = provider.generate_embedding(text).await;
+	match result {
+		Ok(provider) => {
+			eprintln!("MPNet provider created successfully");
+			// Test single embedding
+			let text = "This is a test sentence for MPNet embedding.";
+			let embedding = provider.generate_embedding(text).await;
 
-            match embedding {
-                Ok((vec, _usage)) => {
-                    assert!(!vec.is_empty(), "Embedding should not be empty");
-                    assert_eq!(
-                        vec.len(),
-                        768,
-                        "all-mpnet-base-v2 should produce 768-dim vectors"
-                    );
-                    assert!(
-                        vec.iter().all(|v| v.is_finite()),
-                        "All values should be finite"
-                    );
-                    // Verify the embedding is normalized (L2 norm ≈ 1.0)
-                    let norm: f32 = vec.iter().map(|v| v * v).sum::<f32>().sqrt();
-                    assert!(
-                        (norm - 1.0).abs() < 0.01,
-                        "Embedding should be L2-normalized, got norm: {}",
-                        norm
-                    );
-                    println!(
-                        "✓ MPNet embedding generated successfully, dimension: {}",
-                        vec.len()
-                    );
-                }
-                Err(e) => {
-                    // Model loading can fail in CI due to network/resource constraints
-                    eprintln!("MPNet embedding generation failed:");
-                    for cause in e.chain() {
-                        eprintln!("  Caused by: {}", cause);
-                    }
-                }
-            }
-        }
-        Err(e) => {
-            // HuggingFace might fail due to model download issues in CI
-            eprintln!("HuggingFace MPNet provider creation failed:");
-            for cause in e.chain() {
-                eprintln!("  Caused by: {}", cause);
-            }
-        }
-    }
+			match embedding {
+				Ok((vec, _usage)) => {
+					assert!(!vec.is_empty(), "Embedding should not be empty");
+					assert_eq!(vec.len(), 768, "all-mpnet-base-v2 should produce 768-dim vectors");
+					assert!(vec.iter().all(|v| v.is_finite()), "All values should be finite");
+					// Verify the embedding is normalized (L2 norm ≈ 1.0)
+					let norm: f32 = vec.iter().map(|v| v * v).sum::<f32>().sqrt();
+					assert!(
+						(norm - 1.0).abs() < 0.01,
+						"Embedding should be L2-normalized, got norm: {}",
+						norm
+					);
+					println!("✓ MPNet embedding generated successfully, dimension: {}", vec.len());
+				}
+				Err(e) => {
+					// Model loading can fail in CI due to network/resource constraints
+					eprintln!("MPNet embedding generation failed:");
+					for cause in e.chain() {
+						eprintln!("  Caused by: {}", cause);
+					}
+				}
+			}
+		}
+		Err(e) => {
+			// HuggingFace might fail due to model download issues in CI
+			eprintln!("HuggingFace MPNet provider creation failed:");
+			for cause in e.chain() {
+				eprintln!("  Caused by: {}", cause);
+			}
+		}
+	}
 }
 
 #[tokio::test]
 #[cfg(feature = "huggingface")]
 async fn test_create_huggingface_codebert_provider() {
-    // Test CodeBERT model loading (microsoft/codebert-base uses RobertaModel architecture)
-    let result = create_embedding_provider_from_parts(
-        &EmbeddingProviderType::HuggingFace,
-        "microsoft/codebert-base",
-    )
-    .await;
+	// Test CodeBERT model loading (microsoft/codebert-base uses RobertaModel architecture)
+	let result =
+		create_embedding_provider_from_parts(&EmbeddingProviderType::HuggingFace, "microsoft/codebert-base").await;
 
-    match result {
-        Ok(provider) => {
-            assert_eq!(provider.get_dimension(), 768);
-            assert!(provider.is_model_supported());
-        }
-        Err(e) => {
-            // HuggingFace might fail due to model download issues in CI
-            println!("HuggingFace CodeBERT test failed (expected in CI): {}", e);
-        }
-    }
+	match result {
+		Ok(provider) => {
+			assert_eq!(provider.get_dimension(), 768);
+			assert!(provider.is_model_supported());
+		}
+		Err(e) => {
+			// HuggingFace might fail due to model download issues in CI
+			println!("HuggingFace CodeBERT test failed (expected in CI): {}", e);
+		}
+	}
 }
 #[tokio::test]
 async fn test_invalid_model() {
-    let result =
-        create_embedding_provider_from_parts(&EmbeddingProviderType::Jina, "invalid-model-name")
-            .await;
+	let result = create_embedding_provider_from_parts(&EmbeddingProviderType::Jina, "invalid-model-name").await;
 
-    assert!(result.is_err());
-    let error_msg = result.err().unwrap().to_string();
-    assert!(error_msg.contains("Unsupported model") || error_msg.contains("invalid"));
+	assert!(result.is_err());
+	let error_msg = result.err().unwrap().to_string();
+	assert!(error_msg.contains("Unsupported model") || error_msg.contains("invalid"));
 }
 
 /// How a provider settles its embedding dimension. `get_dimension()` is
@@ -738,51 +666,51 @@ async fn test_invalid_model() {
 /// to dimension 0 without someone deciding, on this line, how it learns it.
 #[derive(Debug, PartialEq)]
 enum DimensionStrategy {
-    /// Known synchronously at construction (per-model map or local model config).
-    StaticAtConstruction,
-    /// Not advertised by the backend — must be probed from a live response in an
-    /// async `new()` and cached, like the Local and OpenRouter providers.
-    ProbedAtConstruction,
+	/// Known synchronously at construction (per-model map or local model config).
+	StaticAtConstruction,
+	/// Not advertised by the backend — must be probed from a live response in an
+	/// async `new()` and cached, like the Local and OpenRouter providers.
+	ProbedAtConstruction,
 }
 
 fn dimension_strategy(provider: &EmbeddingProviderType) -> DimensionStrategy {
-    match provider {
-        EmbeddingProviderType::FastEmbed
-        | EmbeddingProviderType::HuggingFace
-        | EmbeddingProviderType::Onnx
-        | EmbeddingProviderType::Jina
-        | EmbeddingProviderType::Voyage
-        | EmbeddingProviderType::Google
-        | EmbeddingProviderType::OpenAI => DimensionStrategy::StaticAtConstruction,
-        EmbeddingProviderType::OpenRouter
-        | EmbeddingProviderType::OctoHub
-        | EmbeddingProviderType::Local => DimensionStrategy::ProbedAtConstruction,
-    }
+	match provider {
+		EmbeddingProviderType::FastEmbed
+		| EmbeddingProviderType::HuggingFace
+		| EmbeddingProviderType::Onnx
+		| EmbeddingProviderType::Jina
+		| EmbeddingProviderType::Voyage
+		| EmbeddingProviderType::Google
+		| EmbeddingProviderType::OpenAI => DimensionStrategy::StaticAtConstruction,
+		EmbeddingProviderType::OpenRouter | EmbeddingProviderType::OctoHub | EmbeddingProviderType::Local => {
+			DimensionStrategy::ProbedAtConstruction
+		}
+	}
 }
 
 #[test]
 fn every_provider_declares_a_dimension_strategy() {
-    // The compile-time guarantee lives in `dimension_strategy`'s exhaustive
-    // match. These assertions pin the providers whose dimension is NOT statically
-    // known to probe-at-construction, so a future "simplification" back to a sync
-    // constructor returning 0 (which silently breaks indexing) trips this test.
-    assert_eq!(
-        dimension_strategy(&EmbeddingProviderType::Local),
-        DimensionStrategy::ProbedAtConstruction
-    );
-    assert_eq!(
-        dimension_strategy(&EmbeddingProviderType::OpenRouter),
-        DimensionStrategy::ProbedAtConstruction
-    );
-    // Static providers must resolve a dimension without any network probe.
-    assert_eq!(
-        dimension_strategy(&EmbeddingProviderType::Voyage),
-        DimensionStrategy::StaticAtConstruction
-    );
-    // ONNX reads its dimension from the repo's own `1_Pooling/config.json`
-    // (or `hidden_size`) during async construction — a declaration, not a probe.
-    assert_eq!(
-        dimension_strategy(&EmbeddingProviderType::Onnx),
-        DimensionStrategy::StaticAtConstruction
-    );
+	// The compile-time guarantee lives in `dimension_strategy`'s exhaustive
+	// match. These assertions pin the providers whose dimension is NOT statically
+	// known to probe-at-construction, so a future "simplification" back to a sync
+	// constructor returning 0 (which silently breaks indexing) trips this test.
+	assert_eq!(
+		dimension_strategy(&EmbeddingProviderType::Local),
+		DimensionStrategy::ProbedAtConstruction
+	);
+	assert_eq!(
+		dimension_strategy(&EmbeddingProviderType::OpenRouter),
+		DimensionStrategy::ProbedAtConstruction
+	);
+	// Static providers must resolve a dimension without any network probe.
+	assert_eq!(
+		dimension_strategy(&EmbeddingProviderType::Voyage),
+		DimensionStrategy::StaticAtConstruction
+	);
+	// ONNX reads its dimension from the repo's own `1_Pooling/config.json`
+	// (or `hidden_size`) during async construction — a declaration, not a probe.
+	assert_eq!(
+		dimension_strategy(&EmbeddingProviderType::Onnx),
+		DimensionStrategy::StaticAtConstruction
+	);
 }

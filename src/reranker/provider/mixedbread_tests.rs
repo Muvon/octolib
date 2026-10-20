@@ -16,20 +16,17 @@ use super::*;
 
 #[test]
 fn test_mixedbread_provider_creation() {
-    assert!(MixedbreadProvider::new("mixedbread-ai/mxbai-rerank-v3.1-listwise").is_ok());
-    assert!(MixedbreadProvider::new("mxbai-rerank-large-v2").is_ok());
-    assert!(MixedbreadProvider::new("mxbai-rerank-base-v2").is_err());
-    assert!(MixedbreadProvider::new("invalid-model").is_err());
+	assert!(MixedbreadProvider::new("mixedbread-ai/mxbai-rerank-v3.1-listwise").is_ok());
+	assert!(MixedbreadProvider::new("mxbai-rerank-large-v2").is_ok());
+	assert!(MixedbreadProvider::new("mxbai-rerank-base-v2").is_err());
+	assert!(MixedbreadProvider::new("invalid-model").is_err());
 }
 
 #[test]
 fn test_mixedbread_model_validation() {
-    let models = [
-        "mixedbread-ai/mxbai-rerank-v3.1-listwise",
-        "mxbai-rerank-large-v2",
-    ];
-    for model in models {
-        let provider = MixedbreadProvider::new(model).unwrap();
-        assert!(provider.is_model_supported());
-    }
+	let models = ["mixedbread-ai/mxbai-rerank-v3.1-listwise", "mxbai-rerank-large-v2"];
+	for model in models {
+		let provider = MixedbreadProvider::new(model).unwrap();
+		assert!(provider.is_model_supported());
+	}
 }

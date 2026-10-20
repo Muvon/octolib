@@ -41,11 +41,11 @@
 //! - `OPENCODE_ZEN_API_URL` / `OPENCODE_GO_API_URL`: Optional endpoint overrides
 
 use crate::llm::providers::openai_compat::{
-    chat_completion_with_sampling as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
+	chat_completion_with_sampling as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
 };
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-    ChatCompletionParams, Message, ProviderResponse, ReasoningEffort, SamplingSupport, TokenUsage,
+	ChatCompletionParams, Message, ProviderResponse, ReasoningEffort, SamplingSupport, TokenUsage,
 };
 use crate::llm::utils::contains_ignore_ascii_case;
 use anyhow::Result;
@@ -70,8 +70,7 @@ const OPENCODE_SESSION_HEADER: &str = "x-opencode-session";
 static OPENCODE_SESSION_ID: LazyLock<String> = LazyLock::new(|| uuid::Uuid::new_v4().to_string());
 
 fn get_opencode_api_key(provider: &str) -> Result<String> {
-    env::var(OPENCODE_API_KEY_ENV)
-        .map_err(|_| crate::errors::missing_api_key(provider, OPENCODE_API_KEY_ENV).into())
+	env::var(OPENCODE_API_KEY_ENV).map_err(|_| crate::errors::missing_api_key(provider, OPENCODE_API_KEY_ENV).into())
 }
 
 /// Upstream sampling restrictions for models routed through the proxy.
@@ -81,16 +80,16 @@ fn get_opencode_api_key(provider: &str) -> Result<String> {
 /// "only 0.95 is allowed"), so mirror the per-vendor rules already encoded
 /// in the sibling providers. Unknown families pass everything through.
 fn sampling_support(model: &str) -> SamplingSupport {
-    let model = model.to_ascii_lowercase();
-    if model.starts_with("claude") {
-        crate::llm::providers::anthropic::AnthropicProvider::new().supported_sampling_params(&model)
-    } else if model.starts_with("gpt") {
-        crate::llm::providers::openai::OpenAiProvider::new().supported_sampling_params(&model)
-    } else if model.starts_with("kimi") {
-        crate::llm::providers::moonshot::MoonshotProvider::new().supported_sampling_params(&model)
-    } else {
-        SamplingSupport::ALL
-    }
+	let model = model.to_ascii_lowercase();
+	if model.starts_with("claude") {
+		crate::llm::providers::anthropic::AnthropicProvider::new().supported_sampling_params(&model)
+	} else if model.starts_with("gpt") {
+		crate::llm::providers::openai::OpenAiProvider::new().supported_sampling_params(&model)
+	} else if model.starts_with("kimi") {
+		crate::llm::providers::moonshot::MoonshotProvider::new().supported_sampling_params(&model)
+	} else {
+		SamplingSupport::ALL
+	}
 }
 
 /// Kimi reasoning-effort rules for the opencode routers.
@@ -103,22 +102,19 @@ fn sampling_support(model: &str) -> SamplingSupport {
 /// `k3_reasoning_effort`: floor intermediate levels to the nearest supported
 /// lower effort, drop the field elsewhere.
 /// Source: platform.kimi.ai/docs/guide/use-kimi-k2-thinking-model
-fn adjust_reasoning_effort(
-    model: &str,
-    effort: Option<ReasoningEffort>,
-) -> Option<ReasoningEffort> {
-    if !model.to_ascii_lowercase().starts_with("kimi") {
-        return effort;
-    }
-    if !contains_ignore_ascii_case(model, "kimi-k3") {
-        return None;
-    }
-    match effort {
-        Some(ReasoningEffort::Low) | Some(ReasoningEffort::Medium) => Some(ReasoningEffort::Low),
-        Some(ReasoningEffort::High) | Some(ReasoningEffort::XHigh) => Some(ReasoningEffort::High),
-        Some(ReasoningEffort::Max) => Some(ReasoningEffort::Max),
-        Some(ReasoningEffort::None) | None => None,
-    }
+fn adjust_reasoning_effort(model: &str, effort: Option<ReasoningEffort>) -> Option<ReasoningEffort> {
+	if !model.to_ascii_lowercase().starts_with("kimi") {
+		return effort;
+	}
+	if !contains_ignore_ascii_case(model, "kimi-k3") {
+		return None;
+	}
+	match effort {
+		Some(ReasoningEffort::Low) | Some(ReasoningEffort::Medium) => Some(ReasoningEffort::Low),
+		Some(ReasoningEffort::High) | Some(ReasoningEffort::XHigh) => Some(ReasoningEffort::High),
+		Some(ReasoningEffort::Max) => Some(ReasoningEffort::Max),
+		Some(ReasoningEffort::None) | None => None,
+	}
 }
 
 /// Resolve a cloud-equivalent request cost for an OpenCode response.
@@ -128,26 +124,26 @@ fn adjust_reasoning_effort(
 /// model, so fall back to the reference table in that case. Zen's top-level
 /// `cost` remains authoritative because it is the actual pay-as-you-go charge.
 fn resolve_opencode_cost(
-    provider_name: &str,
-    model: &str,
-    zen_reported_cost: Option<f64>,
-    usage: &TokenUsage,
+	provider_name: &str,
+	model: &str,
+	zen_reported_cost: Option<f64>,
+	usage: &TokenUsage,
 ) -> Option<f64> {
-    let response_cost = if provider_name == "opencode-zen" {
-        zen_reported_cost.or(usage.cost)
-    } else {
-        usage.cost.filter(|cost| cost.is_finite() && *cost > 0.0)
-    };
+	let response_cost = if provider_name == "opencode-zen" {
+		zen_reported_cost.or(usage.cost)
+	} else {
+		usage.cost.filter(|cost| cost.is_finite() && *cost > 0.0)
+	};
 
-    response_cost.or_else(|| {
-        crate::llm::reference_models::calculate_reference_cost_with_cache(
-            model,
-            usage.input_tokens,
-            usage.cache_write_tokens,
-            usage.cache_read_tokens,
-            usage.billable_output_tokens(),
-        )
-    })
+	response_cost.or_else(|| {
+		crate::llm::reference_models::calculate_reference_cost_with_cache(
+			model,
+			usage.input_tokens,
+			usage.cache_write_tokens,
+			usage.cache_read_tokens,
+			usage.billable_output_tokens(),
+		)
+	})
 }
 
 /// Remove replay-only placeholders that Kimi rejects as invalid messages.
@@ -158,92 +154,89 @@ fn resolve_opencode_cost(
 /// tool calls, media, or thinking; only a structurally empty placeholder is
 /// omitted.
 fn remove_empty_kimi_assistant_messages(model: &str, messages: &mut Vec<Message>) {
-    if !model.to_ascii_lowercase().starts_with("kimi") {
-        return;
-    }
+	if !model.to_ascii_lowercase().starts_with("kimi") {
+		return;
+	}
 
-    messages.retain(|message| {
-        let empty_tool_calls = message
-            .tool_calls
-            .as_ref()
-            .is_none_or(|calls| calls.as_array().is_some_and(Vec::is_empty));
-        let empty_images = message.images.as_ref().is_none_or(Vec::is_empty);
-        let empty_videos = message.videos.as_ref().is_none_or(Vec::is_empty);
-        let empty_thinking = message
-            .thinking
-            .as_ref()
-            .is_none_or(|thinking| thinking.content.trim().is_empty());
-        let structurally_empty = message.role == "assistant"
-            && message.content.trim().is_empty()
-            && empty_tool_calls
-            && empty_images
-            && empty_videos
-            && empty_thinking;
+	messages.retain(|message| {
+		let empty_tool_calls = message
+			.tool_calls
+			.as_ref()
+			.is_none_or(|calls| calls.as_array().is_some_and(Vec::is_empty));
+		let empty_images = message.images.as_ref().is_none_or(Vec::is_empty);
+		let empty_videos = message.videos.as_ref().is_none_or(Vec::is_empty);
+		let empty_thinking = message
+			.thinking
+			.as_ref()
+			.is_none_or(|thinking| thinking.content.trim().is_empty());
+		let structurally_empty = message.role == "assistant"
+			&& message.content.trim().is_empty()
+			&& empty_tool_calls
+			&& empty_images
+			&& empty_videos
+			&& empty_thinking;
 
-        !structurally_empty
-    });
+		!structurally_empty
+	});
 }
 
 /// Attach `x-opencode-session` unless the caller already supplied it.
 fn set_session_header(params: &mut ChatCompletionParams) {
-    let headers = params.extra_headers.get_or_insert_with(Default::default);
-    if !headers
-        .keys()
-        .any(|name| name.eq_ignore_ascii_case(OPENCODE_SESSION_HEADER))
-    {
-        headers.insert(
-            OPENCODE_SESSION_HEADER.to_string(),
-            OPENCODE_SESSION_ID.clone(),
-        );
-    }
+	let headers = params.extra_headers.get_or_insert_with(Default::default);
+	if !headers
+		.keys()
+		.any(|name| name.eq_ignore_ascii_case(OPENCODE_SESSION_HEADER))
+	{
+		headers.insert(OPENCODE_SESSION_HEADER.to_string(), OPENCODE_SESSION_ID.clone());
+	}
 }
 
 async fn opencode_chat_completion(
-    provider_name: &'static str,
-    api_key: String,
-    api_url: String,
-    mut params: ChatCompletionParams,
+	provider_name: &'static str,
+	api_key: String,
+	api_url: String,
+	mut params: ChatCompletionParams,
 ) -> Result<ProviderResponse> {
-    let model = params.model.clone();
+	let model = params.model.clone();
 
-    // Kimi models reject unsupported reasoning_effort values — normalize
-    // before the generic openai_compat passthrough serializes the field.
-    params.reasoning_effort = adjust_reasoning_effort(&model, params.reasoning_effort);
-    remove_empty_kimi_assistant_messages(&model, &mut params.messages);
+	// Kimi models reject unsupported reasoning_effort values — normalize
+	// before the generic openai_compat passthrough serializes the field.
+	params.reasoning_effort = adjust_reasoning_effort(&model, params.reasoning_effort);
+	remove_empty_kimi_assistant_messages(&model, &mut params.messages);
 
-    set_session_header(&mut params);
+	set_session_header(&mut params);
 
-    let mut response = openai_compat_chat_completion(
-        OpenAiCompatConfig {
-            provider_name,
-            usage_fallback_cost: None,
-            use_response_cost: true,
-            enforces_response_schema: true,
-            supports_required_tool_choice: false,
-            supports_parallel_tool_calls: true,
-        },
-        sampling_support(&model),
-        api_key,
-        api_url,
-        params,
-    )
-    .await?;
+	let mut response = openai_compat_chat_completion(
+		OpenAiCompatConfig {
+			provider_name,
+			usage_fallback_cost: None,
+			use_response_cost: true,
+			enforces_response_schema: true,
+			supports_required_tool_choice: false,
+			supports_parallel_tool_calls: true,
+		},
+		sampling_support(&model),
+		api_key,
+		api_url,
+		params,
+	)
+	.await?;
 
-    let reported_cost = if provider_name == "opencode-zen" {
-        response.exchange.response.get("cost").and_then(|value| {
-            value
-                .as_f64()
-                .or_else(|| value.as_str().and_then(|text| text.parse::<f64>().ok()))
-        })
-    } else {
-        None
-    };
+	let reported_cost = if provider_name == "opencode-zen" {
+		response.exchange.response.get("cost").and_then(|value| {
+			value
+				.as_f64()
+				.or_else(|| value.as_str().and_then(|text| text.parse::<f64>().ok()))
+		})
+	} else {
+		None
+	};
 
-    if let Some(ref mut usage) = response.exchange.usage {
-        usage.cost = resolve_opencode_cost(provider_name, &model, reported_cost, usage);
-    }
+	if let Some(ref mut usage) = response.exchange.usage {
+		usage.cost = resolve_opencode_cost(provider_name, &model, reported_cost, usage);
+	}
 
-    Ok(response)
+	Ok(response)
 }
 
 /// OpenCode Zen provider (pay-as-you-go)
@@ -251,34 +244,34 @@ async fn opencode_chat_completion(
 pub struct OpenCodeZenProvider;
 
 impl OpenCodeZenProvider {
-    pub fn new() -> Self {
-        Self
-    }
+	pub fn new() -> Self {
+		Self
+	}
 }
 
 #[async_trait::async_trait]
 impl AiProvider for OpenCodeZenProvider {
-    fn name(&self) -> &str {
-        "opencode-zen"
-    }
+	fn name(&self) -> &str {
+		"opencode-zen"
+	}
 
-    fn supports_model(&self, model: &str) -> bool {
-        !model.is_empty()
-    }
+	fn supports_model(&self, model: &str) -> bool {
+		!model.is_empty()
+	}
 
-    fn supported_sampling_params(&self, model: &str) -> SamplingSupport {
-        sampling_support(model)
-    }
+	fn supported_sampling_params(&self, model: &str) -> SamplingSupport {
+		sampling_support(model)
+	}
 
-    fn get_api_key(&self) -> Result<String> {
-        get_opencode_api_key("opencode-zen")
-    }
+	fn get_api_key(&self) -> Result<String> {
+		get_opencode_api_key("opencode-zen")
+	}
 
-    async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-        let api_key = self.get_api_key()?;
-        let api_url = get_api_url(OPENCODE_ZEN_API_URL_ENV, OPENCODE_ZEN_API_URL);
-        opencode_chat_completion("opencode-zen", api_key, api_url, params).await
-    }
+	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
+		let api_key = self.get_api_key()?;
+		let api_url = get_api_url(OPENCODE_ZEN_API_URL_ENV, OPENCODE_ZEN_API_URL);
+		opencode_chat_completion("opencode-zen", api_key, api_url, params).await
+	}
 }
 
 /// OpenCode Go provider (subscription)
@@ -286,45 +279,45 @@ impl AiProvider for OpenCodeZenProvider {
 pub struct OpenCodeGoProvider;
 
 impl OpenCodeGoProvider {
-    pub fn new() -> Self {
-        Self
-    }
+	pub fn new() -> Self {
+		Self
+	}
 }
 
 #[async_trait::async_trait]
 impl AiProvider for OpenCodeGoProvider {
-    fn name(&self) -> &str {
-        "opencode-go"
-    }
+	fn name(&self) -> &str {
+		"opencode-go"
+	}
 
-    fn supports_model(&self, model: &str) -> bool {
-        !model.is_empty()
-    }
+	fn supports_model(&self, model: &str) -> bool {
+		!model.is_empty()
+	}
 
-    fn supports_caching(&self, _model: &str) -> bool {
-        // Automatic upstream prompt-prefix caching — `cached_tokens` observed
-        // in usage on repeated prefixes (no opt-in param).
-        true
-    }
+	fn supports_caching(&self, _model: &str) -> bool {
+		// Automatic upstream prompt-prefix caching — `cached_tokens` observed
+		// in usage on repeated prefixes (no opt-in param).
+		true
+	}
 
-    fn supports_structured_output(&self, _model: &str) -> bool {
-        // Verified live: json_schema response_format honored through the router.
-        true
-    }
+	fn supports_structured_output(&self, _model: &str) -> bool {
+		// Verified live: json_schema response_format honored through the router.
+		true
+	}
 
-    fn supported_sampling_params(&self, model: &str) -> SamplingSupport {
-        sampling_support(model)
-    }
+	fn supported_sampling_params(&self, model: &str) -> SamplingSupport {
+		sampling_support(model)
+	}
 
-    fn get_api_key(&self) -> Result<String> {
-        get_opencode_api_key("opencode-go")
-    }
+	fn get_api_key(&self) -> Result<String> {
+		get_opencode_api_key("opencode-go")
+	}
 
-    async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-        let api_key = self.get_api_key()?;
-        let api_url = get_api_url(OPENCODE_GO_API_URL_ENV, OPENCODE_GO_API_URL);
-        opencode_chat_completion("opencode-go", api_key, api_url, params).await
-    }
+	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
+		let api_key = self.get_api_key()?;
+		let api_url = get_api_url(OPENCODE_GO_API_URL_ENV, OPENCODE_GO_API_URL);
+		opencode_chat_completion("opencode-go", api_key, api_url, params).await
+	}
 }
 
 #[cfg(test)]

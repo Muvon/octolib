@@ -16,40 +16,40 @@ use super::*;
 
 #[test]
 fn test_openai_provider_creation() {
-    // Test valid models
-    assert!(OpenAIProviderImpl::new("text-embedding-3-small").is_ok());
-    assert!(OpenAIProviderImpl::new("text-embedding-3-large").is_ok());
-    assert!(OpenAIProviderImpl::new("text-embedding-ada-002").is_ok());
+	// Test valid models
+	assert!(OpenAIProviderImpl::new("text-embedding-3-small").is_ok());
+	assert!(OpenAIProviderImpl::new("text-embedding-3-large").is_ok());
+	assert!(OpenAIProviderImpl::new("text-embedding-ada-002").is_ok());
 
-    // Test invalid model
-    assert!(OpenAIProviderImpl::new("invalid-model").is_err());
+	// Test invalid model
+	assert!(OpenAIProviderImpl::new("invalid-model").is_err());
 }
 
 #[test]
 fn test_model_dimensions() {
-    let provider_small = OpenAIProviderImpl::new("text-embedding-3-small").unwrap();
-    assert_eq!(provider_small.get_dimension(), 1536);
+	let provider_small = OpenAIProviderImpl::new("text-embedding-3-small").unwrap();
+	assert_eq!(provider_small.get_dimension(), 1536);
 
-    let provider_large = OpenAIProviderImpl::new("text-embedding-3-large").unwrap();
-    assert_eq!(provider_large.get_dimension(), 3072);
+	let provider_large = OpenAIProviderImpl::new("text-embedding-3-large").unwrap();
+	assert_eq!(provider_large.get_dimension(), 3072);
 
-    let provider_ada = OpenAIProviderImpl::new("text-embedding-ada-002").unwrap();
-    assert_eq!(provider_ada.get_dimension(), 1536);
+	let provider_ada = OpenAIProviderImpl::new("text-embedding-ada-002").unwrap();
+	assert_eq!(provider_ada.get_dimension(), 1536);
 }
 
 #[test]
 fn test_model_validation() {
-    let provider_valid = OpenAIProviderImpl::new("text-embedding-3-small").unwrap();
-    assert!(provider_valid.is_model_supported());
+	let provider_valid = OpenAIProviderImpl::new("text-embedding-3-small").unwrap();
+	assert!(provider_valid.is_model_supported());
 
-    // This would panic if we tried to create an invalid model, so we test indirectly
-    let supported_models = [
-        "text-embedding-3-small",
-        "text-embedding-3-large",
-        "text-embedding-ada-002",
-    ];
-    for model in supported_models {
-        let provider = OpenAIProviderImpl::new(model).unwrap();
-        assert!(provider.is_model_supported());
-    }
+	// This would panic if we tried to create an invalid model, so we test indirectly
+	let supported_models = [
+		"text-embedding-3-small",
+		"text-embedding-3-large",
+		"text-embedding-ada-002",
+	];
+	for model in supported_models {
+		let provider = OpenAIProviderImpl::new(model).unwrap();
+		assert!(provider.is_model_supported());
+	}
 }

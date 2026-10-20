@@ -45,494 +45,446 @@ const CODEX_REASONING_LEVELS: &[&str] = &["low", "medium", "high"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum CliBackendKind {
-    Codex,
-    Claude,
-    Cursor,
-    Gemini,
-    Generic,
+	Codex,
+	Claude,
+	Cursor,
+	Gemini,
+	Generic,
 }
 
 #[derive(Debug, Clone)]
 struct CliBackend {
-    name: String,
-    kind: CliBackendKind,
+	name: String,
+	kind: CliBackendKind,
 }
 
 #[derive(Debug, Clone)]
 pub struct CliProvider {
-    backend: CliBackend,
-    command: PathBuf,
-    pub(crate) extra_args: Vec<String>,
-    pub(crate) model_flag: String,
-    pub(crate) prompt_flag: String,
-    pub(crate) reasoning_effort: String,
-    pub(crate) skip_git_check: bool,
+	backend: CliBackend,
+	command: PathBuf,
+	pub(crate) extra_args: Vec<String>,
+	pub(crate) model_flag: String,
+	pub(crate) prompt_flag: String,
+	pub(crate) reasoning_effort: String,
+	pub(crate) skip_git_check: bool,
 }
 
 impl CliProvider {
-    pub fn new_for_model(model: &str) -> Result<Self> {
-        let (backend_name, _) = split_cli_model(model)?;
-        let backend = CliBackend::from_name(&backend_name);
-        let command = resolve_cli_command(&backend.name)?;
-        let extra_args = parse_extra_args(&backend.name);
-        let model_flag = resolve_flag(&backend.name, CLI_MODEL_FLAG_SUFFIX, "-m");
-        let prompt_flag = resolve_flag(&backend.name, CLI_PROMPT_FLAG_SUFFIX, "-p");
+	pub fn new_for_model(model: &str) -> Result<Self> {
+		let (backend_name, _) = split_cli_model(model)?;
+		let backend = CliBackend::from_name(&backend_name);
+		let command = resolve_cli_command(&backend.name)?;
+		let extra_args = parse_extra_args(&backend.name);
+		let model_flag = resolve_flag(&backend.name, CLI_MODEL_FLAG_SUFFIX, "-m");
+		let prompt_flag = resolve_flag(&backend.name, CLI_PROMPT_FLAG_SUFFIX, "-p");
 
-        let reasoning_effort = parse_reasoning_effort();
-        let skip_git_check = parse_bool_env(CLI_CODEX_SKIP_GIT_CHECK_ENV, false)
-            || parse_bool_env(CODEX_SKIP_GIT_CHECK_ENV, false);
+		let reasoning_effort = parse_reasoning_effort();
+		let skip_git_check =
+			parse_bool_env(CLI_CODEX_SKIP_GIT_CHECK_ENV, false) || parse_bool_env(CODEX_SKIP_GIT_CHECK_ENV, false);
 
-        Ok(Self {
-            backend,
-            command,
-            extra_args,
-            model_flag,
-            prompt_flag,
-            reasoning_effort,
-            skip_git_check,
-        })
-    }
+		Ok(Self {
+			backend,
+			command,
+			extra_args,
+			model_flag,
+			prompt_flag,
+			reasoning_effort,
+			skip_git_check,
+		})
+	}
 
-    fn messages_to_prompt(&self, messages: &[Message]) -> String {
-        let mut full_prompt = String::new();
+	fn messages_to_prompt(&self, messages: &[Message]) -> String {
+		let mut full_prompt = String::new();
 
-        let system_text = messages
-            .iter()
-            .filter(|m| m.role == "system")
-            .map(|m| m.content.trim())
-            .filter(|t| !t.is_empty())
-            .collect::<Vec<_>>()
-            .join("\n\n");
+		let system_text = messages
+			.iter()
+			.filter(|m| m.role == "system")
+			.map(|m| m.content.trim())
+			.filter(|t| !t.is_empty())
+			.collect::<Vec<_>>()
+			.join("\n\n");
 
-        if !system_text.is_empty() {
-            full_prompt.push_str(&system_text);
-            full_prompt.push_str("\n\n");
-        }
+		if !system_text.is_empty() {
+			full_prompt.push_str(&system_text);
+			full_prompt.push_str("\n\n");
+		}
 
-        for message in messages.iter().filter(|m| m.role != "system") {
-            let role_prefix = match message.role.as_str() {
-                "user" => "Human: ",
-                "assistant" => "Assistant: ",
-                _ => continue,
-            };
+		for message in messages.iter().filter(|m| m.role != "system") {
+			let role_prefix = match message.role.as_str() {
+				"user" => "Human: ",
+				"assistant" => "Assistant: ",
+				_ => continue,
+			};
 
-            let trimmed = message.content.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
+			let trimmed = message.content.trim();
+			if trimmed.is_empty() {
+				continue;
+			}
 
-            full_prompt.push_str(role_prefix);
-            full_prompt.push_str(trimmed);
-            full_prompt.push('\n');
-            full_prompt.push('\n');
-        }
+			full_prompt.push_str(role_prefix);
+			full_prompt.push_str(trimmed);
+			full_prompt.push('\n');
+			full_prompt.push('\n');
+		}
 
-        full_prompt.push_str("Assistant: ");
-        full_prompt
-    }
+		full_prompt.push_str("Assistant: ");
+		full_prompt
+	}
 
-    // execute_command moved to module-level helper to avoid capturing &self in retry closures
+	// execute_command moved to module-level helper to avoid capturing &self in retry closures
 }
 
 #[async_trait::async_trait]
 impl AiProvider for CliProvider {
-    fn name(&self) -> &str {
-        "cli"
-    }
+	fn name(&self) -> &str {
+		"cli"
+	}
 
-    fn supports_model(&self, model: &str) -> bool {
-        split_cli_model(model).is_ok()
-    }
+	fn supports_model(&self, model: &str) -> bool {
+		split_cli_model(model).is_ok()
+	}
 
-    fn get_api_key(&self) -> Result<String> {
-        Ok(String::new())
-    }
+	fn get_api_key(&self) -> Result<String> {
+		Ok(String::new())
+	}
 
-    fn supports_caching(&self, _model: &str) -> bool {
-        false
-    }
+	fn supports_caching(&self, _model: &str) -> bool {
+		false
+	}
 
-    fn get_max_input_tokens(&self, _model: &str) -> usize {
-        128_000
-    }
+	fn get_max_input_tokens(&self, _model: &str) -> usize {
+		128_000
+	}
 
-    fn supports_vision(&self, _model: &str) -> bool {
-        false
-    }
+	fn supports_vision(&self, _model: &str) -> bool {
+		false
+	}
 
-    fn supports_structured_output(&self, _model: &str) -> bool {
-        false
-    }
+	fn supports_structured_output(&self, _model: &str) -> bool {
+		false
+	}
 
-    async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-        let (backend_name, backend_model) = split_cli_model(&params.model)?;
-        if backend_name != self.backend.name {
-            return Err(anyhow::anyhow!(
-                "CLI provider initialized for backend '{}' but got model for '{}'",
-                self.backend.name,
-                backend_name
-            ));
-        }
+	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
+		let (backend_name, backend_model) = split_cli_model(&params.model)?;
+		if backend_name != self.backend.name {
+			return Err(anyhow::anyhow!(
+				"CLI provider initialized for backend '{}' but got model for '{}'",
+				self.backend.name,
+				backend_name
+			));
+		}
 
-        let request_time_start = std::time::Instant::now();
+		let request_time_start = std::time::Instant::now();
 
-        let (lines, stderr, content, thinking, usage, used_args) = match self.backend.kind {
-            CliBackendKind::Codex => {
-                let prompt = self.messages_to_prompt(&params.messages);
-                let args = codex::build_args(self, &backend_model, params.reasoning_effort);
-                let command = self.command.clone();
+		let (lines, stderr, content, thinking, usage, used_args) = match self.backend.kind {
+			CliBackendKind::Codex => {
+				let prompt = self.messages_to_prompt(&params.messages);
+				let args = codex::build_args(self, &backend_model, params.reasoning_effort);
+				let command = self.command.clone();
 
-                let (lines, stderr) = retry::retry_with_exponential_backoff(
-                    || {
-                        let args = args.clone();
-                        let prompt = prompt.clone();
-                        let command = command.clone();
-                        Box::pin(async move { execute_command(command, args, Some(prompt)).await })
-                    },
-                    params.max_retries,
-                    params.retry_timeout,
-                    params.cancellation_token.as_ref(),
-                    || ProviderError::Cancelled.into(),
-                    |e| {
-                        matches!(
-                            e.downcast_ref::<ProviderError>(),
-                            Some(ProviderError::Cancelled)
-                        )
-                    },
-                    |_: &anyhow::Error| false,
-                )
-                .await?;
+				let (lines, stderr) = retry::retry_with_exponential_backoff(
+					|| {
+						let args = args.clone();
+						let prompt = prompt.clone();
+						let command = command.clone();
+						Box::pin(async move { execute_command(command, args, Some(prompt)).await })
+					},
+					params.max_retries,
+					params.retry_timeout,
+					params.cancellation_token.as_ref(),
+					|| ProviderError::Cancelled.into(),
+					|e| matches!(e.downcast_ref::<ProviderError>(), Some(ProviderError::Cancelled)),
+					|_: &anyhow::Error| false,
+				)
+				.await?;
 
-                let (content, thinking, usage) = codex::parse_response(&lines)?;
-                (lines, stderr, content, thinking, usage, args)
-            }
-            CliBackendKind::Claude => {
-                let system_text = params
-                    .messages
-                    .iter()
-                    .filter(|m| m.role == "system")
-                    .map(|m| m.content.trim())
-                    .filter(|t| !t.is_empty())
-                    .collect::<Vec<_>>()
-                    .join("\n\n");
-                let messages_json = claude::messages_to_claude_json(&params.messages);
-                let args = claude::build_args(self, &backend_model, &system_text, &messages_json);
-                let command = self.command.clone();
+				let (content, thinking, usage) = codex::parse_response(&lines)?;
+				(lines, stderr, content, thinking, usage, args)
+			}
+			CliBackendKind::Claude => {
+				let system_text = params
+					.messages
+					.iter()
+					.filter(|m| m.role == "system")
+					.map(|m| m.content.trim())
+					.filter(|t| !t.is_empty())
+					.collect::<Vec<_>>()
+					.join("\n\n");
+				let messages_json = claude::messages_to_claude_json(&params.messages);
+				let args = claude::build_args(self, &backend_model, &system_text, &messages_json);
+				let command = self.command.clone();
 
-                let (lines, stderr) = retry::retry_with_exponential_backoff(
-                    || {
-                        let args = args.clone();
-                        let command = command.clone();
-                        Box::pin(async move { execute_command(command, args, None).await })
-                    },
-                    params.max_retries,
-                    params.retry_timeout,
-                    params.cancellation_token.as_ref(),
-                    || ProviderError::Cancelled.into(),
-                    |e| {
-                        matches!(
-                            e.downcast_ref::<ProviderError>(),
-                            Some(ProviderError::Cancelled)
-                        )
-                    },
-                    |_: &anyhow::Error| false,
-                )
-                .await?;
+				let (lines, stderr) = retry::retry_with_exponential_backoff(
+					|| {
+						let args = args.clone();
+						let command = command.clone();
+						Box::pin(async move { execute_command(command, args, None).await })
+					},
+					params.max_retries,
+					params.retry_timeout,
+					params.cancellation_token.as_ref(),
+					|| ProviderError::Cancelled.into(),
+					|e| matches!(e.downcast_ref::<ProviderError>(), Some(ProviderError::Cancelled)),
+					|_: &anyhow::Error| false,
+				)
+				.await?;
 
-                let (content, usage) = claude::parse_response(&lines)?;
-                (lines, stderr, content, None, usage, args)
-            }
-            CliBackendKind::Gemini => {
-                let prompt = self.messages_to_prompt(&params.messages);
-                let args = gemini::build_args(self, &backend_model, &prompt);
-                let command = self.command.clone();
+				let (content, usage) = claude::parse_response(&lines)?;
+				(lines, stderr, content, None, usage, args)
+			}
+			CliBackendKind::Gemini => {
+				let prompt = self.messages_to_prompt(&params.messages);
+				let args = gemini::build_args(self, &backend_model, &prompt);
+				let command = self.command.clone();
 
-                let (lines, stderr) = retry::retry_with_exponential_backoff(
-                    || {
-                        let args = args.clone();
-                        let command = command.clone();
-                        Box::pin(async move { execute_command(command, args, None).await })
-                    },
-                    params.max_retries,
-                    params.retry_timeout,
-                    params.cancellation_token.as_ref(),
-                    || ProviderError::Cancelled.into(),
-                    |e| {
-                        matches!(
-                            e.downcast_ref::<ProviderError>(),
-                            Some(ProviderError::Cancelled)
-                        )
-                    },
-                    |_: &anyhow::Error| false,
-                )
-                .await?;
+				let (lines, stderr) = retry::retry_with_exponential_backoff(
+					|| {
+						let args = args.clone();
+						let command = command.clone();
+						Box::pin(async move { execute_command(command, args, None).await })
+					},
+					params.max_retries,
+					params.retry_timeout,
+					params.cancellation_token.as_ref(),
+					|| ProviderError::Cancelled.into(),
+					|e| matches!(e.downcast_ref::<ProviderError>(), Some(ProviderError::Cancelled)),
+					|_: &anyhow::Error| false,
+				)
+				.await?;
 
-                let content = gemini::parse_response(&lines)?;
-                (lines, stderr, content, None, None, args)
-            }
-            CliBackendKind::Cursor => {
-                let prompt = self.messages_to_prompt(&params.messages);
-                let args = cursor::build_args(self, &backend_model, &prompt);
-                let command = self.command.clone();
+				let content = gemini::parse_response(&lines)?;
+				(lines, stderr, content, None, None, args)
+			}
+			CliBackendKind::Cursor => {
+				let prompt = self.messages_to_prompt(&params.messages);
+				let args = cursor::build_args(self, &backend_model, &prompt);
+				let command = self.command.clone();
 
-                let (lines, stderr) = retry::retry_with_exponential_backoff(
-                    || {
-                        let args = args.clone();
-                        let command = command.clone();
-                        Box::pin(async move { execute_command(command, args, None).await })
-                    },
-                    params.max_retries,
-                    params.retry_timeout,
-                    params.cancellation_token.as_ref(),
-                    || ProviderError::Cancelled.into(),
-                    |e| {
-                        matches!(
-                            e.downcast_ref::<ProviderError>(),
-                            Some(ProviderError::Cancelled)
-                        )
-                    },
-                    |_: &anyhow::Error| false,
-                )
-                .await?;
+				let (lines, stderr) = retry::retry_with_exponential_backoff(
+					|| {
+						let args = args.clone();
+						let command = command.clone();
+						Box::pin(async move { execute_command(command, args, None).await })
+					},
+					params.max_retries,
+					params.retry_timeout,
+					params.cancellation_token.as_ref(),
+					|| ProviderError::Cancelled.into(),
+					|e| matches!(e.downcast_ref::<ProviderError>(), Some(ProviderError::Cancelled)),
+					|_: &anyhow::Error| false,
+				)
+				.await?;
 
-                let content = cursor::parse_response(&lines)?;
-                (lines, stderr, content, None, None, args)
-            }
-            CliBackendKind::Generic => {
-                let prompt = self.messages_to_prompt(&params.messages);
-                let args = generic::build_args(self, &backend_model, &prompt);
-                let command = self.command.clone();
+				let content = cursor::parse_response(&lines)?;
+				(lines, stderr, content, None, None, args)
+			}
+			CliBackendKind::Generic => {
+				let prompt = self.messages_to_prompt(&params.messages);
+				let args = generic::build_args(self, &backend_model, &prompt);
+				let command = self.command.clone();
 
-                let (lines, stderr) = retry::retry_with_exponential_backoff(
-                    || {
-                        let args = args.clone();
-                        let command = command.clone();
-                        Box::pin(async move { execute_command(command, args, None).await })
-                    },
-                    params.max_retries,
-                    params.retry_timeout,
-                    params.cancellation_token.as_ref(),
-                    || ProviderError::Cancelled.into(),
-                    |e| {
-                        matches!(
-                            e.downcast_ref::<ProviderError>(),
-                            Some(ProviderError::Cancelled)
-                        )
-                    },
-                    |_: &anyhow::Error| false,
-                )
-                .await?;
+				let (lines, stderr) = retry::retry_with_exponential_backoff(
+					|| {
+						let args = args.clone();
+						let command = command.clone();
+						Box::pin(async move { execute_command(command, args, None).await })
+					},
+					params.max_retries,
+					params.retry_timeout,
+					params.cancellation_token.as_ref(),
+					|| ProviderError::Cancelled.into(),
+					|e| matches!(e.downcast_ref::<ProviderError>(), Some(ProviderError::Cancelled)),
+					|_: &anyhow::Error| false,
+				)
+				.await?;
 
-                let content = generic::parse_response(&lines)?;
-                (lines, stderr, content, None, None, args)
-            }
-        };
+				let content = generic::parse_response(&lines)?;
+				(lines, stderr, content, None, None, args)
+			}
+		};
 
-        let request_time_ms = request_time_start.elapsed().as_millis() as u64;
-        let mut usage = usage;
-        if let Some(ref mut usage) = usage {
-            usage.request_time_ms = Some(request_time_ms);
-        }
+		let request_time_ms = request_time_start.elapsed().as_millis() as u64;
+		let mut usage = usage;
+		if let Some(ref mut usage) = usage {
+			usage.request_time_ms = Some(request_time_ms);
+		}
 
-        let request_json = serde_json::json!({
-            "backend": backend_name,
-            "command": self.command,
-            "model": backend_model,
-            "args": used_args,
-        });
+		let request_json = serde_json::json!({
+			"backend": backend_name,
+			"command": self.command,
+			"model": backend_model,
+			"args": used_args,
+		});
 
-        let response_json = serde_json::json!({
-            "lines": lines,
-            "stderr": stderr,
-        });
+		let response_json = serde_json::json!({
+			"lines": lines,
+			"stderr": stderr,
+		});
 
-        let exchange = ProviderExchange::new(request_json, response_json, usage.clone(), "cli");
+		let exchange = ProviderExchange::new(request_json, response_json, usage.clone(), "cli");
 
-        let structured_output =
-            if content.trim().starts_with('{') || content.trim().starts_with('[') {
-                serde_json::from_str(&content).ok()
-            } else {
-                None
-            };
+		let structured_output = if content.trim().starts_with('{') || content.trim().starts_with('[') {
+			serde_json::from_str(&content).ok()
+		} else {
+			None
+		};
 
-        Ok(ProviderResponse {
-            content,
-            thinking,
-            exchange,
-            tool_calls: None,
-            finish_reason: None,
-            structured_output,
-            id: None,
-        })
-    }
+		Ok(ProviderResponse {
+			content,
+			thinking,
+			exchange,
+			tool_calls: None,
+			finish_reason: None,
+			structured_output,
+			id: None,
+		})
+	}
 }
 
 impl CliBackend {
-    fn from_name(name: &str) -> Self {
-        let normalized = normalize_backend_name(name);
-        let kind = match normalized.as_str() {
-            "codex" => CliBackendKind::Codex,
-            "claude" => CliBackendKind::Claude,
-            "cursor" => CliBackendKind::Cursor,
-            "gemini" => CliBackendKind::Gemini,
-            _ => CliBackendKind::Generic,
-        };
+	fn from_name(name: &str) -> Self {
+		let normalized = normalize_backend_name(name);
+		let kind = match normalized.as_str() {
+			"codex" => CliBackendKind::Codex,
+			"claude" => CliBackendKind::Claude,
+			"cursor" => CliBackendKind::Cursor,
+			"gemini" => CliBackendKind::Gemini,
+			_ => CliBackendKind::Generic,
+		};
 
-        Self {
-            name: normalized,
-            kind,
-        }
-    }
+		Self { name: normalized, kind }
+	}
 }
 
 fn split_cli_model(model: &str) -> Result<(String, String)> {
-    let mut parts = model.splitn(2, '/');
-    let backend_raw = parts.next().unwrap_or_default().trim();
-    let model_name = parts.next().unwrap_or_default().trim();
+	let mut parts = model.splitn(2, '/');
+	let backend_raw = parts.next().unwrap_or_default().trim();
+	let model_name = parts.next().unwrap_or_default().trim();
 
-    if backend_raw.is_empty() || model_name.is_empty() {
-        return Err(anyhow::anyhow!(
-            "Invalid cli model format. Use 'cli:<backend>/<model>' (e.g., 'cli:codex/gpt-5.2-codex')"
-        ));
-    }
+	if backend_raw.is_empty() || model_name.is_empty() {
+		return Err(anyhow::anyhow!(
+			"Invalid cli model format. Use 'cli:<backend>/<model>' (e.g., 'cli:codex/gpt-5.2-codex')"
+		));
+	}
 
-    let backend = normalize_backend_name(backend_raw);
-    Ok((backend, model_name.to_string()))
+	let backend = normalize_backend_name(backend_raw);
+	Ok((backend, model_name.to_string()))
 }
 
 fn normalize_backend_name(name: &str) -> String {
-    let normalized = name.trim().to_ascii_lowercase();
-    match normalized.as_str() {
-        "claude-code" | "claude_code" => "claude".to_string(),
-        "cursor-agent" | "cursor_agent" => "cursor".to_string(),
-        "gemini-cli" | "gemini_cli" => "gemini".to_string(),
-        "codex-cli" | "codex_cli" => "codex".to_string(),
-        _ => normalized,
-    }
+	let normalized = name.trim().to_ascii_lowercase();
+	match normalized.as_str() {
+		"claude-code" | "claude_code" => "claude".to_string(),
+		"cursor-agent" | "cursor_agent" => "cursor".to_string(),
+		"gemini-cli" | "gemini_cli" => "gemini".to_string(),
+		"codex-cli" | "codex_cli" => "codex".to_string(),
+		_ => normalized,
+	}
 }
 
 fn resolve_cli_command(backend: &str) -> Result<PathBuf> {
-    let backend_upper = backend.to_ascii_uppercase();
-    let env_key = format!(
-        "{}{}{}",
-        CLI_COMMAND_PREFIX, backend_upper, CLI_COMMAND_SUFFIX
-    );
-    let legacy_command = if backend == "codex" {
-        env::var(CODEX_COMMAND_ENV).ok()
-    } else {
-        None
-    };
+	let backend_upper = backend.to_ascii_uppercase();
+	let env_key = format!("{}{}{}", CLI_COMMAND_PREFIX, backend_upper, CLI_COMMAND_SUFFIX);
+	let legacy_command = if backend == "codex" {
+		env::var(CODEX_COMMAND_ENV).ok()
+	} else {
+		None
+	};
 
-    let command = env::var(&env_key)
-        .ok()
-        .or(legacy_command)
-        .unwrap_or_else(|| {
-            if backend == "cursor" {
-                "cursor-agent".to_string()
-            } else {
-                backend.to_string()
-            }
-        });
+	let command = env::var(&env_key).ok().or(legacy_command).unwrap_or_else(|| {
+		if backend == "cursor" {
+			"cursor-agent".to_string()
+		} else {
+			backend.to_string()
+		}
+	});
 
-    let command_path = PathBuf::from(&command);
+	let command_path = PathBuf::from(&command);
 
-    if command.contains(std::path::MAIN_SEPARATOR) || command.contains('/') {
-        if is_executable(&command_path) {
-            return Ok(command_path);
-        }
-        return Err(anyhow::anyhow!(
-            "CLI command not found at '{}'. Set {} to a valid path.",
-            command,
-            env_key
-        ));
-    }
+	if command.contains(std::path::MAIN_SEPARATOR) || command.contains('/') {
+		if is_executable(&command_path) {
+			return Ok(command_path);
+		}
+		return Err(anyhow::anyhow!(
+			"CLI command not found at '{}'. Set {} to a valid path.",
+			command,
+			env_key
+		));
+	}
 
-    if let Some(found) = find_in_path(&command) {
-        return Ok(found);
-    }
+	if let Some(found) = find_in_path(&command) {
+		return Ok(found);
+	}
 
-    Err(anyhow::anyhow!(
-        "CLI command '{}' not found in PATH. Install it or set {}.",
-        command,
-        env_key
-    ))
+	Err(anyhow::anyhow!(
+		"CLI command '{}' not found in PATH. Install it or set {}.",
+		command,
+		env_key
+	))
 }
 
 fn parse_extra_args(backend: &str) -> Vec<String> {
-    let backend_upper = backend.to_ascii_uppercase();
-    let env_key = format!(
-        "{}{}{}",
-        CLI_COMMAND_PREFIX, backend_upper, CLI_EXTRA_ARGS_SUFFIX
-    );
-    env::var(env_key)
-        .map(|value| {
-            value
-                .split_whitespace()
-                .filter(|arg| !arg.is_empty())
-                .map(|arg| arg.to_string())
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default()
+	let backend_upper = backend.to_ascii_uppercase();
+	let env_key = format!("{}{}{}", CLI_COMMAND_PREFIX, backend_upper, CLI_EXTRA_ARGS_SUFFIX);
+	env::var(env_key)
+		.map(|value| {
+			value
+				.split_whitespace()
+				.filter(|arg| !arg.is_empty())
+				.map(|arg| arg.to_string())
+				.collect::<Vec<_>>()
+		})
+		.unwrap_or_default()
 }
 
 fn resolve_flag(backend: &str, suffix: &str, default_flag: &str) -> String {
-    let backend_upper = backend.to_ascii_uppercase();
-    let env_key = format!("{}{}{}", CLI_COMMAND_PREFIX, backend_upper, suffix);
-    env::var(env_key).unwrap_or_else(|_| default_flag.to_string())
+	let backend_upper = backend.to_ascii_uppercase();
+	let env_key = format!("{}{}{}", CLI_COMMAND_PREFIX, backend_upper, suffix);
+	env::var(env_key).unwrap_or_else(|_| default_flag.to_string())
 }
 
 fn parse_reasoning_effort() -> String {
-    let effort = env::var(CLI_CODEX_REASONING_EFFORT_ENV)
-        .or_else(|_| env::var(CODEX_REASONING_EFFORT_ENV))
-        .unwrap_or_else(|_| "high".to_string());
-    let effort_trimmed = effort.trim().to_lowercase();
+	let effort = env::var(CLI_CODEX_REASONING_EFFORT_ENV)
+		.or_else(|_| env::var(CODEX_REASONING_EFFORT_ENV))
+		.unwrap_or_else(|_| "high".to_string());
+	let effort_trimmed = effort.trim().to_lowercase();
 
-    if CODEX_REASONING_LEVELS
-        .iter()
-        .any(|level| *level == effort_trimmed)
-    {
-        effort_trimmed
-    } else {
-        tracing::warn!(
-            "Invalid {} value '{}'; using 'high'",
-            CLI_CODEX_REASONING_EFFORT_ENV,
-            effort
-        );
-        "high".to_string()
-    }
+	if CODEX_REASONING_LEVELS.iter().any(|level| *level == effort_trimmed) {
+		effort_trimmed
+	} else {
+		tracing::warn!(
+			"Invalid {} value '{}'; using 'high'",
+			CLI_CODEX_REASONING_EFFORT_ENV,
+			effort
+		);
+		"high".to_string()
+	}
 }
 
 fn parse_bool_env(key: &str, default: bool) -> bool {
-    match env::var(key) {
-        Ok(value) => matches!(
-            value.trim().to_ascii_lowercase().as_str(),
-            "1" | "true" | "yes" | "on"
-        ),
-        Err(_) => default,
-    }
+	match env::var(key) {
+		Ok(value) => matches!(value.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"),
+		Err(_) => default,
+	}
 }
 
 fn find_in_path(command: &str) -> Option<PathBuf> {
-    let path_var = env::var_os("PATH")?;
-    for dir in env::split_paths(&path_var) {
-        let candidate = dir.join(command);
-        if is_executable(&candidate) {
-            return Some(candidate);
-        }
-    }
-    None
+	let path_var = env::var_os("PATH")?;
+	for dir in env::split_paths(&path_var) {
+		let candidate = dir.join(command);
+		if is_executable(&candidate) {
+			return Some(candidate);
+		}
+	}
+	None
 }
 
 fn is_executable(path: &Path) -> bool {
-    path.is_file()
+	path.is_file()
 }
 
-async fn execute_command(
-    command: PathBuf,
-    args: Vec<String>,
-    prompt: Option<String>,
-) -> Result<(Vec<String>, String)> {
-    let output = tokio::task::spawn_blocking(move || {
+async fn execute_command(command: PathBuf, args: Vec<String>, prompt: Option<String>) -> Result<(Vec<String>, String)> {
+	let output = tokio::task::spawn_blocking(move || {
         let mut cmd = std::process::Command::new(&command);
         cmd.args(&args)
             .stdin(Stdio::piped())
@@ -595,7 +547,7 @@ async fn execute_command(
     })
     .await??;
 
-    Ok(output)
+	Ok(output)
 }
 
 #[cfg(test)]

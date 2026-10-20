@@ -17,20 +17,18 @@ use octolib::{AiProvider, ChatCompletionParams, Message, ReasoningEffort, XaiPro
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let provider = XaiProvider::new();
-    let params = ChatCompletionParams::new(
-        &[Message::user(
-            "Explain why the sky is blue in two sentences.",
-        )],
-        "grok-4.5",
-        0.2,
-        0.9,
-        40,
-        512,
-    )
-    .with_reasoning_effort(ReasoningEffort::Medium);
+	let provider = XaiProvider::new();
+	let params = ChatCompletionParams::new(
+		&[Message::user("Explain why the sky is blue in two sentences.")],
+		"grok-4.5",
+		0.2,
+		0.9,
+		40,
+		512,
+	)
+	.with_reasoning_effort(ReasoningEffort::Medium);
 
-    let response = provider.chat_completion(params).await?;
-    println!("{}", response.content);
-    Ok(())
+	let response = provider.chat_completion(params).await?;
+	println!("{}", response.content);
+	Ok(())
 }

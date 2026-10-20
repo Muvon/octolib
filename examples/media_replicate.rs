@@ -19,30 +19,28 @@ use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let (provider, model) = MediaProviderFactory::get_image_provider_for_model(
-        "replicate:black-forest-labs/flux-1.1-pro",
-    )?;
-    let mut request =
-        ImageGenerationRequest::new("A quiet library under the ocean").with_model(model);
-    request.request_options.polling_interval = Duration::from_secs(2);
+	let (provider, model) =
+		MediaProviderFactory::get_image_provider_for_model("replicate:black-forest-labs/flux-1.1-pro")?;
+	let mut request = ImageGenerationRequest::new("A quiet library under the ocean").with_model(model);
+	request.request_options.polling_interval = Duration::from_secs(2);
 
-    // submit_image returns immediately. Persist this handle if your process may restart.
-    let mut operation = provider.submit_image(request).await?;
-    while !operation.status.is_terminal() {
-        let handle = operation
-            .handle
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Replicate returned no job handle"))?;
-        operation = provider.poll_image(handle).await?;
-        tokio::time::sleep(Duration::from_secs(2)).await;
-    }
+	// submit_image returns immediately. Persist this handle if your process may restart.
+	let mut operation = provider.submit_image(request).await?;
+	while !operation.status.is_terminal() {
+		let handle = operation
+			.handle
+			.as_ref()
+			.ok_or_else(|| anyhow::anyhow!("Replicate returned no job handle"))?;
+		operation = provider.poll_image(handle).await?;
+		tokio::time::sleep(Duration::from_secs(2)).await;
+	}
 
-    if operation.status != OperationStatus::Succeeded {
-        return Err(anyhow::anyhow!("prediction failed: {:?}", operation.error));
-    }
-    let result = operation
-        .result
-        .ok_or_else(|| anyhow::anyhow!("completed prediction returned no result"))?;
-    println!("generated {} artifact(s)", result.artifacts.len());
-    Ok(())
+	if operation.status != OperationStatus::Succeeded {
+		return Err(anyhow::anyhow!("prediction failed: {:?}", operation.error));
+	}
+	let result = operation
+		.result
+		.ok_or_else(|| anyhow::anyhow!("completed prediction returned no result"))?;
+	println!("generated {} artifact(s)", result.artifacts.len());
+	Ok(())
 }

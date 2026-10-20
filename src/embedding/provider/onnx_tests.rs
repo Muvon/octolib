@@ -16,38 +16,35 @@ use super::*;
 
 #[test]
 fn splits_bare_repo() {
-    let (repo, file) = split_repo_and_file("muvon/octomind-embed");
-    assert_eq!(repo, "muvon/octomind-embed");
-    assert_eq!(file, None);
+	let (repo, file) = split_repo_and_file("muvon/octomind-embed");
+	assert_eq!(repo, "muvon/octomind-embed");
+	assert_eq!(file, None);
 }
 
 #[test]
 fn splits_pinned_graph() {
-    let (repo, file) = split_repo_and_file("muvon/octomind-embed#onnx/model_quantized.onnx");
-    assert_eq!(repo, "muvon/octomind-embed");
-    assert_eq!(file.as_deref(), Some("onnx/model_quantized.onnx"));
+	let (repo, file) = split_repo_and_file("muvon/octomind-embed#onnx/model_quantized.onnx");
+	assert_eq!(repo, "muvon/octomind-embed");
+	assert_eq!(file.as_deref(), Some("onnx/model_quantized.onnx"));
 }
 
 #[test]
 fn trims_whitespace_around_parts() {
-    let (repo, file) = split_repo_and_file("  muvon/octomind-embed # onnx/model.onnx ");
-    assert_eq!(repo, "muvon/octomind-embed");
-    assert_eq!(file.as_deref(), Some("onnx/model.onnx"));
+	let (repo, file) = split_repo_and_file("  muvon/octomind-embed # onnx/model.onnx ");
+	assert_eq!(repo, "muvon/octomind-embed");
+	assert_eq!(file.as_deref(), Some("onnx/model.onnx"));
 }
 
 #[test]
 fn quantized_graph_is_preferred_over_fp32() {
-    // Probe order decides which graph a repo publishing both ends up using.
-    let quantized = GRAPH_CANDIDATES
-        .iter()
-        .position(|c| *c == "onnx/model_quantized.onnx")
-        .expect("quantized candidate present");
-    let fp32 = GRAPH_CANDIDATES
-        .iter()
-        .position(|c| *c == "onnx/model.onnx")
-        .expect("fp32 candidate present");
-    assert!(
-        quantized < fp32,
-        "quantized graph must be probed before fp32"
-    );
+	// Probe order decides which graph a repo publishing both ends up using.
+	let quantized = GRAPH_CANDIDATES
+		.iter()
+		.position(|c| *c == "onnx/model_quantized.onnx")
+		.expect("quantized candidate present");
+	let fp32 = GRAPH_CANDIDATES
+		.iter()
+		.position(|c| *c == "onnx/model.onnx")
+		.expect("fp32 candidate present");
+	assert!(quantized < fp32, "quantized graph must be probed before fp32");
 }

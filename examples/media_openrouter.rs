@@ -18,24 +18,20 @@ use octolib::{generate_image, ArtifactSource, ImageGenerationRequest};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let request =
-        ImageGenerationRequest::new("A small brass octopus library assistant, product photography");
-    let result = generate_image("openrouter:openai/gpt-image-1", request).await?;
+	let request = ImageGenerationRequest::new("A small brass octopus library assistant, product photography");
+	let result = generate_image("openrouter:openai/gpt-image-1", request).await?;
 
-    for artifact in &result.artifacts {
-        match &artifact.source {
-            ArtifactSource::Inline(bytes) => {
-                println!("{} bytes of {}", bytes.len(), artifact.media_type);
-            }
-            ArtifactSource::Url(url) => println!("remote artifact: {url}"),
-            _ => println!("provider-managed artifact"),
-        }
-    }
-    if let Some(usage) = result.usage {
-        println!(
-            "provider-reported cost: {:?} USD",
-            usage.provider_reported_cost
-        );
-    }
-    Ok(())
+	for artifact in &result.artifacts {
+		match &artifact.source {
+			ArtifactSource::Inline(bytes) => {
+				println!("{} bytes of {}", bytes.len(), artifact.media_type);
+			}
+			ArtifactSource::Url(url) => println!("remote artifact: {url}"),
+			_ => println!("provider-managed artifact"),
+		}
+	}
+	if let Some(usage) = result.usage {
+		println!("provider-reported cost: {:?} USD", usage.provider_reported_cost);
+	}
+	Ok(())
 }

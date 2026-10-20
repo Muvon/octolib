@@ -46,9 +46,7 @@ use crate::errors::ProviderError;
 use crate::llm::providers::shared;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
-use crate::llm::types::{
-    ChatCompletionParams, ProviderExchange, ProviderResponse, SamplingSupport, TokenUsage,
-};
+use crate::llm::types::{ChatCompletionParams, ProviderExchange, ProviderResponse, SamplingSupport, TokenUsage};
 use crate::llm::utils::{contains_ignore_ascii_case, is_model_in_pricing_table, PricingTuple};
 use anyhow::Result;
 
@@ -62,34 +60,34 @@ use std::env;
 /// DeepSeek bills peak / off-peak: peak windows are 01:00-04:00 and 06:00-10:00
 /// UTC Monday-Friday excluding Chinese public holidays; off-peak is half of peak.
 const PRICING_PEAK: &[PricingTuple] = &[
-    // V4.1 Flash (1M context), peak-hour rates
-    ("deepseek-flash", 0.3, 1.2, 0.3, 0.006),
-    // Legacy names deepseek-v4-flash / deepseek-v4-flash-vision-exp: retired,
-    // still accepted, served by V4.1 Flash and billed at the Flash price
-    ("deepseek-v4-flash", 0.3, 1.2, 0.3, 0.006),
-    // V4 Pro (1M context, text-only), peak-hour rates
-    ("deepseek-v4-pro", 1.32, 3.96, 1.32, 0.044),
+	// V4.1 Flash (1M context), peak-hour rates
+	("deepseek-flash", 0.3, 1.2, 0.3, 0.006),
+	// Legacy names deepseek-v4-flash / deepseek-v4-flash-vision-exp: retired,
+	// still accepted, served by V4.1 Flash and billed at the Flash price
+	("deepseek-v4-flash", 0.3, 1.2, 0.3, 0.006),
+	// V4 Pro (1M context, text-only), peak-hour rates
+	("deepseek-v4-pro", 1.32, 3.96, 1.32, 0.044),
 ];
 
 const PRICING_OFF_PEAK: &[PricingTuple] = &[
-    // V4.1 Flash (1M context), off-peak rates (half of peak)
-    ("deepseek-flash", 0.15, 0.6, 0.15, 0.003),
-    // Legacy names deepseek-v4-flash / deepseek-v4-flash-vision-exp, billed at Flash price
-    ("deepseek-v4-flash", 0.15, 0.6, 0.15, 0.003),
-    // V4 Pro (1M context, text-only), off-peak rates (half of peak)
-    ("deepseek-v4-pro", 0.66, 1.98, 0.66, 0.022),
+	// V4.1 Flash (1M context), off-peak rates (half of peak)
+	("deepseek-flash", 0.15, 0.6, 0.15, 0.003),
+	// Legacy names deepseek-v4-flash / deepseek-v4-flash-vision-exp, billed at Flash price
+	("deepseek-v4-flash", 0.15, 0.6, 0.15, 0.003),
+	// V4 Pro (1M context, text-only), off-peak rates (half of peak)
+	("deepseek-v4-pro", 0.66, 1.98, 0.66, 0.022),
 ];
 
 /// Days since 1970-01-01 for a Gregorian date in 1970 or later
 /// (Howard Hinnant's `days_from_civil`).
 const fn epoch_day(year: u64, month: u64, day: u64) -> u64 {
-    let y = if month <= 2 { year - 1 } else { year };
-    let era = y / 400;
-    let year_of_era = y - era * 400;
-    let shifted_month = if month > 2 { month - 3 } else { month + 9 };
-    let day_of_year = (153 * shifted_month + 2) / 5 + day - 1;
-    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
-    era * 146_097 + day_of_era - 719_468
+	let y = if month <= 2 { year - 1 } else { year };
+	let era = y / 400;
+	let year_of_era = y - era * 400;
+	let shifted_month = if month > 2 { month - 3 } else { month + 9 };
+	let day_of_year = (153 * shifted_month + 2) / 5 + day - 1;
+	let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+	era * 146_097 + day_of_era - 719_468
 }
 
 /// Chinese public holidays as inclusive `(first, last)` spans of days off,
@@ -99,41 +97,41 @@ const fn epoch_day(year: u64, month: u64, day: u64) -> u64 {
 /// Weekend make-up working days (调休上班) are deliberately absent: DeepSeek's
 /// peak hours are Monday-Friday only, so those weekends stay off-peak.
 const CHINESE_PUBLIC_HOLIDAYS: &[(u64, u64)] = &[
-    (epoch_day(2026, 1, 1), epoch_day(2026, 1, 3)), // New Year's Day
-    (epoch_day(2026, 2, 15), epoch_day(2026, 2, 23)), // Spring Festival
-    (epoch_day(2026, 4, 4), epoch_day(2026, 4, 6)), // Qingming
-    (epoch_day(2026, 5, 1), epoch_day(2026, 5, 5)), // Labour Day
-    (epoch_day(2026, 6, 19), epoch_day(2026, 6, 21)), // Dragon Boat
-    (epoch_day(2026, 9, 25), epoch_day(2026, 9, 27)), // Mid-Autumn
-    (epoch_day(2026, 10, 1), epoch_day(2026, 10, 7)), // National Day
+	(epoch_day(2026, 1, 1), epoch_day(2026, 1, 3)),   // New Year's Day
+	(epoch_day(2026, 2, 15), epoch_day(2026, 2, 23)), // Spring Festival
+	(epoch_day(2026, 4, 4), epoch_day(2026, 4, 6)),   // Qingming
+	(epoch_day(2026, 5, 1), epoch_day(2026, 5, 5)),   // Labour Day
+	(epoch_day(2026, 6, 19), epoch_day(2026, 6, 21)), // Dragon Boat
+	(epoch_day(2026, 9, 25), epoch_day(2026, 9, 27)), // Mid-Autumn
+	(epoch_day(2026, 10, 1), epoch_day(2026, 10, 7)), // National Day
 ];
 
 /// Peak billing windows: Monday-Friday, 01:00-04:00 and 06:00-10:00 UTC,
 /// excluding Chinese public holidays.
 fn is_peak_window(days_since_epoch: u64, utc_hour: u64) -> bool {
-    // 1970-01-01 was Thursday. Map Monday..Sunday to 0..6.
-    let weekday = (days_since_epoch + 3) % 7;
-    // The peak hours are 09:00-12:00 and 14:00-18:00 Beijing time (UTC+8), so
-    // within them the UTC date is the China date the holiday table is keyed on.
-    weekday < 5
-        && ((1..4).contains(&utc_hour) || (6..10).contains(&utc_hour))
-        && !CHINESE_PUBLIC_HOLIDAYS
-            .iter()
-            .any(|&(first, last)| (first..=last).contains(&days_since_epoch))
+	// 1970-01-01 was Thursday. Map Monday..Sunday to 0..6.
+	let weekday = (days_since_epoch + 3) % 7;
+	// The peak hours are 09:00-12:00 and 14:00-18:00 Beijing time (UTC+8), so
+	// within them the UTC date is the China date the holiday table is keyed on.
+	weekday < 5
+		&& ((1..4).contains(&utc_hour) || (6..10).contains(&utc_hour))
+		&& !CHINESE_PUBLIC_HOLIDAYS
+			.iter()
+			.any(|&(first, last)| (first..=last).contains(&days_since_epoch))
 }
 
 /// Pick the pricing table that applies at `time` (tier decided by UTC weekday,
 /// hour and Chinese public holidays)
 fn pricing_table_at(time: std::time::SystemTime) -> &'static [PricingTuple] {
-    let secs = time
-        .duration_since(std::time::SystemTime::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    if is_peak_window(secs / 86_400, (secs % 86_400) / 3_600) {
-        PRICING_PEAK
-    } else {
-        PRICING_OFF_PEAK
-    }
+	let secs = time
+		.duration_since(std::time::SystemTime::UNIX_EPOCH)
+		.map(|d| d.as_secs())
+		.unwrap_or(0);
+	if is_peak_window(secs / 86_400, (secs % 86_400) / 3_600) {
+		PRICING_PEAK
+	} else {
+		PRICING_OFF_PEAK
+	}
 }
 
 /// Map generic ReasoningEffort to DeepSeek's `reasoning_effort` string.
@@ -142,36 +140,34 @@ fn pricing_table_at(time: std::time::SystemTime) -> &'static [PricingTuple] {
 /// and "xhigh" but maps both UP to "high". Intermediate internal levels
 /// instead floor to the nearest lower tier so the adapter never increases
 /// effort (Medium → "low", deviating from the API's own medium → "high").
-fn map_reasoning_effort(
-    effort: Option<crate::llm::types::ReasoningEffort>,
-) -> Option<&'static str> {
-    use crate::llm::types::ReasoningEffort;
-    match effort {
-        Some(ReasoningEffort::Low) | Some(ReasoningEffort::Medium) => Some("low"),
-        Some(ReasoningEffort::High) | Some(ReasoningEffort::XHigh) => Some("high"),
-        Some(ReasoningEffort::Max) => Some("max"),
-        // Thinking is switched off through `thinking.type` instead.
-        Some(ReasoningEffort::None) | None => None,
-    }
+fn map_reasoning_effort(effort: Option<crate::llm::types::ReasoningEffort>) -> Option<&'static str> {
+	use crate::llm::types::ReasoningEffort;
+	match effort {
+		Some(ReasoningEffort::Low) | Some(ReasoningEffort::Medium) => Some("low"),
+		Some(ReasoningEffort::High) | Some(ReasoningEffort::XHigh) => Some("high"),
+		Some(ReasoningEffort::Max) => Some("max"),
+		// Thinking is switched off through `thinking.type` instead.
+		Some(ReasoningEffort::None) | None => None,
+	}
 }
 
 /// Calculate cost for DeepSeek models with cache-aware pricing, against the
 /// pricing table active at request time (legacy / peak / off-peak)
 fn calculate_cost_with_cache(
-    pricing: &[PricingTuple],
-    model: &str,
-    regular_input_tokens: u64,
-    cache_hit_tokens: u64,
-    completion_tokens: u64,
+	pricing: &[PricingTuple],
+	model: &str,
+	regular_input_tokens: u64,
+	cache_hit_tokens: u64,
+	completion_tokens: u64,
 ) -> Option<f64> {
-    let (input_price, output_price, _cache_write_price, cache_read_price) =
-        crate::llm::utils::get_model_pricing(model, pricing)?;
+	let (input_price, output_price, _cache_write_price, cache_read_price) =
+		crate::llm::utils::get_model_pricing(model, pricing)?;
 
-    let regular_input_cost = (regular_input_tokens as f64 / 1_000_000.0) * input_price;
-    let cache_hit_cost = (cache_hit_tokens as f64 / 1_000_000.0) * cache_read_price;
-    let output_cost = (completion_tokens as f64 / 1_000_000.0) * output_price;
+	let regular_input_cost = (regular_input_tokens as f64 / 1_000_000.0) * input_price;
+	let cache_hit_cost = (cache_hit_tokens as f64 / 1_000_000.0) * cache_read_price;
+	let output_cost = (completion_tokens as f64 / 1_000_000.0) * output_price;
 
-    Some(regular_input_cost + cache_hit_cost + output_cost)
+	Some(regular_input_cost + cache_hit_cost + output_cost)
 }
 
 /// Split a usage report into (cache-miss, cache-hit) prompt tokens.
@@ -189,21 +185,21 @@ fn calculate_cost_with_cache(
 /// saturates: a provider inconsistency must never underflow u64 into a
 /// catastrophic charge.
 fn split_prompt_tokens(usage: &DeepSeekUsage) -> (u64, u64) {
-    let hit = if usage.prompt_cache_hit_tokens > 0 {
-        usage.prompt_cache_hit_tokens
-    } else {
-        usage
-            .prompt_tokens_details
-            .as_ref()
-            .map(|d| d.cached_tokens)
-            .unwrap_or(0)
-    };
-    let miss = if usage.prompt_cache_miss_tokens > 0 {
-        usage.prompt_cache_miss_tokens
-    } else {
-        usage.prompt_tokens.saturating_sub(hit)
-    };
-    (miss, hit)
+	let hit = if usage.prompt_cache_hit_tokens > 0 {
+		usage.prompt_cache_hit_tokens
+	} else {
+		usage
+			.prompt_tokens_details
+			.as_ref()
+			.map(|d| d.cached_tokens)
+			.unwrap_or(0)
+	};
+	let miss = if usage.prompt_cache_miss_tokens > 0 {
+		usage.prompt_cache_miss_tokens
+	} else {
+		usage.prompt_tokens.saturating_sub(hit)
+	};
+	(miss, hit)
 }
 
 /// DeepSeek provider
@@ -211,9 +207,9 @@ fn split_prompt_tokens(usage: &DeepSeekUsage) -> (u64, u64) {
 pub struct DeepSeekProvider;
 
 impl DeepSeekProvider {
-    pub fn new() -> Self {
-        Self
-    }
+	pub fn new() -> Self {
+		Self
+	}
 }
 
 const DEEPSEEK_API_KEY_ENV: &str = "DEEPSEEK_API_KEY";
@@ -221,120 +217,120 @@ const DEEPSEEK_API_KEY_ENV: &str = "DEEPSEEK_API_KEY";
 // DeepSeek API request/response structures
 #[derive(Serialize, Debug, Clone)]
 struct DeepSeekRequest {
-    model: String,
-    messages: Vec<DeepSeekMessage>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    max_tokens: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    stream: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    response_format: Option<serde_json::Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tools: Option<Vec<DeepSeekTool>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    reasoning_effort: Option<&'static str>,
-    thinking: DeepSeekThinking,
+	model: String,
+	messages: Vec<DeepSeekMessage>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	max_tokens: Option<u32>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	stream: Option<bool>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	response_format: Option<serde_json::Value>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	tools: Option<Vec<DeepSeekTool>>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	reasoning_effort: Option<&'static str>,
+	thinking: DeepSeekThinking,
 }
 
 #[derive(Serialize, Debug, Clone)]
 struct DeepSeekThinking {
-    #[serde(rename = "type")]
-    thinking_type: &'static str,
+	#[serde(rename = "type")]
+	thinking_type: &'static str,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct DeepSeekMessage {
-    role: String,
-    /// Plain string for text turns, OpenAI-style content parts when the turn
-    /// carries images (vision route only).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    content: Option<serde_json::Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    reasoning_content: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tool_calls: Option<Vec<DeepSeekToolCall>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tool_call_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    name: Option<String>,
+	role: String,
+	/// Plain string for text turns, OpenAI-style content parts when the turn
+	/// carries images (vision route only).
+	#[serde(skip_serializing_if = "Option::is_none")]
+	content: Option<serde_json::Value>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	reasoning_content: Option<String>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	tool_calls: Option<Vec<DeepSeekToolCall>>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	tool_call_id: Option<String>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	name: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 struct DeepSeekResponse {
-    id: String,
-    #[serde(default)]
-    object: Option<String>,
-    #[serde(default)]
-    created: Option<u64>,
-    #[serde(default)]
-    model: Option<String>,
-    choices: Vec<DeepSeekChoice>,
-    usage: Option<DeepSeekUsage>,
-    #[serde(default)]
-    system_fingerprint: Option<String>,
+	id: String,
+	#[serde(default)]
+	object: Option<String>,
+	#[serde(default)]
+	created: Option<u64>,
+	#[serde(default)]
+	model: Option<String>,
+	choices: Vec<DeepSeekChoice>,
+	usage: Option<DeepSeekUsage>,
+	#[serde(default)]
+	system_fingerprint: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 struct DeepSeekChoice {
-    #[serde(default)]
-    index: u32,
-    message: DeepSeekMessage,
-    finish_reason: Option<String>,
+	#[serde(default)]
+	index: u32,
+	message: DeepSeekMessage,
+	finish_reason: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 struct DeepSeekUsage {
-    prompt_tokens: u64,
-    completion_tokens: u64,
-    total_tokens: u64,
-    #[serde(default)]
-    prompt_cache_hit_tokens: u64,
-    #[serde(default)]
-    prompt_cache_miss_tokens: u64,
-    #[serde(default)]
-    prompt_tokens_details: Option<DeepSeekPromptTokensDetails>,
-    #[serde(default)]
-    completion_tokens_details: Option<DeepSeekCompletionTokensDetails>,
+	prompt_tokens: u64,
+	completion_tokens: u64,
+	total_tokens: u64,
+	#[serde(default)]
+	prompt_cache_hit_tokens: u64,
+	#[serde(default)]
+	prompt_cache_miss_tokens: u64,
+	#[serde(default)]
+	prompt_tokens_details: Option<DeepSeekPromptTokensDetails>,
+	#[serde(default)]
+	completion_tokens_details: Option<DeepSeekCompletionTokensDetails>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct DeepSeekPromptTokensDetails {
-    #[serde(default)]
-    cached_tokens: u64,
+	#[serde(default)]
+	cached_tokens: u64,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct DeepSeekCompletionTokensDetails {
-    #[serde(default)]
-    reasoning_tokens: u64,
+	#[serde(default)]
+	reasoning_tokens: u64,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct DeepSeekToolCall {
-    id: String,
-    #[serde(rename = "type")]
-    tool_type: String,
-    function: DeepSeekFunction,
+	id: String,
+	#[serde(rename = "type")]
+	tool_type: String,
+	function: DeepSeekFunction,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct DeepSeekFunction {
-    name: String,
-    arguments: String,
+	name: String,
+	arguments: String,
 }
 
 #[derive(Serialize, Debug, Clone)]
 struct DeepSeekTool {
-    #[serde(rename = "type")]
-    tool_type: String,
-    function: DeepSeekToolFunction,
+	#[serde(rename = "type")]
+	tool_type: String,
+	function: DeepSeekToolFunction,
 }
 
 #[derive(Serialize, Debug, Clone)]
 struct DeepSeekToolFunction {
-    name: String,
-    description: String,
-    parameters: serde_json::Value,
+	name: String,
+	description: String,
+	parameters: serde_json::Value,
 }
 
 /// Convert generic Messages into DeepSeek's wire format.
@@ -343,396 +339,370 @@ struct DeepSeekToolFunction {
 /// request carries tools, every prior assistant turn's complete reasoning_content
 /// MUST be replayed, including turns that did not call a tool. Without tools the
 /// API ignores historical reasoning, so it is omitted.
-fn convert_messages(
-    messages: &[crate::llm::types::Message],
-    has_tools: bool,
-) -> Vec<DeepSeekMessage> {
-    let messages = shared::chat_completion_messages(messages);
-    let messages = messages.as_ref();
-    messages
-        .iter()
-        .map(|msg| {
-            let tool_calls = msg.tool_calls.as_ref().and_then(|tc| {
-                shared::parse_generic_tool_calls_strict(tc, "deepseek")
-                    .ok()
-                    .map(|calls| {
-                        calls
-                            .into_iter()
-                            .map(|call| DeepSeekToolCall {
-                                id: call.id,
-                                tool_type: "function".to_string(),
-                                function: DeepSeekFunction {
-                                    name: call.name,
-                                    arguments: shared::arguments_to_json_string(&call.arguments),
-                                },
-                            })
-                            .collect::<Vec<_>>()
-                    })
-            });
+fn convert_messages(messages: &[crate::llm::types::Message], has_tools: bool) -> Vec<DeepSeekMessage> {
+	let messages = shared::chat_completion_messages(messages);
+	let messages = messages.as_ref();
+	messages
+		.iter()
+		.map(|msg| {
+			let tool_calls = msg.tool_calls.as_ref().and_then(|tc| {
+				shared::parse_generic_tool_calls_strict(tc, "deepseek")
+					.ok()
+					.map(|calls| {
+						calls
+							.into_iter()
+							.map(|call| DeepSeekToolCall {
+								id: call.id,
+								tool_type: "function".to_string(),
+								function: DeepSeekFunction {
+									name: call.name,
+									arguments: shared::arguments_to_json_string(&call.arguments),
+								},
+							})
+							.collect::<Vec<_>>()
+					})
+			});
 
-            let reasoning_content = if has_tools && msg.role == "assistant" {
-                msg.thinking.as_ref().map(|t| t.content.clone())
-            } else {
-                None
-            };
+			let reasoning_content = if has_tools && msg.role == "assistant" {
+				msg.thinking.as_ref().map(|t| t.content.clone())
+			} else {
+				None
+			};
 
-            let images = msg.images.as_deref().unwrap_or_default();
-            let content = if !images.is_empty() {
-                let mut parts = vec![serde_json::json!({"type": "text", "text": msg.content})];
-                parts.extend(images.iter().map(|image| {
-                    let url = match &image.data {
-                        crate::llm::types::ImageData::Base64(data) => {
-                            format!("data:{};base64,{}", image.media_type, data)
-                        }
-                        crate::llm::types::ImageData::Url(u) => u.clone(),
-                    };
-                    serde_json::json!({"type": "image_url", "image_url": {"url": url}})
-                }));
-                Some(serde_json::json!(parts))
-            } else {
-                Some(serde_json::json!(msg.content))
-            };
+			let images = msg.images.as_deref().unwrap_or_default();
+			let content = if !images.is_empty() {
+				let mut parts = vec![serde_json::json!({"type": "text", "text": msg.content})];
+				parts.extend(images.iter().map(|image| {
+					let url = match &image.data {
+						crate::llm::types::ImageData::Base64(data) => {
+							format!("data:{};base64,{}", image.media_type, data)
+						}
+						crate::llm::types::ImageData::Url(u) => u.clone(),
+					};
+					serde_json::json!({"type": "image_url", "image_url": {"url": url}})
+				}));
+				Some(serde_json::json!(parts))
+			} else {
+				Some(serde_json::json!(msg.content))
+			};
 
-            DeepSeekMessage {
-                role: msg.role.clone(),
-                content,
-                reasoning_content,
-                tool_calls,
-                tool_call_id: msg.tool_call_id.clone(),
-                name: msg.name.clone(),
-            }
-        })
-        .collect()
+			DeepSeekMessage {
+				role: msg.role.clone(),
+				content,
+				reasoning_content,
+				tool_calls,
+				tool_call_id: msg.tool_call_id.clone(),
+				name: msg.name.clone(),
+			}
+		})
+		.collect()
 }
 
 fn build_request(params: &ChatCompletionParams) -> DeepSeekRequest {
-    let has_tools = params.tools.as_ref().is_some_and(|tools| !tools.is_empty());
-    let messages = convert_messages(&params.messages, has_tools);
-    let response_format = params.response_format.as_ref().map(|_| {
-        // Preserve the existing native-wire behavior: DeepSeek exposes JSON
-        // Object mode here, not JSON Schema.
-        serde_json::json!({"type": "json_object"})
-    });
-    let tools = params.tools.as_ref().and_then(|tools| {
-        (!tools.is_empty()).then(|| {
-            tools
-                .iter()
-                .map(|tool| DeepSeekTool {
-                    tool_type: "function".to_string(),
-                    function: DeepSeekToolFunction {
-                        name: tool.name.clone(),
-                        description: tool.description.clone(),
-                        parameters: tool.parameters.clone(),
-                    },
-                })
-                .collect()
-        })
-    });
+	let has_tools = params.tools.as_ref().is_some_and(|tools| !tools.is_empty());
+	let messages = convert_messages(&params.messages, has_tools);
+	let response_format = params.response_format.as_ref().map(|_| {
+		// Preserve the existing native-wire behavior: DeepSeek exposes JSON
+		// Object mode here, not JSON Schema.
+		serde_json::json!({"type": "json_object"})
+	});
+	let tools = params.tools.as_ref().and_then(|tools| {
+		(!tools.is_empty()).then(|| {
+			tools
+				.iter()
+				.map(|tool| DeepSeekTool {
+					tool_type: "function".to_string(),
+					function: DeepSeekToolFunction {
+						name: tool.name.clone(),
+						description: tool.description.clone(),
+						parameters: tool.parameters.clone(),
+					},
+				})
+				.collect()
+		})
+	});
 
-    DeepSeekRequest {
-        model: params.model.clone(),
-        messages,
-        // 0 = provider default: omit rather than send a literal zero cap.
-        max_tokens: (params.max_tokens > 0).then_some(params.max_tokens),
-        stream: Some(false),
-        response_format,
-        tools,
-        reasoning_effort: map_reasoning_effort(params.reasoning_effort),
-        thinking: DeepSeekThinking {
-            thinking_type: if params.reasoning_effort
-                == Some(crate::llm::types::ReasoningEffort::None)
-            {
-                "disabled"
-            } else {
-                "enabled"
-            },
-        },
-    }
+	DeepSeekRequest {
+		model: params.model.clone(),
+		messages,
+		// 0 = provider default: omit rather than send a literal zero cap.
+		max_tokens: (params.max_tokens > 0).then_some(params.max_tokens),
+		stream: Some(false),
+		response_format,
+		tools,
+		reasoning_effort: map_reasoning_effort(params.reasoning_effort),
+		thinking: DeepSeekThinking {
+			thinking_type: if params.reasoning_effort == Some(crate::llm::types::ReasoningEffort::None) {
+				"disabled"
+			} else {
+				"enabled"
+			},
+		},
+	}
 }
 
 #[async_trait::async_trait]
 impl AiProvider for DeepSeekProvider {
-    fn name(&self) -> &str {
-        "deepseek"
-    }
+	fn name(&self) -> &str {
+		"deepseek"
+	}
 
-    fn supports_model(&self, model: &str) -> bool {
-        // DeepSeek models - check against the active pricing table (strict);
-        // the model set is identical across peak/off-peak tables
-        is_model_in_pricing_table(model, pricing_table_at(std::time::SystemTime::now()))
-    }
+	fn supports_model(&self, model: &str) -> bool {
+		// DeepSeek models - check against the active pricing table (strict);
+		// the model set is identical across peak/off-peak tables
+		is_model_in_pricing_table(model, pricing_table_at(std::time::SystemTime::now()))
+	}
 
-    fn get_api_key(&self) -> Result<String> {
-        env::var(DEEPSEEK_API_KEY_ENV)
-            .map_err(|_| crate::errors::missing_api_key("deepseek", DEEPSEEK_API_KEY_ENV).into())
-    }
+	fn get_api_key(&self) -> Result<String> {
+		env::var(DEEPSEEK_API_KEY_ENV)
+			.map_err(|_| crate::errors::missing_api_key("deepseek", DEEPSEEK_API_KEY_ENV).into())
+	}
 
-    /// DeepSeek's thinking-mode rule replays every prior turn's reasoning on
-    /// tool-carrying requests (see `convert_messages`); agent sessions are
-    /// tool-carrying, so the stored reasoning is context the model reads.
-    fn replays_thinking(&self, _model: &str) -> bool {
-        true
-    }
+	/// DeepSeek's thinking-mode rule replays every prior turn's reasoning on
+	/// tool-carrying requests (see `convert_messages`); agent sessions are
+	/// tool-carrying, so the stored reasoning is context the model reads.
+	fn replays_thinking(&self, _model: &str) -> bool {
+		true
+	}
 
-    fn supports_caching(&self, _model: &str) -> bool {
-        true // DeepSeek supports caching
-    }
+	fn supports_caching(&self, _model: &str) -> bool {
+		true // DeepSeek supports caching
+	}
 
-    fn supports_vision(&self, model: &str) -> bool {
-        // V4.1 Flash is natively multimodal; V4 Pro is text-only
-        !contains_ignore_ascii_case(model, "deepseek-v4-pro")
-    }
+	fn supports_vision(&self, model: &str) -> bool {
+		// V4.1 Flash is natively multimodal; V4 Pro is text-only
+		!contains_ignore_ascii_case(model, "deepseek-v4-pro")
+	}
 
-    fn supports_structured_output(&self, _model: &str) -> bool {
-        // DeepSeek supports JSON mode as per their API documentation
-        true
-    }
+	fn supports_structured_output(&self, _model: &str) -> bool {
+		// DeepSeek supports JSON mode as per their API documentation
+		true
+	}
 
-    fn enforces_response_schema(&self, _model: &str) -> bool {
-        // DeepSeek supports only `json_object` mode — it returns valid JSON but
-        // ignores the supplied JSON schema, so the response shape is NOT
-        // guaranteed (the `JsonSchema` request arm above downgrades to
-        // `json_object`). Report false so callers route to a tolerant parser.
-        false
-    }
+	fn enforces_response_schema(&self, _model: &str) -> bool {
+		// DeepSeek supports only `json_object` mode — it returns valid JSON but
+		// ignores the supplied JSON schema, so the response shape is NOT
+		// guaranteed (the `JsonSchema` request arm above downgrades to
+		// `json_object`). Report false so callers route to a tolerant parser.
+		false
+	}
 
-    fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
-        let (input_price, output_price, cache_write_price, cache_read_price) =
-            crate::llm::utils::get_model_pricing(
-                model,
-                pricing_table_at(std::time::SystemTime::now()),
-            )?;
+	fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
+		let (input_price, output_price, cache_write_price, cache_read_price) =
+			crate::llm::utils::get_model_pricing(model, pricing_table_at(std::time::SystemTime::now()))?;
 
-        Some(crate::llm::types::ModelPricing::new(
-            input_price,
-            output_price,
-            cache_write_price,
-            cache_read_price,
-        ))
-    }
+		Some(crate::llm::types::ModelPricing::new(
+			input_price,
+			output_price,
+			cache_write_price,
+			cache_read_price,
+		))
+	}
 
-    fn get_max_input_tokens(&self, _model: &str) -> usize {
-        1_000_000 // V4.1 Flash and V4 Pro: 1M context
-    }
+	fn get_max_input_tokens(&self, _model: &str) -> usize {
+		1_000_000 // V4.1 Flash and V4 Pro: 1M context
+	}
 
-    fn supported_sampling_params(&self, _model: &str) -> SamplingSupport {
-        // Both native routes (V4.1 Flash, V4 Pro) run in thinking mode. DeepSeek
-        // documents sampling controls as unsupported in thinking mode (accepted
-        // but ignored).
-        SamplingSupport::NONE
-    }
+	fn supported_sampling_params(&self, _model: &str) -> SamplingSupport {
+		// Both native routes (V4.1 Flash, V4 Pro) run in thinking mode. DeepSeek
+		// documents sampling controls as unsupported in thinking mode (accepted
+		// but ignored).
+		SamplingSupport::NONE
+	}
 
-    async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-        let api_key = self.get_api_key()?;
-        let request = build_request(&params);
+	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
+		let api_key = self.get_api_key()?;
+		let request = build_request(&params);
 
-        let start_time = std::time::Instant::now();
-        let request_timeout = params.request_timeout;
-        let extra_headers = params.extra_headers.clone();
-        let response = retry::retry_with_exponential_backoff(
-            || {
-                let client = shared::http_client();
-                let api_key = api_key.clone();
-                let request = request.clone();
-                let extra_headers = extra_headers.clone();
-                Box::pin(async move {
-                    let req = client
-                        .post("https://api.deepseek.com/chat/completions")
-                        .header("Authorization", format!("Bearer {}", api_key))
-                        .header("Content-Type", "application/json")
-                        .json(&request);
+		let start_time = std::time::Instant::now();
+		let request_timeout = params.request_timeout;
+		let extra_headers = params.extra_headers.clone();
+		let response = retry::retry_with_exponential_backoff(
+			|| {
+				let client = shared::http_client();
+				let api_key = api_key.clone();
+				let request = request.clone();
+				let extra_headers = extra_headers.clone();
+				Box::pin(async move {
+					let req = client
+						.post("https://api.deepseek.com/chat/completions")
+						.header("Authorization", format!("Bearer {}", api_key))
+						.header("Content-Type", "application/json")
+						.json(&request);
 
-                    let captured =
-                        shared::send_and_read(req, request_timeout, extra_headers.as_ref()).await?;
+					let captured = shared::send_and_read(req, request_timeout, extra_headers.as_ref()).await?;
 
-                    // Return Err for retryable HTTP errors so the retry loop catches them
-                    if retry::is_retryable_status(captured.status.as_u16()) {
-                        return Err(anyhow::anyhow!(
-                            "DeepSeek API error {}: {}",
-                            captured.status,
-                            captured.body
-                        ));
-                    }
+					// Return Err for retryable HTTP errors so the retry loop catches them
+					if retry::is_retryable_status(captured.status.as_u16()) {
+						return Err(anyhow::anyhow!(
+							"DeepSeek API error {}: {}",
+							captured.status,
+							captured.body
+						));
+					}
 
-                    Ok(captured)
-                })
-            },
-            params.max_retries,
-            params.retry_timeout,
-            params.cancellation_token.as_ref(),
-            || ProviderError::Cancelled.into(),
-            |e| {
-                matches!(
-                    e.downcast_ref::<ProviderError>(),
-                    Some(ProviderError::Cancelled)
-                )
-            },
-            |e: &anyhow::Error| shared::is_connection_error(e),
-        )
-        .await?;
-        let request_time_ms = start_time.elapsed().as_millis() as u64;
+					Ok(captured)
+				})
+			},
+			params.max_retries,
+			params.retry_timeout,
+			params.cancellation_token.as_ref(),
+			|| ProviderError::Cancelled.into(),
+			|e| matches!(e.downcast_ref::<ProviderError>(), Some(ProviderError::Cancelled)),
+			|e: &anyhow::Error| shared::is_connection_error(e),
+		)
+		.await?;
+		let request_time_ms = start_time.elapsed().as_millis() as u64;
 
-        if !response.status.is_success() {
-            return Err(anyhow::anyhow!(
-                "DeepSeek API error {}: {}",
-                response.status,
-                response.body
-            ));
-        }
+		if !response.status.is_success() {
+			return Err(anyhow::anyhow!(
+				"DeepSeek API error {}: {}",
+				response.status,
+				response.body
+			));
+		}
 
-        // Parse response as JSON Value first — gives us both the raw value for exchange logging
-        // and a source for typed deserialization without parsing the body twice.
-        let response_json: serde_json::Value = serde_json::from_str(&response.body)?;
+		// Parse response as JSON Value first — gives us both the raw value for exchange logging
+		// and a source for typed deserialization without parsing the body twice.
+		let response_json: serde_json::Value = serde_json::from_str(&response.body)?;
 
-        let deepseek_response: DeepSeekResponse = serde_json::from_value(response_json.clone())
-            .map_err(|e| {
-                anyhow::anyhow!(
-                    "DeepSeek API response deserialization error: {} — response: {}",
-                    e,
-                    response_json
-                        .to_string()
-                        .chars()
-                        .take(500)
-                        .collect::<String>()
-                )
-            })?;
+		let deepseek_response: DeepSeekResponse = serde_json::from_value(response_json.clone()).map_err(|e| {
+			anyhow::anyhow!(
+				"DeepSeek API response deserialization error: {} — response: {}",
+				e,
+				response_json.to_string().chars().take(500).collect::<String>()
+			)
+		})?;
 
-        let response_for_exchange = response_json;
+		let response_for_exchange = response_json;
 
-        let choice = deepseek_response
-            .choices
-            .into_iter()
-            .next()
-            .ok_or_else(|| anyhow::anyhow!("No choices in DeepSeek response"))?;
+		let choice = deepseek_response
+			.choices
+			.into_iter()
+			.next()
+			.ok_or_else(|| anyhow::anyhow!("No choices in DeepSeek response"))?;
 
-        let content = choice
-            .message
-            .content
-            .as_ref()
-            .and_then(|c| c.as_str())
-            .unwrap_or_default()
-            .to_string();
+		let content = choice
+			.message
+			.content
+			.as_ref()
+			.and_then(|c| c.as_str())
+			.unwrap_or_default()
+			.to_string();
 
-        // Extract tool calls from response
-        let tool_calls: Option<Vec<crate::llm::types::ToolCall>> =
-            choice.message.tool_calls.map(|calls| {
-                calls
-                    .into_iter()
-                    .filter_map(|call| {
-                        if call.tool_type != "function" {
-                            tracing::warn!("Unexpected tool type: {}", call.tool_type);
-                            return None;
-                        }
+		// Extract tool calls from response
+		let tool_calls: Option<Vec<crate::llm::types::ToolCall>> = choice.message.tool_calls.map(|calls| {
+			calls
+				.into_iter()
+				.filter_map(|call| {
+					if call.tool_type != "function" {
+						tracing::warn!("Unexpected tool type: {}", call.tool_type);
+						return None;
+					}
 
-                        let arguments =
-                            shared::parse_tool_call_arguments_lossy(&call.function.arguments);
+					let arguments = shared::parse_tool_call_arguments_lossy(&call.function.arguments);
 
-                        Some(crate::llm::types::ToolCall {
-                            id: call.id,
-                            name: call.function.name,
-                            arguments,
-                        })
-                    })
-                    .collect()
-            });
+					Some(crate::llm::types::ToolCall {
+						id: call.id,
+						name: call.function.name,
+						arguments,
+					})
+				})
+				.collect()
+		});
 
-        // Create exchange record for logging
-        let mut response_json = response_for_exchange;
-        if let Some(ref tc) = tool_calls {
-            shared::set_response_tool_calls(&mut response_json, tc, None);
-        }
+		// Create exchange record for logging
+		let mut response_json = response_for_exchange;
+		if let Some(ref tc) = tool_calls {
+			shared::set_response_tool_calls(&mut response_json, tc, None);
+		}
 
-        let exchange = ProviderExchange::new(
-            serde_json::to_value(&request)?,
-            response_json,
-            None, // Will be set below
-            self.name(),
-        );
+		let exchange = ProviderExchange::new(
+			serde_json::to_value(&request)?,
+			response_json,
+			None, // Will be set below
+			self.name(),
+		);
 
-        // Calculate cost with the provider pricing table
-        let token_usage = if let Some(usage) = deepseek_response.usage {
-            let completion_tokens = usage.completion_tokens;
-            let total_tokens = usage.total_tokens;
+		// Calculate cost with the provider pricing table
+		let token_usage = if let Some(usage) = deepseek_response.usage {
+			let completion_tokens = usage.completion_tokens;
+			let total_tokens = usage.total_tokens;
 
-            // Cache misses are billed at the input ("cache miss") rate, hits at the
-            // much cheaper cache-read rate. {@see split_prompt_tokens} for why the
-            // miss count is derived rather than read straight off the response.
-            let (input_tokens_clean, cache_read_tokens) = split_prompt_tokens(&usage);
+			// Cache misses are billed at the input ("cache miss") rate, hits at the
+			// much cheaper cache-read rate. {@see split_prompt_tokens} for why the
+			// miss count is derived rather than read straight off the response.
+			let (input_tokens_clean, cache_read_tokens) = split_prompt_tokens(&usage);
 
-            // DeepSeek doesn't expose cache_write separately - it's included in cache_miss
-            let cache_write_tokens = 0_u64;
+			// DeepSeek doesn't expose cache_write separately - it's included in cache_miss
+			let cache_write_tokens = 0_u64;
 
-            // ONE path for both the cached and uncached case: with zero hits this is
-            // exactly the no-cache calculation, so the two can never drift apart.
-            // Tier is picked from the pricing table active now (peak windows
-            // 01:00-04:00 and 06:00-10:00 UTC Monday-Friday excluding Chinese public
-            // holidays, off-peak — half price — otherwise).
-            let pricing = pricing_table_at(std::time::SystemTime::now());
-            let cost = calculate_cost_with_cache(
-                pricing,
-                &params.model,
-                input_tokens_clean,
-                cache_read_tokens,
-                completion_tokens,
-            );
+			// ONE path for both the cached and uncached case: with zero hits this is
+			// exactly the no-cache calculation, so the two can never drift apart.
+			// Tier is picked from the pricing table active now (peak windows
+			// 01:00-04:00 and 06:00-10:00 UTC Monday-Friday excluding Chinese public
+			// holidays, off-peak — half price — otherwise).
+			let pricing = pricing_table_at(std::time::SystemTime::now());
+			let cost = calculate_cost_with_cache(
+				pricing,
+				&params.model,
+				input_tokens_clean,
+				cache_read_tokens,
+				completion_tokens,
+			);
 
-            let reasoning_tokens = usage
-                .completion_tokens_details
-                .as_ref()
-                .map(|details| details.reasoning_tokens)
-                .unwrap_or(0);
-            let (output_tokens, reasoning_tokens) =
-                TokenUsage::split_output(completion_tokens, reasoning_tokens);
+			let reasoning_tokens = usage
+				.completion_tokens_details
+				.as_ref()
+				.map(|details| details.reasoning_tokens)
+				.unwrap_or(0);
+			let (output_tokens, reasoning_tokens) = TokenUsage::split_output(completion_tokens, reasoning_tokens);
 
-            Some(TokenUsage {
-                input_tokens: input_tokens_clean, // CLEAN input (cache miss tokens)
-                cache_read_tokens,                // Tokens read from cache
-                cache_write_tokens,               // DeepSeek doesn't expose this (0)
-                output_tokens,
-                reasoning_tokens,
-                total_tokens,
-                cost,
-                request_time_ms: Some(request_time_ms),
-            })
-        } else {
-            None
-        };
+			Some(TokenUsage {
+				input_tokens: input_tokens_clean, // CLEAN input (cache miss tokens)
+				cache_read_tokens,                // Tokens read from cache
+				cache_write_tokens,               // DeepSeek doesn't expose this (0)
+				output_tokens,
+				reasoning_tokens,
+				total_tokens,
+				cost,
+				request_time_ms: Some(request_time_ms),
+			})
+		} else {
+			None
+		};
 
-        // Update exchange with token usage
-        let mut final_exchange = exchange;
-        final_exchange.usage = token_usage.clone();
+		// Update exchange with token usage
+		let mut final_exchange = exchange;
+		final_exchange.usage = token_usage.clone();
 
-        // Extract thinking block from reasoning_content if present
-        let thinking = choice
-            .message
-            .reasoning_content
-            .as_ref()
-            .and_then(|reasoning| {
-                if reasoning.trim().is_empty() {
-                    None
-                } else {
-                    // Estimate tokens from content length (4 chars per token)
-                    let tokens = (reasoning.len() / 4) as u64;
-                    Some(crate::llm::types::ThinkingBlock {
-                        content: reasoning.clone(),
-                        tokens,
-                    })
-                }
-            });
+		// Extract thinking block from reasoning_content if present
+		let thinking = choice.message.reasoning_content.as_ref().and_then(|reasoning| {
+			if reasoning.trim().is_empty() {
+				None
+			} else {
+				// Estimate tokens from content length (4 chars per token)
+				let tokens = (reasoning.len() / 4) as u64;
+				Some(crate::llm::types::ThinkingBlock {
+					content: reasoning.clone(),
+					tokens,
+				})
+			}
+		});
 
-        // Try to parse structured output if it was requested
-        let structured_output = shared::parse_structured_output_from_text(&content);
+		// Try to parse structured output if it was requested
+		let structured_output = shared::parse_structured_output_from_text(&content);
 
-        Ok(ProviderResponse {
-            content,
-            thinking,
-            exchange: final_exchange,
-            tool_calls,
-            finish_reason: choice.finish_reason,
-            structured_output,
-            id: Some(deepseek_response.id),
-        })
-    }
+		Ok(ProviderResponse {
+			content,
+			thinking,
+			exchange: final_exchange,
+			tool_calls,
+			finish_reason: choice.finish_reason,
+			structured_output,
+			id: Some(deepseek_response.id),
+		})
+	}
 }
 
 #[cfg(test)]

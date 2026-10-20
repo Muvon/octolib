@@ -16,370 +16,307 @@ use super::*;
 
 #[test]
 fn test_text_only_model() {
-    let caps = get_reference_capabilities("llama-3.1-8b").unwrap();
-    assert!(!caps.vision);
-    assert!(!caps.video);
-    assert!(caps.structured_output);
-    assert_eq!(caps.max_input_tokens, 131_072);
+	let caps = get_reference_capabilities("llama-3.1-8b").unwrap();
+	assert!(!caps.vision);
+	assert!(!caps.video);
+	assert!(caps.structured_output);
+	assert_eq!(caps.max_input_tokens, 131_072);
 }
 
 #[test]
 fn test_vision_model() {
-    let caps = get_reference_capabilities("llama-3.2-90b-vision").unwrap();
-    assert!(caps.vision);
-    assert!(!caps.video);
-    assert!(caps.structured_output);
+	let caps = get_reference_capabilities("llama-3.2-90b-vision").unwrap();
+	assert!(caps.vision);
+	assert!(!caps.video);
+	assert!(caps.structured_output);
 }
 
 #[test]
 fn test_vl_model_with_video() {
-    let caps = get_reference_capabilities("qwen-2.5-vl-72b").unwrap();
-    assert!(caps.vision);
-    assert!(caps.video);
-    assert!(caps.structured_output);
+	let caps = get_reference_capabilities("qwen-2.5-vl-72b").unwrap();
+	assert!(caps.vision);
+	assert!(caps.video);
+	assert!(caps.structured_output);
 }
 
 #[test]
 fn test_ollama_format() {
-    // Ollama uses format like "llama3.1:8b"
-    let caps = get_reference_capabilities("llama3.1:8b").unwrap();
-    assert!(!caps.vision);
-    assert_eq!(caps.max_input_tokens, 131_072);
+	// Ollama uses format like "llama3.1:8b"
+	let caps = get_reference_capabilities("llama3.1:8b").unwrap();
+	assert!(!caps.vision);
+	assert_eq!(caps.max_input_tokens, 131_072);
 }
 
 #[test]
 fn test_ollama_vision_model() {
-    let caps = get_reference_capabilities("llava:latest").unwrap();
-    assert!(caps.vision);
+	let caps = get_reference_capabilities("llava:latest").unwrap();
+	assert!(caps.vision);
 }
 
 #[test]
 fn test_together_format() {
-    // Together uses HuggingFace-style names
-    let caps = get_reference_capabilities("meta-llama/Llama-3.3-70B-Instruct").unwrap();
-    assert!(!caps.vision);
-    assert_eq!(caps.max_input_tokens, 131_072);
+	// Together uses HuggingFace-style names
+	let caps = get_reference_capabilities("meta-llama/Llama-3.3-70B-Instruct").unwrap();
+	assert!(!caps.vision);
+	assert_eq!(caps.max_input_tokens, 131_072);
 }
 
 #[test]
 fn test_small_context_model() {
-    let caps = get_reference_capabilities("mistral-7b").unwrap();
-    assert!(!caps.vision);
-    assert!(!caps.structured_output);
-    assert_eq!(caps.max_input_tokens, 32_768);
+	let caps = get_reference_capabilities("mistral-7b").unwrap();
+	assert!(!caps.vision);
+	assert!(!caps.structured_output);
+	assert_eq!(caps.max_input_tokens, 32_768);
 }
 
 #[test]
 fn test_llama3_old_context() {
-    let caps = get_reference_capabilities("llama-3-8b").unwrap();
-    assert_eq!(caps.max_input_tokens, 8_192);
+	let caps = get_reference_capabilities("llama-3-8b").unwrap();
+	assert_eq!(caps.max_input_tokens, 8_192);
 }
 
 #[test]
 fn test_unknown_model() {
-    assert!(get_reference_capabilities("totally-unknown-model-xyz").is_none());
+	assert!(get_reference_capabilities("totally-unknown-model-xyz").is_none());
 }
 
 #[test]
 fn test_specificity_vision_vs_text() {
-    // "llama-3.2-11b-vision" should match the vision entry, not "llama-3.2-1b"
-    let caps = get_reference_capabilities("llama-3.2-11b-vision-instruct").unwrap();
-    assert!(caps.vision);
+	// "llama-3.2-11b-vision" should match the vision entry, not "llama-3.2-1b"
+	let caps = get_reference_capabilities("llama-3.2-11b-vision-instruct").unwrap();
+	assert!(caps.vision);
 
-    // "llama-3.2-3b" should match the text-only entry
-    let caps = get_reference_capabilities("llama-3.2-3b-instruct").unwrap();
-    assert!(!caps.vision);
+	// "llama-3.2-3b" should match the text-only entry
+	let caps = get_reference_capabilities("llama-3.2-3b-instruct").unwrap();
+	assert!(!caps.vision);
 }
 
 #[test]
 fn test_gemma_multimodal_vs_text() {
-    // Gemma 3 is multimodal
-    let caps = get_reference_capabilities("gemma-3-27b").unwrap();
-    assert!(caps.vision);
+	// Gemma 3 is multimodal
+	let caps = get_reference_capabilities("gemma-3-27b").unwrap();
+	assert!(caps.vision);
 
-    // Gemma 2 is text-only
-    let caps = get_reference_capabilities("gemma-2-27b").unwrap();
-    assert!(!caps.vision);
+	// Gemma 2 is text-only
+	let caps = get_reference_capabilities("gemma-2-27b").unwrap();
+	assert!(!caps.vision);
 }
 
 #[test]
 fn test_deepseek_context() {
-    let caps = get_reference_capabilities("deepseek-r1-distill-llama-70b").unwrap();
-    assert!(!caps.vision);
-    assert_eq!(caps.max_input_tokens, 65_536);
+	let caps = get_reference_capabilities("deepseek-r1-distill-llama-70b").unwrap();
+	assert!(!caps.vision);
+	assert_eq!(caps.max_input_tokens, 65_536);
 }
 
 #[test]
 fn test_pixtral_vision() {
-    let caps = get_reference_capabilities("pixtral-large").unwrap();
-    assert!(caps.vision);
+	let caps = get_reference_capabilities("pixtral-large").unwrap();
+	assert!(caps.vision);
 }
 
 #[test]
 fn test_phi_multimodal_vs_text() {
-    let caps = get_reference_capabilities("phi-4-multimodal").unwrap();
-    assert!(caps.vision);
+	let caps = get_reference_capabilities("phi-4-multimodal").unwrap();
+	assert!(caps.vision);
 
-    let caps = get_reference_capabilities("phi-4").unwrap();
-    assert!(!caps.vision);
-    assert_eq!(caps.max_input_tokens, 16_384);
+	let caps = get_reference_capabilities("phi-4").unwrap();
+	assert!(!caps.vision);
+	assert_eq!(caps.max_input_tokens, 16_384);
 }
 
 #[test]
 fn test_deepseek_v4_pro_ollama_format() {
-    // Regression: previously fell through to 8192 default via Ollama
-    let caps = get_reference_capabilities("deepseek-v4-pro").unwrap();
-    assert_eq!(caps.max_input_tokens, 1_000_000);
-    let caps = get_reference_capabilities("deepseek-v4-pro:671b").unwrap();
-    assert_eq!(caps.max_input_tokens, 1_000_000);
-    let caps = get_reference_capabilities("deepseek-v4-flash").unwrap();
-    assert_eq!(caps.max_input_tokens, 1_000_000);
-    assert!(!caps.vision);
+	// Regression: previously fell through to 8192 default via Ollama
+	let caps = get_reference_capabilities("deepseek-v4-pro").unwrap();
+	assert_eq!(caps.max_input_tokens, 1_000_000);
+	let caps = get_reference_capabilities("deepseek-v4-pro:671b").unwrap();
+	assert_eq!(caps.max_input_tokens, 1_000_000);
+	let caps = get_reference_capabilities("deepseek-v4-flash").unwrap();
+	assert_eq!(caps.max_input_tokens, 1_000_000);
+	assert!(!caps.vision);
 }
 
 #[test]
 fn test_deepseek_v4_flash_vision_exp() {
-    // Must win over the plain `deepseek-v4-flash` entry (specificity ordering)
-    for model in [
-        "deepseek-v4-flash-vision-exp",
-        "deepseek/deepseek-v4-flash-vision-exp",
-    ] {
-        let caps = get_reference_capabilities(model).unwrap();
-        assert!(caps.vision, "{model}");
-        assert!(!caps.video);
-        assert_eq!(caps.max_input_tokens, 1_000_000);
-    }
+	// Must win over the plain `deepseek-v4-flash` entry (specificity ordering)
+	for model in ["deepseek-v4-flash-vision-exp", "deepseek/deepseek-v4-flash-vision-exp"] {
+		let caps = get_reference_capabilities(model).unwrap();
+		assert!(caps.vision, "{model}");
+		assert!(!caps.video);
+		assert_eq!(caps.max_input_tokens, 1_000_000);
+	}
 }
 
 #[test]
 fn test_openai_gpt5_family() {
-    // gpt-5.5-pro must NOT match the gpt-5 catch-all (400K) — specificity ordering proof
-    assert_eq!(
-        get_reference_capabilities("gpt-5.5-pro")
-            .unwrap()
-            .max_input_tokens,
-        1_050_000
-    );
-    assert_eq!(
-        get_reference_capabilities("gpt-5.5")
-            .unwrap()
-            .max_input_tokens,
-        1_050_000
-    );
-    assert_eq!(
-        get_reference_capabilities("gpt-5.4")
-            .unwrap()
-            .max_input_tokens,
-        1_050_000
-    );
-    assert_eq!(
-        get_reference_capabilities("gpt-5")
-            .unwrap()
-            .max_input_tokens,
-        400_000
-    );
-    assert_eq!(
-        get_reference_capabilities("gpt-5.3-instant")
-            .unwrap()
-            .max_input_tokens,
-        128_000
-    );
+	// gpt-5.5-pro must NOT match the gpt-5 catch-all (400K) — specificity ordering proof
+	assert_eq!(
+		get_reference_capabilities("gpt-5.5-pro").unwrap().max_input_tokens,
+		1_050_000
+	);
+	assert_eq!(
+		get_reference_capabilities("gpt-5.5").unwrap().max_input_tokens,
+		1_050_000
+	);
+	assert_eq!(
+		get_reference_capabilities("gpt-5.4").unwrap().max_input_tokens,
+		1_050_000
+	);
+	assert_eq!(get_reference_capabilities("gpt-5").unwrap().max_input_tokens, 400_000);
+	assert_eq!(
+		get_reference_capabilities("gpt-5.3-instant").unwrap().max_input_tokens,
+		128_000
+	);
 }
 
 #[test]
 fn test_openai_o_series_and_gpt4() {
-    assert_eq!(
-        get_reference_capabilities("o4-mini")
-            .unwrap()
-            .max_input_tokens,
-        200_000
-    );
-    assert_eq!(
-        get_reference_capabilities("o3").unwrap().max_input_tokens,
-        200_000
-    );
-    assert_eq!(
-        get_reference_capabilities("gpt-4-32k")
-            .unwrap()
-            .max_input_tokens,
-        32_768
-    );
-    assert_eq!(
-        get_reference_capabilities("gpt-4o")
-            .unwrap()
-            .max_input_tokens,
-        128_000
-    );
-    assert_eq!(
-        get_reference_capabilities("gpt-4.1-mini")
-            .unwrap()
-            .max_input_tokens,
-        1_047_576
-    );
+	assert_eq!(get_reference_capabilities("o4-mini").unwrap().max_input_tokens, 200_000);
+	assert_eq!(get_reference_capabilities("o3").unwrap().max_input_tokens, 200_000);
+	assert_eq!(
+		get_reference_capabilities("gpt-4-32k").unwrap().max_input_tokens,
+		32_768
+	);
+	assert_eq!(get_reference_capabilities("gpt-4o").unwrap().max_input_tokens, 128_000);
+	assert_eq!(
+		get_reference_capabilities("gpt-4.1-mini").unwrap().max_input_tokens,
+		1_047_576
+	);
 }
 
 #[test]
 fn test_anthropic_claude() {
-    assert_eq!(
-        get_reference_capabilities("claude-opus-4-7")
-            .unwrap()
-            .max_input_tokens,
-        1_000_000
-    );
-    assert_eq!(
-        get_reference_capabilities("claude-sonnet-4-6")
-            .unwrap()
-            .max_input_tokens,
-        1_000_000
-    );
-    assert_eq!(
-        get_reference_capabilities("claude-fable-5-1")
-            .unwrap()
-            .max_input_tokens,
-        1_000_000
-    );
-    assert_eq!(
-        get_reference_capabilities("claude-haiku-4-5-20251001")
-            .unwrap()
-            .max_input_tokens,
-        200_000
-    );
-    assert!(
-        get_reference_capabilities("claude-opus-4-7")
-            .unwrap()
-            .vision
-    );
-    // Mythos-class: 1M context, vision
-    let fable = get_reference_capabilities("claude-fable-5").unwrap();
-    assert_eq!(fable.max_input_tokens, 1_000_000);
-    assert!(fable.vision);
+	assert_eq!(
+		get_reference_capabilities("claude-opus-4-7").unwrap().max_input_tokens,
+		1_000_000
+	);
+	assert_eq!(
+		get_reference_capabilities("claude-sonnet-4-6")
+			.unwrap()
+			.max_input_tokens,
+		1_000_000
+	);
+	assert_eq!(
+		get_reference_capabilities("claude-fable-5-1").unwrap().max_input_tokens,
+		1_000_000
+	);
+	assert_eq!(
+		get_reference_capabilities("claude-haiku-4-5-20251001")
+			.unwrap()
+			.max_input_tokens,
+		200_000
+	);
+	assert!(get_reference_capabilities("claude-opus-4-7").unwrap().vision);
+	// Mythos-class: 1M context, vision
+	let fable = get_reference_capabilities("claude-fable-5").unwrap();
+	assert_eq!(fable.max_input_tokens, 1_000_000);
+	assert!(fable.vision);
 }
 
 #[test]
 fn test_kimi_k3_1m() {
-    let caps = get_reference_capabilities("kimi-k3").unwrap();
-    assert!(caps.vision);
-    assert!(caps.video);
-    assert_eq!(caps.max_input_tokens, 1_048_576);
+	let caps = get_reference_capabilities("kimi-k3").unwrap();
+	assert!(caps.vision);
+	assert!(caps.video);
+	assert_eq!(caps.max_input_tokens, 1_048_576);
 }
 
 #[test]
 fn kimi_k2_6_and_k2_7_code_read_video() {
-    for model in [
-        "kimi-k2.7-code",
-        "kimi-k2.7-code-highspeed",
-        "kimi-2.7-code",
-        "kimi-k2.6",
-        "kimi-2.6",
-        "moonshotai/Kimi-K2.7-Code",
-    ] {
-        let caps = get_reference_capabilities(model).unwrap();
-        assert!(caps.vision, "{model} reads images");
-        assert!(caps.video, "{model} reads video");
-    }
+	for model in [
+		"kimi-k2.7-code",
+		"kimi-k2.7-code-highspeed",
+		"kimi-2.7-code",
+		"kimi-k2.6",
+		"kimi-2.6",
+		"moonshotai/Kimi-K2.7-Code",
+	] {
+		let caps = get_reference_capabilities(model).unwrap();
+		assert!(caps.vision, "{model} reads images");
+		assert!(caps.video, "{model} reads video");
+	}
 }
 
 #[test]
 fn test_kimi_k2_256k() {
-    // All Kimi K2 variants now report 256K (matches MoonshotProvider override)
-    assert_eq!(
-        get_reference_capabilities("kimi-k2.7-code")
-            .unwrap()
-            .max_input_tokens,
-        256_000
-    );
-    assert_eq!(
-        get_reference_capabilities("kimi-k2.6")
-            .unwrap()
-            .max_input_tokens,
-        256_000
-    );
-    assert_eq!(
-        get_reference_capabilities("kimi-k2-0905")
-            .unwrap()
-            .max_input_tokens,
-        256_000
-    );
-    assert_eq!(
-        get_reference_capabilities("kimi-k2")
-            .unwrap()
-            .max_input_tokens,
-        256_000
-    );
+	// All Kimi K2 variants now report 256K (matches MoonshotProvider override)
+	assert_eq!(
+		get_reference_capabilities("kimi-k2.7-code").unwrap().max_input_tokens,
+		256_000
+	);
+	assert_eq!(
+		get_reference_capabilities("kimi-k2.6").unwrap().max_input_tokens,
+		256_000
+	);
+	assert_eq!(
+		get_reference_capabilities("kimi-k2-0905").unwrap().max_input_tokens,
+		256_000
+	);
+	assert_eq!(get_reference_capabilities("kimi-k2").unwrap().max_input_tokens, 256_000);
 }
 
 #[test]
 fn test_glm_5_1_200k() {
-    assert_eq!(
-        get_reference_capabilities("glm-5.1")
-            .unwrap()
-            .max_input_tokens,
-        200_000
-    );
-    assert_eq!(
-        get_reference_capabilities("glm-5.1-turbo")
-            .unwrap()
-            .max_input_tokens,
-        200_000
-    );
-    assert_eq!(
-        get_reference_capabilities("glm-5.3")
-            .unwrap()
-            .max_input_tokens,
-        1_000_000
-    );
+	assert_eq!(get_reference_capabilities("glm-5.1").unwrap().max_input_tokens, 200_000);
+	assert_eq!(
+		get_reference_capabilities("glm-5.1-turbo").unwrap().max_input_tokens,
+		200_000
+	);
+	assert_eq!(
+		get_reference_capabilities("glm-5.3").unwrap().max_input_tokens,
+		1_000_000
+	);
 }
 
 #[test]
 fn test_minimax_variants() {
-    // M3 is multimodal: image + video
-    let m3 = get_reference_capabilities("MiniMax-M3").unwrap();
-    assert!(m3.vision);
-    assert!(m3.video);
-    assert_eq!(m3.max_input_tokens, 1_000_000);
-    assert_eq!(
-        get_reference_capabilities("MiniMax-M3-highspeed")
-            .unwrap()
-            .max_input_tokens,
-        1_000_000
-    );
-    let m3_1_flash = get_reference_capabilities("MiniMax-M3.1-Flash-Preview").unwrap();
-    assert!(m3_1_flash.vision);
-    assert!(m3_1_flash.video);
-    assert_eq!(m3_1_flash.max_input_tokens, 1_000_000);
-    assert_eq!(
-        get_reference_capabilities("MiniMax-M2.7-highspeed")
-            .unwrap()
-            .max_input_tokens,
-        204_800
-    );
-    assert_eq!(
-        get_reference_capabilities("MiniMax-M2.5-lightning")
-            .unwrap()
-            .max_input_tokens,
-        1_000_000
-    );
-    assert_eq!(
-        get_reference_capabilities("MiniMax-M2.1")
-            .unwrap()
-            .max_input_tokens,
-        204_800
-    );
+	// M3 is multimodal: image + video
+	let m3 = get_reference_capabilities("MiniMax-M3").unwrap();
+	assert!(m3.vision);
+	assert!(m3.video);
+	assert_eq!(m3.max_input_tokens, 1_000_000);
+	assert_eq!(
+		get_reference_capabilities("MiniMax-M3-highspeed")
+			.unwrap()
+			.max_input_tokens,
+		1_000_000
+	);
+	let m3_1_flash = get_reference_capabilities("MiniMax-M3.1-Flash-Preview").unwrap();
+	assert!(m3_1_flash.vision);
+	assert!(m3_1_flash.video);
+	assert_eq!(m3_1_flash.max_input_tokens, 1_000_000);
+	assert_eq!(
+		get_reference_capabilities("MiniMax-M2.7-highspeed")
+			.unwrap()
+			.max_input_tokens,
+		204_800
+	);
+	assert_eq!(
+		get_reference_capabilities("MiniMax-M2.5-lightning")
+			.unwrap()
+			.max_input_tokens,
+		1_000_000
+	);
+	assert_eq!(
+		get_reference_capabilities("MiniMax-M2.1").unwrap().max_input_tokens,
+		204_800
+	);
 }
 
 #[test]
 fn test_byteplus_dot_aliases() {
-    // BytePlus dot-form aliases (don't sanitize to "2-0" form)
-    assert_eq!(
-        get_reference_capabilities("dola-seed-2.0-pro")
-            .unwrap()
-            .max_input_tokens,
-        256_000
-    );
-    assert_eq!(
-        get_reference_capabilities("bytedance-seed-code")
-            .unwrap()
-            .max_input_tokens,
-        256_000
-    );
+	// BytePlus dot-form aliases (don't sanitize to "2-0" form)
+	assert_eq!(
+		get_reference_capabilities("dola-seed-2.0-pro")
+			.unwrap()
+			.max_input_tokens,
+		256_000
+	);
+	assert_eq!(
+		get_reference_capabilities("bytedance-seed-code")
+			.unwrap()
+			.max_input_tokens,
+		256_000
+	);
 }

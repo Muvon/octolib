@@ -28,21 +28,21 @@ use std::path::PathBuf;
 /// it would orphan gigabytes of already-downloaded weights on existing
 /// machines and force a re-download.
 pub fn get_model_cache_dir() -> anyhow::Result<PathBuf> {
-    let cache_dir = dirs::cache_dir()
-        .ok_or_else(|| anyhow::anyhow!("Could not determine cache directory"))?
-        .join("octolib")
-        .join("huggingface");
+	let cache_dir = dirs::cache_dir()
+		.ok_or_else(|| anyhow::anyhow!("Could not determine cache directory"))?
+		.join("octolib")
+		.join("huggingface");
 
-    std::fs::create_dir_all(&cache_dir)?;
-    Ok(cache_dir)
+	std::fs::create_dir_all(&cache_dir)?;
+	Ok(cache_dir)
 }
 
 #[deprecated(note = "all model caches share one dir — use get_model_cache_dir()")]
 pub fn get_fastembed_cache_dir() -> anyhow::Result<PathBuf> {
-    get_model_cache_dir()
+	get_model_cache_dir()
 }
 
 #[deprecated(note = "all model caches share one dir — use get_model_cache_dir()")]
 pub fn get_huggingface_cache_dir() -> anyhow::Result<PathBuf> {
-    get_model_cache_dir()
+	get_model_cache_dir()
 }

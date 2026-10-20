@@ -38,101 +38,87 @@ use super::{http_client, EmbeddingProvider};
 
 /// Google provider implementation for trait
 pub struct GoogleProviderImpl {
-    model_name: String,
-    dimension: usize,
+	model_name: String,
+	dimension: usize,
 }
 
 impl GoogleProviderImpl {
-    pub fn new(model: &str) -> Result<Self> {
-        let dimension = Self::get_model_dimension(model)?;
-        Ok(Self {
-            model_name: model.to_string(),
-            dimension,
-        })
-    }
+	pub fn new(model: &str) -> Result<Self> {
+		let dimension = Self::get_model_dimension(model)?;
+		Ok(Self {
+			model_name: model.to_string(),
+			dimension,
+		})
+	}
 
-    fn get_model_dimension(model: &str) -> Result<usize> {
-        match model {
-			"gemini-embedding-2" => Ok(3072),    // Multimodal, 8192 input tokens, MRL down to 128d
-			"gemini-embedding-001" => Ok(3072),  // Up to 3072 dimensions, state-of-the-art performance
+	fn get_model_dimension(model: &str) -> Result<usize> {
+		match model {
+			"gemini-embedding-2" => Ok(3072),   // Multimodal, 8192 input tokens, MRL down to 128d
+			"gemini-embedding-001" => Ok(3072), // Up to 3072 dimensions, state-of-the-art performance
 			_ => Err(anyhow::anyhow!(
 				"Unsupported Google model: '{}'. Supported models: gemini-embedding-2 (3072d), gemini-embedding-001 (3072d)",
 				model
 			)),
 		}
-    }
+	}
 }
 
 #[async_trait::async_trait]
 impl EmbeddingProvider for GoogleProviderImpl {
-    async fn generate_embedding(&self, text: &str) -> Result<(Vec<f32>, EmbeddingUsage)> {
-        GoogleProvider::generate_embeddings(text, &self.model_name).await
-    }
+	async fn generate_embedding(&self, text: &str) -> Result<(Vec<f32>, EmbeddingUsage)> {
+		GoogleProvider::generate_embeddings(text, &self.model_name).await
+	}
 
-    async fn generate_embeddings_batch(
-        &self,
-        texts: Vec<String>,
-        input_type: InputType,
-    ) -> Result<(Vec<Vec<f32>>, EmbeddingUsage)> {
-        // Apply prefix manually for Google (doesn't support input_type API)
-        let processed_texts: Vec<String> = texts
-            .into_iter()
-            .map(|text| input_type.apply_prefix(&text))
-            .collect();
-        GoogleProvider::generate_embeddings_batch(processed_texts, &self.model_name).await
-    }
+	async fn generate_embeddings_batch(
+		&self,
+		texts: Vec<String>,
+		input_type: InputType,
+	) -> Result<(Vec<Vec<f32>>, EmbeddingUsage)> {
+		// Apply prefix manually for Google (doesn't support input_type API)
+		let processed_texts: Vec<String> = texts.into_iter().map(|text| input_type.apply_prefix(&text)).collect();
+		GoogleProvider::generate_embeddings_batch(processed_texts, &self.model_name).await
+	}
 
-    fn get_dimension(&self) -> usize {
-        self.dimension
-    }
+	fn get_dimension(&self) -> usize {
+		self.dimension
+	}
 
-    fn is_model_supported(&self) -> bool {
-        matches!(
-            self.model_name.as_str(),
-            "gemini-embedding-2" | "gemini-embedding-001"
-        )
-    }
+	fn is_model_supported(&self) -> bool {
+		matches!(self.model_name.as_str(), "gemini-embedding-2" | "gemini-embedding-001")
+	}
 }
 
 /// Google provider implementation
 pub struct GoogleProvider;
 
 impl GoogleProvider {
-    /// Get list of supported models for dynamic discovery
-    pub fn get_supported_models() -> Vec<&'static str> {
-        vec!["gemini-embedding-2", "gemini-embedding-001"]
-    }
-    pub async fn generate_embeddings(
-        contents: &str,
-        model: &str,
-    ) -> Result<(Vec<f32>, EmbeddingUsage)> {
-        let (vectors, usage) =
-            Self::generate_embeddings_batch(vec![contents.to_string()], model).await?;
-        let first = vectors
-            .into_iter()
-            .next()
-            .ok_or_else(|| anyhow::anyhow!("No embeddings found"))?;
-        Ok((first, usage))
-    }
+	/// Get list of supported models for dynamic discovery
+	pub fn get_supported_models() -> Vec<&'static str> {
+		vec!["gemini-embedding-2", "gemini-embedding-001"]
+	}
+	pub async fn generate_embeddings(contents: &str, model: &str) -> Result<(Vec<f32>, EmbeddingUsage)> {
+		let (vectors, usage) = Self::generate_embeddings_batch(vec![contents.to_string()], model).await?;
+		let first = vectors
+			.into_iter()
+			.next()
+			.ok_or_else(|| anyhow::anyhow!("No embeddings found"))?;
+		Ok((first, usage))
+	}
 
-    pub async fn generate_embeddings_batch(
-        texts: Vec<String>,
-        model: &str,
-    ) -> Result<(Vec<Vec<f32>>, EmbeddingUsage)> {
-        // Google's embedContent returns no token usage, so estimate with tiktoken.
-        let est_tokens: u64 = texts
-            .iter()
-            .map(|t| crate::embedding::count_tokens(t) as u64)
-            .sum();
-        let google_api_key = std::env::var("GOOGLE_API_KEY")
-            .context("GOOGLE_API_KEY environment variable not set")?;
+	pub async fn generate_embeddings_batch(texts: Vec<String>, model: &str) -> Result<(Vec<Vec<f32>>, EmbeddingUsage)> {
+		// Google's embedContent returns no token usage, so estimate with tiktoken.
+		let est_tokens: u64 = texts.iter().map(|t| crate::embedding::count_tokens(t) as u64).sum();
+		let google_api_key = std::env::var("GOOGLE_API_KEY").context("GOOGLE_API_KEY environment variable not set")?;
 
-        // For batch processing, we'll need to send individual requests as Google's API structure is different
-        let mut all_embeddings = Vec::new();
+		// For batch processing, we'll need to send individual requests as Google's API structure is different
+		let mut all_embeddings = Vec::new();
 
-        for text in texts {
-            let response = http_client()
-				.post(format!("https://generativelanguage.googleapis.com/v1beta/models/{}:embedContent?key={}", model, google_api_key))
+		for text in texts {
+			let response = http_client()
+				.post(format!(
+					"https://generativelanguage.googleapis.com/v1beta/models/{}:embedContent?key={}",
+					model, google_api_key
+				))
 				.header("Content-Type", "application/json")
 				.json(&json!({
 					"content": {
@@ -142,28 +128,25 @@ impl GoogleProvider {
 					}
 				}))
 				.send()
-			.await?;
+				.await?;
 
-            if !response.status().is_success() {
-                let error_text = response.text().await?;
-                return Err(anyhow::anyhow!("Google API error: {}", error_text));
-            }
+			if !response.status().is_success() {
+				let error_text = response.text().await?;
+				return Err(anyhow::anyhow!("Google API error: {}", error_text));
+			}
 
-            let response_json: Value = response.json().await?;
+			let response_json: Value = response.json().await?;
 
-            let embedding = response_json["embedding"]["values"]
-                .as_array()
-                .context("Failed to get embedding values")?
-                .iter()
-                .map(|v| v.as_f64().unwrap_or_default() as f32)
-                .collect();
+			let embedding = response_json["embedding"]["values"]
+				.as_array()
+				.context("Failed to get embedding values")?
+				.iter()
+				.map(|v| v.as_f64().unwrap_or_default() as f32)
+				.collect();
 
-            all_embeddings.push(embedding);
-        }
+			all_embeddings.push(embedding);
+		}
 
-        Ok((
-            all_embeddings,
-            EmbeddingUsage::from_tokens(model, est_tokens),
-        ))
-    }
+		Ok((all_embeddings, EmbeddingUsage::from_tokens(model, est_tokens)))
+	}
 }

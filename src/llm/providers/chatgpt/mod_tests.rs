@@ -18,197 +18,188 @@ use crate::llm::tool_calls::GenericToolCall;
 use crate::llm::types::FunctionDefinition;
 
 fn assistant_with_call(meta: Option<serde_json::Map<String, Value>>) -> Message {
-    let mut message = Message::assistant("");
-    message.tool_calls = Some(
-        serde_json::to_value(vec![GenericToolCall {
-            id: "call_1".to_string(),
-            name: "view".to_string(),
-            arguments: json!({"path": "a.rs"}),
-            meta,
-        }])
-        .unwrap(),
-    );
-    message
+	let mut message = Message::assistant("");
+	message.tool_calls = Some(
+		serde_json::to_value(vec![GenericToolCall {
+			id: "call_1".to_string(),
+			name: "view".to_string(),
+			arguments: json!({"path": "a.rs"}),
+			meta,
+		}])
+		.unwrap(),
+	);
+	message
 }
 
 #[test]
 fn factory_resolves_chatgpt_models() {
-    let (provider, model) = ProviderFactory::get_provider_for_model("chatgpt:gpt-6.1-sol").unwrap();
-    assert_eq!(provider.name(), "chatgpt");
-    assert_eq!(model, "gpt-6.1-sol");
-    assert!(provider.get_model_pricing(&model).is_some());
+	let (provider, model) = ProviderFactory::get_provider_for_model("chatgpt:gpt-6.1-sol").unwrap();
+	assert_eq!(provider.name(), "chatgpt");
+	assert_eq!(model, "gpt-6.1-sol");
+	assert!(provider.get_model_pricing(&model).is_some());
 }
 
 #[test]
 fn request_follows_the_plan_route_contract() {
-    let messages = vec![Message::system("rules"), Message::user("hi")];
-    let mut params = ChatCompletionParams::new(&messages, "gpt-6.1-sol", 0.7, 1.0, 50, 1000)
-        .with_long_cache(true);
-    params.previous_id = Some("resp_1".to_string());
-    params.tools = Some(vec![FunctionDefinition {
-        name: "view".to_string(),
-        description: "Read a file".to_string(),
-        parameters: json!({"type": "object"}),
-        cache_control: None,
-    }]);
+	let messages = vec![Message::system("rules"), Message::user("hi")];
+	let mut params = ChatCompletionParams::new(&messages, "gpt-6.1-sol", 0.7, 1.0, 50, 1000).with_long_cache(true);
+	params.previous_id = Some("resp_1".to_string());
+	params.tools = Some(vec![FunctionDefinition {
+		name: "view".to_string(),
+		description: "Read a file".to_string(),
+		parameters: json!({"type": "object"}),
+		cache_control: None,
+	}]);
 
-    let request = build_request(&params);
+	let request = build_request(&params);
 
-    assert_eq!(request["store"], false);
-    assert_eq!(request["stream"], true);
-    assert_eq!(request["include"], json!(["reasoning.encrypted_content"]));
-    for rejected in [
-        "previous_response_id",
-        "max_output_tokens",
-        "temperature",
-        "top_p",
-        "prompt_cache_retention",
-    ] {
-        assert!(
-            request.get(rejected).is_none(),
-            "{} must not be sent",
-            rejected
-        );
-    }
-    assert_eq!(request["input"][0]["role"], "developer");
-    assert_eq!(request["input"][1]["role"], "user");
-    assert_eq!(request["tools"][0]["type"], "namespace");
-    assert_eq!(request["tools"][0]["name"], TOOL_NAMESPACE);
-    assert_eq!(request["tools"][0]["tools"][0]["name"], "view");
-    assert_eq!(request["tools"][0]["tools"][0]["strict"], false);
+	assert_eq!(request["store"], false);
+	assert_eq!(request["stream"], true);
+	assert_eq!(request["include"], json!(["reasoning.encrypted_content"]));
+	for rejected in [
+		"previous_response_id",
+		"max_output_tokens",
+		"temperature",
+		"top_p",
+		"prompt_cache_retention",
+	] {
+		assert!(request.get(rejected).is_none(), "{} must not be sent", rejected);
+	}
+	assert_eq!(request["input"][0]["role"], "developer");
+	assert_eq!(request["input"][1]["role"], "user");
+	assert_eq!(request["tools"][0]["type"], "namespace");
+	assert_eq!(request["tools"][0]["name"], TOOL_NAMESPACE);
+	assert_eq!(request["tools"][0]["tools"][0]["name"], "view");
+	assert_eq!(request["tools"][0]["tools"][0]["strict"], false);
 }
 
 #[test]
 fn cache_key_names_the_session_so_the_plan_route_keeps_it() {
-    let messages = vec![Message::user("hi")];
-    let params = ChatCompletionParams::new(&messages, "gpt-6.1-sol", 0.7, 1.0, 50, 1000);
-    let mut turn_states = TurnStateStore::default();
-    assert_eq!(request_headers_with_store(&params, &mut turn_states), None);
+	let messages = vec![Message::user("hi")];
+	let params = ChatCompletionParams::new(&messages, "gpt-6.1-sol", 0.7, 1.0, 50, 1000);
+	let mut turn_states = TurnStateStore::default();
+	assert_eq!(request_headers_with_store(&params, &mut turn_states), None);
 
-    let params = params.with_prompt_cache_key("s-1");
-    assert_eq!(build_request(&params)["prompt_cache_key"], "s-1");
-    assert_eq!(
-        request_headers_with_store(&params, &mut turn_states)
-            .unwrap()
-            .get(SESSION_HEADER),
-        Some(&"s-1".to_string())
-    );
+	let params = params.with_prompt_cache_key("s-1");
+	assert_eq!(build_request(&params)["prompt_cache_key"], "s-1");
+	assert_eq!(
+		request_headers_with_store(&params, &mut turn_states)
+			.unwrap()
+			.get(SESSION_HEADER),
+		Some(&"s-1".to_string())
+	);
 
-    let caller = HashMap::from([(SESSION_HEADER.to_string(), "caller".to_string())]);
-    let params = params.with_extra_headers(caller);
-    assert_eq!(
-        request_headers_with_store(&params, &mut turn_states)
-            .unwrap()
-            .get(SESSION_HEADER),
-        Some(&"caller".to_string())
-    );
+	let caller = HashMap::from([(SESSION_HEADER.to_string(), "caller".to_string())]);
+	let params = params.with_extra_headers(caller);
+	assert_eq!(
+		request_headers_with_store(&params, &mut turn_states)
+			.unwrap()
+			.get(SESSION_HEADER),
+		Some(&"caller".to_string())
+	);
 }
 
 #[test]
 fn turn_state_is_echoed_on_the_second_request_of_a_turn() {
-    let mut turn_states = TurnStateStore::default();
-    let user_messages = vec![Message::user("start")];
-    let user_params = ChatCompletionParams::new(&user_messages, "gpt-6.1-sol", 0.7, 1.0, 50, 1000)
-        .with_prompt_cache_key("session");
+	let mut turn_states = TurnStateStore::default();
+	let user_messages = vec![Message::user("start")];
+	let user_params =
+		ChatCompletionParams::new(&user_messages, "gpt-6.1-sol", 0.7, 1.0, 50, 1000).with_prompt_cache_key("session");
 
-    let headers = request_headers_with_store(&user_params, &mut turn_states).unwrap();
-    assert!(!headers.contains_key(TURN_STATE_HEADER));
-    remember_turn_state_with_store(Some("session"), Some("first-turn-state"), &mut turn_states);
+	let headers = request_headers_with_store(&user_params, &mut turn_states).unwrap();
+	assert!(!headers.contains_key(TURN_STATE_HEADER));
+	remember_turn_state_with_store(Some("session"), Some("first-turn-state"), &mut turn_states);
 
-    let continued_messages = vec![Message::user("start"), Message::assistant("working")];
-    let continued_params =
-        ChatCompletionParams::new(&continued_messages, "gpt-6.1-sol", 0.7, 1.0, 50, 1000)
-            .with_prompt_cache_key("session");
-    let headers = request_headers_with_store(&continued_params, &mut turn_states).unwrap();
-    assert_eq!(
-        headers.get(TURN_STATE_HEADER).map(String::as_str),
-        Some("first-turn-state")
-    );
+	let continued_messages = vec![Message::user("start"), Message::assistant("working")];
+	let continued_params = ChatCompletionParams::new(&continued_messages, "gpt-6.1-sol", 0.7, 1.0, 50, 1000)
+		.with_prompt_cache_key("session");
+	let headers = request_headers_with_store(&continued_params, &mut turn_states).unwrap();
+	assert_eq!(
+		headers.get(TURN_STATE_HEADER).map(String::as_str),
+		Some("first-turn-state")
+	);
 }
 
 #[test]
 fn first_turn_state_wins_when_later_responses_return_another() {
-    let mut turn_states = TurnStateStore::default();
-    remember_turn_state_with_store(Some("session"), Some("first"), &mut turn_states);
-    remember_turn_state_with_store(Some("session"), Some("later"), &mut turn_states);
+	let mut turn_states = TurnStateStore::default();
+	remember_turn_state_with_store(Some("session"), Some("first"), &mut turn_states);
+	remember_turn_state_with_store(Some("session"), Some("later"), &mut turn_states);
 
-    assert_eq!(turn_states.get("session").as_deref(), Some("first"));
+	assert_eq!(turn_states.get("session").as_deref(), Some("first"));
 }
 
 #[test]
 fn new_user_turn_clears_the_stored_turn_state() {
-    let mut turn_states = TurnStateStore::default();
-    turn_states.store_first("session", "previous-turn");
-    let messages = vec![Message::user("next turn")];
-    let params = ChatCompletionParams::new(&messages, "gpt-6.1-sol", 0.7, 1.0, 50, 1000)
-        .with_prompt_cache_key("session");
+	let mut turn_states = TurnStateStore::default();
+	turn_states.store_first("session", "previous-turn");
+	let messages = vec![Message::user("next turn")];
+	let params =
+		ChatCompletionParams::new(&messages, "gpt-6.1-sol", 0.7, 1.0, 50, 1000).with_prompt_cache_key("session");
 
-    let headers = request_headers_with_store(&params, &mut turn_states).unwrap();
+	let headers = request_headers_with_store(&params, &mut turn_states).unwrap();
 
-    assert!(!headers.contains_key(TURN_STATE_HEADER));
-    assert_eq!(turn_states.get("session"), None);
+	assert!(!headers.contains_key(TURN_STATE_HEADER));
+	assert_eq!(turn_states.get("session"), None);
 }
 
 #[test]
 fn requests_without_cache_keys_have_no_turn_state_affinity() {
-    let mut turn_states = TurnStateStore::default();
-    let messages = vec![Message::assistant("continue")];
-    let caller_headers = HashMap::from([
-        (TURN_STATE_HEADER.to_string(), "caller-token".to_string()),
-        ("x-test".to_string(), "kept".to_string()),
-    ]);
-    let params = ChatCompletionParams::new(&messages, "gpt-6.1-sol", 0.7, 1.0, 50, 1000)
-        .with_extra_headers(caller_headers);
+	let mut turn_states = TurnStateStore::default();
+	let messages = vec![Message::assistant("continue")];
+	let caller_headers = HashMap::from([
+		(TURN_STATE_HEADER.to_string(), "caller-token".to_string()),
+		("x-test".to_string(), "kept".to_string()),
+	]);
+	let params =
+		ChatCompletionParams::new(&messages, "gpt-6.1-sol", 0.7, 1.0, 50, 1000).with_extra_headers(caller_headers);
 
-    let headers = request_headers_with_store(&params, &mut turn_states).unwrap();
-    remember_turn_state_with_store(None, Some("response-token"), &mut turn_states);
+	let headers = request_headers_with_store(&params, &mut turn_states).unwrap();
+	remember_turn_state_with_store(None, Some("response-token"), &mut turn_states);
 
-    assert!(!headers.contains_key(TURN_STATE_HEADER));
-    assert_eq!(headers.get("x-test").map(String::as_str), Some("kept"));
-    assert!(turn_states.entries.is_empty());
+	assert!(!headers.contains_key(TURN_STATE_HEADER));
+	assert_eq!(headers.get("x-test").map(String::as_str), Some("kept"));
+	assert!(turn_states.entries.is_empty());
 }
 
 #[test]
 fn turn_state_store_evicts_the_least_recently_used_key_at_capacity() {
-    let mut turn_states = TurnStateStore::default();
-    for index in 0..TURN_STATE_STORE_CAPACITY {
-        turn_states.store_first(&format!("session-{index}"), &format!("token-{index}"));
-    }
-    assert_eq!(turn_states.get("session-0").as_deref(), Some("token-0"));
+	let mut turn_states = TurnStateStore::default();
+	for index in 0..TURN_STATE_STORE_CAPACITY {
+		turn_states.store_first(&format!("session-{index}"), &format!("token-{index}"));
+	}
+	assert_eq!(turn_states.get("session-0").as_deref(), Some("token-0"));
 
-    turn_states.store_first("overflow", "new-token");
+	turn_states.store_first("overflow", "new-token");
 
-    assert_eq!(turn_states.entries.len(), TURN_STATE_STORE_CAPACITY);
-    assert_eq!(turn_states.get("session-1"), None);
-    assert_eq!(turn_states.get("session-0").as_deref(), Some("token-0"));
-    assert_eq!(turn_states.get("overflow").as_deref(), Some("new-token"));
+	assert_eq!(turn_states.entries.len(), TURN_STATE_STORE_CAPACITY);
+	assert_eq!(turn_states.get("session-1"), None);
+	assert_eq!(turn_states.get("session-0").as_deref(), Some("token-0"));
+	assert_eq!(turn_states.get("overflow").as_deref(), Some("new-token"));
 }
 
 #[test]
 fn replay_puts_encrypted_reasoning_before_namespaced_calls() {
-    let reasoning = json!({
-        "type": "reasoning",
-        "id": "rs_1",
-        "summary": [],
-        "encrypted_content": "enc"
-    });
-    let meta = serde_json::Map::from_iter([(
-        openai::REASONING_META_KEY.to_string(),
-        json!([reasoning.clone()]),
-    )]);
-    let messages = vec![
-        Message::user("go"),
-        assistant_with_call(Some(meta)),
-        Message::tool("ok", "call_1", "view"),
-    ];
+	let reasoning = json!({
+		"type": "reasoning",
+		"id": "rs_1",
+		"summary": [],
+		"encrypted_content": "enc"
+	});
+	let meta = serde_json::Map::from_iter([(openai::REASONING_META_KEY.to_string(), json!([reasoning.clone()]))]);
+	let messages = vec![
+		Message::user("go"),
+		assistant_with_call(Some(meta)),
+		Message::tool("ok", "call_1", "view"),
+	];
 
-    let input = build_input(&messages);
+	let input = build_input(&messages);
 
-    assert_eq!(input.len(), 4);
-    assert_eq!(input[1], reasoning);
-    assert_eq!(input[2]["type"], "function_call");
-    assert_eq!(input[2]["namespace"], TOOL_NAMESPACE);
-    assert_eq!(input[3]["type"], "function_call_output");
+	assert_eq!(input.len(), 4);
+	assert_eq!(input[1], reasoning);
+	assert_eq!(input[2]["type"], "function_call");
+	assert_eq!(input[2]["namespace"], TOOL_NAMESPACE);
+	assert_eq!(input[3]["type"], "function_call_output");
 }
 
 // The plan route caches by rendered prefix: a later request of the same session
@@ -216,60 +207,48 @@ fn replay_puts_encrypted_reasoning_before_namespaced_calls() {
 // history again.
 #[test]
 fn a_grown_transcript_extends_the_previous_request_unchanged() {
-    let meta = serde_json::Map::from_iter([(
-        openai::REASONING_META_KEY.to_string(),
-        json!([{"type": "reasoning", "id": "rs_1", "summary": [], "encrypted_content": "enc"}]),
-    )]);
-    let mut messages = vec![
-        Message::system("rules"),
-        Message::user("go"),
-        assistant_with_call(Some(meta)),
-        Message::tool("ok", "call_1", "view"),
-    ];
-    let request_at = |messages: &[Message]| {
-        let mut params = ChatCompletionParams::new(messages, "gpt-6.1-sol", 0.7, 1.0, 50, 1000)
-            .with_prompt_cache_key("s-1");
-        params.tools = Some(vec![FunctionDefinition {
-            name: "view".to_string(),
-            description: "Read a file".to_string(),
-            parameters: json!({"type": "object", "properties": {"path": {"type": "string"}}}),
-            cache_control: None,
-        }]);
-        build_request(&params)
-    };
+	let meta = serde_json::Map::from_iter([(
+		openai::REASONING_META_KEY.to_string(),
+		json!([{"type": "reasoning", "id": "rs_1", "summary": [], "encrypted_content": "enc"}]),
+	)]);
+	let mut messages = vec![
+		Message::system("rules"),
+		Message::user("go"),
+		assistant_with_call(Some(meta)),
+		Message::tool("ok", "call_1", "view"),
+	];
+	let request_at = |messages: &[Message]| {
+		let mut params =
+			ChatCompletionParams::new(messages, "gpt-6.1-sol", 0.7, 1.0, 50, 1000).with_prompt_cache_key("s-1");
+		params.tools = Some(vec![FunctionDefinition {
+			name: "view".to_string(),
+			description: "Read a file".to_string(),
+			parameters: json!({"type": "object", "properties": {"path": {"type": "string"}}}),
+			cache_control: None,
+		}]);
+		build_request(&params)
+	};
 
-    let first = request_at(&messages);
-    assert_eq!(
-        first,
-        request_at(&messages),
-        "request building is deterministic"
-    );
+	let first = request_at(&messages);
+	assert_eq!(first, request_at(&messages), "request building is deterministic");
 
-    let mut next_call = assistant_with_call(None);
-    next_call.content = "checking".to_string();
-    messages.push(next_call);
-    messages.push(Message::tool("done", "call_1", "view"));
-    let second = request_at(&messages);
+	let mut next_call = assistant_with_call(None);
+	next_call.content = "checking".to_string();
+	messages.push(next_call);
+	messages.push(Message::tool("done", "call_1", "view"));
+	let second = request_at(&messages);
 
-    let (first_input, second_input) = (
-        first["input"].as_array().unwrap(),
-        second["input"].as_array().unwrap(),
-    );
-    assert!(second_input.len() > first_input.len());
-    assert_eq!(&second_input[..first_input.len()], first_input.as_slice());
-    for field in first
-        .as_object()
-        .unwrap()
-        .keys()
-        .filter(|key| *key != "input")
-    {
-        assert_eq!(first[field], second[field], "{field} changed between turns");
-    }
+	let (first_input, second_input) = (first["input"].as_array().unwrap(), second["input"].as_array().unwrap());
+	assert!(second_input.len() > first_input.len());
+	assert_eq!(&second_input[..first_input.len()], first_input.as_slice());
+	for field in first.as_object().unwrap().keys().filter(|key| *key != "input") {
+		assert_eq!(first[field], second[field], "{field} changed between turns");
+	}
 }
 
 #[test]
 fn stream_folds_into_a_response_that_keeps_reasoning_for_replay() {
-    let body = [
+	let body = [
         "event: response.created",
         r#"data: {"type":"response.created","response":{"id":"resp_1"}}"#,
         "",
@@ -284,141 +263,105 @@ fn stream_folds_into_a_response_that_keeps_reasoning_for_replay() {
     ]
     .join("\n");
 
-    let merged = merge_stream(&body).unwrap();
-    assert_eq!(merged["output"].as_array().unwrap().len(), 2);
+	let merged = merge_stream(&body).unwrap();
+	assert_eq!(merged["output"].as_array().unwrap().len(), 2);
 
-    let response = openai::parse_responses_api_response(
-        json!({"model": "gpt-6.1-sol"}),
-        merged,
-        "chatgpt",
-        1,
-        HashMap::new(),
-    )
-    .unwrap();
+	let response =
+		openai::parse_responses_api_response(json!({"model": "gpt-6.1-sol"}), merged, "chatgpt", 1, HashMap::new())
+			.unwrap();
 
-    let calls = response.tool_calls.expect("tool call parsed");
-    assert_eq!(calls[0].name, "view");
-    assert_eq!(calls[0].arguments, json!({"path": "a.rs"}));
-    let cost = response.exchange.usage.expect("usage").cost;
-    assert!(cost.is_some_and(|cost| cost > 0.0), "{:?}", cost);
-    assert_eq!(response.exchange.provider, "chatgpt");
+	let calls = response.tool_calls.expect("tool call parsed");
+	assert_eq!(calls[0].name, "view");
+	assert_eq!(calls[0].arguments, json!({"path": "a.rs"}));
+	let cost = response.exchange.usage.expect("usage").cost;
+	assert!(cost.is_some_and(|cost| cost > 0.0), "{:?}", cost);
+	assert_eq!(response.exchange.provider, "chatgpt");
 
-    // Stored on the tool call, the reasoning is replayed by the next request.
-    let mut assistant = Message::assistant("");
-    assistant.tool_calls = Some(response.exchange.response["tool_calls"].clone());
-    assert_eq!(
-        stored_reasoning_items(&assistant)[0]["encrypted_content"],
-        "enc"
-    );
+	// Stored on the tool call, the reasoning is replayed by the next request.
+	let mut assistant = Message::assistant("");
+	assistant.tool_calls = Some(response.exchange.response["tool_calls"].clone());
+	assert_eq!(stored_reasoning_items(&assistant)[0]["encrypted_content"], "enc");
 }
 
 #[test]
 fn failed_and_unfinished_streams_are_errors_and_only_transient_ones_are_retried() {
-    let failed = r#"data: {"type":"response.failed","response":{"error":{"code":"subscription_sharing_usage_limit_exceeded","message":"weekly cap reached"}}}"#;
-    let error = merge_stream(failed).unwrap_err();
-    assert!(!error.is::<RetryableStreamError>());
-    assert!(
-        error
-            .to_string()
-            .contains("subscription_sharing_usage_limit_exceeded"),
-        "{}",
-        error
-    );
+	let failed = r#"data: {"type":"response.failed","response":{"error":{"code":"subscription_sharing_usage_limit_exceeded","message":"weekly cap reached"}}}"#;
+	let error = merge_stream(failed).unwrap_err();
+	assert!(!error.is::<RetryableStreamError>());
+	assert!(
+		error.to_string().contains("subscription_sharing_usage_limit_exceeded"),
+		"{}",
+		error
+	);
 
-    let unfinished =
-        r#"data: {"type":"response.output_item.done","item":{"type":"message","content":[]}}"#;
-    let error = merge_stream(unfinished).unwrap_err();
-    assert!(error.is::<RetryableStreamError>());
-    assert!(
-        error.to_string().contains("without response.completed"),
-        "{}",
-        error
-    );
+	let unfinished = r#"data: {"type":"response.output_item.done","item":{"type":"message","content":[]}}"#;
+	let error = merge_stream(unfinished).unwrap_err();
+	assert!(error.is::<RetryableStreamError>());
+	assert!(error.to_string().contains("without response.completed"), "{}", error);
 }
 
 #[test]
 fn server_faults_reported_mid_stream_are_retried() {
-    // Verbatim shape of a plan-route `error` event observed in a live session.
-    let stream_error = r#"data: {"type":"error","error":{"type":"server_error","code":"server_error","message":"An error occurred while processing your request. You can retry your request.","param":null},"sequence_number":7}"#;
-    let error = merge_stream(stream_error).unwrap_err();
-    assert!(error.is::<RetryableStreamError>());
-    assert!(
-        error.to_string().starts_with("ChatGPT stream error: "),
-        "{}",
-        error
-    );
-    assert!(error.to_string().contains("server_error"), "{}", error);
+	// Verbatim shape of a plan-route `error` event observed in a live session.
+	let stream_error = r#"data: {"type":"error","error":{"type":"server_error","code":"server_error","message":"An error occurred while processing your request. You can retry your request.","param":null},"sequence_number":7}"#;
+	let error = merge_stream(stream_error).unwrap_err();
+	assert!(error.is::<RetryableStreamError>());
+	assert!(error.to_string().starts_with("ChatGPT stream error: "), "{}", error);
+	assert!(error.to_string().contains("server_error"), "{}", error);
 
-    for code in TRANSIENT_ERROR_CODES {
-        let failed = format!(
-            r#"data: {{"type":"response.failed","response":{{"error":{{"code":"{}","message":"try again"}}}}}}"#,
-            code
-        );
-        let error = merge_stream(&failed).unwrap_err();
-        assert!(error.is::<RetryableStreamError>(), "{}", code);
-        assert!(
-            error.to_string().starts_with("ChatGPT response failed: "),
-            "{}",
-            error
-        );
-    }
+	for code in TRANSIENT_ERROR_CODES {
+		let failed = format!(
+			r#"data: {{"type":"response.failed","response":{{"error":{{"code":"{}","message":"try again"}}}}}}"#,
+			code
+		);
+		let error = merge_stream(&failed).unwrap_err();
+		assert!(error.is::<RetryableStreamError>(), "{}", code);
+		assert!(error.to_string().starts_with("ChatGPT response failed: "), "{}", error);
+	}
 }
 
 #[test]
 fn request_faults_reported_mid_stream_are_not_retried() {
-    let stream_error = r#"data: {"type":"error","error":{"type":"invalid_request_error","code":"invalid_prompt","message":"Invalid prompt.","param":null},"sequence_number":3}"#;
-    let error = merge_stream(stream_error).unwrap_err();
-    assert!(!error.is::<RetryableStreamError>());
-    assert!(error.to_string().contains("invalid_prompt"), "{}", error);
+	let stream_error = r#"data: {"type":"error","error":{"type":"invalid_request_error","code":"invalid_prompt","message":"Invalid prompt.","param":null},"sequence_number":3}"#;
+	let error = merge_stream(stream_error).unwrap_err();
+	assert!(!error.is::<RetryableStreamError>());
+	assert!(error.to_string().contains("invalid_prompt"), "{}", error);
 
-    let uncoded = r#"data: {"type":"error","error":{"message":"no code"},"sequence_number":1}"#;
-    assert!(!merge_stream(uncoded)
-        .unwrap_err()
-        .is::<RetryableStreamError>());
+	let uncoded = r#"data: {"type":"error","error":{"message":"no code"},"sequence_number":1}"#;
+	assert!(!merge_stream(uncoded).unwrap_err().is::<RetryableStreamError>());
 }
 
 #[test]
 fn plan_usage_errors_lead_with_guidance_and_keep_the_raw_error() {
-    // Verbatim shape of the plan-route event observed when the app limit was hit.
-    let limit = r#"data: {"type":"error","error":{"type":"invalid_request_error","code":"subscription_sharing_usage_limit_exceeded","message":"The ChatGPT user has reached their Subscription Sharing usage limit.","param":null},"sequence_number":2}"#;
-    let error = merge_stream(limit).unwrap_err();
-    assert!(!error.is::<RetryableStreamError>());
-    let text = error.to_string();
-    assert!(
-        text.starts_with("ChatGPT plan usage limit reached for this app."),
-        "{}",
-        text
-    );
-    assert!(text.contains("ChatGPT settings → Usage"), "{}", text);
-    assert!(
-        text.contains("subscription_sharing_usage_limit_exceeded"),
-        "{}",
-        text
-    );
+	// Verbatim shape of the plan-route event observed when the app limit was hit.
+	let limit = r#"data: {"type":"error","error":{"type":"invalid_request_error","code":"subscription_sharing_usage_limit_exceeded","message":"The ChatGPT user has reached their Subscription Sharing usage limit.","param":null},"sequence_number":2}"#;
+	let error = merge_stream(limit).unwrap_err();
+	assert!(!error.is::<RetryableStreamError>());
+	let text = error.to_string();
+	assert!(
+		text.starts_with("ChatGPT plan usage limit reached for this app."),
+		"{}",
+		text
+	);
+	assert!(text.contains("ChatGPT settings → Usage"), "{}", text);
+	assert!(text.contains("subscription_sharing_usage_limit_exceeded"), "{}", text);
 
-    let unavailable = with_usage_guidance(
-        Some("subscription_sharing_usage_unavailable"),
-        "ChatGPT API error 503 Service Unavailable: {}".to_string(),
-    );
-    assert!(unavailable
-        .to_string()
-        .starts_with("ChatGPT could not check"));
-    assert!(unavailable
-        .to_string()
-        .ends_with("503 Service Unavailable: {}"));
+	let unavailable = with_usage_guidance(
+		Some("subscription_sharing_usage_unavailable"),
+		"ChatGPT API error 503 Service Unavailable: {}".to_string(),
+	);
+	assert!(unavailable.to_string().starts_with("ChatGPT could not check"));
+	assert!(unavailable.to_string().ends_with("503 Service Unavailable: {}"));
 
-    let other = with_usage_guidance(Some("invalid_prompt"), "raw".to_string());
-    assert_eq!(other.to_string(), "raw");
+	let other = with_usage_guidance(Some("invalid_prompt"), "raw".to_string());
+	assert_eq!(other.to_string(), "raw");
 }
 
 #[test]
 fn tool_images_reach_the_chatgpt_plan_route() {
-    let input = build_input(&[shared::tests::tool_image_message("caption")]);
-    assert_eq!(input.len(), 1);
-    assert_eq!(input[0]["type"], "function_call_output");
-    assert_eq!(input[0]["call_id"], "call_image");
-    assert_eq!(
-        input[0]["output"][1]["image_url"],
-        "data:image/png;base64,aW1hZ2U="
-    );
+	let input = build_input(&[shared::tests::tool_image_message("caption")]);
+	assert_eq!(input.len(), 1);
+	assert_eq!(input[0]["type"], "function_call_output");
+	assert_eq!(input[0]["call_id"], "call_image");
+	assert_eq!(input[0]["output"][1]["image_url"], "data:image/png;base64,aW1hZ2U=");
 }

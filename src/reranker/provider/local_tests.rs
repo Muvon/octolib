@@ -16,22 +16,19 @@ use super::*;
 
 #[test]
 fn test_provider_creation() {
-    assert!(LocalRerankerProvider::new("bge-reranker-v2-m3").is_ok());
-    assert!(LocalRerankerProvider::new("any-model-name").is_ok());
-    assert!(LocalRerankerProvider::new("").is_err());
+	assert!(LocalRerankerProvider::new("bge-reranker-v2-m3").is_ok());
+	assert!(LocalRerankerProvider::new("any-model-name").is_ok());
+	assert!(LocalRerankerProvider::new("").is_err());
 }
 
 #[test]
 fn test_api_url_default() {
-    std::env::remove_var(LOCAL_RERANK_API_URL_ENV);
-    assert_eq!(
-        LocalRerankerProvider::api_url(),
-        "http://localhost:8012/v1/rerank"
-    );
+	std::env::remove_var(LOCAL_RERANK_API_URL_ENV);
+	assert_eq!(LocalRerankerProvider::api_url(), "http://localhost:8012/v1/rerank");
 }
 
 #[test]
 fn test_is_model_supported() {
-    let provider = LocalRerankerProvider::new("bge-reranker-v2-m3").unwrap();
-    assert!(provider.is_model_supported());
+	let provider = LocalRerankerProvider::new("bge-reranker-v2-m3").unwrap();
+	assert!(provider.is_model_supported());
 }

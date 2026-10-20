@@ -42,173 +42,160 @@ const OCTOHUB_DEFAULT_URL: &str = "https://hub.octomind.run";
 /// size is learned from one embedding at construction, once per `(endpoint,
 /// model)` per process, like the local provider.
 static DIMENSION_CACHE: LazyLock<RwLock<HashMap<(String, String), usize>>> =
-    LazyLock::new(|| RwLock::new(HashMap::new()));
+	LazyLock::new(|| RwLock::new(HashMap::new()));
 
 /// OctoHub embedding provider - routes through OctoHub proxy server
 pub struct OctoHubEmbeddingProvider {
-    model_name: String,
-    dimension: usize,
+	model_name: String,
+	dimension: usize,
 }
 
 impl OctoHubEmbeddingProvider {
-    /// Construct the provider and probe its embedding dimension.
-    pub async fn new(model: &str) -> Result<Self> {
-        if model.is_empty() {
-            return Err(anyhow::anyhow!("Model name cannot be empty"));
-        }
-        let cache_key = (Self::api_url(), model.to_string());
+	/// Construct the provider and probe its embedding dimension.
+	pub async fn new(model: &str) -> Result<Self> {
+		if model.is_empty() {
+			return Err(anyhow::anyhow!("Model name cannot be empty"));
+		}
+		let cache_key = (Self::api_url(), model.to_string());
 
-        // Reuse a dimension already probed for this (endpoint, model) — no network.
-        if let Some(dimension) = DIMENSION_CACHE
-            .read()
-            .ok()
-            .and_then(|cache| cache.get(&cache_key).copied())
-        {
-            return Ok(Self {
-                model_name: model.to_string(),
-                dimension,
-            });
-        }
+		// Reuse a dimension already probed for this (endpoint, model) — no network.
+		if let Some(dimension) = DIMENSION_CACHE
+			.read()
+			.ok()
+			.and_then(|cache| cache.get(&cache_key).copied())
+		{
+			return Ok(Self {
+				model_name: model.to_string(),
+				dimension,
+			});
+		}
 
-        let mut provider = Self {
-            model_name: model.to_string(),
-            dimension: 0,
-        };
-        let probe = provider
-            .generate_embedding("dimension probe")
-            .await
-            .context("Failed to probe embedding dimension from OctoHub")?;
-        provider.dimension = probe.0.len();
-        if provider.dimension == 0 {
-            return Err(anyhow::anyhow!(
-                "OctoHub embedding model '{}' returned a zero-length embedding while probing dimension",
-                model
-            ));
-        }
-        if let Ok(mut cache) = DIMENSION_CACHE.write() {
-            cache.insert(cache_key, provider.dimension);
-        }
-        Ok(provider)
-    }
+		let mut provider = Self {
+			model_name: model.to_string(),
+			dimension: 0,
+		};
+		let probe = provider
+			.generate_embedding("dimension probe")
+			.await
+			.context("Failed to probe embedding dimension from OctoHub")?;
+		provider.dimension = probe.0.len();
+		if provider.dimension == 0 {
+			return Err(anyhow::anyhow!(
+				"OctoHub embedding model '{}' returned a zero-length embedding while probing dimension",
+				model
+			));
+		}
+		if let Ok(mut cache) = DIMENSION_CACHE.write() {
+			cache.insert(cache_key, provider.dimension);
+		}
+		Ok(provider)
+	}
 
-    fn api_url() -> String {
-        let base =
-            std::env::var(OCTOHUB_API_URL_ENV).unwrap_or_else(|_| OCTOHUB_DEFAULT_URL.to_string());
-        format!("{}/v1/embeddings", base.trim_end_matches('/'))
-    }
+	fn api_url() -> String {
+		let base = std::env::var(OCTOHUB_API_URL_ENV).unwrap_or_else(|_| OCTOHUB_DEFAULT_URL.to_string());
+		format!("{}/v1/embeddings", base.trim_end_matches('/'))
+	}
 
-    fn api_key() -> Option<String> {
-        std::env::var(OCTOHUB_API_KEY_ENV).ok()
-    }
+	fn api_key() -> Option<String> {
+		std::env::var(OCTOHUB_API_KEY_ENV).ok()
+	}
 
-    async fn call_api(&self, input: Value) -> Result<Value> {
-        let url = Self::api_url();
+	async fn call_api(&self, input: Value) -> Result<Value> {
+		let url = Self::api_url();
 
-        let body = json!({
-            "model": self.model_name,
-            "input": input,
-        });
+		let body = json!({
+			"model": self.model_name,
+			"input": input,
+		});
 
-        let mut req = http_client()
-            .post(&url)
-            .header("Content-Type", "application/json");
+		let mut req = http_client().post(&url).header("Content-Type", "application/json");
 
-        if let Some(key) = Self::api_key() {
-            req = req.header("Authorization", format!("Bearer {}", key));
-        }
+		if let Some(key) = Self::api_key() {
+			req = req.header("Authorization", format!("Bearer {}", key));
+		}
 
-        let response = req
-            .json(&body)
-            .send()
-            .await
-            .with_context(|| format!("Failed to connect to OctoHub at {}", url))?;
+		let response = req
+			.json(&body)
+			.send()
+			.await
+			.with_context(|| format!("Failed to connect to OctoHub at {}", url))?;
 
-        if !response.status().is_success() {
-            let status = response.status().as_u16();
-            let error_text = response.text().await.unwrap_or_default();
-            // A rejected credential is the one failure the user can act on, so
-            // say how: `octomind login` both obtains the key and stores it.
-            if status == 401 || status == 403 {
-                let hint = match Self::api_key() {
+		if !response.status().is_success() {
+			let status = response.status().as_u16();
+			let error_text = response.text().await.unwrap_or_default();
+			// A rejected credential is the one failure the user can act on, so
+			// say how: `octomind login` both obtains the key and stores it.
+			if status == 401 || status == 403 {
+				let hint = match Self::api_key() {
                     Some(k) if !k.trim().is_empty() => "the stored OctoHub key was rejected (revoked, or replaced by a newer login) — run `octomind login` to sign in again",
                     _ => "no OctoHub key is set — run `octomind login` to sign in",
                 };
-                return Err(anyhow::anyhow!(
-                    "OctoHub embedding API error ({status}): {hint}. Server said: {error_text}"
-                ));
-            }
-            return Err(anyhow::anyhow!(
-                "OctoHub embedding API error ({status}): {error_text}"
-            ));
-        }
+				return Err(anyhow::anyhow!(
+					"OctoHub embedding API error ({status}): {hint}. Server said: {error_text}"
+				));
+			}
+			return Err(anyhow::anyhow!("OctoHub embedding API error ({status}): {error_text}"));
+		}
 
-        response
-            .json()
-            .await
-            .context("Failed to parse OctoHub embedding response")
-    }
+		response
+			.json()
+			.await
+			.context("Failed to parse OctoHub embedding response")
+	}
 
-    fn parse_single(response: &Value) -> Result<Vec<f32>> {
-        response
-            .as_array()
-            .context("Expected a JSON array for single embedding response")?
-            .iter()
-            .map(|v| {
-                v.as_f64()
-                    .map(|f| f as f32)
-                    .context("Embedding value is not a number")
-            })
-            .collect()
-    }
+	fn parse_single(response: &Value) -> Result<Vec<f32>> {
+		response
+			.as_array()
+			.context("Expected a JSON array for single embedding response")?
+			.iter()
+			.map(|v| v.as_f64().map(|f| f as f32).context("Embedding value is not a number"))
+			.collect()
+	}
 
-    fn parse_batch(response: &Value) -> Result<Vec<Vec<f32>>> {
-        response
-            .as_array()
-            .context("Expected a JSON array for batch embedding response")?
-            .iter()
-            .map(|row| {
-                row.as_array()
-                    .context("Expected inner array in batch embedding response")?
-                    .iter()
-                    .map(|v| {
-                        v.as_f64()
-                            .map(|f| f as f32)
-                            .context("Embedding value is not a number")
-                    })
-                    .collect()
-            })
-            .collect()
-    }
+	fn parse_batch(response: &Value) -> Result<Vec<Vec<f32>>> {
+		response
+			.as_array()
+			.context("Expected a JSON array for batch embedding response")?
+			.iter()
+			.map(|row| {
+				row.as_array()
+					.context("Expected inner array in batch embedding response")?
+					.iter()
+					.map(|v| v.as_f64().map(|f| f as f32).context("Embedding value is not a number"))
+					.collect()
+			})
+			.collect()
+	}
 }
 
 #[async_trait::async_trait]
 impl EmbeddingProvider for OctoHubEmbeddingProvider {
-    async fn generate_embedding(&self, text: &str) -> Result<(Vec<f32>, EmbeddingUsage)> {
-        let response = self.call_api(json!(text)).await?;
-        let vector = Self::parse_single(&response)?;
-        // OctoHub's embedding response is a bare vector array (no usage envelope),
-        // so estimate; the underlying provider bills the real tokens upstream.
-        let usage = EmbeddingUsage::estimate(&self.model_name, &[text.to_string()]);
-        Ok((vector, usage))
-    }
+	async fn generate_embedding(&self, text: &str) -> Result<(Vec<f32>, EmbeddingUsage)> {
+		let response = self.call_api(json!(text)).await?;
+		let vector = Self::parse_single(&response)?;
+		// OctoHub's embedding response is a bare vector array (no usage envelope),
+		// so estimate; the underlying provider bills the real tokens upstream.
+		let usage = EmbeddingUsage::estimate(&self.model_name, &[text.to_string()]);
+		Ok((vector, usage))
+	}
 
-    async fn generate_embeddings_batch(
-        &self,
-        texts: Vec<String>,
-        _input_type: InputType,
-    ) -> Result<(Vec<Vec<f32>>, EmbeddingUsage)> {
-        if texts.is_empty() {
-            return Ok((Vec::new(), EmbeddingUsage::from_tokens(&self.model_name, 0)));
-        }
-        let usage = EmbeddingUsage::estimate(&self.model_name, &texts);
-        let response = self.call_api(json!(texts)).await?;
-        let vectors = Self::parse_batch(&response)?;
-        Ok((vectors, usage))
-    }
+	async fn generate_embeddings_batch(
+		&self,
+		texts: Vec<String>,
+		_input_type: InputType,
+	) -> Result<(Vec<Vec<f32>>, EmbeddingUsage)> {
+		if texts.is_empty() {
+			return Ok((Vec::new(), EmbeddingUsage::from_tokens(&self.model_name, 0)));
+		}
+		let usage = EmbeddingUsage::estimate(&self.model_name, &texts);
+		let response = self.call_api(json!(texts)).await?;
+		let vectors = Self::parse_batch(&response)?;
+		Ok((vectors, usage))
+	}
 
-    fn get_dimension(&self) -> usize {
-        self.dimension
-    }
+	fn get_dimension(&self) -> usize {
+		self.dimension
+	}
 }
 
 #[cfg(test)]

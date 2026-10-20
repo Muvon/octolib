@@ -37,118 +37,115 @@ use std::env;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Check for credential file
-    let credential_file = env::var("GOOGLE_VERTEX_CREDENTIAL_FILE");
-    let application_credentials = env::var("GOOGLE_APPLICATION_CREDENTIALS");
+	// Check for credential file
+	let credential_file = env::var("GOOGLE_VERTEX_CREDENTIAL_FILE");
+	let application_credentials = env::var("GOOGLE_APPLICATION_CREDENTIALS");
 
-    if credential_file.is_err() && application_credentials.is_err() {
-        eprintln!(
+	if credential_file.is_err() && application_credentials.is_err() {
+		eprintln!(
             "Error: Set GOOGLE_VERTEX_CREDENTIAL_FILE or GOOGLE_APPLICATION_CREDENTIALS to your service-account JSON file"
         );
-        std::process::exit(1);
-    }
+		std::process::exit(1);
+	}
 
-    if env::var("GOOGLE_VERTEX_PROJECT_ID").is_err() {
-        println!("Info: GOOGLE_VERTEX_PROJECT_ID not set, provider will read project_id from credential file");
-    }
+	if env::var("GOOGLE_VERTEX_PROJECT_ID").is_err() {
+		println!("Info: GOOGLE_VERTEX_PROJECT_ID not set, provider will read project_id from credential file");
+	}
 
-    if env::var("GOOGLE_VERTEX_LOCATION").is_err() {
-        println!("Info: GOOGLE_VERTEX_LOCATION not set, defaulting to us-central1");
-    }
+	if env::var("GOOGLE_VERTEX_LOCATION").is_err() {
+		println!("Info: GOOGLE_VERTEX_LOCATION not set, defaulting to us-central1");
+	}
 
-    if env::var("GOOGLE_VERTEX_API_URL").is_ok() {
-        println!("Info: using GOOGLE_VERTEX_API_URL override");
-    }
+	if env::var("GOOGLE_VERTEX_API_URL").is_ok() {
+		println!("Info: using GOOGLE_VERTEX_API_URL override");
+	}
 
-    println!("🚀 Google Vertex AI Example");
-    println!("====================");
+	println!("🚀 Google Vertex AI Example");
+	println!("====================");
 
-    // Example 1: Basic chat completion with Gemini 2.5 Flash
-    println!("\n📝 Example 1: Gemini 2.5 Flash");
-    let (provider, model) =
-        ProviderFactory::get_provider_for_model("google-vertex:gemini-2.5-flash")?;
-    println!("Provider: {}", provider.name());
-    println!("Model: {}", model);
+	// Example 1: Basic chat completion with Gemini 2.5 Flash
+	println!("\n📝 Example 1: Gemini 2.5 Flash");
+	let (provider, model) = ProviderFactory::get_provider_for_model("google-vertex:gemini-2.5-flash")?;
+	println!("Provider: {}", provider.name());
+	println!("Model: {}", model);
 
-    let messages = vec![Message::user("What is the capital of Japan?")];
+	let messages = vec![Message::user("What is the capital of Japan?")];
 
-    let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000);
+	let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000);
 
-    match provider.chat_completion(params).await {
-        Ok(response) => {
-            println!("Response: {}", response.content);
-            if let Some(usage) = &response.exchange.usage {
-                println!("Input tokens: {}", usage.input_tokens);
-                println!("Output tokens: {}", usage.output_tokens);
-                println!("Total tokens: {}", usage.total_tokens);
-                if let Some(cost) = usage.cost {
-                    println!("Cost: ${:.6}", cost);
-                }
-            }
-        }
-        Err(e) => {
-            eprintln!("Error: {}", e);
-        }
-    }
+	match provider.chat_completion(params).await {
+		Ok(response) => {
+			println!("Response: {}", response.content);
+			if let Some(usage) = &response.exchange.usage {
+				println!("Input tokens: {}", usage.input_tokens);
+				println!("Output tokens: {}", usage.output_tokens);
+				println!("Total tokens: {}", usage.total_tokens);
+				if let Some(cost) = usage.cost {
+					println!("Cost: ${:.6}", cost);
+				}
+			}
+		}
+		Err(e) => {
+			eprintln!("Error: {}", e);
+		}
+	}
 
-    // Example 2: Chat completion with Gemini 2.5 Pro
-    println!("\n📝 Example 2: Gemini 2.5 Pro");
-    let (provider, model) =
-        ProviderFactory::get_provider_for_model("google-vertex:gemini-2.5-pro")?;
-    println!("Provider: {}", provider.name());
-    println!("Model: {}", model);
+	// Example 2: Chat completion with Gemini 2.5 Pro
+	println!("\n📝 Example 2: Gemini 2.5 Pro");
+	let (provider, model) = ProviderFactory::get_provider_for_model("google-vertex:gemini-2.5-pro")?;
+	println!("Provider: {}", provider.name());
+	println!("Model: {}", model);
 
-    let messages = vec![Message::user("Explain machine learning in simple terms")];
+	let messages = vec![Message::user("Explain machine learning in simple terms")];
 
-    let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000);
+	let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000);
 
-    match provider.chat_completion(params).await {
-        Ok(response) => {
-            println!("Response: {}", response.content);
-            if let Some(usage) = &response.exchange.usage {
-                println!("Input tokens: {}", usage.input_tokens);
-                println!("Output tokens: {}", usage.output_tokens);
-                println!("Total tokens: {}", usage.total_tokens);
-                if let Some(cost) = usage.cost {
-                    println!("Cost: ${:.6}", cost);
-                }
-            }
-        }
-        Err(e) => {
-            eprintln!("Error: {}", e);
-        }
-    }
+	match provider.chat_completion(params).await {
+		Ok(response) => {
+			println!("Response: {}", response.content);
+			if let Some(usage) = &response.exchange.usage {
+				println!("Input tokens: {}", usage.input_tokens);
+				println!("Output tokens: {}", usage.output_tokens);
+				println!("Total tokens: {}", usage.total_tokens);
+				if let Some(cost) = usage.cost {
+					println!("Cost: ${:.6}", cost);
+				}
+			}
+		}
+		Err(e) => {
+			eprintln!("Error: {}", e);
+		}
+	}
 
-    // Example 3: Chat completion with Gemini 2.0 Flash
-    println!("\n📝 Example 3: Gemini 2.0 Flash");
-    let (provider, model) =
-        ProviderFactory::get_provider_for_model("google-vertex:gemini-2.5-flash")?;
-    println!("Provider: {}", provider.name());
-    println!("Model: {}", model);
+	// Example 3: Chat completion with Gemini 2.0 Flash
+	println!("\n📝 Example 3: Gemini 2.0 Flash");
+	let (provider, model) = ProviderFactory::get_provider_for_model("google-vertex:gemini-2.5-flash")?;
+	println!("Provider: {}", provider.name());
+	println!("Model: {}", model);
 
-    let messages = vec![Message::user("Write a short story about space exploration")];
+	let messages = vec![Message::user("Write a short story about space exploration")];
 
-    let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000);
+	let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000);
 
-    match provider.chat_completion(params).await {
-        Ok(response) => {
-            println!("Response: {}", response.content);
-            if let Some(usage) = &response.exchange.usage {
-                println!("Input tokens: {}", usage.input_tokens);
-                println!("Output tokens: {}", usage.output_tokens);
-                println!("Total tokens: {}", usage.total_tokens);
-                if let Some(cost) = usage.cost {
-                    println!("Cost: ${:.6}", cost);
-                }
-            }
-        }
-        Err(e) => {
-            eprintln!("Error: {}", e);
-        }
-    }
+	match provider.chat_completion(params).await {
+		Ok(response) => {
+			println!("Response: {}", response.content);
+			if let Some(usage) = &response.exchange.usage {
+				println!("Input tokens: {}", usage.input_tokens);
+				println!("Output tokens: {}", usage.output_tokens);
+				println!("Total tokens: {}", usage.total_tokens);
+				if let Some(cost) = usage.cost {
+					println!("Cost: ${:.6}", cost);
+				}
+			}
+		}
+		Err(e) => {
+			eprintln!("Error: {}", e);
+		}
+	}
 
-    println!("\n====================");
-    println!("✅ Examples completed!");
+	println!("\n====================");
+	println!("✅ Examples completed!");
 
-    Ok(())
+	Ok(())
 }

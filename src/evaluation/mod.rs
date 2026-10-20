@@ -36,27 +36,22 @@ pub mod types;
 
 pub use errors::{EvaluationError, EvaluationResult};
 pub use factory::EvaluationProviderFactory;
-pub use providers::{
-    CloudflareEvaluationProvider, OctoHubEvaluationProvider, TypeSafeEvaluationProvider,
-};
+pub use providers::{CloudflareEvaluationProvider, OctoHubEvaluationProvider, TypeSafeEvaluationProvider};
 pub use traits::EvaluationProvider;
 pub use types::{
-    Answer, BoundingBox, EvaluationImageFormat, EvaluationPricing, EvaluationRequest,
-    EvaluationResponse, EvaluationUsage, ImageAsset, NoulCriteria, Question,
+	Answer, BoundingBox, EvaluationImageFormat, EvaluationPricing, EvaluationRequest, EvaluationResponse,
+	EvaluationUsage, ImageAsset, NoulCriteria, Question,
 };
 
 /// Evaluate `request` on `provider:model`, e.g. `typesafe:jev-latest`.
-pub async fn evaluate(
-    provider_model: &str,
-    mut request: EvaluationRequest,
-) -> EvaluationResult<EvaluationResponse> {
-    let (provider, model) = EvaluationProviderFactory::get_provider_for_model(provider_model)?;
-    if !request.model.is_empty() && request.model != model {
-        return Err(EvaluationError::InvalidRequest(format!(
-            "request model '{}' does not match '{provider_model}'",
-            request.model
-        )));
-    }
-    request.model = model;
-    provider.evaluate(request).await
+pub async fn evaluate(provider_model: &str, mut request: EvaluationRequest) -> EvaluationResult<EvaluationResponse> {
+	let (provider, model) = EvaluationProviderFactory::get_provider_for_model(provider_model)?;
+	if !request.model.is_empty() && request.model != model {
+		return Err(EvaluationError::InvalidRequest(format!(
+			"request model '{}' does not match '{provider_model}'",
+			request.model
+		)));
+	}
+	request.model = model;
+	provider.evaluate(request).await
 }

@@ -49,173 +49,168 @@ use std::env;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    println!("🚀 MiniMax Provider Example\n");
+	println!("🚀 MiniMax Provider Example\n");
 
-    // Check for API key
-    match env::var("MINIMAX_API_KEY") {
-        Ok(key) => {
-            println!("✅ API key found: {}...", &key[..key.len().min(20)]);
-        }
-        Err(_) => {
-            eprintln!("❌ Error: MINIMAX_API_KEY not set");
-            eprintln!("\nTo use MiniMax:");
-            eprintln!("1. Get your API key from https://platform.minimax.io");
-            eprintln!("2. Set the environment variable:");
-            eprintln!("   export MINIMAX_API_KEY=\"your-api-key-here\"");
-            eprintln!("\nSupported models:");
-            eprintln!("   - minimax:MiniMax-M3 (recommended - latest, multimodal)");
-            eprintln!("   - minimax:MiniMax-M2.5");
-            eprintln!("   - minimax:MiniMax-M2.5-highspeed (faster)");
-            eprintln!("   - minimax:MiniMax-M2.1");
-            eprintln!("   - minimax:MiniMax-M2");
-            std::process::exit(1);
-        }
-    }
+	// Check for API key
+	match env::var("MINIMAX_API_KEY") {
+		Ok(key) => {
+			println!("✅ API key found: {}...", &key[..key.len().min(20)]);
+		}
+		Err(_) => {
+			eprintln!("❌ Error: MINIMAX_API_KEY not set");
+			eprintln!("\nTo use MiniMax:");
+			eprintln!("1. Get your API key from https://platform.minimax.io");
+			eprintln!("2. Set the environment variable:");
+			eprintln!("   export MINIMAX_API_KEY=\"your-api-key-here\"");
+			eprintln!("\nSupported models:");
+			eprintln!("   - minimax:MiniMax-M3 (recommended - latest, multimodal)");
+			eprintln!("   - minimax:MiniMax-M2.5");
+			eprintln!("   - minimax:MiniMax-M2.5-highspeed (faster)");
+			eprintln!("   - minimax:MiniMax-M2.1");
+			eprintln!("   - minimax:MiniMax-M2");
+			std::process::exit(1);
+		}
+	}
 
-    // Create provider with MiniMax-M3 model (latest, multimodal)
-    let (provider, model) = ProviderFactory::get_provider_for_model("minimax:MiniMax-M3")?;
+	// Create provider with MiniMax-M3 model (latest, multimodal)
+	let (provider, model) = ProviderFactory::get_provider_for_model("minimax:MiniMax-M3")?;
 
-    println!("\n📝 Provider: {}", provider.name());
-    println!("🤖 Model: {}", model);
-    println!("💾 Caching support: {}", provider.supports_caching(&model));
-    println!("👁️  Vision support: {}", provider.supports_vision(&model));
-    println!(
-        "📏 Max input tokens: {}\n",
-        provider.get_max_input_tokens(&model)
-    );
+	println!("\n📝 Provider: {}", provider.name());
+	println!("🤖 Model: {}", model);
+	println!("💾 Caching support: {}", provider.supports_caching(&model));
+	println!("👁️  Vision support: {}", provider.supports_vision(&model));
+	println!("📏 Max input tokens: {}\n", provider.get_max_input_tokens(&model));
 
-    // Example 1: Simple chat
-    println!("=== Example 1: Simple Chat ===\n");
+	// Example 1: Simple chat
+	println!("=== Example 1: Simple Chat ===\n");
 
-    let params = ChatCompletionParams {
-        model: model.clone(),
-        messages: vec![Message {
-            role: "user".to_string(),
-            content: "Explain what makes MiniMax unique in 2-3 sentences.".to_string(),
-            name: None,
-            tool_call_id: None,
-            tool_calls: None,
-            images: None,
-            videos: None,
-            cached: false,
-            cache_ttl: None,
-            timestamp: 0,
-            thinking: None,
-            id: None,
-        }],
-        temperature: 0.7,
-        max_tokens: 200,
-        top_p: 1.0,
-        top_k: 0,
-        tools: None,
-        response_format: None,
-        max_retries: 3,
-        retry_timeout: std::time::Duration::from_secs(10),
-        cancellation_token: None,
-        previous_id: None,
-        use_long_cache: false,
-        prompt_cache_key: None,
-        extra_headers: None,
-        reasoning_effort: None,
-        request_timeout: None,
-    };
+	let params = ChatCompletionParams {
+		model: model.clone(),
+		messages: vec![Message {
+			role: "user".to_string(),
+			content: "Explain what makes MiniMax unique in 2-3 sentences.".to_string(),
+			name: None,
+			tool_call_id: None,
+			tool_calls: None,
+			images: None,
+			videos: None,
+			cached: false,
+			cache_ttl: None,
+			timestamp: 0,
+			thinking: None,
+			id: None,
+		}],
+		temperature: 0.7,
+		max_tokens: 200,
+		top_p: 1.0,
+		top_k: 0,
+		tools: None,
+		response_format: None,
+		max_retries: 3,
+		retry_timeout: std::time::Duration::from_secs(10),
+		cancellation_token: None,
+		previous_id: None,
+		use_long_cache: false,
+		prompt_cache_key: None,
+		extra_headers: None,
+		reasoning_effort: None,
+		request_timeout: None,
+	};
 
-    match provider.chat_completion(params).await {
-        Ok(response) => {
-            println!("✅ Response:\n");
-            println!("{}\n", response.content);
+	match provider.chat_completion(params).await {
+		Ok(response) => {
+			println!("✅ Response:\n");
+			println!("{}\n", response.content);
 
-            if let Some(usage) = response.exchange.usage {
-                println!("📊 Token usage:");
-                println!("   Input tokens:  {}", usage.input_tokens);
-                println!("   Output tokens: {}", usage.output_tokens);
-                println!("   Total tokens:  {}", usage.total_tokens);
-                if usage.cache_read_tokens > 0 {
-                    println!(
-                        "   Cached tokens: {} (saved cost!)",
-                        usage.cache_read_tokens
-                    );
-                }
-                if let Some(cost) = usage.cost {
-                    println!("   Cost: ${:.6}", cost);
-                }
-                if let Some(time_ms) = usage.request_time_ms {
-                    println!("   Request time: {}ms", time_ms);
-                }
-            }
-        }
-        Err(e) => {
-            eprintln!("❌ Error: {}", e);
-            eprintln!("\nPossible issues:");
-            eprintln!("- Invalid API key");
-            eprintln!("- Network connectivity issues");
-            eprintln!("- Model not available");
-            std::process::exit(1);
-        }
-    }
+			if let Some(usage) = response.exchange.usage {
+				println!("📊 Token usage:");
+				println!("   Input tokens:  {}", usage.input_tokens);
+				println!("   Output tokens: {}", usage.output_tokens);
+				println!("   Total tokens:  {}", usage.total_tokens);
+				if usage.cache_read_tokens > 0 {
+					println!("   Cached tokens: {} (saved cost!)", usage.cache_read_tokens);
+				}
+				if let Some(cost) = usage.cost {
+					println!("   Cost: ${:.6}", cost);
+				}
+				if let Some(time_ms) = usage.request_time_ms {
+					println!("   Request time: {}ms", time_ms);
+				}
+			}
+		}
+		Err(e) => {
+			eprintln!("❌ Error: {}", e);
+			eprintln!("\nPossible issues:");
+			eprintln!("- Invalid API key");
+			eprintln!("- Network connectivity issues");
+			eprintln!("- Model not available");
+			std::process::exit(1);
+		}
+	}
 
-    // Example 2: With thinking blocks
-    println!("\n\n=== Example 2: Problem Solving (with thinking) ===\n");
+	// Example 2: With thinking blocks
+	println!("\n\n=== Example 2: Problem Solving (with thinking) ===\n");
 
-    let params = ChatCompletionParams {
-        model: model.clone(),
-        messages: vec![Message {
-            role: "user".to_string(),
-            content: "If I have 3 apples and buy 2 more, then give away 1, how many do I have? Show your reasoning.".to_string(),
-            name: None,
-            tool_call_id: None,
-            tool_calls: None,
-            images: None,
-            videos: None,
-            cached: false,
-            cache_ttl: None,
-            timestamp: 0,
-            thinking: None,
-        id: None,
-            }],
-        temperature: 0.5,
-        max_tokens: 300,
-        top_p: 1.0,
-        top_k: 0,
-        tools: None,
-        response_format: None,
-        max_retries: 3,
-        retry_timeout: std::time::Duration::from_secs(10),
-        cancellation_token: None,
-        previous_id: None,
-        use_long_cache: false,
-        prompt_cache_key: None,
-        extra_headers: None,
-        reasoning_effort: None,
-        request_timeout: None,
-    };
+	let params = ChatCompletionParams {
+		model: model.clone(),
+		messages: vec![Message {
+			role: "user".to_string(),
+			content: "If I have 3 apples and buy 2 more, then give away 1, how many do I have? Show your reasoning."
+				.to_string(),
+			name: None,
+			tool_call_id: None,
+			tool_calls: None,
+			images: None,
+			videos: None,
+			cached: false,
+			cache_ttl: None,
+			timestamp: 0,
+			thinking: None,
+			id: None,
+		}],
+		temperature: 0.5,
+		max_tokens: 300,
+		top_p: 1.0,
+		top_k: 0,
+		tools: None,
+		response_format: None,
+		max_retries: 3,
+		retry_timeout: std::time::Duration::from_secs(10),
+		cancellation_token: None,
+		previous_id: None,
+		use_long_cache: false,
+		prompt_cache_key: None,
+		extra_headers: None,
+		reasoning_effort: None,
+		request_timeout: None,
+	};
 
-    match provider.chat_completion(params).await {
-        Ok(response) => {
-            println!("✅ Response:\n");
-            println!("{}\n", response.content);
+	match provider.chat_completion(params).await {
+		Ok(response) => {
+			println!("✅ Response:\n");
+			println!("{}\n", response.content);
 
-            if let Some(usage) = response.exchange.usage {
-                println!("📊 Token usage:");
-                println!("   Input tokens:  {}", usage.input_tokens);
-                println!("   Output tokens: {}", usage.output_tokens);
-                if let Some(cost) = usage.cost {
-                    println!("   Cost: ${:.6}", cost);
-                }
-            }
-        }
-        Err(e) => {
-            eprintln!("❌ Error: {}", e);
-        }
-    }
+			if let Some(usage) = response.exchange.usage {
+				println!("📊 Token usage:");
+				println!("   Input tokens:  {}", usage.input_tokens);
+				println!("   Output tokens: {}", usage.output_tokens);
+				if let Some(cost) = usage.cost {
+					println!("   Cost: ${:.6}", cost);
+				}
+			}
+		}
+		Err(e) => {
+			eprintln!("❌ Error: {}", e);
+		}
+	}
 
-    println!("\n✨ MiniMax example completed successfully!");
-    println!("\n💡 Tips:");
-    println!("   - MiniMax shows thinking process in [Thinking] blocks");
-    println!("   - Use MiniMax-M2.5-highspeed for faster responses");
-    println!("   - Temperature must be in range (0.0, 1.0]");
-    println!("   - Supports prompt caching to reduce costs");
-    println!("   - 1M token context window for long conversations");
+	println!("\n✨ MiniMax example completed successfully!");
+	println!("\n💡 Tips:");
+	println!("   - MiniMax shows thinking process in [Thinking] blocks");
+	println!("   - Use MiniMax-M2.5-highspeed for faster responses");
+	println!("   - Temperature must be in range (0.0, 1.0]");
+	println!("   - Supports prompt caching to reduce costs");
+	println!("   - 1M token context window for long conversations");
 
-    Ok(())
+	Ok(())
 }

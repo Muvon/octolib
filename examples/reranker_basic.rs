@@ -34,14 +34,14 @@ use octolib::reranker::rerank;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Initialize tracing for debug output
-    tracing_subscriber::fmt::init();
+	// Initialize tracing for debug output
+	tracing_subscriber::fmt::init();
 
-    println!("=== Octolib Reranker Example ===\n");
+	println!("=== Octolib Reranker Example ===\n");
 
-    // Example query and documents
-    let query = "When is Apple's conference call scheduled?";
-    let documents = vec![
+	// Example query and documents
+	let query = "When is Apple's conference call scheduled?";
+	let documents = vec![
         "The Mediterranean diet emphasizes fish, olive oil, and vegetables, believed to reduce chronic diseases.".to_string(),
         "Photosynthesis in plants converts light energy into glucose and produces essential oxygen.".to_string(),
         "20th-century innovations, from radios to smartphones, centered on electronic advancements.".to_string(),
@@ -50,35 +50,35 @@ async fn main() -> anyhow::Result<()> {
         "Shakespeare's works, like 'Hamlet' and 'A Midsummer Night's Dream,' endure in literature.".to_string(),
     ];
 
-    println!("Query: {}\n", query);
-    println!("Documents to rerank: {}\n", documents.len());
+	println!("Query: {}\n", query);
+	println!("Documents to rerank: {}\n", documents.len());
 
-    // Rerank with Voyage AI - get top 3 results
-    println!("Reranking with Voyage AI (rerank-3)...\n");
-    let response = rerank(query, documents.clone(), "voyage", "rerank-3", Some(3)).await?;
+	// Rerank with Voyage AI - get top 3 results
+	println!("Reranking with Voyage AI (rerank-3)...\n");
+	let response = rerank(query, documents.clone(), "voyage", "rerank-3", Some(3)).await?;
 
-    println!("Top {} results:", response.results.len());
-    println!("Total tokens used: {}\n", response.total_tokens);
+	println!("Top {} results:", response.results.len());
+	println!("Total tokens used: {}\n", response.total_tokens);
 
-    for (rank, result) in response.results.iter().enumerate() {
-        println!("Rank {}: (Score: {:.4})", rank + 1, result.relevance_score);
-        println!("  Document: {}", result.document);
-        println!("  Original index: {}\n", result.index);
-    }
+	for (rank, result) in response.results.iter().enumerate() {
+		println!("Rank {}: (Score: {:.4})", rank + 1, result.relevance_score);
+		println!("  Document: {}", result.document);
+		println!("  Original index: {}\n", result.index);
+	}
 
-    // Example 2: Rerank all documents without top_k limit
-    println!("\n=== Reranking all documents ===\n");
-    let response_all = rerank(query, documents, "voyage", "rerank-3", None).await?;
+	// Example 2: Rerank all documents without top_k limit
+	println!("\n=== Reranking all documents ===\n");
+	let response_all = rerank(query, documents, "voyage", "rerank-3", None).await?;
 
-    println!("All {} results ranked:", response_all.results.len());
-    for (rank, result) in response_all.results.iter().enumerate() {
-        println!(
-            "{}. Score: {:.4} - {}",
-            rank + 1,
-            result.relevance_score,
-            &result.document[..60.min(result.document.len())]
-        );
-    }
+	println!("All {} results ranked:", response_all.results.len());
+	for (rank, result) in response_all.results.iter().enumerate() {
+		println!(
+			"{}. Score: {:.4} - {}",
+			rank + 1,
+			result.relevance_score,
+			&result.document[..60.min(result.document.len())]
+		);
+	}
 
-    Ok(())
+	Ok(())
 }

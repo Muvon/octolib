@@ -32,9 +32,7 @@ use super::shared;
 use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
-use crate::llm::types::{
-    ChatCompletionParams, Message, ModelPricing, ProviderResponse, SamplingSupport,
-};
+use crate::llm::types::{ChatCompletionParams, Message, ModelPricing, ProviderResponse, SamplingSupport};
 use anyhow::{Context, Result};
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -60,353 +58,302 @@ const TURN_STATE_STORE_CAPACITY: usize = 1_024;
 
 #[derive(Debug)]
 struct TurnStateEntry {
-    cache_key: String,
-    token: String,
+	cache_key: String,
+	token: String,
 }
 
 #[derive(Debug, Default)]
 struct TurnStateStore {
-    entries: Vec<TurnStateEntry>,
+	entries: Vec<TurnStateEntry>,
 }
 
 impl TurnStateStore {
-    fn clear(&mut self, cache_key: &str) {
-        if let Some(index) = self
-            .entries
-            .iter()
-            .position(|entry| entry.cache_key == cache_key)
-        {
-            self.entries.remove(index);
-        }
-    }
+	fn clear(&mut self, cache_key: &str) {
+		if let Some(index) = self.entries.iter().position(|entry| entry.cache_key == cache_key) {
+			self.entries.remove(index);
+		}
+	}
 
-    fn get(&mut self, cache_key: &str) -> Option<String> {
-        let index = self
-            .entries
-            .iter()
-            .position(|entry| entry.cache_key == cache_key)?;
-        let entry = self.entries.remove(index);
-        let token = entry.token.clone();
-        self.entries.push(entry);
-        Some(token)
-    }
+	fn get(&mut self, cache_key: &str) -> Option<String> {
+		let index = self.entries.iter().position(|entry| entry.cache_key == cache_key)?;
+		let entry = self.entries.remove(index);
+		let token = entry.token.clone();
+		self.entries.push(entry);
+		Some(token)
+	}
 
-    fn store_first(&mut self, cache_key: &str, token: &str) {
-        if let Some(index) = self
-            .entries
-            .iter()
-            .position(|entry| entry.cache_key == cache_key)
-        {
-            let entry = self.entries.remove(index);
-            self.entries.push(entry);
-            return;
-        }
+	fn store_first(&mut self, cache_key: &str, token: &str) {
+		if let Some(index) = self.entries.iter().position(|entry| entry.cache_key == cache_key) {
+			let entry = self.entries.remove(index);
+			self.entries.push(entry);
+			return;
+		}
 
-        if self.entries.len() == TURN_STATE_STORE_CAPACITY {
-            self.entries.remove(0);
-        }
-        self.entries.push(TurnStateEntry {
-            cache_key: cache_key.to_string(),
-            token: token.to_string(),
-        });
-    }
+		if self.entries.len() == TURN_STATE_STORE_CAPACITY {
+			self.entries.remove(0);
+		}
+		self.entries.push(TurnStateEntry {
+			cache_key: cache_key.to_string(),
+			token: token.to_string(),
+		});
+	}
 }
 
-static TURN_STATES: LazyLock<Mutex<TurnStateStore>> =
-    LazyLock::new(|| Mutex::new(TurnStateStore::default()));
+static TURN_STATES: LazyLock<Mutex<TurnStateStore>> = LazyLock::new(|| Mutex::new(TurnStateStore::default()));
 
 /// ChatGPT subscription provider (`chatgpt:<model>`).
 #[derive(Debug, Clone, Default)]
 pub struct ChatGptProvider;
 
 impl ChatGptProvider {
-    pub fn new() -> Self {
-        Self
-    }
+	pub fn new() -> Self {
+		Self
+	}
 }
 
 #[async_trait::async_trait]
 impl AiProvider for ChatGptProvider {
-    fn name(&self) -> &str {
-        "chatgpt"
-    }
+	fn name(&self) -> &str {
+		"chatgpt"
+	}
 
-    /// The signed-in account's catalog decides which models exist ([`list_models`]).
-    fn supports_model(&self, _model: &str) -> bool {
-        true
-    }
+	/// The signed-in account's catalog decides which models exist ([`list_models`]).
+	fn supports_model(&self, _model: &str) -> bool {
+		true
+	}
 
-    fn get_api_key(&self) -> Result<String> {
-        auth::stored_access_token()
-    }
+	fn get_api_key(&self) -> Result<String> {
+		auth::stored_access_token()
+	}
 
-    fn supported_sampling_params(&self, _model: &str) -> SamplingSupport {
-        SamplingSupport::NONE
-    }
+	fn supported_sampling_params(&self, _model: &str) -> SamplingSupport {
+		SamplingSupport::NONE
+	}
 
-    fn get_max_input_tokens(&self, model: &str) -> usize {
-        OpenAiProvider.get_max_input_tokens(model)
-    }
+	fn get_max_input_tokens(&self, model: &str) -> usize {
+		OpenAiProvider.get_max_input_tokens(model)
+	}
 
-    fn supports_vision(&self, model: &str) -> bool {
-        OpenAiProvider.supports_vision(model)
-    }
+	fn supports_vision(&self, model: &str) -> bool {
+		OpenAiProvider.supports_vision(model)
+	}
 
-    fn supports_structured_output(&self, model: &str) -> bool {
-        OpenAiProvider.supports_structured_output(model)
-    }
+	fn supports_structured_output(&self, model: &str) -> bool {
+		OpenAiProvider.supports_structured_output(model)
+	}
 
-    /// Real per-token API prices, whatever the subscription covers, so cost
-    /// reports actual model consumption.
-    fn get_model_pricing(&self, model: &str) -> Option<ModelPricing> {
-        OpenAiProvider.get_model_pricing(model)
-    }
+	/// Real per-token API prices, whatever the subscription covers, so cost
+	/// reports actual model consumption.
+	fn get_model_pricing(&self, model: &str) -> Option<ModelPricing> {
+		OpenAiProvider.get_model_pricing(model)
+	}
 
-    async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-        let request_body = build_request(&params);
-        let extra_headers = request_headers(&params)?;
-        let start_time = std::time::Instant::now();
+	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
+		let request_body = build_request(&params);
+		let extra_headers = request_headers(&params)?;
+		let start_time = std::time::Instant::now();
 
-        // Errors are retried; `Ok` holds the outcome of a delivered response,
-        // which a retry would not change.
-        let response_json = retry::retry_with_exponential_backoff(
-            || {
-                let client = shared::http_client();
-                let request_body = request_body.clone();
-                let request_timeout = params.request_timeout;
-                let extra_headers = extra_headers.clone();
-                let capture_turn_state = params.prompt_cache_key.is_some();
-                Box::pin(async move {
-                    let request = client.post(RESPONSES_URL).json(&request_body);
-                    let captured = match auth::send_authenticated(
-                        request,
-                        request_timeout,
-                        extra_headers.as_ref(),
-                    )
-                    .await
-                    {
-                        Ok(captured) => captured,
-                        Err(error) if error.is::<reqwest::Error>() => return Err(error),
-                        // Credential failures need sign-in, not another refresh attempt.
-                        Err(error) => return Ok(Err(error)),
-                    };
+		// Errors are retried; `Ok` holds the outcome of a delivered response,
+		// which a retry would not change.
+		let response_json = retry::retry_with_exponential_backoff(
+			|| {
+				let client = shared::http_client();
+				let request_body = request_body.clone();
+				let request_timeout = params.request_timeout;
+				let extra_headers = extra_headers.clone();
+				let capture_turn_state = params.prompt_cache_key.is_some();
+				Box::pin(async move {
+					let request = client.post(RESPONSES_URL).json(&request_body);
+					let captured =
+						match auth::send_authenticated(request, request_timeout, extra_headers.as_ref()).await {
+							Ok(captured) => captured,
+							Err(error) if error.is::<reqwest::Error>() => return Err(error),
+							// Credential failures need sign-in, not another refresh attempt.
+							Err(error) => return Ok(Err(error)),
+						};
 
-                    // An exhausted plan allowance or app cap does not clear on retry.
-                    if retry::is_retryable_status(captured.status.as_u16())
-                        && !captured.body.contains(USAGE_LIMIT_ERROR_PREFIX)
-                    {
-                        return Err(anyhow::anyhow!(
-                            "ChatGPT API error {}: {}",
-                            captured.status,
-                            captured.body
-                        ));
-                    }
+					// An exhausted plan allowance or app cap does not clear on retry.
+					if retry::is_retryable_status(captured.status.as_u16())
+						&& !captured.body.contains(USAGE_LIMIT_ERROR_PREFIX)
+					{
+						return Err(anyhow::anyhow!(
+							"ChatGPT API error {}: {}",
+							captured.status,
+							captured.body
+						));
+					}
 
-                    if !captured.status.is_success() {
-                        let code = serde_json::from_str::<Value>(&captured.body)
-                            .ok()
-                            .and_then(|body| body["error"]["code"].as_str().map(str::to_owned));
-                        return Ok(Err(with_usage_guidance(
-                            code.as_deref(),
-                            format!("ChatGPT API error {}: {}", captured.status, captured.body),
-                        )));
-                    }
+					if !captured.status.is_success() {
+						let code = serde_json::from_str::<Value>(&captured.body)
+							.ok()
+							.and_then(|body| body["error"]["code"].as_str().map(str::to_owned));
+						return Ok(Err(with_usage_guidance(
+							code.as_deref(),
+							format!("ChatGPT API error {}: {}", captured.status, captured.body),
+						)));
+					}
 
-                    let turn_state = if capture_turn_state {
-                        captured
-                            .headers
-                            .get(TURN_STATE_HEADER)
-                            .map(|value| value.to_str())
-                            .transpose()
-                            .context(
-                                "ChatGPT response returned an invalid x-codex-turn-state header",
-                            )?
-                            .map(str::to_owned)
-                    } else {
-                        None
-                    };
+					let turn_state = if capture_turn_state {
+						captured
+							.headers
+							.get(TURN_STATE_HEADER)
+							.map(|value| value.to_str())
+							.transpose()
+							.context("ChatGPT response returned an invalid x-codex-turn-state header")?
+							.map(str::to_owned)
+					} else {
+						None
+					};
 
-                    match merge_stream(&captured.body) {
-                        Err(e) if e.is::<RetryableStreamError>() => Err(e),
-                        merged => Ok(merged.map(|body| (body, turn_state))),
-                    }
-                })
-            },
-            params.max_retries,
-            params.retry_timeout,
-            params.cancellation_token.as_ref(),
-            || ProviderError::Cancelled.into(),
-            |e| {
-                matches!(
-                    e.downcast_ref::<ProviderError>(),
-                    Some(ProviderError::Cancelled)
-                )
-            },
-            |e: &anyhow::Error| shared::is_connection_error(e),
-        )
-        .await??;
+					match merge_stream(&captured.body) {
+						Err(e) if e.is::<RetryableStreamError>() => Err(e),
+						merged => Ok(merged.map(|body| (body, turn_state))),
+					}
+				})
+			},
+			params.max_retries,
+			params.retry_timeout,
+			params.cancellation_token.as_ref(),
+			|| ProviderError::Cancelled.into(),
+			|e| matches!(e.downcast_ref::<ProviderError>(), Some(ProviderError::Cancelled)),
+			|e: &anyhow::Error| shared::is_connection_error(e),
+		)
+		.await??;
 
-        let (response_json, response_turn_state) = response_json;
-        remember_turn_state(
-            params.prompt_cache_key.as_deref(),
-            response_turn_state.as_deref(),
-        )?;
-        let request_time_ms = start_time.elapsed().as_millis() as u64;
+		let (response_json, response_turn_state) = response_json;
+		remember_turn_state(params.prompt_cache_key.as_deref(), response_turn_state.as_deref())?;
+		let request_time_ms = start_time.elapsed().as_millis() as u64;
 
-        openai::parse_responses_api_response(
-            request_body,
-            response_json,
-            "chatgpt",
-            request_time_ms,
-            HashMap::new(),
-        )
-    }
+		openai::parse_responses_api_response(request_body, response_json, "chatgpt", request_time_ms, HashMap::new())
+	}
 }
 
 fn build_request(params: &ChatCompletionParams) -> Value {
-    let mut request = json!({
-        "model": params.model,
-        "input": build_input(&params.messages),
-        "store": false,
-        "stream": true,
-        "include": ["reasoning.encrypted_content"],
-    });
+	let mut request = json!({
+		"model": params.model,
+		"input": build_input(&params.messages),
+		"store": false,
+		"stream": true,
+		"include": ["reasoning.encrypted_content"],
+	});
 
-    if let Some(effort) = openai::reasoning_effort(&params.model, params.reasoning_effort) {
-        request["reasoning"] = json!({ "effort": effort });
-    }
+	if let Some(effort) = openai::reasoning_effort(&params.model, params.reasoning_effort) {
+		request["reasoning"] = json!({ "effort": effort });
+	}
 
-    if let Some(tools) = openai::function_tools(params.tools.as_deref()) {
-        request["tools"] = json!([{
-            "type": "namespace",
-            "name": TOOL_NAMESPACE,
-            "description": TOOL_NAMESPACE_DESCRIPTION,
-            "tools": tools,
-        }]);
-    }
+	if let Some(tools) = openai::function_tools(params.tools.as_deref()) {
+		request["tools"] = json!([{
+			"type": "namespace",
+			"name": TOOL_NAMESPACE,
+			"description": TOOL_NAMESPACE_DESCRIPTION,
+			"tools": tools,
+		}]);
+	}
 
-    if let Some(text) = params
-        .response_format
-        .as_ref()
-        .and_then(openai::text_format)
-    {
-        request["text"] = text;
-    }
+	if let Some(text) = params.response_format.as_ref().and_then(openai::text_format) {
+		request["text"] = text;
+	}
 
-    if let Some(cache_key) = &params.prompt_cache_key {
-        request["prompt_cache_key"] = json!(cache_key);
-    }
+	if let Some(cache_key) = &params.prompt_cache_key {
+		request["prompt_cache_key"] = json!(cache_key);
+	}
 
-    request
+	request
 }
 
 fn request_headers(params: &ChatCompletionParams) -> Result<Option<HashMap<String, String>>> {
-    if params.prompt_cache_key.is_none() {
-        return Ok(request_headers_without_turn_state(params));
-    }
-    let mut turn_states = TURN_STATES
-        .lock()
-        .map_err(|_| anyhow::anyhow!("ChatGPT turn-state store lock poisoned"))?;
-    Ok(request_headers_with_store(params, &mut turn_states))
+	if params.prompt_cache_key.is_none() {
+		return Ok(request_headers_without_turn_state(params));
+	}
+	let mut turn_states = TURN_STATES
+		.lock()
+		.map_err(|_| anyhow::anyhow!("ChatGPT turn-state store lock poisoned"))?;
+	Ok(request_headers_with_store(params, &mut turn_states))
 }
 
 fn request_headers_with_store(
-    params: &ChatCompletionParams,
-    turn_states: &mut TurnStateStore,
+	params: &ChatCompletionParams,
+	turn_states: &mut TurnStateStore,
 ) -> Option<HashMap<String, String>> {
-    let mut headers = request_headers_without_turn_state(params);
+	let mut headers = request_headers_without_turn_state(params);
 
-    let Some(cache_key) = &params.prompt_cache_key else {
-        return headers;
-    };
+	let Some(cache_key) = &params.prompt_cache_key else {
+		return headers;
+	};
 
-    let request_headers = headers.get_or_insert_with(HashMap::new);
-    request_headers
-        .entry(SESSION_HEADER.to_string())
-        .or_insert_with(|| cache_key.clone());
+	let request_headers = headers.get_or_insert_with(HashMap::new);
+	request_headers
+		.entry(SESSION_HEADER.to_string())
+		.or_insert_with(|| cache_key.clone());
 
-    if params
-        .messages
-        .last()
-        .is_some_and(|message| message.role == "user")
-    {
-        turn_states.clear(cache_key);
-    } else if let Some(token) = turn_states.get(cache_key) {
-        request_headers.insert(TURN_STATE_HEADER.to_string(), token);
-    }
-    headers
+	if params.messages.last().is_some_and(|message| message.role == "user") {
+		turn_states.clear(cache_key);
+	} else if let Some(token) = turn_states.get(cache_key) {
+		request_headers.insert(TURN_STATE_HEADER.to_string(), token);
+	}
+	headers
 }
 
-fn request_headers_without_turn_state(
-    params: &ChatCompletionParams,
-) -> Option<HashMap<String, String>> {
-    let mut headers = params.extra_headers.clone();
-    remove_header(&mut headers, TURN_STATE_HEADER);
-    headers.filter(|headers| !headers.is_empty())
+fn request_headers_without_turn_state(params: &ChatCompletionParams) -> Option<HashMap<String, String>> {
+	let mut headers = params.extra_headers.clone();
+	remove_header(&mut headers, TURN_STATE_HEADER);
+	headers.filter(|headers| !headers.is_empty())
 }
 
 fn remove_header(headers: &mut Option<HashMap<String, String>>, name: &str) {
-    if let Some(headers) = headers {
-        headers.retain(|header, _| !header.eq_ignore_ascii_case(name));
-    }
+	if let Some(headers) = headers {
+		headers.retain(|header, _| !header.eq_ignore_ascii_case(name));
+	}
 }
 
 fn remember_turn_state(cache_key: Option<&str>, token: Option<&str>) -> Result<()> {
-    let (Some(cache_key), Some(token)) = (cache_key, token) else {
-        return Ok(());
-    };
-    let mut turn_states = TURN_STATES
-        .lock()
-        .map_err(|_| anyhow::anyhow!("ChatGPT turn-state store lock poisoned"))?;
-    remember_turn_state_with_store(Some(cache_key), Some(token), &mut turn_states);
-    Ok(())
+	let (Some(cache_key), Some(token)) = (cache_key, token) else {
+		return Ok(());
+	};
+	let mut turn_states = TURN_STATES
+		.lock()
+		.map_err(|_| anyhow::anyhow!("ChatGPT turn-state store lock poisoned"))?;
+	remember_turn_state_with_store(Some(cache_key), Some(token), &mut turn_states);
+	Ok(())
 }
 
-fn remember_turn_state_with_store(
-    cache_key: Option<&str>,
-    token: Option<&str>,
-    turn_states: &mut TurnStateStore,
-) {
-    if let (Some(cache_key), Some(token)) = (cache_key, token) {
-        turn_states.store_first(cache_key, token);
-    }
+fn remember_turn_state_with_store(cache_key: Option<&str>, token: Option<&str>, turn_states: &mut TurnStateStore) {
+	if let (Some(cache_key), Some(token)) = (cache_key, token) {
+		turn_states.store_first(cache_key, token);
+	}
 }
 
 /// The full transcript as Responses API input: each assistant turn preceded by
 /// its replayed encrypted reasoning, system messages sent as developer
 /// messages, and function calls tagged with the namespace they were declared in.
 fn build_input(messages: &[Message]) -> Vec<Value> {
-    messages
-        .iter()
-        .flat_map(|message| {
-            let mut items = stored_reasoning_items(message);
-            items.extend(openai::messages_to_input(
-                std::slice::from_ref(message),
-                None,
-                false,
-            ));
-            items
-        })
-        .map(|mut item| {
-            if item["role"] == "system" {
-                item["role"] = json!("developer");
-            }
-            if item["type"] == "function_call" {
-                item["namespace"] = json!(TOOL_NAMESPACE);
-            }
-            item
-        })
-        .collect()
+	messages
+		.iter()
+		.flat_map(|message| {
+			let mut items = stored_reasoning_items(message);
+			items.extend(openai::messages_to_input(std::slice::from_ref(message), None, false));
+			items
+		})
+		.map(|mut item| {
+			if item["role"] == "system" {
+				item["role"] = json!("developer");
+			}
+			if item["type"] == "function_call" {
+				item["namespace"] = json!(TOOL_NAMESPACE);
+			}
+			item
+		})
+		.collect()
 }
 
 fn stored_reasoning_items(message: &Message) -> Vec<Value> {
-    shared::parse_generic_tool_calls_lossy(message.tool_calls.as_ref(), "chatgpt")
-        .first()
-        .and_then(|call| call.meta.as_ref())
-        .and_then(|meta| meta.get(openai::REASONING_META_KEY))
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default()
+	shared::parse_generic_tool_calls_lossy(message.tool_calls.as_ref(), "chatgpt")
+		.first()
+		.and_then(|call| call.meta.as_ref())
+		.and_then(|meta| meta.get(openai::REASONING_META_KEY))
+		.and_then(Value::as_array)
+		.cloned()
+		.unwrap_or_default()
 }
 
 /// Responses API error codes for a server-side fault or throttling: the stream
@@ -414,52 +361,52 @@ fn stored_reasoning_items(message: &Message) -> Vec<Value> {
 /// retries. Usage-limit codes are absent — an exhausted allowance does not
 /// clear on retry.
 const TRANSIENT_ERROR_CODES: [&str; 4] = [
-    "server_error",
-    "server_is_overloaded",
-    "rate_limit_exceeded",
-    "slow_down",
+	"server_error",
+	"server_is_overloaded",
+	"rate_limit_exceeded",
+	"slow_down",
 ];
 
 /// A stream failure a retry can clear. Every other terminal event is the
 /// outcome of the request, which a retry would not change.
 #[derive(Debug, thiserror::Error)]
 enum RetryableStreamError {
-    /// The stream closed before any terminal event.
-    #[error("ChatGPT stream ended without response.completed")]
-    CutOff,
-    /// A terminal event carrying one of [`TRANSIENT_ERROR_CODES`].
-    #[error("{0}")]
-    Transient(String),
+	/// The stream closed before any terminal event.
+	#[error("ChatGPT stream ended without response.completed")]
+	CutOff,
+	/// A terminal event carrying one of [`TRANSIENT_ERROR_CODES`].
+	#[error("{0}")]
+	Transient(String),
 }
 
 /// A terminal failure event as an error, retryable when its code is transient.
 fn terminal_error(error: &Value, message: String) -> anyhow::Error {
-    let code = error["code"].as_str();
-    if code.is_some_and(|code| TRANSIENT_ERROR_CODES.contains(&code)) {
-        RetryableStreamError::Transient(message).into()
-    } else {
-        with_usage_guidance(code, message)
-    }
+	let code = error["code"].as_str();
+	if code.is_some_and(|code| TRANSIENT_ERROR_CODES.contains(&code)) {
+		RetryableStreamError::Transient(message).into()
+	} else {
+		with_usage_guidance(code, message)
+	}
 }
 
 /// Lead a plan-usage error with what the user can act on; the raw provider
 /// error follows unchanged. The code does not say whether the whole plan or an
 /// app-specific limit is exhausted, and signing in again clears neither.
 fn with_usage_guidance(code: Option<&str>, message: String) -> anyhow::Error {
-    let guidance = match code {
-        Some("subscription_sharing_usage_limit_exceeded") => {
-            "ChatGPT plan usage limit reached for this app. It can be an app-specific limit \
+	let guidance = match code {
+		Some("subscription_sharing_usage_limit_exceeded") => {
+			"ChatGPT plan usage limit reached for this app. It can be an app-specific limit \
              while the account still has usage in ChatGPT or Codex, and signing in again does \
              not clear it. Check ChatGPT settings → Usage for your limits and reset time, or \
              use an API-key provider until then."
-        }
-        Some("subscription_sharing_usage_unavailable") => {
-            "ChatGPT could not check this plan's usage availability; try again later. \
+		}
+		Some("subscription_sharing_usage_unavailable") => {
+			"ChatGPT could not check this plan's usage availability; try again later. \
              Your sign-in is still valid."
-        }
-        _ => return anyhow::Error::msg(message),
-    };
-    anyhow::Error::msg(format!("{guidance}\n{message}"))
+		}
+		_ => return anyhow::Error::msg(message),
+	};
+	anyhow::Error::msg(format!("{guidance}\n{message}"))
 }
 
 /// Fold the buffered SSE body back into one Responses API response object.
@@ -468,47 +415,44 @@ fn with_usage_guidance(code: Option<&str>, message: String) -> anyhow::Error {
 /// `response.completed` event carries the response id and usage. Only a
 /// completed stream is a successful response.
 fn merge_stream(body: &str) -> Result<Value> {
-    let mut output = Vec::new();
+	let mut output = Vec::new();
 
-    for line in body.lines() {
-        let Some(data) = line.strip_prefix("data:") else {
-            continue;
-        };
-        let event: Value = serde_json::from_str(data.trim())
-            .with_context(|| format!("ChatGPT stream: malformed event: {}", data))?;
+	for line in body.lines() {
+		let Some(data) = line.strip_prefix("data:") else {
+			continue;
+		};
+		let event: Value =
+			serde_json::from_str(data.trim()).with_context(|| format!("ChatGPT stream: malformed event: {}", data))?;
 
-        match event["type"].as_str() {
-            Some("response.output_item.done") => output.push(event["item"].clone()),
-            Some("response.completed") => {
-                let mut response = event["response"].clone();
-                response["output"] = Value::Array(output);
-                return Ok(response);
-            }
-            Some("response.failed") => {
-                let error = &event["response"]["error"];
-                return Err(terminal_error(
-                    error,
-                    format!("ChatGPT response failed: {}", error),
-                ));
-            }
-            Some("response.incomplete") => anyhow::bail!(
-                "ChatGPT response incomplete: {}",
-                event["response"]["incomplete_details"]
-            ),
-            // The plan route nests the error object (`{"type":"error",
-            // "error":{"code":…}}`), unlike the flat `ResponseErrorEvent` of
-            // the API reference.
-            Some("error") => {
-                return Err(terminal_error(
-                    &event["error"],
-                    format!("ChatGPT stream error: {}", event),
-                ));
-            }
-            _ => {}
-        }
-    }
+		match event["type"].as_str() {
+			Some("response.output_item.done") => output.push(event["item"].clone()),
+			Some("response.completed") => {
+				let mut response = event["response"].clone();
+				response["output"] = Value::Array(output);
+				return Ok(response);
+			}
+			Some("response.failed") => {
+				let error = &event["response"]["error"];
+				return Err(terminal_error(error, format!("ChatGPT response failed: {}", error)));
+			}
+			Some("response.incomplete") => anyhow::bail!(
+				"ChatGPT response incomplete: {}",
+				event["response"]["incomplete_details"]
+			),
+			// The plan route nests the error object (`{"type":"error",
+			// "error":{"code":…}}`), unlike the flat `ResponseErrorEvent` of
+			// the API reference.
+			Some("error") => {
+				return Err(terminal_error(
+					&event["error"],
+					format!("ChatGPT stream error: {}", event),
+				));
+			}
+			_ => {}
+		}
+	}
 
-    Err(RetryableStreamError::CutOff.into())
+	Err(RetryableStreamError::CutOff.into())
 }
 
 #[cfg(test)]

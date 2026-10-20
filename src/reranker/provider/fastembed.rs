@@ -29,36 +29,35 @@ use super::RerankProvider;
 #[cfg(feature = "fastembed")]
 /// FastEmbed provider implementation
 pub struct FastEmbedProvider {
-    model: Arc<Mutex<TextRerank>>,
-    model_name: String,
+	model: Arc<Mutex<TextRerank>>,
+	model_name: String,
 }
 
 #[cfg(feature = "fastembed")]
 impl FastEmbedProvider {
-    pub fn new(model_name: &str) -> Result<Self> {
-        let model_enum = Self::map_model_name(model_name)?;
+	pub fn new(model_name: &str) -> Result<Self> {
+		let model_enum = Self::map_model_name(model_name)?;
 
-        let cache_dir = crate::storage::get_model_cache_dir()
-            .context("Failed to get FastEmbed cache directory")?;
+		let cache_dir = crate::storage::get_model_cache_dir().context("Failed to get FastEmbed cache directory")?;
 
-        let model = TextRerank::try_new(
-            RerankInitOptions::new(model_enum)
-                .with_show_download_progress(false)
-                .with_cache_dir(cache_dir),
-        )
-        .context("Failed to initialize FastEmbed reranker model")?;
+		let model = TextRerank::try_new(
+			RerankInitOptions::new(model_enum)
+				.with_show_download_progress(false)
+				.with_cache_dir(cache_dir),
+		)
+		.context("Failed to initialize FastEmbed reranker model")?;
 
-        Ok(Self {
-            model: Arc::new(Mutex::new(model)),
-            model_name: model_name.to_string(),
-        })
-    }
+		Ok(Self {
+			model: Arc::new(Mutex::new(model)),
+			model_name: model_name.to_string(),
+		})
+	}
 
-    /// Map model name to FastEmbed reranker model enum
-    /// Returns Ok for valid models, Err for invalid ones
-    /// This allows testing model name validation without downloading the model
-    pub fn map_model_name(model_name: &str) -> Result<RerankerModel> {
-        match model_name {
+	/// Map model name to FastEmbed reranker model enum
+	/// Returns Ok for valid models, Err for invalid ones
+	/// This allows testing model name validation without downloading the model
+	pub fn map_model_name(model_name: &str) -> Result<RerankerModel> {
+		match model_name {
             "bge-reranker-base" | "BAAI/bge-reranker-base" => Ok(RerankerModel::BGERerankerBase),
             "bge-reranker-v2-m3" | "rozgo/bge-reranker-v2-m3" => Ok(RerankerModel::BGERerankerV2M3),
             "jina-reranker-v1-turbo-en" | "jinaai/jina-reranker-v1-turbo-en" => {
@@ -72,90 +71,90 @@ impl FastEmbedProvider {
                 model_name
             )),
         }
-    }
+	}
 
-    pub fn list_supported_models() -> Vec<String> {
-        vec![
-            "bge-reranker-base".to_string(),
-            "bge-reranker-v2-m3".to_string(),
-            "jina-reranker-v1-turbo-en".to_string(),
-            "jina-reranker-v2-base-multilingual".to_string(),
-        ]
-    }
+	pub fn list_supported_models() -> Vec<String> {
+		vec![
+			"bge-reranker-base".to_string(),
+			"bge-reranker-v2-m3".to_string(),
+			"jina-reranker-v1-turbo-en".to_string(),
+			"jina-reranker-v2-base-multilingual".to_string(),
+		]
+	}
 }
 
 #[cfg(feature = "fastembed")]
 #[async_trait::async_trait]
 impl RerankProvider for FastEmbedProvider {
-    async fn rerank(
-        &self,
-        query: &str,
-        documents: Vec<String>,
-        top_k: Option<usize>,
-        _truncation: bool,
-    ) -> Result<RerankResponse> {
-        let query = query.to_string();
-        let model = self.model.clone();
+	async fn rerank(
+		&self,
+		query: &str,
+		documents: Vec<String>,
+		top_k: Option<usize>,
+		_truncation: bool,
+	) -> Result<RerankResponse> {
+		let query = query.to_string();
+		let model = self.model.clone();
 
-        let results = tokio::task::spawn_blocking(move || -> Result<Vec<RerankResult>> {
-            let mut model = model.lock().unwrap();
+		let results = tokio::task::spawn_blocking(move || -> Result<Vec<RerankResult>> {
+			let mut model = model.lock().unwrap();
 
-            // Convert Vec<String> to Vec<&str> for the rerank API
-            // We need to keep documents alive for the lifetime of doc_refs
-            let doc_refs: Vec<&str> = documents.iter().map(|s| s.as_str()).collect();
+			// Convert Vec<String> to Vec<&str> for the rerank API
+			// We need to keep documents alive for the lifetime of doc_refs
+			let doc_refs: Vec<&str> = documents.iter().map(|s| s.as_str()).collect();
 
-            // Rerank returns scores for each document
-            let scores = model
-                .rerank(query.as_str(), doc_refs, true, None)
-                .context("Failed to rerank documents")?;
+			// Rerank returns scores for each document
+			let scores = model
+				.rerank(query.as_str(), doc_refs, true, None)
+				.context("Failed to rerank documents")?;
 
-            // Create results with original indices
-            let mut results: Vec<RerankResult> = scores
-                .into_iter()
-                .enumerate()
-                .map(|(idx, score)| RerankResult {
-                    index: idx,
-                    document: documents[idx].clone(),
-                    relevance_score: score.score as f64,
-                })
-                .collect();
+			// Create results with original indices
+			let mut results: Vec<RerankResult> = scores
+				.into_iter()
+				.enumerate()
+				.map(|(idx, score)| RerankResult {
+					index: idx,
+					document: documents[idx].clone(),
+					relevance_score: score.score as f64,
+				})
+				.collect();
 
-            // Sort by relevance score descending
-            results.sort_by(|a, b| {
-                b.relevance_score
-                    .partial_cmp(&a.relevance_score)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            });
+			// Sort by relevance score descending
+			results.sort_by(|a, b| {
+				b.relevance_score
+					.partial_cmp(&a.relevance_score)
+					.unwrap_or(std::cmp::Ordering::Equal)
+			});
 
-            // Apply top_k if specified
-            if let Some(k) = top_k {
-                results.truncate(k);
-            }
+			// Apply top_k if specified
+			if let Some(k) = top_k {
+				results.truncate(k);
+			}
 
-            Ok(results)
-        })
-        .await
-        .context("Reranking task failed")??;
+			Ok(results)
+		})
+		.await
+		.context("Reranking task failed")??;
 
-        Ok(RerankResponse {
-            results,
-            total_tokens: 0, // FastEmbed doesn't provide token count
-        })
-    }
+		Ok(RerankResponse {
+			results,
+			total_tokens: 0, // FastEmbed doesn't provide token count
+		})
+	}
 
-    fn is_model_supported(&self) -> bool {
-        matches!(
-            self.model_name.as_str(),
-            "bge-reranker-base"
-                | "BAAI/bge-reranker-base"
-                | "bge-reranker-v2-m3"
-                | "rozgo/bge-reranker-v2-m3"
-                | "jina-reranker-v1-turbo-en"
-                | "jinaai/jina-reranker-v1-turbo-en"
-                | "jina-reranker-v2-base-multilingual"
-                | "jinaai/jina-reranker-v2-base-multilingual"
-        )
-    }
+	fn is_model_supported(&self) -> bool {
+		matches!(
+			self.model_name.as_str(),
+			"bge-reranker-base"
+				| "BAAI/bge-reranker-base"
+				| "bge-reranker-v2-m3"
+				| "rozgo/bge-reranker-v2-m3"
+				| "jina-reranker-v1-turbo-en"
+				| "jinaai/jina-reranker-v1-turbo-en"
+				| "jina-reranker-v2-base-multilingual"
+				| "jinaai/jina-reranker-v2-base-multilingual"
+		)
+	}
 }
 
 #[cfg(feature = "fastembed")]

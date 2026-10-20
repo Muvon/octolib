@@ -15,13 +15,12 @@
 //! Provider factory for creating AI provider instances
 
 use crate::llm::providers::{
-    AlibabaProvider, AmazonBedrockProvider, AnthropicProvider, BytePlusProvider, CerebrasProvider,
-    ChatGptProvider, CliProvider, CloudflareWorkersAiProvider, DeepSeekProvider,
-    FeatherlessProvider, FireworksProvider, GoogleStudioProvider, GoogleVertexProvider,
-    GroqProvider, HetznerProvider, InceptionProvider, LocalProvider, MetaProvider, MinimaxProvider,
-    MoonshotProvider, NvidiaProvider, OctoHubProvider, OllamaProvider, OpenAiProvider,
-    OpenCodeGoProvider, OpenCodeZenProvider, OpenRouterProvider, TinkerProvider, TogetherProvider,
-    WebWrightProvider, XaiProvider, ZaiProvider,
+	AlibabaProvider, AmazonBedrockProvider, AnthropicProvider, BytePlusProvider, CerebrasProvider, ChatGptProvider,
+	CliProvider, CloudflareWorkersAiProvider, DeepSeekProvider, FeatherlessProvider, FireworksProvider,
+	GoogleStudioProvider, GoogleVertexProvider, GroqProvider, HetznerProvider, InceptionProvider, LocalProvider,
+	MetaProvider, MinimaxProvider, MoonshotProvider, NvidiaProvider, OctoHubProvider, OllamaProvider, OpenAiProvider,
+	OpenCodeGoProvider, OpenCodeZenProvider, OpenRouterProvider, TinkerProvider, TogetherProvider, WebWrightProvider,
+	XaiProvider, ZaiProvider,
 };
 use crate::llm::traits::AiProvider;
 use anyhow::Result;
@@ -30,32 +29,32 @@ use anyhow::Result;
 pub struct ProviderFactory;
 
 impl ProviderFactory {
-    /// Parse a model string in format "provider:model" and return (provider_name, model_name)
-    /// Provider prefix is now REQUIRED
-    pub fn parse_model(model: &str) -> Result<(String, String)> {
-        let model = model.trim();
-        if let Some(pos) = model.find(':') {
-            let provider = model[..pos].trim().to_string();
-            let model_name = model[pos + 1..].trim().to_string();
+	/// Parse a model string in format "provider:model" and return (provider_name, model_name)
+	/// Provider prefix is now REQUIRED
+	pub fn parse_model(model: &str) -> Result<(String, String)> {
+		let model = model.trim();
+		if let Some(pos) = model.find(':') {
+			let provider = model[..pos].trim().to_string();
+			let model_name = model[pos + 1..].trim().to_string();
 
-            if provider.is_empty() || model_name.is_empty() {
-                return Err(anyhow::anyhow!(
-                    "Invalid model format. Use 'provider:model' (e.g., 'openai:gpt-4o')"
-                ));
-            }
+			if provider.is_empty() || model_name.is_empty() {
+				return Err(anyhow::anyhow!(
+					"Invalid model format. Use 'provider:model' (e.g., 'openai:gpt-4o')"
+				));
+			}
 
-            Ok((provider, model_name))
-        } else {
-            Err(anyhow::anyhow!(
-                "Invalid model format '{}'. Must specify provider like 'provider:model'",
-                model
-            ))
-        }
-    }
+			Ok((provider, model_name))
+		} else {
+			Err(anyhow::anyhow!(
+				"Invalid model format '{}'. Must specify provider like 'provider:model'",
+				model
+			))
+		}
+	}
 
-    /// Create a provider instance based on the provider name
-    pub fn create_provider(provider_name: &str) -> Result<Box<dyn AiProvider>> {
-        match provider_name.to_lowercase().as_str() {
+	/// Create a provider instance based on the provider name
+	pub fn create_provider(provider_name: &str) -> Result<Box<dyn AiProvider>> {
+		match provider_name.to_lowercase().as_str() {
             "openrouter" => Ok(Box::new(OpenRouterProvider::new())),
             "openai" => Ok(Box::new(OpenAiProvider::new())),
             "chatgpt" => Ok(Box::new(ChatGptProvider::new())),
@@ -92,72 +91,72 @@ impl ProviderFactory {
             )),
             _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported: openai, chatgpt, anthropic, openrouter, cerebras, local, ollama, google-vertex, google-studio, groq, alibaba, amazon, cloudflare, deepseek, featherless, fireworks, hetzner, inception, meta, minimax, moonshot, nvidia, octohub, opencode-zen, opencode-go, tinker, together, webwright, xai, zai, byteplus, cli", provider_name))
         }
-    }
+	}
 
-    /// Get the appropriate provider for a given model string
-    pub fn get_provider_for_model(model: &str) -> Result<(Box<dyn AiProvider>, String)> {
-        let (provider_name, model_name) = Self::parse_model(model)?;
-        let provider: Box<dyn AiProvider> = if provider_name.eq_ignore_ascii_case("cli") {
-            Box::new(CliProvider::new_for_model(&model_name)?)
-        } else {
-            Self::create_provider(&provider_name)?
-        };
+	/// Get the appropriate provider for a given model string
+	pub fn get_provider_for_model(model: &str) -> Result<(Box<dyn AiProvider>, String)> {
+		let (provider_name, model_name) = Self::parse_model(model)?;
+		let provider: Box<dyn AiProvider> = if provider_name.eq_ignore_ascii_case("cli") {
+			Box::new(CliProvider::new_for_model(&model_name)?)
+		} else {
+			Self::create_provider(&provider_name)?
+		};
 
-        // Verify the provider supports this model
-        if !provider.supports_model(&model_name) {
-            return Err(anyhow::anyhow!(
-                "Provider '{}' does not support model '{}'",
-                provider_name,
-                model_name
-            ));
-        }
+		// Verify the provider supports this model
+		if !provider.supports_model(&model_name) {
+			return Err(anyhow::anyhow!(
+				"Provider '{}' does not support model '{}'",
+				provider_name,
+				model_name
+			));
+		}
 
-        Ok((provider, model_name))
-    }
+		Ok((provider, model_name))
+	}
 
-    /// Get list of all supported providers
-    pub fn supported_providers() -> Vec<&'static str> {
-        vec![
-            "openrouter",
-            "openai",
-            "chatgpt",
-            "cerebras",
-            "local",
-            "ollama",
-            "anthropic",
-            "google-vertex",
-            "google-studio",
-            "groq",
-            "alibaba",
-            "amazon",
-            "cloudflare",
-            "deepseek",
-            "featherless",
-            "fireworks",
-            "hetzner",
-            "inception",
-            "meta",
-            "minimax",
-            "moonshot",
-            "nvidia",
-            "octohub",
-            "opencode-zen",
-            "opencode-go",
-            "tinker",
-            "together",
-            "webwright",
-            "xai",
-            "zai",
-            "byteplus",
-            "cli",
-        ]
-    }
+	/// Get list of all supported providers
+	pub fn supported_providers() -> Vec<&'static str> {
+		vec![
+			"openrouter",
+			"openai",
+			"chatgpt",
+			"cerebras",
+			"local",
+			"ollama",
+			"anthropic",
+			"google-vertex",
+			"google-studio",
+			"groq",
+			"alibaba",
+			"amazon",
+			"cloudflare",
+			"deepseek",
+			"featherless",
+			"fireworks",
+			"hetzner",
+			"inception",
+			"meta",
+			"minimax",
+			"moonshot",
+			"nvidia",
+			"octohub",
+			"opencode-zen",
+			"opencode-go",
+			"tinker",
+			"together",
+			"webwright",
+			"xai",
+			"zai",
+			"byteplus",
+			"cli",
+		]
+	}
 
-    /// Validate model format without creating provider
-    pub fn validate_model_format(model: &str) -> Result<()> {
-        Self::parse_model(model)?;
-        Ok(())
-    }
+	/// Validate model format without creating provider
+	pub fn validate_model_format(model: &str) -> Result<()> {
+		Self::parse_model(model)?;
+		Ok(())
+	}
 }
 
 #[cfg(test)]

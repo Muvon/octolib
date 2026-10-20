@@ -17,653 +17,623 @@ use serial_test::serial;
 
 #[test]
 fn test_supported_sampling_params() {
-    let provider = OpenAiProvider::new();
+	let provider = OpenAiProvider::new();
 
-    // Models that should support temperature/top_p (but never top_k)
-    let sp = provider.supported_sampling_params("gpt-4");
-    assert!(sp.temperature);
-    assert!(sp.top_p);
-    assert!(!sp.top_k); // OpenAI never supports top_k
+	// Models that should support temperature/top_p (but never top_k)
+	let sp = provider.supported_sampling_params("gpt-4");
+	assert!(sp.temperature);
+	assert!(sp.top_p);
+	assert!(!sp.top_k); // OpenAI never supports top_k
 
-    let sp = provider.supported_sampling_params("gpt-4o");
-    assert!(sp.temperature);
-    assert!(sp.top_p);
+	let sp = provider.supported_sampling_params("gpt-4o");
+	assert!(sp.temperature);
+	assert!(sp.top_p);
 
-    let sp = provider.supported_sampling_params("gpt-4o-mini");
-    assert!(sp.temperature);
+	let sp = provider.supported_sampling_params("gpt-4o-mini");
+	assert!(sp.temperature);
 
-    let sp = provider.supported_sampling_params("chatgpt-4o-latest");
-    assert!(sp.temperature);
+	let sp = provider.supported_sampling_params("chatgpt-4o-latest");
+	assert!(sp.temperature);
 
-    // Reasoning models should NOT support temperature/top_p
-    let sp = provider.supported_sampling_params("o1");
-    assert!(!sp.temperature);
-    assert!(!sp.top_p);
-    assert!(!sp.top_k);
+	// Reasoning models should NOT support temperature/top_p
+	let sp = provider.supported_sampling_params("o1");
+	assert!(!sp.temperature);
+	assert!(!sp.top_p);
+	assert!(!sp.top_k);
 
-    let sp = provider.supported_sampling_params("o1-preview");
-    assert!(!sp.temperature);
+	let sp = provider.supported_sampling_params("o1-preview");
+	assert!(!sp.temperature);
 
-    let sp = provider.supported_sampling_params("o3");
-    assert!(!sp.temperature);
+	let sp = provider.supported_sampling_params("o3");
+	assert!(!sp.temperature);
 
-    let sp = provider.supported_sampling_params("o4");
-    assert!(!sp.temperature);
+	let sp = provider.supported_sampling_params("o4");
+	assert!(!sp.temperature);
 
-    let sp = provider.supported_sampling_params("gpt-5");
-    assert!(!sp.temperature);
-    assert!(!sp.top_p);
+	let sp = provider.supported_sampling_params("gpt-5");
+	assert!(!sp.temperature);
+	assert!(!sp.top_p);
 
-    let sp = provider.supported_sampling_params("gpt-5-mini");
-    assert!(!sp.temperature);
+	let sp = provider.supported_sampling_params("gpt-5-mini");
+	assert!(!sp.temperature);
 
-    let sp = provider.supported_sampling_params("gpt-5-nano");
-    assert!(!sp.temperature);
+	let sp = provider.supported_sampling_params("gpt-5-nano");
+	assert!(!sp.temperature);
 }
 
 #[test]
 fn test_supports_model_gpt5() {
-    let provider = OpenAiProvider::new();
+	let provider = OpenAiProvider::new();
 
-    // GPT-5 models should be supported
-    assert!(provider.supports_model("gpt-5"));
-    assert!(provider.supports_model("gpt-5-2025-08-07"));
-    assert!(provider.supports_model("gpt-5-mini"));
-    assert!(provider.supports_model("gpt-5-mini-2025-08-07"));
-    assert!(provider.supports_model("gpt-5-nano"));
-    assert!(provider.supports_model("gpt-5-nano-2025-08-07"));
-    assert!(provider.supports_model("gpt-5.5"));
-    assert!(provider.supports_model("gpt-5.5-pro"));
-    assert!(provider.supports_model("gpt-5.6"));
-    assert!(provider.supports_model("gpt-5.6-sol"));
-    assert!(provider.supports_model("gpt-5.6-terra"));
-    assert!(provider.supports_model("gpt-5.6-luna"));
-    assert!(provider.supports_model("gpt-5.2-codex"));
-    assert!(provider.supports_model("gpt-5.3-codex"));
-    assert!(provider.supports_model("gpt-5.2-chat-latest"));
-    assert!(provider.supports_model("gpt-5-search-api"));
+	// GPT-5 models should be supported
+	assert!(provider.supports_model("gpt-5"));
+	assert!(provider.supports_model("gpt-5-2025-08-07"));
+	assert!(provider.supports_model("gpt-5-mini"));
+	assert!(provider.supports_model("gpt-5-mini-2025-08-07"));
+	assert!(provider.supports_model("gpt-5-nano"));
+	assert!(provider.supports_model("gpt-5-nano-2025-08-07"));
+	assert!(provider.supports_model("gpt-5.5"));
+	assert!(provider.supports_model("gpt-5.5-pro"));
+	assert!(provider.supports_model("gpt-5.6"));
+	assert!(provider.supports_model("gpt-5.6-sol"));
+	assert!(provider.supports_model("gpt-5.6-terra"));
+	assert!(provider.supports_model("gpt-5.6-luna"));
+	assert!(provider.supports_model("gpt-5.2-codex"));
+	assert!(provider.supports_model("gpt-5.3-codex"));
+	assert!(provider.supports_model("gpt-5.2-chat-latest"));
+	assert!(provider.supports_model("gpt-5-search-api"));
 
-    // Specialized and alias models
-    assert!(provider.supports_model("chat-latest"));
-    assert!(provider.supports_model("gpt-rosalind-research"));
-    assert!(provider.supports_model("gpt-daybreak-blue-latest"));
-    assert!(provider.supports_model("gpt-daybreak-red-latest"));
+	// Specialized and alias models
+	assert!(provider.supports_model("chat-latest"));
+	assert!(provider.supports_model("gpt-rosalind-research"));
+	assert!(provider.supports_model("gpt-daybreak-blue-latest"));
+	assert!(provider.supports_model("gpt-daybreak-red-latest"));
 
-    // Other models should still be supported
-    assert!(provider.supports_model("gpt-4o"));
-    assert!(provider.supports_model("gpt-audio-mini"));
-    assert!(provider.supports_model("gpt-4"));
-    assert!(provider.supports_model("gpt-3.5-turbo"));
-    assert!(provider.supports_model("o1"));
-    assert!(provider.supports_model("o4-mini"));
+	// Other models should still be supported
+	assert!(provider.supports_model("gpt-4o"));
+	assert!(provider.supports_model("gpt-audio-mini"));
+	assert!(provider.supports_model("gpt-4"));
+	assert!(provider.supports_model("gpt-3.5-turbo"));
+	assert!(provider.supports_model("o1"));
+	assert!(provider.supports_model("o4-mini"));
 
-    // Unsupported models
-    assert!(!provider.supports_model("claude-3"));
-    assert!(!provider.supports_model("llama-2"));
-    // Open-weight models are not served by the OpenAI API
-    assert!(!provider.supports_model("gpt-oss-120b"));
-    assert!(!provider.supports_model("gpt-oss-20b"));
-    // Shut down 2026-02-12
-    assert!(!provider.supports_model("codex-mini-latest"));
+	// Unsupported models
+	assert!(!provider.supports_model("claude-3"));
+	assert!(!provider.supports_model("llama-2"));
+	// Open-weight models are not served by the OpenAI API
+	assert!(!provider.supports_model("gpt-oss-120b"));
+	assert!(!provider.supports_model("gpt-oss-20b"));
+	// Shut down 2026-02-12
+	assert!(!provider.supports_model("codex-mini-latest"));
 }
 
 #[test]
 fn test_supports_model_case_insensitive() {
-    let provider = OpenAiProvider::new();
+	let provider = OpenAiProvider::new();
 
-    // Test uppercase
-    assert!(provider.supports_model("GPT-5"));
-    assert!(provider.supports_model("GPT-4O"));
-    assert!(provider.supports_model("GPT-4"));
-    // Test mixed case
-    assert!(provider.supports_model("Gpt-5"));
-    assert!(provider.supports_model("gPT-4o"));
-    assert!(provider.supports_model("O1"));
-    assert!(provider.supports_model("o3-mini"));
+	// Test uppercase
+	assert!(provider.supports_model("GPT-5"));
+	assert!(provider.supports_model("GPT-4O"));
+	assert!(provider.supports_model("GPT-4"));
+	// Test mixed case
+	assert!(provider.supports_model("Gpt-5"));
+	assert!(provider.supports_model("gPT-4o"));
+	assert!(provider.supports_model("O1"));
+	assert!(provider.supports_model("o3-mini"));
 }
 
 #[test]
 fn test_get_max_input_tokens_gpt5() {
-    let provider = OpenAiProvider::new();
+	let provider = OpenAiProvider::new();
 
-    // GPT-5.6 models have a 1.05M context window.
-    assert_eq!(provider.get_max_input_tokens("gpt-5.6"), 1_050_000);
-    assert_eq!(provider.get_max_input_tokens("gpt-5.6-sol"), 1_050_000);
-    assert_eq!(provider.get_max_input_tokens("gpt-5.6-terra"), 1_050_000);
-    assert_eq!(provider.get_max_input_tokens("gpt-5.6-luna"), 1_050_000);
+	// GPT-5.6 models have a 1.05M context window.
+	assert_eq!(provider.get_max_input_tokens("gpt-5.6"), 1_050_000);
+	assert_eq!(provider.get_max_input_tokens("gpt-5.6-sol"), 1_050_000);
+	assert_eq!(provider.get_max_input_tokens("gpt-5.6-terra"), 1_050_000);
+	assert_eq!(provider.get_max_input_tokens("gpt-5.6-luna"), 1_050_000);
 
-    // GPT-5.5 models have a 1.05M context window.
-    assert_eq!(provider.get_max_input_tokens("gpt-5.5"), 1_050_000);
-    assert_eq!(provider.get_max_input_tokens("gpt-5.5-pro"), 1_050_000);
-    assert_eq!(provider.get_max_input_tokens("gpt-5.6-cyber"), 400_000);
+	// GPT-5.5 models have a 1.05M context window.
+	assert_eq!(provider.get_max_input_tokens("gpt-5.5"), 1_050_000);
+	assert_eq!(provider.get_max_input_tokens("gpt-5.5-pro"), 1_050_000);
+	assert_eq!(provider.get_max_input_tokens("gpt-5.6-cyber"), 400_000);
 
-    // GPT-5.4 and GPT-5.4 Pro have a 1.05M context window; mini/nano stay at 400K.
-    assert_eq!(provider.get_max_input_tokens("gpt-5.4"), 1_050_000);
-    assert_eq!(provider.get_max_input_tokens("gpt-5.4-pro"), 1_050_000);
-    assert_eq!(provider.get_max_input_tokens("gpt-5.4-mini"), 400_000);
-    assert_eq!(provider.get_max_input_tokens("gpt-5.4-nano"), 400_000);
+	// GPT-5.4 and GPT-5.4 Pro have a 1.05M context window; mini/nano stay at 400K.
+	assert_eq!(provider.get_max_input_tokens("gpt-5.4"), 1_050_000);
+	assert_eq!(provider.get_max_input_tokens("gpt-5.4-pro"), 1_050_000);
+	assert_eq!(provider.get_max_input_tokens("gpt-5.4-mini"), 400_000);
+	assert_eq!(provider.get_max_input_tokens("gpt-5.4-nano"), 400_000);
 
-    // GPT-5 models should have 400K context window
-    assert_eq!(provider.get_max_input_tokens("gpt-5"), 400_000);
-    assert_eq!(provider.get_max_input_tokens("gpt-5-2025-08-07"), 400_000);
-    assert_eq!(provider.get_max_input_tokens("gpt-5-mini"), 400_000);
-    assert_eq!(provider.get_max_input_tokens("gpt-5-nano"), 400_000);
-    assert_eq!(provider.get_max_input_tokens("gpt-5.2-codex"), 400_000);
-    assert_eq!(provider.get_max_input_tokens("gpt-5.3-codex"), 400_000);
+	// GPT-5 models should have 400K context window
+	assert_eq!(provider.get_max_input_tokens("gpt-5"), 400_000);
+	assert_eq!(provider.get_max_input_tokens("gpt-5-2025-08-07"), 400_000);
+	assert_eq!(provider.get_max_input_tokens("gpt-5-mini"), 400_000);
+	assert_eq!(provider.get_max_input_tokens("gpt-5-nano"), 400_000);
+	assert_eq!(provider.get_max_input_tokens("gpt-5.2-codex"), 400_000);
+	assert_eq!(provider.get_max_input_tokens("gpt-5.3-codex"), 400_000);
 
-    // GPT-5.x chat-latest snapshots are 128K
-    assert_eq!(
-        provider.get_max_input_tokens("gpt-5.3-chat-latest"),
-        128_000
-    );
-    assert_eq!(
-        provider.get_max_input_tokens("gpt-5.2-chat-latest"),
-        128_000
-    );
-    assert_eq!(
-        provider.get_max_input_tokens("gpt-5.1-chat-latest"),
-        128_000
-    );
-    assert_eq!(provider.get_max_input_tokens("gpt-5-chat-latest"), 128_000);
+	// GPT-5.x chat-latest snapshots are 128K
+	assert_eq!(provider.get_max_input_tokens("gpt-5.3-chat-latest"), 128_000);
+	assert_eq!(provider.get_max_input_tokens("gpt-5.2-chat-latest"), 128_000);
+	assert_eq!(provider.get_max_input_tokens("gpt-5.1-chat-latest"), 128_000);
+	assert_eq!(provider.get_max_input_tokens("gpt-5-chat-latest"), 128_000);
 
-    // Specialized and alias models
-    assert_eq!(provider.get_max_input_tokens("chat-latest"), 400_000);
-    assert_eq!(
-        provider.get_max_input_tokens("gpt-daybreak-blue-latest"),
-        1_050_000
-    );
-    assert_eq!(
-        provider.get_max_input_tokens("gpt-daybreak-red-latest"),
-        400_000
-    );
+	// Specialized and alias models
+	assert_eq!(provider.get_max_input_tokens("chat-latest"), 400_000);
+	assert_eq!(provider.get_max_input_tokens("gpt-daybreak-blue-latest"), 1_050_000);
+	assert_eq!(provider.get_max_input_tokens("gpt-daybreak-red-latest"), 400_000);
 
-    // GPT-4.1 family is 1,047,576
-    assert_eq!(provider.get_max_input_tokens("gpt-4.1"), 1_047_576);
-    assert_eq!(provider.get_max_input_tokens("gpt-4.1-mini"), 1_047_576);
-    assert_eq!(provider.get_max_input_tokens("gpt-4.1-nano"), 1_047_576);
-    assert_eq!(provider.get_max_input_tokens("gpt-4-turbo"), 128_000);
+	// GPT-4.1 family is 1,047,576
+	assert_eq!(provider.get_max_input_tokens("gpt-4.1"), 1_047_576);
+	assert_eq!(provider.get_max_input_tokens("gpt-4.1-mini"), 1_047_576);
+	assert_eq!(provider.get_max_input_tokens("gpt-4.1-nano"), 1_047_576);
+	assert_eq!(provider.get_max_input_tokens("gpt-4-turbo"), 128_000);
 
-    // O-series models are 200K
-    assert_eq!(provider.get_max_input_tokens("o1"), 200_000);
-    assert_eq!(provider.get_max_input_tokens("o1-pro"), 200_000);
-    assert_eq!(provider.get_max_input_tokens("o3"), 200_000);
-    assert_eq!(provider.get_max_input_tokens("o3-mini"), 200_000);
-    assert_eq!(provider.get_max_input_tokens("o3-pro"), 200_000);
-    assert_eq!(provider.get_max_input_tokens("o4-mini"), 200_000);
+	// O-series models are 200K
+	assert_eq!(provider.get_max_input_tokens("o1"), 200_000);
+	assert_eq!(provider.get_max_input_tokens("o1-pro"), 200_000);
+	assert_eq!(provider.get_max_input_tokens("o3"), 200_000);
+	assert_eq!(provider.get_max_input_tokens("o3-mini"), 200_000);
+	assert_eq!(provider.get_max_input_tokens("o3-pro"), 200_000);
+	assert_eq!(provider.get_max_input_tokens("o4-mini"), 200_000);
 
-    // Other models should maintain their existing limits
-    assert_eq!(provider.get_max_input_tokens("gpt-4o"), 128_000);
-    assert_eq!(provider.get_max_input_tokens("gpt-4"), 8_192);
-    assert_eq!(provider.get_max_input_tokens("gpt-3.5-turbo"), 16_384);
+	// Other models should maintain their existing limits
+	assert_eq!(provider.get_max_input_tokens("gpt-4o"), 128_000);
+	assert_eq!(provider.get_max_input_tokens("gpt-4"), 8_192);
+	assert_eq!(provider.get_max_input_tokens("gpt-3.5-turbo"), 16_384);
 }
 
 #[test]
 fn test_supports_vision() {
-    let provider = OpenAiProvider::new();
+	let provider = OpenAiProvider::new();
 
-    // Models that should support vision
-    assert!(provider.supports_vision("gpt-4o"));
-    assert!(provider.supports_vision("gpt-4o-mini"));
-    assert!(provider.supports_vision("gpt-4o-2024-05-13"));
-    assert!(provider.supports_vision("gpt-4-turbo"));
-    assert!(provider.supports_vision("gpt-4-vision-preview"));
-    assert!(provider.supports_vision("gpt-4.1"));
-    assert!(provider.supports_vision("gpt-5-mini"));
-    assert!(provider.supports_vision("gpt-5.2-codex"));
-    assert!(provider.supports_vision("gpt-5.3-codex"));
-    assert!(provider.supports_vision("gpt-realtime"));
-    assert!(provider.supports_vision("chat-latest"));
-    assert!(provider.supports_vision("gpt-daybreak-blue-latest"));
-    assert!(provider.supports_vision("gpt-daybreak-red-latest"));
+	// Models that should support vision
+	assert!(provider.supports_vision("gpt-4o"));
+	assert!(provider.supports_vision("gpt-4o-mini"));
+	assert!(provider.supports_vision("gpt-4o-2024-05-13"));
+	assert!(provider.supports_vision("gpt-4-turbo"));
+	assert!(provider.supports_vision("gpt-4-vision-preview"));
+	assert!(provider.supports_vision("gpt-4.1"));
+	assert!(provider.supports_vision("gpt-5-mini"));
+	assert!(provider.supports_vision("gpt-5.2-codex"));
+	assert!(provider.supports_vision("gpt-5.3-codex"));
+	assert!(provider.supports_vision("gpt-realtime"));
+	assert!(provider.supports_vision("chat-latest"));
+	assert!(provider.supports_vision("gpt-daybreak-blue-latest"));
+	assert!(provider.supports_vision("gpt-daybreak-red-latest"));
 
-    // Models that should NOT support vision
-    assert!(!provider.supports_vision("gpt-3.5-turbo"));
-    assert!(!provider.supports_vision("gpt-4"));
-    assert!(!provider.supports_vision("o1-preview"));
-    assert!(!provider.supports_vision("text-davinci-003"));
-    // Rosalind has no model page; image input is unconfirmed.
-    assert!(!provider.supports_vision("gpt-rosalind-research"));
+	// Models that should NOT support vision
+	assert!(!provider.supports_vision("gpt-3.5-turbo"));
+	assert!(!provider.supports_vision("gpt-4"));
+	assert!(!provider.supports_vision("o1-preview"));
+	assert!(!provider.supports_vision("text-davinci-003"));
+	// Rosalind has no model page; image input is unconfirmed.
+	assert!(!provider.supports_vision("gpt-rosalind-research"));
 }
 
 #[test]
 #[serial]
 fn test_oauth_token_priority() {
-    let provider = OpenAiProvider::new();
+	let provider = OpenAiProvider::new();
 
-    // Set OAuth tokens
-    env::set_var(OPENAI_OAUTH_ACCESS_TOKEN_ENV, "test-oauth-token");
-    env::set_var(OPENAI_OAUTH_ACCOUNT_ID_ENV, "test-account-id");
+	// Set OAuth tokens
+	env::set_var(OPENAI_OAUTH_ACCESS_TOKEN_ENV, "test-oauth-token");
+	env::set_var(OPENAI_OAUTH_ACCOUNT_ID_ENV, "test-account-id");
 
-    // get_api_key should return error when OAuth is set
-    let result = provider.get_api_key();
-    assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("OAuth authentication"));
+	// get_api_key should return error when OAuth is set
+	let result = provider.get_api_key();
+	assert!(result.is_err());
+	assert!(result.unwrap_err().to_string().contains("OAuth authentication"));
 
-    // Clean up
-    env::remove_var(OPENAI_OAUTH_ACCESS_TOKEN_ENV);
-    env::remove_var(OPENAI_OAUTH_ACCOUNT_ID_ENV);
+	// Clean up
+	env::remove_var(OPENAI_OAUTH_ACCESS_TOKEN_ENV);
+	env::remove_var(OPENAI_OAUTH_ACCOUNT_ID_ENV);
 }
 
 #[test]
 #[serial]
 fn test_api_key_fallback() {
-    let provider = OpenAiProvider::new();
+	let provider = OpenAiProvider::new();
 
-    // Remove OAuth tokens if set
-    env::remove_var(OPENAI_OAUTH_ACCESS_TOKEN_ENV);
-    env::remove_var(OPENAI_OAUTH_ACCOUNT_ID_ENV);
+	// Remove OAuth tokens if set
+	env::remove_var(OPENAI_OAUTH_ACCESS_TOKEN_ENV);
+	env::remove_var(OPENAI_OAUTH_ACCOUNT_ID_ENV);
 
-    // Set API key
-    env::set_var(OPENAI_API_KEY_ENV, "test-api-key");
+	// Set API key
+	env::set_var(OPENAI_API_KEY_ENV, "test-api-key");
 
-    // get_api_key should return the API key
-    let result = provider.get_api_key();
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap(), "test-api-key");
+	// get_api_key should return the API key
+	let result = provider.get_api_key();
+	assert!(result.is_ok());
+	assert_eq!(result.unwrap(), "test-api-key");
 
-    // Clean up
-    env::remove_var(OPENAI_API_KEY_ENV);
+	// Clean up
+	env::remove_var(OPENAI_API_KEY_ENV);
 }
 
 #[test]
 #[serial]
 fn test_no_auth_error() {
-    let provider = OpenAiProvider::new();
+	let provider = OpenAiProvider::new();
 
-    // Remove all auth env vars
-    env::remove_var(OPENAI_OAUTH_ACCESS_TOKEN_ENV);
-    env::remove_var(OPENAI_OAUTH_ACCOUNT_ID_ENV);
-    env::remove_var(OPENAI_API_KEY_ENV);
+	// Remove all auth env vars
+	env::remove_var(OPENAI_OAUTH_ACCESS_TOKEN_ENV);
+	env::remove_var(OPENAI_OAUTH_ACCOUNT_ID_ENV);
+	env::remove_var(OPENAI_API_KEY_ENV);
 
-    // get_api_key should return error
-    let result = provider.get_api_key();
-    assert!(result.is_err());
-    let error_msg = result.unwrap_err().to_string();
-    assert!(error_msg.contains("OPENAI_API_KEY") || error_msg.contains("OPENAI_OAUTH"));
+	// get_api_key should return error
+	let result = provider.get_api_key();
+	assert!(result.is_err());
+	let error_msg = result.unwrap_err().to_string();
+	assert!(error_msg.contains("OPENAI_API_KEY") || error_msg.contains("OPENAI_OAUTH"));
 }
 
 #[test]
 fn test_messages_to_input() {
-    let messages = vec![
-        Message {
-            role: "system".to_string(),
-            content: "You are a helpful assistant.".to_string(),
-            timestamp: 0,
-            images: None,
-            videos: None,
-            cached: false,
-            cache_ttl: None,
-            tool_calls: None,
-            tool_call_id: None,
-            name: None,
-            thinking: None,
-            id: None,
-        },
-        Message {
-            role: "user".to_string(),
-            content: "Hello!".to_string(),
-            timestamp: 0,
-            images: None,
-            videos: None,
-            cached: false,
-            cache_ttl: None,
-            tool_calls: None,
-            tool_call_id: None,
-            name: None,
-            thinking: None,
-            id: None,
-        },
-    ];
+	let messages = vec![
+		Message {
+			role: "system".to_string(),
+			content: "You are a helpful assistant.".to_string(),
+			timestamp: 0,
+			images: None,
+			videos: None,
+			cached: false,
+			cache_ttl: None,
+			tool_calls: None,
+			tool_call_id: None,
+			name: None,
+			thinking: None,
+			id: None,
+		},
+		Message {
+			role: "user".to_string(),
+			content: "Hello!".to_string(),
+			timestamp: 0,
+			images: None,
+			videos: None,
+			cached: false,
+			cache_ttl: None,
+			tool_calls: None,
+			tool_call_id: None,
+			name: None,
+			thinking: None,
+			id: None,
+		},
+	];
 
-    let input = messages_to_input(&messages, None, false);
-    assert_eq!(input.len(), 2);
+	let input = messages_to_input(&messages, None, false);
+	assert_eq!(input.len(), 2);
 
-    // First message - content is plain string
-    let first = &input[0];
-    assert_eq!(first["role"], "system");
-    assert_eq!(first["content"], "You are a helpful assistant.");
+	// First message - content is plain string
+	let first = &input[0];
+	assert_eq!(first["role"], "system");
+	assert_eq!(first["content"], "You are a helpful assistant.");
 
-    // Second message - content is plain string
-    let second = &input[1];
-    assert_eq!(second["role"], "user");
-    assert_eq!(second["content"], "Hello!");
+	// Second message - content is plain string
+	let second = &input[1];
+	assert_eq!(second["role"], "user");
+	assert_eq!(second["content"], "Hello!");
 }
 
 #[test]
 fn test_messages_to_input_with_images() {
-    let image_attachment = crate::llm::types::ImageAttachment {
-        data: ImageData::Base64("fakebase64data".to_string()),
-        media_type: "image/png".to_string(),
-        source_type: crate::llm::types::SourceType::File(std::path::PathBuf::from("test.png")),
-        dimensions: None,
-        size_bytes: None,
-    };
+	let image_attachment = crate::llm::types::ImageAttachment {
+		data: ImageData::Base64("fakebase64data".to_string()),
+		media_type: "image/png".to_string(),
+		source_type: crate::llm::types::SourceType::File(std::path::PathBuf::from("test.png")),
+		dimensions: None,
+		size_bytes: None,
+	};
 
-    let messages = vec![
-        Message::system("You are a helpful assistant."),
-        Message::user("What is in this image?").with_images(vec![image_attachment]),
-    ];
+	let messages = vec![
+		Message::system("You are a helpful assistant."),
+		Message::user("What is in this image?").with_images(vec![image_attachment]),
+	];
 
-    let input = messages_to_input(&messages, None, false);
-    assert_eq!(input.len(), 2);
+	let input = messages_to_input(&messages, None, false);
+	assert_eq!(input.len(), 2);
 
-    // System message remains a plain string.
-    assert_eq!(input[0]["role"], "system");
-    assert_eq!(input[0]["content"], "You are a helpful assistant.");
+	// System message remains a plain string.
+	assert_eq!(input[0]["role"], "system");
+	assert_eq!(input[0]["content"], "You are a helpful assistant.");
 
-    // User message with an image is an array of typed parts.
-    assert_eq!(input[1]["role"], "user");
-    let content = &input[1]["content"];
-    assert!(content.is_array());
-    assert_eq!(content.as_array().unwrap().len(), 2);
-    assert_eq!(content[0]["type"], "input_text");
-    assert_eq!(content[0]["text"], "What is in this image?");
-    assert_eq!(content[1]["type"], "input_image");
-    assert_eq!(
-        content[1]["image_url"],
-        "data:image/png;base64,fakebase64data"
-    );
+	// User message with an image is an array of typed parts.
+	assert_eq!(input[1]["role"], "user");
+	let content = &input[1]["content"];
+	assert!(content.is_array());
+	assert_eq!(content.as_array().unwrap().len(), 2);
+	assert_eq!(content[0]["type"], "input_text");
+	assert_eq!(content[0]["text"], "What is in this image?");
+	assert_eq!(content[1]["type"], "input_image");
+	assert_eq!(content[1]["image_url"], "data:image/png;base64,fakebase64data");
 }
 
 #[test]
 fn test_messages_to_input_with_image_url_and_cache() {
-    let image_attachment = crate::llm::types::ImageAttachment {
-        data: ImageData::Url("https://example.com/image.png".to_string()),
-        media_type: "image/png".to_string(),
-        source_type: crate::llm::types::SourceType::Url,
-        dimensions: None,
-        size_bytes: None,
-    };
+	let image_attachment = crate::llm::types::ImageAttachment {
+		data: ImageData::Url("https://example.com/image.png".to_string()),
+		media_type: "image/png".to_string(),
+		source_type: crate::llm::types::SourceType::Url,
+		dimensions: None,
+		size_bytes: None,
+	};
 
-    let messages = vec![Message::user("Describe this")
-        .with_images(vec![image_attachment])
-        .with_cache_marker()];
+	let messages = vec![Message::user("Describe this")
+		.with_images(vec![image_attachment])
+		.with_cache_marker()];
 
-    let input = messages_to_input(&messages, None, true);
-    assert_eq!(input.len(), 1);
+	let input = messages_to_input(&messages, None, true);
+	assert_eq!(input.len(), 1);
 
-    let content = &input[0]["content"];
-    assert_eq!(content.as_array().unwrap().len(), 2);
-    assert_eq!(content[0]["type"], "input_text");
-    assert_eq!(content[0]["prompt_cache_breakpoint"]["mode"], "explicit");
-    assert_eq!(content[1]["type"], "input_image");
-    assert_eq!(content[1]["image_url"], "https://example.com/image.png");
+	let content = &input[0]["content"];
+	assert_eq!(content.as_array().unwrap().len(), 2);
+	assert_eq!(content[0]["type"], "input_text");
+	assert_eq!(content[0]["prompt_cache_breakpoint"]["mode"], "explicit");
+	assert_eq!(content[1]["type"], "input_image");
+	assert_eq!(content[1]["image_url"], "https://example.com/image.png");
 }
 
 #[test]
 fn test_ollama_compaction_tail_rebases_and_keeps_summary() {
-    let mut old_openai = Message::assistant("Older OpenAI answer");
-    old_openai.id = Some("resp_old".to_string());
+	let mut old_openai = Message::assistant("Older OpenAI answer");
+	old_openai.id = Some("resp_old".to_string());
 
-    let mut summary = Message::assistant("Compacted Ollama conversation");
-    summary.name = Some("plan_compression".to_string());
-    summary.id = Some("chatcmpl-18".to_string());
+	let mut summary = Message::assistant("Compacted Ollama conversation");
+	summary.name = Some("plan_compression".to_string());
+	summary.id = Some("chatcmpl-18".to_string());
 
-    let messages = vec![
-        Message::system("System instructions"),
-        old_openai,
-        summary,
-        Message::user("Please finalize the task"),
-    ];
+	let messages = vec![
+		Message::system("System instructions"),
+		old_openai,
+		summary,
+		Message::user("Please finalize the task"),
+	];
 
-    let previous_id = resolve_previous_response_id(&messages, None);
-    assert_eq!(
-        previous_id, None,
-        "Ollama ids must start a fresh OpenAI chain"
-    );
+	let previous_id = resolve_previous_response_id(&messages, None);
+	assert_eq!(previous_id, None, "Ollama ids must start a fresh OpenAI chain");
 
-    let input = messages_to_input(&messages, previous_id.as_deref(), false);
-    assert_eq!(input.len(), 4);
-    assert_eq!(input[2]["role"], "assistant");
-    assert_eq!(input[2]["content"], "Compacted Ollama conversation");
-    assert_eq!(input[3]["role"], "user");
-    assert_eq!(input[3]["content"], "Please finalize the task");
+	let input = messages_to_input(&messages, previous_id.as_deref(), false);
+	assert_eq!(input.len(), 4);
+	assert_eq!(input[2]["role"], "assistant");
+	assert_eq!(input[2]["content"], "Compacted Ollama conversation");
+	assert_eq!(input[3]["role"], "user");
+	assert_eq!(input[3]["content"], "Please finalize the task");
 }
 
 #[test]
 fn test_latest_openai_response_id_continues_exact_turn() {
-    let mut assistant = Message::assistant("OpenAI answer");
-    assistant.id = Some("resp_latest".to_string());
-    let messages = vec![assistant, Message::user("Follow-up")];
+	let mut assistant = Message::assistant("OpenAI answer");
+	assistant.id = Some("resp_latest".to_string());
+	let messages = vec![assistant, Message::user("Follow-up")];
 
-    let previous_id = resolve_previous_response_id(&messages, None);
-    assert_eq!(previous_id.as_deref(), Some("resp_latest"));
+	let previous_id = resolve_previous_response_id(&messages, None);
+	assert_eq!(previous_id.as_deref(), Some("resp_latest"));
 
-    let input = messages_to_input(&messages, previous_id.as_deref(), false);
-    assert_eq!(input.len(), 1);
-    assert_eq!(input[0]["role"], "user");
-    assert_eq!(input[0]["content"], "Follow-up");
+	let input = messages_to_input(&messages, previous_id.as_deref(), false);
+	assert_eq!(input.len(), 1);
+	assert_eq!(input[0]["role"], "user");
+	assert_eq!(input[0]["content"], "Follow-up");
 }
 
 #[test]
 fn test_invalid_explicit_previous_id_forces_rebase() {
-    let messages = vec![Message::user("Fresh input")];
-    let previous_id = resolve_previous_response_id(&messages, Some("chatcmpl-18".to_string()));
+	let messages = vec![Message::user("Fresh input")];
+	let previous_id = resolve_previous_response_id(&messages, Some("chatcmpl-18".to_string()));
 
-    assert_eq!(previous_id, None);
-    let input = messages_to_input(&messages, previous_id.as_deref(), false);
-    assert_eq!(input.len(), 1);
-    assert_eq!(input[0]["content"], "Fresh input");
+	assert_eq!(previous_id, None);
+	let input = messages_to_input(&messages, previous_id.as_deref(), false);
+	assert_eq!(input.len(), 1);
+	assert_eq!(input[0]["content"], "Fresh input");
 }
 
 #[test]
 fn test_gpt_5_6_explicit_cache_breakpoint_wire_shape() {
-    let messages = vec![
-        Message::system("Stable instructions").with_cache_marker(),
-        Message::user("Variable request"),
-    ];
+	let messages = vec![
+		Message::system("Stable instructions").with_cache_marker(),
+		Message::user("Variable request"),
+	];
 
-    let input = messages_to_input(&messages, None, true);
-    assert_eq!(count_explicit_cache_breakpoints(&input), 1);
-    assert_eq!(input[0]["content"][0]["type"], "input_text");
-    assert_eq!(input[0]["content"][0]["text"], "Stable instructions");
-    assert_eq!(
-        input[0]["content"][0]["prompt_cache_breakpoint"]["mode"],
-        "explicit"
-    );
-    assert_eq!(input[1]["content"], "Variable request");
+	let input = messages_to_input(&messages, None, true);
+	assert_eq!(count_explicit_cache_breakpoints(&input), 1);
+	assert_eq!(input[0]["content"][0]["type"], "input_text");
+	assert_eq!(input[0]["content"][0]["text"], "Stable instructions");
+	assert_eq!(input[0]["content"][0]["prompt_cache_breakpoint"]["mode"], "explicit");
+	assert_eq!(input[1]["content"], "Variable request");
 
-    let mut request_body = serde_json::json!({"input": input});
-    apply_explicit_cache_options(&mut request_body, 1).unwrap();
-    assert_eq!(request_body["prompt_cache_options"]["mode"], "explicit");
-    assert_eq!(request_body["prompt_cache_options"]["ttl"], "30m");
+	let mut request_body = serde_json::json!({"input": input});
+	apply_explicit_cache_options(&mut request_body, 1).unwrap();
+	assert_eq!(request_body["prompt_cache_options"]["mode"], "explicit");
+	assert_eq!(request_body["prompt_cache_options"]["ttl"], "30m");
 }
 
 #[test]
 fn test_gpt_5_6_cached_assistant_uses_output_text() {
-    let mut summary = Message::assistant("Compressed task summary");
-    summary.name = Some("plan_compression".to_string());
-    summary.cached = true;
+	let mut summary = Message::assistant("Compressed task summary");
+	summary.name = Some("plan_compression".to_string());
+	summary.cached = true;
 
-    let input = messages_to_input(&[summary], None, true);
+	let input = messages_to_input(&[summary], None, true);
 
-    assert_eq!(input[0]["role"], "assistant");
-    assert_eq!(input[0]["content"][0]["type"], "output_text");
-    assert_eq!(
-        input[0]["content"][0]["prompt_cache_breakpoint"]["mode"],
-        "explicit"
-    );
+	assert_eq!(input[0]["role"], "assistant");
+	assert_eq!(input[0]["content"][0]["type"], "output_text");
+	assert_eq!(input[0]["content"][0]["prompt_cache_breakpoint"]["mode"], "explicit");
 }
 
 #[test]
 fn test_explicit_cache_breakpoint_limit() {
-    let mut request_body = serde_json::json!({});
-    let error = apply_explicit_cache_options(&mut request_body, 5).unwrap_err();
-    assert!(error.to_string().contains("at most 4"));
+	let mut request_body = serde_json::json!({});
+	let error = apply_explicit_cache_options(&mut request_body, 5).unwrap_err();
+	assert!(error.to_string().contains("at most 4"));
 }
 
 #[test]
 fn test_pre_gpt_5_6_keeps_cached_messages_in_legacy_shape() {
-    let messages = vec![Message::system("Stable instructions").with_cache_marker()];
-    let input = messages_to_input(&messages, None, false);
+	let messages = vec![Message::system("Stable instructions").with_cache_marker()];
+	let input = messages_to_input(&messages, None, false);
 
-    assert_eq!(input[0]["content"], "Stable instructions");
-    assert_eq!(count_explicit_cache_breakpoints(&input), 0);
+	assert_eq!(input[0]["content"], "Stable instructions");
+	assert_eq!(count_explicit_cache_breakpoints(&input), 0);
 }
 
 #[test]
 fn test_messages_to_input_with_tool_response() {
-    // Scenario: Assistant made a tool call, we're sending the tool result back
-    let messages = vec![
-        Message {
-            role: "user".to_string(),
-            content: "What is the weather?".to_string(),
-            timestamp: 0,
-            images: None,
-            videos: None,
-            cached: false,
-            cache_ttl: None,
-            tool_calls: None,
-            tool_call_id: None,
-            name: None,
-            thinking: None,
-            id: None,
-        },
-        Message {
-            role: "assistant".to_string(),
-            content: "".to_string(),
-            timestamp: 0,
-            images: None,
-            videos: None,
-            cached: false,
-            cache_ttl: None,
-            tool_calls: Some(serde_json::json!([{
-                "id": "call_12345",
-                "type": "function",
-                "function": {
-                    "name": "get_weather",
-                    "arguments": "{}"
-                }
-            }])),
-            tool_call_id: None,
-            name: None,
-            thinking: None,
-            id: Some("resp_abc123".to_string()),
-        },
-        Message {
-            role: "tool".to_string(),
-            content: "{\"temperature\": \"22C\", \"condition\": \"sunny\"}".to_string(),
-            timestamp: 0,
-            images: None,
-            videos: None,
-            cached: false,
-            cache_ttl: None,
-            tool_calls: None,
-            tool_call_id: Some("call_12345".to_string()),
-            name: Some("get_weather".to_string()),
-            thinking: None,
-            id: None,
-        },
-    ];
+	// Scenario: Assistant made a tool call, we're sending the tool result back
+	let messages = vec![
+		Message {
+			role: "user".to_string(),
+			content: "What is the weather?".to_string(),
+			timestamp: 0,
+			images: None,
+			videos: None,
+			cached: false,
+			cache_ttl: None,
+			tool_calls: None,
+			tool_call_id: None,
+			name: None,
+			thinking: None,
+			id: None,
+		},
+		Message {
+			role: "assistant".to_string(),
+			content: "".to_string(),
+			timestamp: 0,
+			images: None,
+			videos: None,
+			cached: false,
+			cache_ttl: None,
+			tool_calls: Some(serde_json::json!([{
+				"id": "call_12345",
+				"type": "function",
+				"function": {
+					"name": "get_weather",
+					"arguments": "{}"
+				}
+			}])),
+			tool_call_id: None,
+			name: None,
+			thinking: None,
+			id: Some("resp_abc123".to_string()),
+		},
+		Message {
+			role: "tool".to_string(),
+			content: "{\"temperature\": \"22C\", \"condition\": \"sunny\"}".to_string(),
+			timestamp: 0,
+			images: None,
+			videos: None,
+			cached: false,
+			cache_ttl: None,
+			tool_calls: None,
+			tool_call_id: Some("call_12345".to_string()),
+			name: Some("get_weather".to_string()),
+			thinking: None,
+			id: None,
+		},
+	];
 
-    // When there are NEW tool responses after assistant, send only those tool outputs
-    let input = messages_to_input(&messages, Some("resp_abc123"), false);
-    assert_eq!(input.len(), 1); // Only the NEW tool response
+	// When there are NEW tool responses after assistant, send only those tool outputs
+	let input = messages_to_input(&messages, Some("resp_abc123"), false);
+	assert_eq!(input.len(), 1); // Only the NEW tool response
 
-    // Tool response uses function_call_output format
-    let tool_output = &input[0];
-    assert_eq!(tool_output["type"], "function_call_output");
-    assert_eq!(tool_output["call_id"], "call_12345");
-    assert_eq!(
-        tool_output["output"],
-        "{\"temperature\": \"22C\", \"condition\": \"sunny\"}"
-    );
+	// Tool response uses function_call_output format
+	let tool_output = &input[0];
+	assert_eq!(tool_output["type"], "function_call_output");
+	assert_eq!(tool_output["call_id"], "call_12345");
+	assert_eq!(
+		tool_output["output"],
+		"{\"temperature\": \"22C\", \"condition\": \"sunny\"}"
+	);
 }
 
 #[test]
 fn test_messages_to_input_continuation_without_tools() {
-    // Scenario: Continuing conversation without tool calls (like "what else you can do?")
-    let messages = vec![
-        Message {
-            role: "user".to_string(),
-            content: "run date in shell".to_string(),
-            timestamp: 0,
-            images: None,
-            videos: None,
-            cached: false,
-            cache_ttl: None,
-            tool_calls: None,
-            tool_call_id: None,
-            name: None,
-            thinking: None,
-            id: None,
-        },
-        Message {
-            role: "assistant".to_string(),
-            content: "".to_string(),
-            timestamp: 0,
-            images: None,
-            videos: None,
-            cached: false,
-            cache_ttl: None,
-            tool_calls: Some(serde_json::json!([{
-                "id": "call_old",
-                "type": "function",
-                "function": {
-                    "name": "shell",
-                    "arguments": "{\"command\": \"date\"}"
-                }
-            }])),
-            tool_call_id: None,
-            name: None,
-            thinking: None,
-            id: Some("resp_first".to_string()),
-        },
-        Message {
-            role: "tool".to_string(),
-            content: "Mon Jan 19 22:12:18 +07 2026".to_string(),
-            timestamp: 0,
-            images: None,
-            videos: None,
-            cached: false,
-            cache_ttl: None,
-            tool_calls: None,
-            tool_call_id: Some("call_old".to_string()),
-            name: Some("shell".to_string()),
-            thinking: None,
-            id: None,
-        },
-        Message {
-            role: "assistant".to_string(),
-            content: "The current date is Mon Jan 19 22:12:18 +07 2026".to_string(),
-            timestamp: 0,
-            images: None,
-            videos: None,
-            cached: false,
-            cache_ttl: None,
-            tool_calls: None,
-            tool_call_id: None,
-            name: None,
-            thinking: None,
-            id: Some("resp_second".to_string()),
-        },
-        Message {
-            role: "user".to_string(),
-            content: "what else you can do?".to_string(),
-            timestamp: 0,
-            images: None,
-            videos: None,
-            cached: false,
-            cache_ttl: None,
-            tool_calls: None,
-            tool_call_id: None,
-            name: None,
-            thinking: None,
-            id: None,
-        },
-    ];
+	// Scenario: Continuing conversation without tool calls (like "what else you can do?")
+	let messages = vec![
+		Message {
+			role: "user".to_string(),
+			content: "run date in shell".to_string(),
+			timestamp: 0,
+			images: None,
+			videos: None,
+			cached: false,
+			cache_ttl: None,
+			tool_calls: None,
+			tool_call_id: None,
+			name: None,
+			thinking: None,
+			id: None,
+		},
+		Message {
+			role: "assistant".to_string(),
+			content: "".to_string(),
+			timestamp: 0,
+			images: None,
+			videos: None,
+			cached: false,
+			cache_ttl: None,
+			tool_calls: Some(serde_json::json!([{
+				"id": "call_old",
+				"type": "function",
+				"function": {
+					"name": "shell",
+					"arguments": "{\"command\": \"date\"}"
+				}
+			}])),
+			tool_call_id: None,
+			name: None,
+			thinking: None,
+			id: Some("resp_first".to_string()),
+		},
+		Message {
+			role: "tool".to_string(),
+			content: "Mon Jan 19 22:12:18 +07 2026".to_string(),
+			timestamp: 0,
+			images: None,
+			videos: None,
+			cached: false,
+			cache_ttl: None,
+			tool_calls: None,
+			tool_call_id: Some("call_old".to_string()),
+			name: Some("shell".to_string()),
+			thinking: None,
+			id: None,
+		},
+		Message {
+			role: "assistant".to_string(),
+			content: "The current date is Mon Jan 19 22:12:18 +07 2026".to_string(),
+			timestamp: 0,
+			images: None,
+			videos: None,
+			cached: false,
+			cache_ttl: None,
+			tool_calls: None,
+			tool_call_id: None,
+			name: None,
+			thinking: None,
+			id: Some("resp_second".to_string()),
+		},
+		Message {
+			role: "user".to_string(),
+			content: "what else you can do?".to_string(),
+			timestamp: 0,
+			images: None,
+			videos: None,
+			cached: false,
+			cache_ttl: None,
+			tool_calls: None,
+			tool_call_id: None,
+			name: None,
+			thinking: None,
+			id: None,
+		},
+	];
 
-    // Should send only the NEW user message, NOT the old tool result
-    let input = messages_to_input(&messages, Some("resp_second"), false);
-    assert_eq!(input.len(), 1);
+	// Should send only the NEW user message, NOT the old tool result
+	let input = messages_to_input(&messages, Some("resp_second"), false);
+	assert_eq!(input.len(), 1);
 
-    // Should be the new user message
-    let user_msg = &input[0];
-    assert_eq!(user_msg["role"], "user");
-    assert_eq!(user_msg["content"], "what else you can do?");
+	// Should be the new user message
+	let user_msg = &input[0];
+	assert_eq!(user_msg["role"], "user");
+	assert_eq!(user_msg["content"], "what else you can do?");
 }
 
 /// Regression: after a multi-turn cancel that leaves a tool_result without
@@ -672,508 +642,470 @@ fn test_messages_to_input_continuation_without_tools() {
 /// dropped the user message, causing the model to "drift" off-track.
 #[test]
 fn test_messages_to_input_tool_result_then_user_after_cancel() {
-    let messages = vec![
-        Message {
-            role: "user".to_string(),
-            content: "What is the weather?".to_string(),
-            timestamp: 0,
-            images: None,
-            videos: None,
-            cached: false,
-            cache_ttl: None,
-            tool_calls: None,
-            tool_call_id: None,
-            name: None,
-            thinking: None,
-            id: None,
-        },
-        Message {
-            role: "assistant".to_string(),
-            content: "".to_string(),
-            timestamp: 0,
-            images: None,
-            videos: None,
-            cached: false,
-            cache_ttl: None,
-            tool_calls: Some(serde_json::json!([{
-                "id": "call_w",
-                "type": "function",
-                "function": {"name": "get_weather", "arguments": "{}"}
-            }])),
-            tool_call_id: None,
-            name: None,
-            thinking: None,
-            id: Some("resp_x".to_string()),
-        },
-        Message {
-            role: "tool".to_string(),
-            content: "72°F sunny".to_string(),
-            timestamp: 0,
-            images: None,
-            videos: None,
-            cached: false,
-            cache_ttl: None,
-            tool_calls: None,
-            tool_call_id: Some("call_w".to_string()),
-            name: Some("get_weather".to_string()),
-            thinking: None,
-            id: None,
-        },
-        // User retried after cancelling the follow-up assistant.
-        Message {
-            role: "user".to_string(),
-            content: "Now write me a poem about it.".to_string(),
-            timestamp: 0,
-            images: None,
-            videos: None,
-            cached: false,
-            cache_ttl: None,
-            tool_calls: None,
-            tool_call_id: None,
-            name: None,
-            thinking: None,
-            id: None,
-        },
-    ];
+	let messages = vec![
+		Message {
+			role: "user".to_string(),
+			content: "What is the weather?".to_string(),
+			timestamp: 0,
+			images: None,
+			videos: None,
+			cached: false,
+			cache_ttl: None,
+			tool_calls: None,
+			tool_call_id: None,
+			name: None,
+			thinking: None,
+			id: None,
+		},
+		Message {
+			role: "assistant".to_string(),
+			content: "".to_string(),
+			timestamp: 0,
+			images: None,
+			videos: None,
+			cached: false,
+			cache_ttl: None,
+			tool_calls: Some(serde_json::json!([{
+				"id": "call_w",
+				"type": "function",
+				"function": {"name": "get_weather", "arguments": "{}"}
+			}])),
+			tool_call_id: None,
+			name: None,
+			thinking: None,
+			id: Some("resp_x".to_string()),
+		},
+		Message {
+			role: "tool".to_string(),
+			content: "72°F sunny".to_string(),
+			timestamp: 0,
+			images: None,
+			videos: None,
+			cached: false,
+			cache_ttl: None,
+			tool_calls: None,
+			tool_call_id: Some("call_w".to_string()),
+			name: Some("get_weather".to_string()),
+			thinking: None,
+			id: None,
+		},
+		// User retried after cancelling the follow-up assistant.
+		Message {
+			role: "user".to_string(),
+			content: "Now write me a poem about it.".to_string(),
+			timestamp: 0,
+			images: None,
+			videos: None,
+			cached: false,
+			cache_ttl: None,
+			tool_calls: None,
+			tool_call_id: None,
+			name: None,
+			thinking: None,
+			id: None,
+		},
+	];
 
-    let input = messages_to_input(&messages, Some("resp_x"), false);
-    assert_eq!(
-        input.len(),
-        2,
-        "tool_result and follow-up user must both be sent"
-    );
-    assert_eq!(input[0]["type"], "function_call_output");
-    assert_eq!(input[0]["call_id"], "call_w");
-    assert_eq!(input[1]["role"], "user");
-    assert_eq!(input[1]["content"], "Now write me a poem about it.");
+	let input = messages_to_input(&messages, Some("resp_x"), false);
+	assert_eq!(input.len(), 2, "tool_result and follow-up user must both be sent");
+	assert_eq!(input[0]["type"], "function_call_output");
+	assert_eq!(input[0]["call_id"], "call_w");
+	assert_eq!(input[1]["role"], "user");
+	assert_eq!(input[1]["content"], "Now write me a poem about it.");
 }
 
 #[test]
 fn test_codex_pricing() {
-    // Test that codex models have pricing defined
-    let cost = calculate_cost("gpt-5-codex", 1000, 500);
-    assert!(cost.is_some());
-    let cost_value = cost.unwrap();
-    // Expected: (1000/1M * 1.25) + (500/1M * 10.0) = 0.00125 + 0.005 = 0.00625
-    assert!((cost_value - 0.00625).abs() < 0.0000001);
+	// Test that codex models have pricing defined
+	let cost = calculate_cost("gpt-5-codex", 1000, 500);
+	assert!(cost.is_some());
+	let cost_value = cost.unwrap();
+	// Expected: (1000/1M * 1.25) + (500/1M * 10.0) = 0.00125 + 0.005 = 0.00625
+	assert!((cost_value - 0.00625).abs() < 0.0000001);
 
-    // Verify gpt-5.2-codex pricing path exists
-    let cost_52 = calculate_cost("gpt-5.2-codex", 1000, 500);
-    assert!(cost_52.is_some());
-    let cost_52_value = cost_52.unwrap();
-    // Expected: (1000/1M * 1.75) + (500/1M * 14.0) = 0.00175 + 0.007 = 0.00875
-    assert!((cost_52_value - 0.00875).abs() < 0.0000001);
+	// Verify gpt-5.2-codex pricing path exists
+	let cost_52 = calculate_cost("gpt-5.2-codex", 1000, 500);
+	assert!(cost_52.is_some());
+	let cost_52_value = cost_52.unwrap();
+	// Expected: (1000/1M * 1.75) + (500/1M * 14.0) = 0.00175 + 0.007 = 0.00875
+	assert!((cost_52_value - 0.00875).abs() < 0.0000001);
 
-    // Verify gpt-5.3-codex pricing path exists
-    let cost_53 = calculate_cost("gpt-5.3-codex", 1000, 500);
-    assert!(cost_53.is_some());
-    let cost_53_value = cost_53.unwrap();
-    assert!((cost_53_value - 0.00875).abs() < 0.0000001);
+	// Verify gpt-5.3-codex pricing path exists
+	let cost_53 = calculate_cost("gpt-5.3-codex", 1000, 500);
+	assert!(cost_53.is_some());
+	let cost_53_value = cost_53.unwrap();
+	assert!((cost_53_value - 0.00875).abs() < 0.0000001);
 }
 
 #[test]
 fn test_cache_pricing_for_gpt_5_2_codex() {
-    // (regular 1000 * 1.75 + cached 1000 * 0.175 + output 500 * 14) / 1M
-    let cost = calculate_cost_with_cache("gpt-5.2-codex", 1000, 0, 1000, 500).unwrap();
-    assert!((cost - 0.008925).abs() < 0.0000001);
+	// (regular 1000 * 1.75 + cached 1000 * 0.175 + output 500 * 14) / 1M
+	let cost = calculate_cost_with_cache("gpt-5.2-codex", 1000, 0, 1000, 500).unwrap();
+	assert!((cost - 0.008925).abs() < 0.0000001);
 }
 
 #[test]
 fn test_gpt_5_6_pricing_and_alias() {
-    let provider = OpenAiProvider::new();
-    let cases = [
-        ("gpt-5.6", 4.00, 20.00, 5.00, 0.40),
-        ("gpt-5.6-sol", 4.00, 20.00, 5.00, 0.40),
-        ("gpt-5.6-terra", 2.00, 12.00, 2.50, 0.20),
-        ("gpt-5.6-luna", 0.20, 1.20, 0.25, 0.02),
-    ];
+	let provider = OpenAiProvider::new();
+	let cases = [
+		("gpt-5.6", 4.00, 20.00, 5.00, 0.40),
+		("gpt-5.6-sol", 4.00, 20.00, 5.00, 0.40),
+		("gpt-5.6-terra", 2.00, 12.00, 2.50, 0.20),
+		("gpt-5.6-luna", 0.20, 1.20, 0.25, 0.02),
+	];
 
-    for (model, input, output, cache_write, cache_read) in cases {
-        let pricing = provider.get_model_pricing(model).unwrap();
-        assert_eq!(pricing.input_price_per_1m, input);
-        assert_eq!(pricing.output_price_per_1m, output);
-        assert_eq!(pricing.cache_write_price_per_1m, cache_write);
-        assert_eq!(pricing.cache_read_price_per_1m, cache_read);
+	for (model, input, output, cache_write, cache_read) in cases {
+		let pricing = provider.get_model_pricing(model).unwrap();
+		assert_eq!(pricing.input_price_per_1m, input);
+		assert_eq!(pricing.output_price_per_1m, output);
+		assert_eq!(pricing.cache_write_price_per_1m, cache_write);
+		assert_eq!(pricing.cache_read_price_per_1m, cache_read);
 
-        let reference = crate::llm::reference_models::get_reference_pricing(model).unwrap();
-        assert_eq!(reference.input_price_per_1m, pricing.input_price_per_1m);
-        assert_eq!(reference.output_price_per_1m, pricing.output_price_per_1m);
-        assert_eq!(
-            reference.cache_write_price_per_1m,
-            pricing.cache_write_price_per_1m
-        );
-        assert_eq!(
-            reference.cache_read_price_per_1m,
-            pricing.cache_read_price_per_1m
-        );
-    }
+		let reference = crate::llm::reference_models::get_reference_pricing(model).unwrap();
+		assert_eq!(reference.input_price_per_1m, pricing.input_price_per_1m);
+		assert_eq!(reference.output_price_per_1m, pricing.output_price_per_1m);
+		assert_eq!(reference.cache_write_price_per_1m, pricing.cache_write_price_per_1m);
+		assert_eq!(reference.cache_read_price_per_1m, pricing.cache_read_price_per_1m);
+	}
 }
 
 #[test]
 fn test_specialized_model_pricing() {
-    let provider = OpenAiProvider::new();
-    let cases = [
-        ("chat-latest", 5.00, 30.00, 5.00, 0.50),
-        ("gpt-rosalind-research", 5.00, 25.00, 5.00, 0.50),
-        ("gpt-5-search-api", 1.25, 10.00, 1.25, 0.125),
-        // Daybreak aliases follow gpt-5.6-sol and gpt-5.6-cyber.
-        ("gpt-daybreak-blue-latest", 4.00, 20.00, 5.00, 0.40),
-        ("gpt-daybreak-red-latest", 12.50, 75.00, 15.625, 1.25),
-        // `chat-latest` must not shadow the versioned chat snapshots.
-        ("gpt-5.3-chat-latest", 1.75, 14.00, 1.75, 0.175),
-        ("gpt-5-chat-latest", 1.25, 10.00, 1.25, 0.125),
-    ];
+	let provider = OpenAiProvider::new();
+	let cases = [
+		("chat-latest", 5.00, 30.00, 5.00, 0.50),
+		("gpt-rosalind-research", 5.00, 25.00, 5.00, 0.50),
+		("gpt-5-search-api", 1.25, 10.00, 1.25, 0.125),
+		// Daybreak aliases follow gpt-5.6-sol and gpt-5.6-cyber.
+		("gpt-daybreak-blue-latest", 4.00, 20.00, 5.00, 0.40),
+		("gpt-daybreak-red-latest", 12.50, 75.00, 15.625, 1.25),
+		// `chat-latest` must not shadow the versioned chat snapshots.
+		("gpt-5.3-chat-latest", 1.75, 14.00, 1.75, 0.175),
+		("gpt-5-chat-latest", 1.25, 10.00, 1.25, 0.125),
+	];
 
-    for (model, input, output, cache_write, cache_read) in cases {
-        let pricing = provider.get_model_pricing(model).unwrap();
-        assert_eq!(pricing.input_price_per_1m, input, "{model}");
-        assert_eq!(pricing.output_price_per_1m, output, "{model}");
-        assert_eq!(pricing.cache_write_price_per_1m, cache_write, "{model}");
-        assert_eq!(pricing.cache_read_price_per_1m, cache_read, "{model}");
-    }
+	for (model, input, output, cache_write, cache_read) in cases {
+		let pricing = provider.get_model_pricing(model).unwrap();
+		assert_eq!(pricing.input_price_per_1m, input, "{model}");
+		assert_eq!(pricing.output_price_per_1m, output, "{model}");
+		assert_eq!(pricing.cache_write_price_per_1m, cache_write, "{model}");
+		assert_eq!(pricing.cache_read_price_per_1m, cache_read, "{model}");
+	}
 }
 
 #[test]
 fn test_o_series_pricing_specific_first() {
-    let provider = OpenAiProvider::new();
-    // Variant rows must win over their base name in the substring lookup.
-    let cases = [
-        ("o1-pro", 150.00, 600.00, 150.00),
-        ("o1", 15.00, 60.00, 7.50),
-        ("o3-pro", 20.00, 80.00, 20.00),
-        ("o3-mini", 1.10, 4.40, 0.55),
-        ("o3", 2.00, 8.00, 0.50),
-        ("o4-mini", 1.10, 4.40, 0.275),
-    ];
+	let provider = OpenAiProvider::new();
+	// Variant rows must win over their base name in the substring lookup.
+	let cases = [
+		("o1-pro", 150.00, 600.00, 150.00),
+		("o1", 15.00, 60.00, 7.50),
+		("o3-pro", 20.00, 80.00, 20.00),
+		("o3-mini", 1.10, 4.40, 0.55),
+		("o3", 2.00, 8.00, 0.50),
+		("o4-mini", 1.10, 4.40, 0.275),
+	];
 
-    for (model, input, output, cache_read) in cases {
-        let pricing = provider.get_model_pricing(model).unwrap();
-        assert_eq!(pricing.input_price_per_1m, input, "{model}");
-        assert_eq!(pricing.output_price_per_1m, output, "{model}");
-        assert_eq!(pricing.cache_read_price_per_1m, cache_read, "{model}");
-    }
+	for (model, input, output, cache_read) in cases {
+		let pricing = provider.get_model_pricing(model).unwrap();
+		assert_eq!(pricing.input_price_per_1m, input, "{model}");
+		assert_eq!(pricing.output_price_per_1m, output, "{model}");
+		assert_eq!(pricing.cache_read_price_per_1m, cache_read, "{model}");
+	}
 }
 
 #[test]
 fn test_alias_capabilities_follow_underlying_model() {
-    let provider = OpenAiProvider::new();
+	let provider = OpenAiProvider::new();
 
-    // All four have a cached-input price on the pricing page.
-    for model in [
-        "chat-latest",
-        "gpt-daybreak-blue-latest",
-        "gpt-daybreak-red-latest",
-        "gpt-rosalind-research",
-    ] {
-        assert!(provider.supports_caching(model), "{model}");
-    }
+	// All four have a cached-input price on the pricing page.
+	for model in [
+		"chat-latest",
+		"gpt-daybreak-blue-latest",
+		"gpt-daybreak-red-latest",
+		"gpt-rosalind-research",
+	] {
+		assert!(provider.supports_caching(model), "{model}");
+	}
 
-    // Daybreak aliases resolve to gpt-5.6 snapshots: explicit cache breakpoints,
-    // `max` effort, and no sampling params.
-    assert!(is_gpt_5_6_or_later("gpt-daybreak-blue-latest"));
-    assert!(is_gpt_5_6_or_later("gpt-daybreak-red-latest"));
-    assert!(!is_gpt_5_6_or_later("chat-latest"));
-    assert!(
-        !provider
-            .supported_sampling_params("gpt-daybreak-blue-latest")
-            .temperature
-    );
-    assert!(
-        provider
-            .supported_sampling_params("chat-latest")
-            .temperature
-    );
+	// Daybreak aliases resolve to gpt-5.6 snapshots: explicit cache breakpoints,
+	// `max` effort, and no sampling params.
+	assert!(is_gpt_5_6_or_later("gpt-daybreak-blue-latest"));
+	assert!(is_gpt_5_6_or_later("gpt-daybreak-red-latest"));
+	assert!(!is_gpt_5_6_or_later("chat-latest"));
+	assert!(
+		!provider
+			.supported_sampling_params("gpt-daybreak-blue-latest")
+			.temperature
+	);
+	assert!(provider.supported_sampling_params("chat-latest").temperature);
 
-    // Long-context tier: sol and daybreak-blue are tiered; cyber and daybreak-red are not.
-    let sol = calculate_cost("gpt-5.6-sol", 300_000, 10_000).unwrap();
-    let blue = calculate_cost("gpt-daybreak-blue-latest", 300_000, 10_000).unwrap();
-    assert!((sol - 2.7).abs() < 0.0000001);
-    assert!((blue - 2.7).abs() < 0.0000001);
-    let cyber = calculate_cost("gpt-5.6-cyber", 300_000, 10_000).unwrap();
-    let red = calculate_cost("gpt-daybreak-red-latest", 300_000, 10_000).unwrap();
-    assert!((cyber - 4.5).abs() < 0.0000001);
-    assert!((red - 4.5).abs() < 0.0000001);
-    let cyber_5_5 = calculate_cost("gpt-5.5-cyber", 300_000, 10_000).unwrap();
-    assert!((cyber_5_5 - 4.5).abs() < 0.0000001);
+	// Long-context tier: sol and daybreak-blue are tiered; cyber and daybreak-red are not.
+	let sol = calculate_cost("gpt-5.6-sol", 300_000, 10_000).unwrap();
+	let blue = calculate_cost("gpt-daybreak-blue-latest", 300_000, 10_000).unwrap();
+	assert!((sol - 2.7).abs() < 0.0000001);
+	assert!((blue - 2.7).abs() < 0.0000001);
+	let cyber = calculate_cost("gpt-5.6-cyber", 300_000, 10_000).unwrap();
+	let red = calculate_cost("gpt-daybreak-red-latest", 300_000, 10_000).unwrap();
+	assert!((cyber - 4.5).abs() < 0.0000001);
+	assert!((red - 4.5).abs() < 0.0000001);
+	let cyber_5_5 = calculate_cost("gpt-5.5-cyber", 300_000, 10_000).unwrap();
+	assert!((cyber_5_5 - 4.5).abs() < 0.0000001);
 }
 
 #[test]
 fn test_gpt_5_4_and_pro_long_context_pricing() {
-    // Below 272K input: standard rates.
-    let standard = calculate_cost("gpt-5.4", 200_000, 10_000).unwrap();
-    assert!((standard - 0.65).abs() < 0.0000001);
+	// Below 272K input: standard rates.
+	let standard = calculate_cost("gpt-5.4", 200_000, 10_000).unwrap();
+	assert!((standard - 0.65).abs() < 0.0000001);
 
-    // Above 272K input: 2x input and 1.5x output for gpt-5.4, gpt-5.4-pro, gpt-5.5-pro.
-    let long = calculate_cost("gpt-5.4", 300_000, 10_000).unwrap();
-    assert!((long - 1.725).abs() < 0.0000001);
-    let long_pro = calculate_cost("gpt-5.4-pro", 300_000, 10_000).unwrap();
-    assert!((long_pro - 20.7).abs() < 0.0000001);
-    let long_55_pro = calculate_cost("gpt-5.5-pro", 300_000, 10_000).unwrap();
-    assert!((long_55_pro - 20.7).abs() < 0.0000001);
+	// Above 272K input: 2x input and 1.5x output for gpt-5.4, gpt-5.4-pro, gpt-5.5-pro.
+	let long = calculate_cost("gpt-5.4", 300_000, 10_000).unwrap();
+	assert!((long - 1.725).abs() < 0.0000001);
+	let long_pro = calculate_cost("gpt-5.4-pro", 300_000, 10_000).unwrap();
+	assert!((long_pro - 20.7).abs() < 0.0000001);
+	let long_55_pro = calculate_cost("gpt-5.5-pro", 300_000, 10_000).unwrap();
+	assert!((long_55_pro - 20.7).abs() < 0.0000001);
 
-    // gpt-5.4-mini and gpt-5.4-nano have no long-context tier.
-    let mini = calculate_cost("gpt-5.4-mini", 300_000, 10_000).unwrap();
-    assert!((mini - 0.27).abs() < 0.0000001);
-    let nano = calculate_cost("gpt-5.4-nano", 300_000, 10_000).unwrap();
-    assert!((nano - 0.0725).abs() < 0.0000001);
+	// gpt-5.4-mini and gpt-5.4-nano have no long-context tier.
+	let mini = calculate_cost("gpt-5.4-mini", 300_000, 10_000).unwrap();
+	assert!((mini - 0.27).abs() < 0.0000001);
+	let nano = calculate_cost("gpt-5.4-nano", 300_000, 10_000).unwrap();
+	assert!((nano - 0.0725).abs() < 0.0000001);
 }
 
 #[test]
 fn test_gpt_5_6_long_context_and_cache_write_pricing() {
-    // Standard tier: regular input + cache write + cache read + output.
-    let standard =
-        calculate_cost_with_cache("gpt-5.6-terra", 100_000, 50_000, 50_000, 10_000).unwrap();
-    assert!((standard - 0.455).abs() < 0.0000001);
+	// Standard tier: regular input + cache write + cache read + output.
+	let standard = calculate_cost_with_cache("gpt-5.6-terra", 100_000, 50_000, 50_000, 10_000).unwrap();
+	assert!((standard - 0.455).abs() < 0.0000001);
 
-    // Above 272K total input: 2x every input/cache rate and 1.5x output.
-    let long = calculate_cost_with_cache("gpt-5.6-terra", 200_000, 50_000, 50_001, 10_000).unwrap();
-    assert!((long - 1.2500004).abs() < 0.0000001);
+	// Above 272K total input: 2x every input/cache rate and 1.5x output.
+	let long = calculate_cost_with_cache("gpt-5.6-terra", 200_000, 50_000, 50_001, 10_000).unwrap();
+	assert!((long - 1.2500004).abs() < 0.0000001);
 }
 
 #[test]
 fn test_gpt_6_astra() {
-    let provider = OpenAiProvider::new();
+	let provider = OpenAiProvider::new();
 
-    assert!(provider.supports_model("gpt-6-astra"));
-    assert_eq!(provider.get_max_input_tokens("gpt-6-astra"), 1_050_000);
-    assert!(provider.supports_vision("gpt-6-astra"));
-    assert!(provider.supports_caching("gpt-6-astra"));
-    assert!(
-        !provider
-            .supported_sampling_params("gpt-6-astra")
-            .temperature
-    );
+	assert!(provider.supports_model("gpt-6-astra"));
+	assert_eq!(provider.get_max_input_tokens("gpt-6-astra"), 1_050_000);
+	assert!(provider.supports_vision("gpt-6-astra"));
+	assert!(provider.supports_caching("gpt-6-astra"));
+	assert!(!provider.supported_sampling_params("gpt-6-astra").temperature);
 
-    let pricing = provider.get_model_pricing("gpt-6-astra").unwrap();
-    assert_eq!(pricing.input_price_per_1m, 10.00);
-    assert_eq!(pricing.output_price_per_1m, 50.00);
-    assert_eq!(pricing.cache_write_price_per_1m, 12.50);
-    assert_eq!(pricing.cache_read_price_per_1m, 1.00);
+	let pricing = provider.get_model_pricing("gpt-6-astra").unwrap();
+	assert_eq!(pricing.input_price_per_1m, 10.00);
+	assert_eq!(pricing.output_price_per_1m, 50.00);
+	assert_eq!(pricing.cache_write_price_per_1m, 12.50);
+	assert_eq!(pricing.cache_read_price_per_1m, 1.00);
 
-    let reference = crate::llm::reference_models::get_reference_pricing("gpt-6-astra").unwrap();
-    assert_eq!(reference.input_price_per_1m, pricing.input_price_per_1m);
-    assert_eq!(reference.output_price_per_1m, pricing.output_price_per_1m);
+	let reference = crate::llm::reference_models::get_reference_pricing("gpt-6-astra").unwrap();
+	assert_eq!(reference.input_price_per_1m, pricing.input_price_per_1m);
+	assert_eq!(reference.output_price_per_1m, pricing.output_price_per_1m);
 
-    // Standard tier: 100K input at $10 + 10K output at $50.
-    let standard = calculate_cost_with_cache("gpt-6-astra", 100_000, 0, 0, 10_000).unwrap();
-    assert!((standard - 1.5).abs() < 0.0000001);
+	// Standard tier: 100K input at $10 + 10K output at $50.
+	let standard = calculate_cost_with_cache("gpt-6-astra", 100_000, 0, 0, 10_000).unwrap();
+	assert!((standard - 1.5).abs() < 0.0000001);
 
-    // Above 272K total input: 2x input/cache rates and 1.5x output.
-    let long = calculate_cost_with_cache("gpt-6-astra", 300_000, 0, 0, 10_000).unwrap();
-    assert!((long - 6.75).abs() < 0.0000001);
+	// Above 272K total input: 2x input/cache rates and 1.5x output.
+	let long = calculate_cost_with_cache("gpt-6-astra", 300_000, 0, 0, 10_000).unwrap();
+	assert!((long - 6.75).abs() < 0.0000001);
 }
 
 #[test]
 fn test_reasoning_off_floors_to_each_family_lowest_level() {
-    // GPT-6 rejects "none" (400: supported values are low..max).
-    for model in ["gpt-6-astra", "gpt-6.1-sol", "gpt-6-luna"] {
-        assert_eq!(
-            reasoning_effort(model, Some(ReasoningEffort::None)),
-            Some("low")
-        );
-    }
-    assert_eq!(
-        reasoning_effort("gpt-5.6-sol", Some(ReasoningEffort::None)),
-        Some("none")
-    );
-    assert_eq!(
-        reasoning_effort("o3", Some(ReasoningEffort::None)),
-        Some("low")
-    );
+	// GPT-6 rejects "none" (400: supported values are low..max).
+	for model in ["gpt-6-astra", "gpt-6.1-sol", "gpt-6-luna"] {
+		assert_eq!(reasoning_effort(model, Some(ReasoningEffort::None)), Some("low"));
+	}
+	assert_eq!(
+		reasoning_effort("gpt-5.6-sol", Some(ReasoningEffort::None)),
+		Some("none")
+	);
+	assert_eq!(reasoning_effort("o3", Some(ReasoningEffort::None)), Some("low"));
 }
 
 #[test]
 fn test_unset_reasoning_effort_uses_model_default() {
-    for model in ["gpt-5.1", "gpt-5.5-pro", "gpt-5.6-sol", "gpt-6-astra", "o3"] {
-        assert_eq!(reasoning_effort(model, None), None, "{model}");
-    }
+	for model in ["gpt-5.1", "gpt-5.5-pro", "gpt-5.6-sol", "gpt-6-astra", "o3"] {
+		assert_eq!(reasoning_effort(model, None), None, "{model}");
+	}
 }
 
 #[test]
 fn test_reasoning_effort_snaps_to_each_model_supported_levels() {
-    use ReasoningEffort::{High, Low, Max, Medium, None as Off, XHigh};
-    let levels = |model: &str| {
-        [Off, Low, Medium, High, XHigh, Max].map(|effort| reasoning_effort(model, Some(effort)))
-    };
+	use ReasoningEffort::{High, Low, Max, Medium, None as Off, XHigh};
+	let levels = |model: &str| [Off, Low, Medium, High, XHigh, Max].map(|effort| reasoning_effort(model, Some(effort)));
 
-    // gpt-5-pro only supports "high".
-    for model in ["gpt-5-pro", "gpt-5-pro-2025-10-06"] {
-        assert_eq!(levels(model), [Some("high"); 6], "{model}");
-    }
-    // Pro models from 5.2 support medium, high, xhigh.
-    for model in ["gpt-5.2-pro", "gpt-5.4-pro", "gpt-5.5-pro"] {
-        assert_eq!(
-            levels(model),
-            ["medium", "medium", "medium", "high", "xhigh", "xhigh"].map(Some),
-            "{model}"
-        );
-    }
-    // gpt-5 supports minimal, low, medium, high.
-    for model in ["gpt-5", "gpt-5-2025-08-07"] {
-        assert_eq!(
-            levels(model),
-            ["minimal", "low", "medium", "high", "high", "high"].map(Some),
-            "{model}"
-        );
-    }
-    // gpt-5.1 supports none, low, medium, high.
-    for model in ["gpt-5.1", "gpt-5.1-2025-11-13"] {
-        assert_eq!(
-            levels(model),
-            ["none", "low", "medium", "high", "high", "high"].map(Some),
-            "{model}"
-        );
-    }
-    // Variants keep the general mapping.
-    assert_eq!(
-        levels("gpt-5.5"),
-        ["none", "low", "medium", "high", "xhigh", "xhigh"].map(Some)
-    );
-    assert_eq!(
-        levels("gpt-5.6-sol"),
-        ["none", "low", "medium", "high", "xhigh", "max"].map(Some)
-    );
-    assert_eq!(
-        levels("gpt-6-astra"),
-        ["low", "low", "medium", "high", "xhigh", "max"].map(Some)
-    );
+	// gpt-5-pro only supports "high".
+	for model in ["gpt-5-pro", "gpt-5-pro-2025-10-06"] {
+		assert_eq!(levels(model), [Some("high"); 6], "{model}");
+	}
+	// Pro models from 5.2 support medium, high, xhigh.
+	for model in ["gpt-5.2-pro", "gpt-5.4-pro", "gpt-5.5-pro"] {
+		assert_eq!(
+			levels(model),
+			["medium", "medium", "medium", "high", "xhigh", "xhigh"].map(Some),
+			"{model}"
+		);
+	}
+	// gpt-5 supports minimal, low, medium, high.
+	for model in ["gpt-5", "gpt-5-2025-08-07"] {
+		assert_eq!(
+			levels(model),
+			["minimal", "low", "medium", "high", "high", "high"].map(Some),
+			"{model}"
+		);
+	}
+	// gpt-5.1 supports none, low, medium, high.
+	for model in ["gpt-5.1", "gpt-5.1-2025-11-13"] {
+		assert_eq!(
+			levels(model),
+			["none", "low", "medium", "high", "high", "high"].map(Some),
+			"{model}"
+		);
+	}
+	// Variants keep the general mapping.
+	assert_eq!(
+		levels("gpt-5.5"),
+		["none", "low", "medium", "high", "xhigh", "xhigh"].map(Some)
+	);
+	assert_eq!(
+		levels("gpt-5.6-sol"),
+		["none", "low", "medium", "high", "xhigh", "max"].map(Some)
+	);
+	assert_eq!(
+		levels("gpt-6-astra"),
+		["low", "low", "medium", "high", "xhigh", "max"].map(Some)
+	);
 }
 
 #[test]
 fn test_gpt_6_sol_and_luna_provider_and_reference_support() {
-    let provider = OpenAiProvider::new();
-    for (model, input, output, cache_write, cache_read) in [
-        ("gpt-6.1-sol", 2.00, 10.00, 2.50, 0.10),
-        ("gpt-6-sol", 2.00, 10.00, 2.50, 0.20),
-        ("gpt-6-luna", 0.10, 0.50, 0.125, 0.01),
-    ] {
-        assert!(provider.supports_model(model));
-        assert!(provider.supports_vision(model));
-        assert!(provider.supports_caching(model));
-        assert!(provider.supports_structured_output(model));
-        assert_eq!(provider.get_max_input_tokens(model), 1_050_000);
-        assert!(is_gpt_5_6_or_later(model));
+	let provider = OpenAiProvider::new();
+	for (model, input, output, cache_write, cache_read) in [
+		("gpt-6.1-sol", 2.00, 10.00, 2.50, 0.10),
+		("gpt-6-sol", 2.00, 10.00, 2.50, 0.20),
+		("gpt-6-luna", 0.10, 0.50, 0.125, 0.01),
+	] {
+		assert!(provider.supports_model(model));
+		assert!(provider.supports_vision(model));
+		assert!(provider.supports_caching(model));
+		assert!(provider.supports_structured_output(model));
+		assert_eq!(provider.get_max_input_tokens(model), 1_050_000);
+		assert!(is_gpt_5_6_or_later(model));
 
-        let sampling = provider.supported_sampling_params(model);
-        assert!(!sampling.temperature && !sampling.top_p && !sampling.top_k);
+		let sampling = provider.supported_sampling_params(model);
+		assert!(!sampling.temperature && !sampling.top_p && !sampling.top_k);
 
-        // Check both public reference facades, including aggregator model IDs.
-        let proxy_model = format!("openai/{model}");
-        for pricing in [
-            provider.get_model_pricing(model).unwrap(),
-            crate::llm::reference_pricing::get_reference_pricing(&proxy_model).unwrap(),
-        ] {
-            assert_eq!(pricing.input_price_per_1m, input, "{model}");
-            assert_eq!(pricing.output_price_per_1m, output, "{model}");
-            assert_eq!(pricing.cache_write_price_per_1m, cache_write, "{model}");
-            assert_eq!(pricing.cache_read_price_per_1m, cache_read, "{model}");
-        }
-        let caps =
-            crate::llm::reference_capabilities::get_reference_capabilities(&proxy_model).unwrap();
-        assert!(caps.vision && caps.structured_output && !caps.video);
-        assert_eq!(caps.max_input_tokens, 1_050_000);
-    }
+		// Check both public reference facades, including aggregator model IDs.
+		let proxy_model = format!("openai/{model}");
+		for pricing in [
+			provider.get_model_pricing(model).unwrap(),
+			crate::llm::reference_pricing::get_reference_pricing(&proxy_model).unwrap(),
+		] {
+			assert_eq!(pricing.input_price_per_1m, input, "{model}");
+			assert_eq!(pricing.output_price_per_1m, output, "{model}");
+			assert_eq!(pricing.cache_write_price_per_1m, cache_write, "{model}");
+			assert_eq!(pricing.cache_read_price_per_1m, cache_read, "{model}");
+		}
+		let caps = crate::llm::reference_capabilities::get_reference_capabilities(&proxy_model).unwrap();
+		assert!(caps.vision && caps.structured_output && !caps.video);
+		assert_eq!(caps.max_input_tokens, 1_050_000);
+	}
 }
 
 #[test]
 fn test_gpt_6_sol_and_luna_long_context_boundary_includes_cache_tokens() {
-    for (model, standard_cost, long_cost) in [
-        ("gpt-6.1-sol", 0.5752, 1.1024002),
-        ("gpt-6-sol", 0.5794, 1.1108004),
-        ("gpt-6-luna", 0.02897, 0.05554002),
-    ] {
-        // Exactly 272K total input stays at standard rates, including cache writes/reads.
-        let standard = calculate_cost_with_cache(model, 200_000, 30_000, 42_000, 9_600).unwrap();
-        assert!((standard - standard_cost).abs() < 1e-9, "{model}");
+	for (model, standard_cost, long_cost) in [
+		("gpt-6.1-sol", 0.5752, 1.1024002),
+		("gpt-6-sol", 0.5794, 1.1108004),
+		("gpt-6-luna", 0.02897, 0.05554002),
+	] {
+		// Exactly 272K total input stays at standard rates, including cache writes/reads.
+		let standard = calculate_cost_with_cache(model, 200_000, 30_000, 42_000, 9_600).unwrap();
+		assert!((standard - standard_cost).abs() < 1e-9, "{model}");
 
-        // One more cache-read token switches the full request to long-context rates.
-        let long = calculate_cost_with_cache(model, 200_000, 30_000, 42_001, 9_600).unwrap();
-        assert!((long - long_cost).abs() < 1e-9, "{model}");
-    }
+		// One more cache-read token switches the full request to long-context rates.
+		let long = calculate_cost_with_cache(model, 200_000, 30_000, 42_001, 9_600).unwrap();
+		assert!((long - long_cost).abs() < 1e-9, "{model}");
+	}
 }
 
 #[test]
 fn test_gpt_5_6_usage_deserializes_cache_writes() {
-    let usage: ResponseUsage = serde_json::from_value(serde_json::json!({
-        "input_tokens": 3_000,
-        "output_tokens": 500,
-        "total_tokens": 3_500,
-        "input_tokens_details": {
-            "cached_tokens": 1_000,
-            "cache_write_tokens": 500
-        }
-    }))
-    .unwrap();
+	let usage: ResponseUsage = serde_json::from_value(serde_json::json!({
+		"input_tokens": 3_000,
+		"output_tokens": 500,
+		"total_tokens": 3_500,
+		"input_tokens_details": {
+			"cached_tokens": 1_000,
+			"cache_write_tokens": 500
+		}
+	}))
+	.unwrap();
 
-    let details = usage.input_tokens_details.unwrap();
-    assert_eq!(details.cached_tokens, 1_000);
-    assert_eq!(details.cache_write_tokens, 500);
+	let details = usage.input_tokens_details.unwrap();
+	assert_eq!(details.cached_tokens, 1_000);
+	assert_eq!(details.cache_write_tokens, 500);
 }
 
 #[test]
 fn test_gpt_5_5_cyber_does_not_fall_through_to_gpt_5_5() {
-    let provider = OpenAiProvider::new();
-    assert!(provider.supports_model("gpt-5.5-cyber"));
-    for pricing in [
-        provider.get_model_pricing("gpt-5.5-cyber").unwrap(),
-        crate::llm::reference_pricing::get_reference_pricing("openai/gpt-5.5-cyber").unwrap(),
-    ] {
-        assert_eq!(pricing.input_price_per_1m, 12.50);
-        assert_eq!(pricing.output_price_per_1m, 75.00);
-        assert_eq!(pricing.cache_write_price_per_1m, 12.50);
-        assert_eq!(pricing.cache_read_price_per_1m, 1.25);
-    }
+	let provider = OpenAiProvider::new();
+	assert!(provider.supports_model("gpt-5.5-cyber"));
+	for pricing in [
+		provider.get_model_pricing("gpt-5.5-cyber").unwrap(),
+		crate::llm::reference_pricing::get_reference_pricing("openai/gpt-5.5-cyber").unwrap(),
+	] {
+		assert_eq!(pricing.input_price_per_1m, 12.50);
+		assert_eq!(pricing.output_price_per_1m, 75.00);
+		assert_eq!(pricing.cache_write_price_per_1m, 12.50);
+		assert_eq!(pricing.cache_read_price_per_1m, 1.25);
+	}
 }
 
 #[test]
 fn test_gpt_realtime_2_family() {
-    let provider = OpenAiProvider::new();
-    for pricing in [
-        provider.get_model_pricing("gpt-realtime-2").unwrap(),
-        crate::llm::reference_pricing::get_reference_pricing("openai/gpt-realtime-2").unwrap(),
-    ] {
-        assert_eq!(pricing.input_price_per_1m, 4.00);
-        assert_eq!(pricing.output_price_per_1m, 24.00);
-        assert_eq!(pricing.cache_read_price_per_1m, 0.40);
-    }
-    // The gpt-realtime-2 row must not shadow the cheaper 2.1-mini row.
-    let mini = provider.get_model_pricing("gpt-realtime-2.1-mini").unwrap();
-    assert_eq!(mini.input_price_per_1m, 0.60);
+	let provider = OpenAiProvider::new();
+	for pricing in [
+		provider.get_model_pricing("gpt-realtime-2").unwrap(),
+		crate::llm::reference_pricing::get_reference_pricing("openai/gpt-realtime-2").unwrap(),
+	] {
+		assert_eq!(pricing.input_price_per_1m, 4.00);
+		assert_eq!(pricing.output_price_per_1m, 24.00);
+		assert_eq!(pricing.cache_read_price_per_1m, 0.40);
+	}
+	// The gpt-realtime-2 row must not shadow the cheaper 2.1-mini row.
+	let mini = provider.get_model_pricing("gpt-realtime-2.1-mini").unwrap();
+	assert_eq!(mini.input_price_per_1m, 0.60);
 
-    for model in [
-        "gpt-realtime-2",
-        "gpt-realtime-2.1",
-        "gpt-realtime-2.1-mini",
-    ] {
-        assert_eq!(provider.get_max_input_tokens(model), 128_000, "{model}");
-        let caps = crate::llm::reference_capabilities::get_reference_capabilities(model).unwrap();
-        assert!(caps.vision, "{model}");
-        assert_eq!(caps.max_input_tokens, 128_000, "{model}");
-    }
-    assert_eq!(provider.get_max_input_tokens("gpt-realtime-1.5"), 32_000);
+	for model in ["gpt-realtime-2", "gpt-realtime-2.1", "gpt-realtime-2.1-mini"] {
+		assert_eq!(provider.get_max_input_tokens(model), 128_000, "{model}");
+		let caps = crate::llm::reference_capabilities::get_reference_capabilities(model).unwrap();
+		assert!(caps.vision, "{model}");
+		assert_eq!(caps.max_input_tokens, 128_000, "{model}");
+	}
+	assert_eq!(provider.get_max_input_tokens("gpt-realtime-1.5"), 32_000);
 }
 
 #[test]
 fn tool_images_use_responses_output_blocks_in_replay_and_continuation() {
-    for text in ["caption", ""] {
-        let message = shared::tests::tool_image_message(text);
-        for previous_id in [None, Some("resp_previous")] {
-            let input = messages_to_input(std::slice::from_ref(&message), previous_id, false);
-            assert_eq!(input.len(), 1);
-            assert_eq!(input[0]["type"], "function_call_output");
-            assert_eq!(input[0]["call_id"], "call_image");
-            assert_eq!(input[0]["output"][1]["type"], "input_image");
-            assert_eq!(
-                input[0]["output"][1]["image_url"],
-                "data:image/png;base64,aW1hZ2U="
-            );
-            assert_eq!(
-                input[0]["output"][2]["image_url"],
-                "https://example.com/screenshot.jpg"
-            );
-        }
-    }
-    let text = Message::tool("body", "call_text", "view").with_cache_marker();
-    let input = messages_to_input(&[text], None, true);
-    assert_eq!(input[0]["output"], "body");
+	for text in ["caption", ""] {
+		let message = shared::tests::tool_image_message(text);
+		for previous_id in [None, Some("resp_previous")] {
+			let input = messages_to_input(std::slice::from_ref(&message), previous_id, false);
+			assert_eq!(input.len(), 1);
+			assert_eq!(input[0]["type"], "function_call_output");
+			assert_eq!(input[0]["call_id"], "call_image");
+			assert_eq!(input[0]["output"][1]["type"], "input_image");
+			assert_eq!(input[0]["output"][1]["image_url"], "data:image/png;base64,aW1hZ2U=");
+			assert_eq!(input[0]["output"][2]["image_url"], "https://example.com/screenshot.jpg");
+		}
+	}
+	let text = Message::tool("body", "call_text", "view").with_cache_marker();
+	let input = messages_to_input(&[text], None, true);
+	assert_eq!(input[0]["output"], "body");
 }

@@ -21,42 +21,42 @@ use std::str::FromStr;
 /// Result of a single document reranking
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RerankResult {
-    /// Original index of the document in the input list
-    pub index: usize,
-    /// The document text
-    pub document: String,
-    /// Relevance score (higher = more relevant)
-    pub relevance_score: f64,
+	/// Original index of the document in the input list
+	pub index: usize,
+	/// The document text
+	pub document: String,
+	/// Relevance score (higher = more relevant)
+	pub relevance_score: f64,
 }
 
 /// Response from a reranking operation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RerankResponse {
-    /// Reranked results sorted by relevance score (descending)
-    pub results: Vec<RerankResult>,
-    /// Total tokens used in the reranking operation
-    pub total_tokens: usize,
+	/// Reranked results sorted by relevance score (descending)
+	pub results: Vec<RerankResult>,
+	/// Total tokens used in the reranking operation
+	pub total_tokens: usize,
 }
 
 /// Supported reranker provider types
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RerankProviderType {
-    Voyage,
-    Cohere,
-    Jina,
-    MixedBread,
-    Local,
-    #[cfg(feature = "fastembed")]
-    FastEmbed,
-    #[cfg(feature = "huggingface")]
-    HuggingFace,
+	Voyage,
+	Cohere,
+	Jina,
+	MixedBread,
+	Local,
+	#[cfg(feature = "fastembed")]
+	FastEmbed,
+	#[cfg(feature = "huggingface")]
+	HuggingFace,
 }
 
 impl FromStr for RerankProviderType {
-    type Err = String;
+	type Err = String;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		match s.to_lowercase().as_str() {
             "voyage" => Ok(Self::Voyage),
             "cohere" => Ok(Self::Cohere),
             "jina" => Ok(Self::Jina),
@@ -69,46 +69,46 @@ impl FromStr for RerankProviderType {
             "huggingface" | "hf" => Ok(Self::HuggingFace),
             _ => Err(format!("Unknown reranker provider: {}", s)),
         }
-    }
+	}
 }
 
 impl RerankProviderType {
-    /// Get provider name as string
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Voyage => "voyage",
-            Self::Cohere => "cohere",
-            Self::Jina => "jina",
-            Self::MixedBread => "mixedbread",
-            Self::Local => "local",
-            #[cfg(feature = "fastembed")]
-            Self::FastEmbed => "fastembed",
-            #[cfg(feature = "huggingface")]
-            Self::HuggingFace => "huggingface",
-        }
-    }
+	/// Get provider name as string
+	pub fn as_str(&self) -> &'static str {
+		match self {
+			Self::Voyage => "voyage",
+			Self::Cohere => "cohere",
+			Self::Jina => "jina",
+			Self::MixedBread => "mixedbread",
+			Self::Local => "local",
+			#[cfg(feature = "fastembed")]
+			Self::FastEmbed => "fastembed",
+			#[cfg(feature = "huggingface")]
+			Self::HuggingFace => "huggingface",
+		}
+	}
 }
 
 /// Parse provider and model from a string in format "provider:model"
 pub fn parse_provider_model(input: &str) -> Result<(RerankProviderType, String)> {
-    let input = input.trim();
-    let (provider_str, model) = if let Some((provider, model)) = input.split_once(':') {
-        (provider.trim(), model.trim())
-    } else {
-        ("voyage", input)
-    };
+	let input = input.trim();
+	let (provider_str, model) = if let Some((provider, model)) = input.split_once(':') {
+		(provider.trim(), model.trim())
+	} else {
+		("voyage", input)
+	};
 
-    if provider_str.is_empty() || model.is_empty() {
-        return Err(anyhow::anyhow!(
-            "Model format must be 'provider:model' or just 'model' (defaults to voyage)"
-        ));
-    }
+	if provider_str.is_empty() || model.is_empty() {
+		return Err(anyhow::anyhow!(
+			"Model format must be 'provider:model' or just 'model' (defaults to voyage)"
+		));
+	}
 
-    let provider = provider_str
-        .parse::<RerankProviderType>()
-        .map_err(|e| anyhow::anyhow!("{}", e))?;
+	let provider = provider_str
+		.parse::<RerankProviderType>()
+		.map_err(|e| anyhow::anyhow!("{}", e))?;
 
-    Ok((provider, model.to_string()))
+	Ok((provider, model.to_string()))
 }
 
 #[cfg(test)]

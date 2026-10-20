@@ -16,373 +16,345 @@ use super::*;
 
 #[test]
 fn test_tool_call_and_result_round_trip() {
-    use crate::llm::tool_calls::GenericToolCall;
-    use crate::llm::types::Message;
+	use crate::llm::tool_calls::GenericToolCall;
+	use crate::llm::types::Message;
 
-    let tool_calls = serde_json::to_value(vec![GenericToolCall {
-        id: "call_weather".to_string(),
-        name: "get_weather".to_string(),
-        arguments: serde_json::json!({"city": "Bangkok"}),
-        meta: None,
-    }])
-    .unwrap();
+	let tool_calls = serde_json::to_value(vec![GenericToolCall {
+		id: "call_weather".to_string(),
+		name: "get_weather".to_string(),
+		arguments: serde_json::json!({"city": "Bangkok"}),
+		meta: None,
+	}])
+	.unwrap();
 
-    let assistant = Message {
-        tool_calls: Some(tool_calls),
-        ..Message::assistant("")
-    };
-    let tool_result = Message::tool(
-        r#"{"temperature_c":31,"condition":"sunny"}"#,
-        "call_weather",
-        "get_weather",
-    );
+	let assistant = Message {
+		tool_calls: Some(tool_calls),
+		..Message::assistant("")
+	};
+	let tool_result = Message::tool(
+		r#"{"temperature_c":31,"condition":"sunny"}"#,
+		"call_weather",
+		"get_weather",
+	);
 
-    let converted = convert_messages(&[assistant, tool_result]);
-    let serialized = serde_json::to_value(converted).unwrap();
+	let converted = convert_messages(&[assistant, tool_result]);
+	let serialized = serde_json::to_value(converted).unwrap();
 
-    assert_eq!(serialized[0]["tool_calls"][0]["id"], "call_weather");
-    assert_eq!(
-        serialized[0]["tool_calls"][0]["function"]["arguments"],
-        r#"{"city":"Bangkok"}"#
-    );
-    assert_eq!(serialized[1]["role"], "tool");
-    assert_eq!(serialized[1]["tool_call_id"], "call_weather");
-    assert_eq!(
-        serialized[1]["content"],
-        r#"{"temperature_c":31,"condition":"sunny"}"#
-    );
-    assert!(serialized[1].get("tool_calls_id").is_none());
+	assert_eq!(serialized[0]["tool_calls"][0]["id"], "call_weather");
+	assert_eq!(
+		serialized[0]["tool_calls"][0]["function"]["arguments"],
+		r#"{"city":"Bangkok"}"#
+	);
+	assert_eq!(serialized[1]["role"], "tool");
+	assert_eq!(serialized[1]["tool_call_id"], "call_weather");
+	assert_eq!(serialized[1]["content"], r#"{"temperature_c":31,"condition":"sunny"}"#);
+	assert!(serialized[1].get("tool_calls_id").is_none());
 }
 
 #[test]
 fn test_model_support() {
-    let provider = ZaiProvider::new();
-    assert!(provider.supports_model("glm-5.1"));
-    assert!(provider.supports_model("glm-5.3"));
-    assert!(provider.supports_model("glm-5.3-flash"));
-    assert!(provider.supports_model("glm-5.3-flashx"));
-    assert!(provider.supports_model("glm-5.1-turbo"));
-    assert!(provider.supports_model("glm-5"));
-    assert!(provider.supports_model("glm-5-turbo"));
-    assert!(provider.supports_model("glm-5v-turbo"));
-    assert!(provider.supports_model("glm-4.7"));
-    assert!(provider.supports_model("glm-4.7-flash"));
-    assert!(provider.supports_model("glm-4.6"));
-    assert!(provider.supports_model("glm-4.5"));
-    // Near-miss rejections: invalid models that contain no pricing entry as a substring
-    assert!(!provider.supports_model("glm5.3-flash"));
-    assert!(!provider.supports_model("glmm-5.3-flash"));
-    // Deprecated models
-    assert!(!provider.supports_model("glm-4"));
-    assert!(!provider.supports_model("glm-4-flash"));
-    assert!(!provider.supports_model("gpt-4"));
+	let provider = ZaiProvider::new();
+	assert!(provider.supports_model("glm-5.1"));
+	assert!(provider.supports_model("glm-5.3"));
+	assert!(provider.supports_model("glm-5.3-flash"));
+	assert!(provider.supports_model("glm-5.3-flashx"));
+	assert!(provider.supports_model("glm-5.1-turbo"));
+	assert!(provider.supports_model("glm-5"));
+	assert!(provider.supports_model("glm-5-turbo"));
+	assert!(provider.supports_model("glm-5v-turbo"));
+	assert!(provider.supports_model("glm-4.7"));
+	assert!(provider.supports_model("glm-4.7-flash"));
+	assert!(provider.supports_model("glm-4.6"));
+	assert!(provider.supports_model("glm-4.5"));
+	// Near-miss rejections: invalid models that contain no pricing entry as a substring
+	assert!(!provider.supports_model("glm5.3-flash"));
+	assert!(!provider.supports_model("glmm-5.3-flash"));
+	// Deprecated models
+	assert!(!provider.supports_model("glm-4"));
+	assert!(!provider.supports_model("glm-4-flash"));
+	assert!(!provider.supports_model("gpt-4"));
 }
 
 #[test]
 fn test_model_support_case_insensitive() {
-    let provider = ZaiProvider::new();
-    // Test uppercase
-    assert!(provider.supports_model("GLM-5-Turbo"));
-    assert!(provider.supports_model("GLM-5.1"));
-    // Test mixed case
-    assert!(provider.supports_model("Glm-4.7"));
-    assert!(provider.supports_model("GLM-4.6"));
+	let provider = ZaiProvider::new();
+	// Test uppercase
+	assert!(provider.supports_model("GLM-5-Turbo"));
+	assert!(provider.supports_model("GLM-5.1"));
+	// Test mixed case
+	assert!(provider.supports_model("Glm-4.7"));
+	assert!(provider.supports_model("GLM-4.6"));
 }
 
 #[test]
 fn test_cost_calculation() {
-    // Test GLM-5-Turbo: $1.20 input, $4.00 output
-    let cost = calculate_cost("glm-5-turbo", 1_000_000, 0, 1_000_000);
-    assert!((cost.unwrap() - 5.20).abs() < 0.01); // 1.20 + 4.00
+	// Test GLM-5-Turbo: $1.20 input, $4.00 output
+	let cost = calculate_cost("glm-5-turbo", 1_000_000, 0, 1_000_000);
+	assert!((cost.unwrap() - 5.20).abs() < 0.01); // 1.20 + 4.00
 
-    // Test GLM-5.1: $1.40 input, $4.40 output
-    let cost = calculate_cost("glm-5.1", 1_000_000, 0, 1_000_000);
-    assert!((cost.unwrap() - 5.80).abs() < 0.01); // 1.40 + 4.40
+	// Test GLM-5.1: $1.40 input, $4.40 output
+	let cost = calculate_cost("glm-5.1", 1_000_000, 0, 1_000_000);
+	assert!((cost.unwrap() - 5.80).abs() < 0.01); // 1.40 + 4.40
 
-    // Test GLM-5.3: mirrors GLM-5.2 pricing ($1.40 input, $4.40 output)
-    let cost = calculate_cost("glm-5.3", 1_000_000, 0, 1_000_000);
-    assert!((cost.unwrap() - 5.80).abs() < 0.01); // 1.40 + 4.40
+	// Test GLM-5.3: mirrors GLM-5.2 pricing ($1.40 input, $4.40 output)
+	let cost = calculate_cost("glm-5.3", 1_000_000, 0, 1_000_000);
+	assert!((cost.unwrap() - 5.80).abs() < 0.01); // 1.40 + 4.40
 
-    // Test GLM-5.3-FlashX: $0.37 input, $1.25 output — must resolve to its own
-    // entry, not the glm-5.3-flash substring match
-    let cost = calculate_cost("glm-5.3-flashx", 1_000_000, 0, 1_000_000);
-    assert!((cost.unwrap() - 1.62).abs() < 0.01); // 0.37 + 1.25
-                                                  // GLM-5.3-FlashX cached input: $0.075
-    let cost = calculate_cost("glm-5.3-flashx", 0, 1_000_000, 0);
-    assert!((cost.unwrap() - 0.075).abs() < 0.0001);
+	// Test GLM-5.3-FlashX: $0.37 input, $1.25 output — must resolve to its own
+	// entry, not the glm-5.3-flash substring match
+	let cost = calculate_cost("glm-5.3-flashx", 1_000_000, 0, 1_000_000);
+	assert!((cost.unwrap() - 1.62).abs() < 0.01); // 0.37 + 1.25
+											   // GLM-5.3-FlashX cached input: $0.075
+	let cost = calculate_cost("glm-5.3-flashx", 0, 1_000_000, 0);
+	assert!((cost.unwrap() - 0.075).abs() < 0.0001);
 
-    // Test GLM-4.5: $0.60 input, $2.20 output
-    let cost = calculate_cost("glm-4.5", 1_000_000, 0, 1_000_000);
-    assert!((cost.unwrap() - 2.80).abs() < 0.01); // 0.60 + 2.20
+	// Test GLM-4.5: $0.60 input, $2.20 output
+	let cost = calculate_cost("glm-4.5", 1_000_000, 0, 1_000_000);
+	assert!((cost.unwrap() - 2.80).abs() < 0.01); // 0.60 + 2.20
 
-    // Test GLM-4.7: $0.60 input, $2.20 output
-    let cost = calculate_cost("glm-4.7", 1_000_000, 0, 1_000_000);
-    assert!((cost.unwrap() - 2.80).abs() < 0.01); // 0.60 + 2.20
+	// Test GLM-4.7: $0.60 input, $2.20 output
+	let cost = calculate_cost("glm-4.7", 1_000_000, 0, 1_000_000);
+	assert!((cost.unwrap() - 2.80).abs() < 0.01); // 0.60 + 2.20
 
-    // Test GLM-4.7-flash: free model
-    let cost = calculate_cost("glm-4.7-flash", 1_000_000, 0, 1_000_000);
-    assert_eq!(cost.unwrap(), 0.0);
+	// Test GLM-4.7-flash: free model
+	let cost = calculate_cost("glm-4.7-flash", 1_000_000, 0, 1_000_000);
+	assert_eq!(cost.unwrap(), 0.0);
 }
 
 #[test]
 fn glm_5_3_flash_promo_switches_to_list_price_at_documented_cutoff() {
-    use std::time::{Duration, SystemTime};
+	use std::time::{Duration, SystemTime};
 
-    let before =
-        SystemTime::UNIX_EPOCH + Duration::from_secs(GLM_5_3_FLASH_PROMO_END_UNIX_SECS - 1);
-    let promo = calculate_cost_at("glm-5.3-flash", 1_000_000, 0, 1_000_000, before).unwrap();
-    assert!((promo - 0.325).abs() < 0.0001);
+	let before = SystemTime::UNIX_EPOCH + Duration::from_secs(GLM_5_3_FLASH_PROMO_END_UNIX_SECS - 1);
+	let promo = calculate_cost_at("glm-5.3-flash", 1_000_000, 0, 1_000_000, before).unwrap();
+	assert!((promo - 0.325).abs() < 0.0001);
 
-    let cutoff = SystemTime::UNIX_EPOCH + Duration::from_secs(GLM_5_3_FLASH_PROMO_END_UNIX_SECS);
-    let list = calculate_cost_at("glm-5.3-flash", 1_000_000, 0, 1_000_000, cutoff).unwrap();
-    assert!((list - 0.65).abs() < 0.0001);
+	let cutoff = SystemTime::UNIX_EPOCH + Duration::from_secs(GLM_5_3_FLASH_PROMO_END_UNIX_SECS);
+	let list = calculate_cost_at("glm-5.3-flash", 1_000_000, 0, 1_000_000, cutoff).unwrap();
+	assert!((list - 0.65).abs() < 0.0001);
 
-    // FlashX was never part of the Flash promo: list price even before the cutoff
-    let flashx = calculate_cost_at("glm-5.3-flashx", 1_000_000, 0, 1_000_000, before).unwrap();
-    assert!((flashx - 1.62).abs() < 0.0001);
+	// FlashX was never part of the Flash promo: list price even before the cutoff
+	let flashx = calculate_cost_at("glm-5.3-flashx", 1_000_000, 0, 1_000_000, before).unwrap();
+	assert!((flashx - 1.62).abs() < 0.0001);
 }
 
 #[test]
 fn test_reasoning_effort_floors_to_glm_5_3_supported_levels() {
-    // GLM-5.3 / GLM-5.3-Flash reject anything but low/high/max with a 400.
-    assert_eq!(
-        reasoning_effort_value("glm-5.3", ReasoningEffort::Medium),
-        "low"
-    );
-    assert_eq!(
-        reasoning_effort_value("glm-5.3", ReasoningEffort::XHigh),
-        "high"
-    );
-    assert_eq!(
-        reasoning_effort_value("glm-5.3-flash", ReasoningEffort::Medium),
-        "low"
-    );
-    assert_eq!(
-        reasoning_effort_value("GLM-5.3", ReasoningEffort::Max),
-        "max"
-    );
+	// GLM-5.3 / GLM-5.3-Flash reject anything but low/high/max with a 400.
+	assert_eq!(reasoning_effort_value("glm-5.3", ReasoningEffort::Medium), "low");
+	assert_eq!(reasoning_effort_value("glm-5.3", ReasoningEffort::XHigh), "high");
+	assert_eq!(reasoning_effort_value("glm-5.3-flash", ReasoningEffort::Medium), "low");
+	assert_eq!(reasoning_effort_value("GLM-5.3", ReasoningEffort::Max), "max");
 
-    // GLM-5.2 maps intermediate levels itself, so the caller's level is kept.
-    assert_eq!(
-        reasoning_effort_value("glm-5.2", ReasoningEffort::Medium),
-        "medium"
-    );
-    assert_eq!(
-        reasoning_effort_value("glm-5.2", ReasoningEffort::XHigh),
-        "xhigh"
-    );
-    assert_eq!(
-        reasoning_effort_value("glm-5.2", ReasoningEffort::Max),
-        "max"
-    );
+	// GLM-5.2 maps intermediate levels itself, so the caller's level is kept.
+	assert_eq!(reasoning_effort_value("glm-5.2", ReasoningEffort::Medium), "medium");
+	assert_eq!(reasoning_effort_value("glm-5.2", ReasoningEffort::XHigh), "xhigh");
+	assert_eq!(reasoning_effort_value("glm-5.2", ReasoningEffort::Max), "max");
 }
 
 /// GLM-5.3 cannot stop thinking, so no reasoning runs it at its lowest level;
 /// other models get `thinking: disabled`.
 #[test]
 fn test_no_reasoning_floors_glm_5_3_and_disables_other_models() {
-    let enabled = || Some(serde_json::json!({ "type": "enabled" }));
-    assert_eq!(
-        thinking_fields("glm-5.3", Some(ReasoningEffort::None)),
-        (enabled(), Some("low"))
-    );
-    assert_eq!(
-        thinking_fields("glm-5.3-flash", Some(ReasoningEffort::None)),
-        (enabled(), Some("low"))
-    );
-    assert_eq!(
-        thinking_fields("glm-5.2", Some(ReasoningEffort::None)),
-        (Some(serde_json::json!({ "type": "disabled" })), None)
-    );
-    assert_eq!(
-        thinking_fields("glm-5.3", Some(ReasoningEffort::High)),
-        (enabled(), Some("high"))
-    );
-    assert_eq!(thinking_fields("glm-5.3", None), (None, None));
+	let enabled = || Some(serde_json::json!({ "type": "enabled" }));
+	assert_eq!(
+		thinking_fields("glm-5.3", Some(ReasoningEffort::None)),
+		(enabled(), Some("low"))
+	);
+	assert_eq!(
+		thinking_fields("glm-5.3-flash", Some(ReasoningEffort::None)),
+		(enabled(), Some("low"))
+	);
+	assert_eq!(
+		thinking_fields("glm-5.2", Some(ReasoningEffort::None)),
+		(Some(serde_json::json!({ "type": "disabled" })), None)
+	);
+	assert_eq!(
+		thinking_fields("glm-5.3", Some(ReasoningEffort::High)),
+		(enabled(), Some("high"))
+	);
+	assert_eq!(thinking_fields("glm-5.3", None), (None, None));
 }
 
 #[test]
 fn test_extract_thinking_from_reasoning_content() {
-    let content = "Final answer";
-    let (thinking, clean) = extract_thinking(content, Some("step by step".to_string()));
+	let content = "Final answer";
+	let (thinking, clean) = extract_thinking(content, Some("step by step".to_string()));
 
-    assert_eq!(clean, "Final answer");
-    assert!(thinking.is_some());
-    assert_eq!(thinking.as_ref().unwrap().content, "step by step");
+	assert_eq!(clean, "Final answer");
+	assert!(thinking.is_some());
+	assert_eq!(thinking.as_ref().unwrap().content, "step by step");
 }
 
 #[test]
 fn test_extract_thinking_from_think_tags() {
-    let content = "before <think>internal reasoning</think> after";
-    let (thinking, clean) = extract_thinking(content, None);
+	let content = "before <think>internal reasoning</think> after";
+	let (thinking, clean) = extract_thinking(content, None);
 
-    assert_eq!(clean, "beforeafter");
-    assert!(thinking.is_some());
-    assert_eq!(thinking.as_ref().unwrap().content, "internal reasoning");
+	assert_eq!(clean, "beforeafter");
+	assert!(thinking.is_some());
+	assert_eq!(thinking.as_ref().unwrap().content, "internal reasoning");
 }
 
 #[test]
 fn test_cost_calculation_case_insensitive() {
-    let cost = calculate_cost("GLM-5-TURBO", 1_000_000, 0, 1_000_000);
-    assert!((cost.unwrap() - 5.20).abs() < 0.01);
+	let cost = calculate_cost("GLM-5-TURBO", 1_000_000, 0, 1_000_000);
+	assert!((cost.unwrap() - 5.20).abs() < 0.01);
 
-    let cost = calculate_cost("gLm-4.7-FlAsH", 1_000_000, 0, 1_000_000);
-    assert_eq!(cost.unwrap(), 0.0);
+	let cost = calculate_cost("gLm-4.7-FlAsH", 1_000_000, 0, 1_000_000);
+	assert_eq!(cost.unwrap(), 0.0);
 
-    let cost = calculate_cost("glm-4.5-AIR", 1_000_000, 0, 1_000_000);
-    assert!((cost.unwrap() - 1.30).abs() < 0.01); // 0.20 + 1.10
+	let cost = calculate_cost("glm-4.5-AIR", 1_000_000, 0, 1_000_000);
+	assert!((cost.unwrap() - 1.30).abs() < 0.01); // 0.20 + 1.10
 }
 
 #[test]
 fn test_cost_with_partial_tokens() {
-    let cost = calculate_cost("glm-4.5", 500_000, 0, 500_000);
-    assert!((cost.unwrap() - 1.40).abs() < 0.01); // 0.60 * 0.5 + 2.20 * 0.5
+	let cost = calculate_cost("glm-4.5", 500_000, 0, 500_000);
+	assert!((cost.unwrap() - 1.40).abs() < 0.01); // 0.60 * 0.5 + 2.20 * 0.5
 }
 
 #[test]
 fn test_unknown_model() {
-    let cost = calculate_cost("unknown-model", 1_000_000, 0, 1_000_000);
-    assert_eq!(cost, None);
+	let cost = calculate_cost("unknown-model", 1_000_000, 0, 1_000_000);
+	assert_eq!(cost, None);
 
-    // Deprecated models should return None
-    let cost = calculate_cost("glm-4", 1_000_000, 0, 1_000_000);
-    assert_eq!(cost, None);
+	// Deprecated models should return None
+	let cost = calculate_cost("glm-4", 1_000_000, 0, 1_000_000);
+	assert_eq!(cost, None);
 }
 
 #[test]
 fn test_cost_with_cache_read_tokens() {
-    // GLM-4.7 pricing: input 0.60, cache_read 0.11, output 2.20
-    // regular_input=100K => 0.06
-    // cache_read=200K => 0.022
-    // output=100K => 0.22
-    // total => 0.302
-    let cost = calculate_cost("glm-4.7", 100_000, 200_000, 100_000).unwrap();
-    assert!((cost - 0.302).abs() < 0.0001);
+	// GLM-4.7 pricing: input 0.60, cache_read 0.11, output 2.20
+	// regular_input=100K => 0.06
+	// cache_read=200K => 0.022
+	// output=100K => 0.22
+	// total => 0.302
+	let cost = calculate_cost("glm-4.7", 100_000, 200_000, 100_000).unwrap();
+	assert!((cost - 0.302).abs() < 0.0001);
 }
 
 #[test]
 fn historical_reasoning_is_preserved_for_zai() {
-    use crate::llm::types::{Message, ThinkingBlock};
-    let think = |c: &str| ThinkingBlock {
-        content: c.to_string(),
-        tokens: 0,
-    };
-    let mut older = Message::assistant("older");
-    older.thinking = Some(think("old reasoning"));
-    let mut newer = Message::assistant("newer");
-    newer.thinking = Some(think("current reasoning"));
+	use crate::llm::types::{Message, ThinkingBlock};
+	let think = |c: &str| ThinkingBlock {
+		content: c.to_string(),
+		tokens: 0,
+	};
+	let mut older = Message::assistant("older");
+	older.thinking = Some(think("old reasoning"));
+	let mut newer = Message::assistant("newer");
+	newer.thinking = Some(think("current reasoning"));
 
-    let out = serde_json::to_value(convert_messages(&[
-        Message::user("go"),
-        older,
-        Message::user("again"),
-        newer,
-    ]))
-    .unwrap();
+	let out = serde_json::to_value(convert_messages(&[
+		Message::user("go"),
+		older,
+		Message::user("again"),
+		newer,
+	]))
+	.unwrap();
 
-    // Z.ai requires the complete unmodified reasoning history back: dropping
-    // it to save context breaks the chain and the model re-derives.
-    assert_eq!(out[1]["reasoning_content"], "old reasoning");
-    assert_eq!(out[3]["reasoning_content"], "current reasoning");
+	// Z.ai requires the complete unmodified reasoning history back: dropping
+	// it to save context breaks the chain and the model re-derives.
+	assert_eq!(out[1]["reasoning_content"], "old reasoning");
+	assert_eq!(out[3]["reasoning_content"], "current reasoning");
 }
 
 #[test]
 fn test_zai_usage_deserialize_prompt_tokens_shape() {
-    let parsed: ZaiUsage = serde_json::from_value(serde_json::json!({
-        "prompt_tokens": 173,
-        "completion_tokens": 104,
-        "total_tokens": 277,
-        "prompt_tokens_details": { "cached_tokens": 43 }
-    }))
-    .expect("prompt_tokens shape should deserialize");
-    assert_eq!(parsed.prompt_tokens, 173);
-    assert_eq!(parsed.prompt_tokens_details.cached_tokens, 43);
+	let parsed: ZaiUsage = serde_json::from_value(serde_json::json!({
+		"prompt_tokens": 173,
+		"completion_tokens": 104,
+		"total_tokens": 277,
+		"prompt_tokens_details": { "cached_tokens": 43 }
+	}))
+	.expect("prompt_tokens shape should deserialize");
+	assert_eq!(parsed.prompt_tokens, 173);
+	assert_eq!(parsed.prompt_tokens_details.cached_tokens, 43);
 }
 
 #[test]
 fn test_provider_capabilities() {
-    let provider = ZaiProvider::new();
-    assert!(provider.supports_caching("glm-4.7"));
-    assert!(provider.supports_structured_output("glm-4.7"));
-    // json_object only — schema is NOT enforced (no json_schema response_format)
-    assert!(!provider.enforces_response_schema("glm-4.7"));
-    // Vision models
-    assert!(provider.supports_vision("glm-5v-turbo"));
-    assert!(provider.supports_vision("glm-4.6v"));
-    assert!(provider.supports_vision("glm-4.6v-flash"));
-    assert!(provider.supports_vision("glm-4.5v"));
-    assert!(provider.supports_vision("glm-ocr"));
-    // GLM-5.3-Flash: native image/video input; both 5.3 variants have 1M context.
-    assert!(provider.supports_vision("glm-5.3-flash"));
-    assert!(provider.supports_video("glm-5.3-flash"));
-    assert_eq!(provider.get_max_input_tokens("glm-5.3-flash"), 1_000_000);
-    assert_eq!(provider.get_max_input_tokens("glm-5.3"), 1_000_000);
-    // GLM-5.3-FlashX shares Flash's modalities and 1M context
-    assert!(provider.supports_vision("glm-5.3-flashx"));
-    assert!(provider.supports_video("glm-5.3-flashx"));
-    assert_eq!(provider.get_max_input_tokens("glm-5.3-flashx"), 1_000_000);
-    // GLM-5 / GLM-5-Turbo: 200K per the model pages
-    assert_eq!(provider.get_max_input_tokens("glm-5"), 200_000);
-    assert_eq!(provider.get_max_input_tokens("glm-5-turbo"), 200_000);
-    // Context windows from the Z.ai models overview
-    assert_eq!(provider.get_max_input_tokens("glm-5.2"), 1_000_000);
-    assert_eq!(provider.get_max_input_tokens("glm-5.1"), 200_000);
-    assert_eq!(provider.get_max_input_tokens("glm-4.6"), 200_000);
-    assert_eq!(provider.get_max_input_tokens("glm-4.6v"), 128_000);
-    assert_eq!(provider.get_max_input_tokens("glm-4.5-flash"), 200_000);
-    assert_eq!(provider.get_max_input_tokens("glm-4.5v"), 64_000);
-    assert_eq!(provider.get_max_input_tokens("glm-4.5-air"), 131_072);
-    // Non-vision models
-    assert!(!provider.supports_vision("glm-5.1"));
-    assert!(!provider.supports_vision("glm-5-turbo"));
-    assert!(!provider.supports_vision("glm-5"));
-    assert!(!provider.supports_vision("glm-4.7"));
+	let provider = ZaiProvider::new();
+	assert!(provider.supports_caching("glm-4.7"));
+	assert!(provider.supports_structured_output("glm-4.7"));
+	// json_object only — schema is NOT enforced (no json_schema response_format)
+	assert!(!provider.enforces_response_schema("glm-4.7"));
+	// Vision models
+	assert!(provider.supports_vision("glm-5v-turbo"));
+	assert!(provider.supports_vision("glm-4.6v"));
+	assert!(provider.supports_vision("glm-4.6v-flash"));
+	assert!(provider.supports_vision("glm-4.5v"));
+	assert!(provider.supports_vision("glm-ocr"));
+	// GLM-5.3-Flash: native image/video input; both 5.3 variants have 1M context.
+	assert!(provider.supports_vision("glm-5.3-flash"));
+	assert!(provider.supports_video("glm-5.3-flash"));
+	assert_eq!(provider.get_max_input_tokens("glm-5.3-flash"), 1_000_000);
+	assert_eq!(provider.get_max_input_tokens("glm-5.3"), 1_000_000);
+	// GLM-5.3-FlashX shares Flash's modalities and 1M context
+	assert!(provider.supports_vision("glm-5.3-flashx"));
+	assert!(provider.supports_video("glm-5.3-flashx"));
+	assert_eq!(provider.get_max_input_tokens("glm-5.3-flashx"), 1_000_000);
+	// GLM-5 / GLM-5-Turbo: 200K per the model pages
+	assert_eq!(provider.get_max_input_tokens("glm-5"), 200_000);
+	assert_eq!(provider.get_max_input_tokens("glm-5-turbo"), 200_000);
+	// Context windows from the Z.ai models overview
+	assert_eq!(provider.get_max_input_tokens("glm-5.2"), 1_000_000);
+	assert_eq!(provider.get_max_input_tokens("glm-5.1"), 200_000);
+	assert_eq!(provider.get_max_input_tokens("glm-4.6"), 200_000);
+	assert_eq!(provider.get_max_input_tokens("glm-4.6v"), 128_000);
+	assert_eq!(provider.get_max_input_tokens("glm-4.5-flash"), 200_000);
+	assert_eq!(provider.get_max_input_tokens("glm-4.5v"), 64_000);
+	assert_eq!(provider.get_max_input_tokens("glm-4.5-air"), 131_072);
+	// Non-vision models
+	assert!(!provider.supports_vision("glm-5.1"));
+	assert!(!provider.supports_vision("glm-5-turbo"));
+	assert!(!provider.supports_vision("glm-5"));
+	assert!(!provider.supports_vision("glm-4.7"));
 }
 
 #[test]
 fn image_attachments_become_multimodal_content() {
-    use crate::llm::types::{ImageAttachment, ImageData, Message, SourceType};
-    // The regression this pins: a vision turn used to serialize as a plain text
-    // string, so GLM-5.3-Flash never received the image and answered as if blind.
-    let msg = Message::user("what is on the image?").with_images(vec![ImageAttachment {
-        data: ImageData::Base64("QUJD".to_string()),
-        media_type: "image/jpeg".to_string(),
-        source_type: SourceType::Clipboard,
-        dimensions: None,
-        size_bytes: None,
-    }]);
-    let converted = convert_messages(std::slice::from_ref(&msg));
-    let content = converted[0].content.clone().unwrap();
-    assert_eq!(content[0]["type"], "text");
-    assert_eq!(content[0]["text"], "what is on the image?");
-    assert_eq!(content[1]["type"], "image_url");
-    assert_eq!(
-        content[1]["image_url"]["url"],
-        "data:image/jpeg;base64,QUJD"
-    );
+	use crate::llm::types::{ImageAttachment, ImageData, Message, SourceType};
+	// The regression this pins: a vision turn used to serialize as a plain text
+	// string, so GLM-5.3-Flash never received the image and answered as if blind.
+	let msg = Message::user("what is on the image?").with_images(vec![ImageAttachment {
+		data: ImageData::Base64("QUJD".to_string()),
+		media_type: "image/jpeg".to_string(),
+		source_type: SourceType::Clipboard,
+		dimensions: None,
+		size_bytes: None,
+	}]);
+	let converted = convert_messages(std::slice::from_ref(&msg));
+	let content = converted[0].content.clone().unwrap();
+	assert_eq!(content[0]["type"], "text");
+	assert_eq!(content[0]["text"], "what is on the image?");
+	assert_eq!(content[1]["type"], "image_url");
+	assert_eq!(content[1]["image_url"]["url"], "data:image/jpeg;base64,QUJD");
 
-    // A text-only turn keeps the plain string shape Z.ai expects.
-    let plain = convert_messages(&[Message::user("hi")]);
-    assert_eq!(plain[0].content, Some(serde_json::json!("hi")));
+	// A text-only turn keeps the plain string shape Z.ai expects.
+	let plain = convert_messages(&[Message::user("hi")]);
+	assert_eq!(plain[0].content, Some(serde_json::json!("hi")));
 }
 
 #[test]
 fn test_zai_replays_thinking_for_every_model() {
-    let provider = ZaiProvider::new();
-    assert!(provider.replays_thinking("glm-5.3"));
-    assert!(provider.replays_thinking("glm-4.7"));
+	let provider = ZaiProvider::new();
+	assert!(provider.replays_thinking("glm-5.3"));
+	assert!(provider.replays_thinking("glm-4.7"));
 }
 
 #[test]
 fn tool_images_follow_tool_results_without_losing_call_association() {
-    let messages = [shared::tests::tool_image_message("")];
-    let value = serde_json::to_value(convert_messages(&messages)).unwrap();
-    assert_eq!(value[0]["role"], "tool");
-    assert_eq!(value[0]["tool_call_id"], "call_image");
-    assert_eq!(value[0]["content"], "");
-    assert_eq!(value[1]["role"], "user");
-    assert_eq!(
-        value[1]["content"][1]["image_url"]["url"],
-        "data:image/png;base64,aW1hZ2U="
-    );
+	let messages = [shared::tests::tool_image_message("")];
+	let value = serde_json::to_value(convert_messages(&messages)).unwrap();
+	assert_eq!(value[0]["role"], "tool");
+	assert_eq!(value[0]["tool_call_id"], "call_image");
+	assert_eq!(value[0]["content"], "");
+	assert_eq!(value[1]["role"], "user");
+	assert_eq!(
+		value[1]["content"][1]["image_url"]["url"],
+		"data:image/png;base64,aW1hZ2U="
+	);
 }

@@ -24,33 +24,33 @@ use octolib::llm::{ChatCompletionParams, Message, ProviderFactory};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let model_spec = std::env::args()
-        .nth(1)
-        .unwrap_or_else(|| "inception:mercury-2.5".to_string());
-    let (provider, model) = ProviderFactory::get_provider_for_model(&model_spec)?;
+	let model_spec = std::env::args()
+		.nth(1)
+		.unwrap_or_else(|| "inception:mercury-2.5".to_string());
+	let (provider, model) = ProviderFactory::get_provider_for_model(&model_spec)?;
 
-    println!("Provider: {}", provider.name());
-    println!("Model: {}", model);
+	println!("Provider: {}", provider.name());
+	println!("Model: {}", model);
 
-    let messages = vec![Message::user(
-        "In one short sentence, what is a diffusion language model?",
-    )];
-    // Mercury reasons by default, so leave headroom for reasoning tokens
-    let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1024);
+	let messages = vec![Message::user(
+		"In one short sentence, what is a diffusion language model?",
+	)];
+	// Mercury reasons by default, so leave headroom for reasoning tokens
+	let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1024);
 
-    let response = provider.chat_completion(params).await?;
-    println!("Response: {}", response.content);
-    if let Some(usage) = &response.exchange.usage {
-        println!(
-            "Tokens: input={} output={} reasoning={} cached={} total={} cost={:?}",
-            usage.input_tokens,
-            usage.output_tokens,
-            usage.reasoning_tokens,
-            usage.cache_read_tokens,
-            usage.total_tokens,
-            usage.cost
-        );
-    }
+	let response = provider.chat_completion(params).await?;
+	println!("Response: {}", response.content);
+	if let Some(usage) = &response.exchange.usage {
+		println!(
+			"Tokens: input={} output={} reasoning={} cached={} total={} cost={:?}",
+			usage.input_tokens,
+			usage.output_tokens,
+			usage.reasoning_tokens,
+			usage.cache_read_tokens,
+			usage.total_tokens,
+			usage.cost
+		);
+	}
 
-    Ok(())
+	Ok(())
 }

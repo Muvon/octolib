@@ -27,69 +27,63 @@ use octolib::llm::{ChatCompletionParams, Message, ProviderFactory};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt::init();
+	tracing_subscriber::fmt::init();
 
-    // Fireworks model IDs use the `accounts/fireworks/models/<name>` namespace.
-    let model_spec = "fireworks:accounts/fireworks/models/kimi-k2p6";
-    let (provider, model) = ProviderFactory::get_provider_for_model(model_spec)?;
+	// Fireworks model IDs use the `accounts/fireworks/models/<name>` namespace.
+	let model_spec = "fireworks:accounts/fireworks/models/kimi-k2p6";
+	let (provider, model) = ProviderFactory::get_provider_for_model(model_spec)?;
 
-    println!("Provider: {}", provider.name());
-    println!("Model: {}", model);
-    println!("Caching supported: {}", provider.supports_caching(&model));
-    println!(
-        "Structured output: {}",
-        provider.supports_structured_output(&model)
-    );
-    println!(
-        "Max input tokens: {}",
-        provider.get_max_input_tokens(&model)
-    );
-    if let Some(p) = provider.get_model_pricing(&model) {
-        println!(
-            "Pricing per 1M: input ${:.4}, output ${:.4}, cache_read ${:.4}",
-            p.input_price_per_1m, p.output_price_per_1m, p.cache_read_price_per_1m
-        );
-    }
+	println!("Provider: {}", provider.name());
+	println!("Model: {}", model);
+	println!("Caching supported: {}", provider.supports_caching(&model));
+	println!("Structured output: {}", provider.supports_structured_output(&model));
+	println!("Max input tokens: {}", provider.get_max_input_tokens(&model));
+	if let Some(p) = provider.get_model_pricing(&model) {
+		println!(
+			"Pricing per 1M: input ${:.4}, output ${:.4}, cache_read ${:.4}",
+			p.input_price_per_1m, p.output_price_per_1m, p.cache_read_price_per_1m
+		);
+	}
 
-    // ---- First turn -------------------------------------------------------
-    let messages = vec![Message::user(
-        "In one short sentence, what is the Fireworks AI inference platform?",
-    )];
-    let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 256);
+	// ---- First turn -------------------------------------------------------
+	let messages = vec![Message::user(
+		"In one short sentence, what is the Fireworks AI inference platform?",
+	)];
+	let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 256);
 
-    println!("\n=== Turn 1 ===");
-    let response = provider.chat_completion(params).await?;
-    println!("Response: {}", response.content);
-    if let Some(usage) = &response.exchange.usage {
-        println!(
-            "Tokens: input={} cache_read={} output={} total={}",
-            usage.input_tokens, usage.cache_read_tokens, usage.output_tokens, usage.total_tokens
-        );
-        if let Some(cost) = usage.cost {
-            println!("Cost: ${:.6}", cost);
-        }
-    }
+	println!("\n=== Turn 1 ===");
+	let response = provider.chat_completion(params).await?;
+	println!("Response: {}", response.content);
+	if let Some(usage) = &response.exchange.usage {
+		println!(
+			"Tokens: input={} cache_read={} output={} total={}",
+			usage.input_tokens, usage.cache_read_tokens, usage.output_tokens, usage.total_tokens
+		);
+		if let Some(cost) = usage.cost {
+			println!("Cost: ${:.6}", cost);
+		}
+	}
 
-    // ---- Second turn (same prefix → exercises automatic cache) -----------
-    let messages = vec![
-        Message::user("In one short sentence, what is the Fireworks AI inference platform?"),
-        Message::assistant(&response.content),
-        Message::user("Now name two open-weight model families it serves."),
-    ];
-    let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 256);
+	// ---- Second turn (same prefix → exercises automatic cache) -----------
+	let messages = vec![
+		Message::user("In one short sentence, what is the Fireworks AI inference platform?"),
+		Message::assistant(&response.content),
+		Message::user("Now name two open-weight model families it serves."),
+	];
+	let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 256);
 
-    println!("\n=== Turn 2 (cache should warm up) ===");
-    let response = provider.chat_completion(params).await?;
-    println!("Response: {}", response.content);
-    if let Some(usage) = &response.exchange.usage {
-        println!(
-            "Tokens: input={} cache_read={} output={} total={}",
-            usage.input_tokens, usage.cache_read_tokens, usage.output_tokens, usage.total_tokens
-        );
-        if let Some(cost) = usage.cost {
-            println!("Cost: ${:.6}", cost);
-        }
-    }
+	println!("\n=== Turn 2 (cache should warm up) ===");
+	let response = provider.chat_completion(params).await?;
+	println!("Response: {}", response.content);
+	if let Some(usage) = &response.exchange.usage {
+		println!(
+			"Tokens: input={} cache_read={} output={} total={}",
+			usage.input_tokens, usage.cache_read_tokens, usage.output_tokens, usage.total_tokens
+		);
+		if let Some(cost) = usage.cost {
+			println!("Cost: ${:.6}", cost);
+		}
+	}
 
-    Ok(())
+	Ok(())
 }

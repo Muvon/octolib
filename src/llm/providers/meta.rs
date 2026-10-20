@@ -30,7 +30,7 @@
 //! - `META_API_URL`: Optional endpoint override
 
 use crate::llm::providers::openai_compat::{
-    chat_completion as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
+	chat_completion as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
 };
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderResponse};
@@ -43,15 +43,15 @@ use std::env;
 pub struct MetaProvider;
 
 impl Default for MetaProvider {
-    fn default() -> Self {
-        Self::new()
-    }
+	fn default() -> Self {
+		Self::new()
+	}
 }
 
 impl MetaProvider {
-    pub fn new() -> Self {
-        Self
-    }
+	pub fn new() -> Self {
+		Self
+	}
 }
 
 const META_API_KEY_ENV: &str = "META_API_KEY";
@@ -67,14 +67,14 @@ const META_API_URL: &str = "https://api.meta.ai/v1/chat/completions";
 // for permission to train on prompts/completions. Contributor patterns must
 // stay before their base versions because matching is substring-based.
 const PRICING: &[PricingTuple] = &[
-    ("muse-wonder-1.0", 4.00, 20.00, 4.00, 0.20),
-    // Contributor tier (1.3 / 1.2): $0.10 in / $0.20 out / $0.002 cached
-    ("muse-spark-1.3-contributor", 0.10, 0.20, 0.10, 0.002),
-    ("muse-spark-1.2-contributor", 0.10, 0.20, 0.10, 0.002),
-    // Standard tier (1.1 / 1.2 / 1.3 share the same rates)
-    ("muse-spark-1.3", 1.25, 4.25, 1.25, 0.15),
-    ("muse-spark-1.2", 1.25, 4.25, 1.25, 0.15),
-    ("muse-spark-1.1", 1.25, 4.25, 1.25, 0.15),
+	("muse-wonder-1.0", 4.00, 20.00, 4.00, 0.20),
+	// Contributor tier (1.3 / 1.2): $0.10 in / $0.20 out / $0.002 cached
+	("muse-spark-1.3-contributor", 0.10, 0.20, 0.10, 0.002),
+	("muse-spark-1.2-contributor", 0.10, 0.20, 0.10, 0.002),
+	// Standard tier (1.1 / 1.2 / 1.3 share the same rates)
+	("muse-spark-1.3", 1.25, 4.25, 1.25, 0.15),
+	("muse-spark-1.2", 1.25, 4.25, 1.25, 0.15),
+	("muse-spark-1.1", 1.25, 4.25, 1.25, 0.15),
 ];
 
 /// Context window shared by Muse Wonder and every Muse Spark version.
@@ -82,105 +82,103 @@ const MAX_INPUT_TOKENS: usize = 1_048_576;
 
 #[async_trait::async_trait]
 impl AiProvider for MetaProvider {
-    fn name(&self) -> &str {
-        "meta"
-    }
+	fn name(&self) -> &str {
+		"meta"
+	}
 
-    /// Closed first-party catalog: only priced Model API models are accepted.
-    fn supports_model(&self, model: &str) -> bool {
-        is_model_in_pricing_table(model, PRICING)
-    }
+	/// Closed first-party catalog: only priced Model API models are accepted.
+	fn supports_model(&self, model: &str) -> bool {
+		is_model_in_pricing_table(model, PRICING)
+	}
 
-    fn get_api_key(&self) -> Result<String> {
-        env::var(META_API_KEY_ENV)
-            .or_else(|_| env::var(MODEL_API_KEY_ENV))
-            .map_err(|_| {
-                anyhow::anyhow!(
-                    "Meta Model API key not found in environment variables: {} or {}",
-                    META_API_KEY_ENV,
-                    MODEL_API_KEY_ENV
-                )
-            })
-    }
+	fn get_api_key(&self) -> Result<String> {
+		env::var(META_API_KEY_ENV)
+			.or_else(|_| env::var(MODEL_API_KEY_ENV))
+			.map_err(|_| {
+				anyhow::anyhow!(
+					"Meta Model API key not found in environment variables: {} or {}",
+					META_API_KEY_ENV,
+					MODEL_API_KEY_ENV
+				)
+			})
+	}
 
-    /// Prompt caching is implicit on Model API; hits report `cached_tokens`.
-    fn supports_caching(&self, _model: &str) -> bool {
-        true
-    }
+	/// Prompt caching is implicit on Model API; hits report `cached_tokens`.
+	fn supports_caching(&self, _model: &str) -> bool {
+		true
+	}
 
-    /// Text, image, video, audio and PDF input on Muse Wonder and Muse Spark.
-    fn supports_vision(&self, _model: &str) -> bool {
-        true
-    }
+	/// Text, image, video, audio and PDF input on Muse Wonder and Muse Spark.
+	fn supports_vision(&self, _model: &str) -> bool {
+		true
+	}
 
-    fn supports_video(&self, _model: &str) -> bool {
-        true
-    }
+	fn supports_video(&self, _model: &str) -> bool {
+		true
+	}
 
-    /// `response_format: json_schema` constrains decoding server-side, so
-    /// responses are schema-enforced natively.
-    fn supports_structured_output(&self, _model: &str) -> bool {
-        true
-    }
+	/// `response_format: json_schema` constrains decoding server-side, so
+	/// responses are schema-enforced natively.
+	fn supports_structured_output(&self, _model: &str) -> bool {
+		true
+	}
 
-    fn enforces_response_schema(&self, _model: &str) -> bool {
-        true
-    }
+	fn enforces_response_schema(&self, _model: &str) -> bool {
+		true
+	}
 
-    /// Only `tool_choice: "auto"` is accepted; none/required/named return 400.
-    fn supports_required_tool_choice(&self, _model: &str) -> bool {
-        false
-    }
+	/// Only `tool_choice: "auto"` is accepted; none/required/named return 400.
+	fn supports_required_tool_choice(&self, _model: &str) -> bool {
+		false
+	}
 
-    fn get_max_input_tokens(&self, _model: &str) -> usize {
-        MAX_INPUT_TOKENS
-    }
+	fn get_max_input_tokens(&self, _model: &str) -> usize {
+		MAX_INPUT_TOKENS
+	}
 
-    fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
-        crate::llm::utils::get_model_pricing(model, PRICING).map(
-            |(input, output, cache_write, cache_read)| {
-                crate::llm::types::ModelPricing::new(input, output, cache_write, cache_read)
-            },
-        )
-    }
+	fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
+		crate::llm::utils::get_model_pricing(model, PRICING).map(|(input, output, cache_write, cache_read)| {
+			crate::llm::types::ModelPricing::new(input, output, cache_write, cache_read)
+		})
+	}
 
-    async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-        let api_key = self.get_api_key()?;
-        let api_url = get_api_url(META_API_URL_ENV, META_API_URL);
-        let model = params.model.clone();
+	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
+		let api_key = self.get_api_key()?;
+		let api_url = get_api_url(META_API_URL_ENV, META_API_URL);
+		let model = params.model.clone();
 
-        let mut response = openai_compat_chat_completion(
-            OpenAiCompatConfig {
-                provider_name: "meta",
-                usage_fallback_cost: None,
-                use_response_cost: true,
-                enforces_response_schema: true,
-                supports_required_tool_choice: false,
-                supports_parallel_tool_calls: true,
-            },
-            api_key,
-            api_url,
-            params,
-        )
-        .await?;
+		let mut response = openai_compat_chat_completion(
+			OpenAiCompatConfig {
+				provider_name: "meta",
+				usage_fallback_cost: None,
+				use_response_cost: true,
+				enforces_response_schema: true,
+				supports_required_tool_choice: false,
+				supports_parallel_tool_calls: true,
+			},
+			api_key,
+			api_url,
+			params,
+		)
+		.await?;
 
-        // Meta reports token counts but no cost in the response — derive it
-        // from the local pricing table so downstream cost tracking sees a value.
-        if let Some(ref mut usage) = response.exchange.usage {
-            if usage.cost.is_none() {
-                if let Some(pricing) = self.get_model_pricing(&model) {
-                    usage.cost = Some(pricing.calculate_cost(
-                        usage.input_tokens,
-                        usage.cache_write_tokens,
-                        usage.cache_read_tokens,
-                        usage.billable_output_tokens(),
-                    ));
-                }
-            }
-        }
+		// Meta reports token counts but no cost in the response — derive it
+		// from the local pricing table so downstream cost tracking sees a value.
+		if let Some(ref mut usage) = response.exchange.usage {
+			if usage.cost.is_none() {
+				if let Some(pricing) = self.get_model_pricing(&model) {
+					usage.cost = Some(pricing.calculate_cost(
+						usage.input_tokens,
+						usage.cache_write_tokens,
+						usage.cache_read_tokens,
+						usage.billable_output_tokens(),
+					));
+				}
+			}
+		}
 
-        Ok(response)
-    }
+		Ok(response)
+	}
 }
 
 #[cfg(test)]

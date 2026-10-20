@@ -17,96 +17,94 @@ use crate::llm::utils::is_model_in_pricing_table;
 
 #[test]
 fn test_supports_model() {
-    let provider = GroqProvider::new();
-    assert!(provider.supports_model("openai/gpt-oss-120b"));
-    assert!(provider.supports_model("qwen/qwen3.8-27b"));
-    assert!(provider.supports_model("any-future-model"));
-    assert!(!provider.supports_model(""));
+	let provider = GroqProvider::new();
+	assert!(provider.supports_model("openai/gpt-oss-120b"));
+	assert!(provider.supports_model("qwen/qwen3.8-27b"));
+	assert!(provider.supports_model("any-future-model"));
+	assert!(!provider.supports_model(""));
 }
 
 #[test]
 fn test_default_capabilities() {
-    let provider = GroqProvider::new();
-    assert_eq!(provider.name(), "groq");
-    assert!(provider.supports_structured_output("any-model"));
-    // Cached-input models
-    assert!(provider.supports_caching("openai/gpt-oss-120b"));
-    assert!(provider.supports_caching("openai/gpt-oss-20b"));
-    assert!(provider.supports_caching("openai/gpt-oss-safeguard-20b"));
-    // Non-cached models
-    assert!(!provider.supports_caching("qwen/qwen3.8-27b"));
+	let provider = GroqProvider::new();
+	assert_eq!(provider.name(), "groq");
+	assert!(provider.supports_structured_output("any-model"));
+	// Cached-input models
+	assert!(provider.supports_caching("openai/gpt-oss-120b"));
+	assert!(provider.supports_caching("openai/gpt-oss-20b"));
+	assert!(provider.supports_caching("openai/gpt-oss-safeguard-20b"));
+	// Non-cached models
+	assert!(!provider.supports_caching("qwen/qwen3.8-27b"));
 }
 
 #[test]
 fn test_pricing_gpt_oss() {
-    let provider = GroqProvider::new();
+	let provider = GroqProvider::new();
 
-    let p = provider.get_model_pricing("openai/gpt-oss-120b").unwrap();
-    assert_eq!(p.input_price_per_1m, 0.15);
-    assert_eq!(p.output_price_per_1m, 0.60);
-    assert_eq!(p.cache_read_price_per_1m, 0.075);
+	let p = provider.get_model_pricing("openai/gpt-oss-120b").unwrap();
+	assert_eq!(p.input_price_per_1m, 0.15);
+	assert_eq!(p.output_price_per_1m, 0.60);
+	assert_eq!(p.cache_read_price_per_1m, 0.075);
 
-    let p = provider.get_model_pricing("openai/gpt-oss-20b").unwrap();
-    assert_eq!(p.input_price_per_1m, 0.075);
-    assert_eq!(p.output_price_per_1m, 0.30);
-    assert_eq!(p.cache_read_price_per_1m, 0.0375);
+	let p = provider.get_model_pricing("openai/gpt-oss-20b").unwrap();
+	assert_eq!(p.input_price_per_1m, 0.075);
+	assert_eq!(p.output_price_per_1m, 0.30);
+	assert_eq!(p.cache_read_price_per_1m, 0.0375);
 
-    let p = provider
-        .get_model_pricing("openai/gpt-oss-safeguard-20b")
-        .unwrap();
-    assert_eq!(p.input_price_per_1m, 0.075);
-    assert_eq!(p.output_price_per_1m, 0.30);
-    assert_eq!(p.cache_read_price_per_1m, 0.0375);
+	let p = provider.get_model_pricing("openai/gpt-oss-safeguard-20b").unwrap();
+	assert_eq!(p.input_price_per_1m, 0.075);
+	assert_eq!(p.output_price_per_1m, 0.30);
+	assert_eq!(p.cache_read_price_per_1m, 0.0375);
 }
 
 #[test]
 fn test_pricing_qwen() {
-    let provider = GroqProvider::new();
+	let provider = GroqProvider::new();
 
-    let p = provider.get_model_pricing("qwen/qwen3.8-27b").unwrap();
-    assert_eq!(p.input_price_per_1m, 0.80);
-    assert_eq!(p.output_price_per_1m, 4.00);
-    assert!(!provider.supports_caching("qwen/qwen3.8-27b"));
-    assert!(provider.supports_vision("qwen/qwen3.8-27b"));
+	let p = provider.get_model_pricing("qwen/qwen3.8-27b").unwrap();
+	assert_eq!(p.input_price_per_1m, 0.80);
+	assert_eq!(p.output_price_per_1m, 4.00);
+	assert!(!provider.supports_caching("qwen/qwen3.8-27b"));
+	assert!(provider.supports_vision("qwen/qwen3.8-27b"));
 }
 
 #[test]
 fn test_retired_models_removed() {
-    let provider = GroqProvider::new();
-    for model in [
-        "qwen/qwen3.6-27b",
-        "qwen/qwen3-32b",
-        "meta-llama/llama-4-scout-17b-16e-instruct",
-        "moonshotai/kimi-k2-instruct-0905",
-        "llama-3.3-70b-versatile",
-        "llama-3.1-8b-instant",
-    ] {
-        assert!(!is_model_in_pricing_table(model, PRICING), "{model}");
-        assert!(!provider.supports_caching(model), "{model}");
-    }
+	let provider = GroqProvider::new();
+	for model in [
+		"qwen/qwen3.6-27b",
+		"qwen/qwen3-32b",
+		"meta-llama/llama-4-scout-17b-16e-instruct",
+		"moonshotai/kimi-k2-instruct-0905",
+		"llama-3.3-70b-versatile",
+		"llama-3.1-8b-instant",
+	] {
+		assert!(!is_model_in_pricing_table(model, PRICING), "{model}");
+		assert!(!provider.supports_caching(model), "{model}");
+	}
 }
 
 #[test]
 fn test_pricing_falls_back_to_reference() {
-    let provider = GroqProvider::new();
-    assert!(!is_model_in_pricing_table("gpt-oss-120b", PRICING));
-    let p = provider.get_model_pricing("gpt-oss-120b").unwrap();
-    assert!(p.input_price_per_1m > 0.0);
+	let provider = GroqProvider::new();
+	assert!(!is_model_in_pricing_table("gpt-oss-120b", PRICING));
+	let p = provider.get_model_pricing("gpt-oss-120b").unwrap();
+	assert!(p.input_price_per_1m > 0.0);
 }
 
 #[test]
 fn test_cost_calculation_cached_input() {
-    let provider = GroqProvider::new();
-    let pricing = provider.get_model_pricing("openai/gpt-oss-120b").unwrap();
+	let provider = GroqProvider::new();
+	let pricing = provider.get_model_pricing("openai/gpt-oss-120b").unwrap();
 
-    // 1M regular input + 500K output, no cache
-    let cost = pricing.calculate_cost(1_000_000, 0, 0, 500_000);
-    let expected = 0.15 + 0.5 * 0.60; // $0.45
-    assert!((cost - expected).abs() < 0.001);
+	// 1M regular input + 500K output, no cache
+	let cost = pricing.calculate_cost(1_000_000, 0, 0, 500_000);
+	let expected = 0.15 + 0.5 * 0.60; // $0.45
+	assert!((cost - expected).abs() < 0.001);
 
-    // 500K regular + 500K cache_read + 500K output → cached saves money
-    let cost_cached = pricing.calculate_cost(500_000, 0, 500_000, 500_000);
-    let expected_cached = 0.5 * 0.15 + 0.5 * 0.075 + 0.5 * 0.60; // $0.4125
-    assert!((cost_cached - expected_cached).abs() < 0.001);
-    assert!(cost_cached < cost);
+	// 500K regular + 500K cache_read + 500K output → cached saves money
+	let cost_cached = pricing.calculate_cost(500_000, 0, 500_000, 500_000);
+	let expected_cached = 0.5 * 0.15 + 0.5 * 0.075 + 0.5 * 0.60; // $0.4125
+	assert!((cost_cached - expected_cached).abs() < 0.001);
+	assert!(cost_cached < cost);
 }

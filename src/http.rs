@@ -26,8 +26,7 @@ const DEFAULT_USER_AGENT: &str = concat!("octolib/", env!("CARGO_PKG_VERSION"));
 /// `User-Agent` sent with every upstream request. reqwest sends none by default
 /// and some upstreams (OpenCode) reject anonymous requests, so octolib always
 /// identifies itself; embedding apps rename it with [`set_user_agent`].
-static USER_AGENT: LazyLock<ArcSwap<String>> =
-    LazyLock::new(|| ArcSwap::from_pointee(DEFAULT_USER_AGENT.to_string()));
+static USER_AGENT: LazyLock<ArcSwap<String>> = LazyLock::new(|| ArcSwap::from_pointee(DEFAULT_USER_AGENT.to_string()));
 
 /// Identify the calling application in the `User-Agent` of every upstream
 /// request, replacing the `octolib/<version>` default.
@@ -36,14 +35,13 @@ static USER_AGENT: LazyLock<ArcSwap<String>> =
 /// requests keep the old client and pooled connections are dropped. Values that
 /// are empty or not a valid header are ignored.
 pub fn set_user_agent(user_agent: impl Into<String>) {
-    let user_agent = user_agent.into();
-    if user_agent.trim().is_empty() || reqwest::header::HeaderValue::from_str(&user_agent).is_err()
-    {
-        tracing::warn!(user_agent = %user_agent, "ignoring invalid user agent");
-        return;
-    }
-    USER_AGENT.store(std::sync::Arc::new(user_agent));
-    refresh_http_client();
+	let user_agent = user_agent.into();
+	if user_agent.trim().is_empty() || reqwest::header::HeaderValue::from_str(&user_agent).is_err() {
+		tracing::warn!(user_agent = %user_agent, "ignoring invalid user agent");
+		return;
+	}
+	USER_AGENT.store(std::sync::Arc::new(user_agent));
+	refresh_http_client();
 }
 
 /// Process-wide shared HTTP client, swappable on connection errors.
@@ -98,22 +96,21 @@ pub fn set_user_agent(user_agent: impl Into<String>) {
 /// probed and removed before they can be reused, regardless of whether the
 /// connection is HTTP/2 (PING-based detection) or HTTP/1.1 (TCP keepalive
 /// probe-based detection).
-static HTTP_CLIENT: LazyLock<ArcSwap<reqwest::Client>> =
-    LazyLock::new(|| ArcSwap::from_pointee(build_http_client()));
+static HTTP_CLIENT: LazyLock<ArcSwap<reqwest::Client>> = LazyLock::new(|| ArcSwap::from_pointee(build_http_client()));
 
 fn build_http_client() -> reqwest::Client {
-    reqwest::Client::builder()
-        .user_agent(USER_AGENT.load().as_str())
-        .connect_timeout(Duration::from_secs(20))
-        .tcp_keepalive(Duration::from_secs(10))
-        .tcp_keepalive_interval(Duration::from_secs(5))
-        .tcp_nodelay(true)
-        .pool_idle_timeout(Duration::from_secs(15))
-        .http2_keep_alive_interval(Duration::from_secs(10))
-        .http2_keep_alive_while_idle(true)
-        .http2_keep_alive_timeout(Duration::from_secs(10))
-        .build()
-        .expect("failed to build HTTP client")
+	reqwest::Client::builder()
+		.user_agent(USER_AGENT.load().as_str())
+		.connect_timeout(Duration::from_secs(20))
+		.tcp_keepalive(Duration::from_secs(10))
+		.tcp_keepalive_interval(Duration::from_secs(5))
+		.tcp_nodelay(true)
+		.pool_idle_timeout(Duration::from_secs(15))
+		.http2_keep_alive_interval(Duration::from_secs(10))
+		.http2_keep_alive_while_idle(true)
+		.http2_keep_alive_timeout(Duration::from_secs(10))
+		.build()
+		.expect("failed to build HTTP client")
 }
 
 /// Returns a cloned handle to the process-wide shared HTTP client.
@@ -123,9 +120,9 @@ fn build_http_client() -> reqwest::Client {
 /// swaps the global).
 #[cfg(any(feature = "llm", feature = "media", feature = "evaluation"))]
 pub(crate) fn http_client() -> reqwest::Client {
-    // load_full() clones the Arc (cheap atomic increment),
-    // then dereference and clone the Client (cheap — Client is Arc internally)
-    (*HTTP_CLIENT.load_full()).clone()
+	// load_full() clones the Arc (cheap atomic increment),
+	// then dereference and clone the Client (cheap — Client is Arc internally)
+	(*HTTP_CLIENT.load_full()).clone()
 }
 
 /// Atomically replace the shared HTTP client with a fresh instance.
@@ -138,7 +135,7 @@ pub(crate) fn http_client() -> reqwest::Client {
 /// The old client is dropped once all outstanding references to it are gone,
 /// which closes its idle connections.
 pub(crate) fn refresh_http_client() {
-    let fresh = build_http_client();
-    HTTP_CLIENT.store(std::sync::Arc::new(fresh));
-    tracing::debug!("HTTP client refreshed with new connection pool");
+	let fresh = build_http_client();
+	HTTP_CLIENT.store(std::sync::Arc::new(fresh));
+	tracing::debug!("HTTP client refreshed with new connection pool");
 }

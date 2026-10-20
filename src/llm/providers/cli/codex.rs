@@ -16,238 +16,225 @@ use crate::llm::providers::cli::CliProvider;
 use crate::llm::types::{ReasoningEffort, ThinkingBlock, TokenUsage};
 use anyhow::Result;
 
-pub(crate) fn build_args(
-    provider: &CliProvider,
-    model: &str,
-    effort_override: Option<ReasoningEffort>,
-) -> Vec<String> {
-    let mut args = vec!["exec".to_string()];
+pub(crate) fn build_args(provider: &CliProvider, model: &str, effort_override: Option<ReasoningEffort>) -> Vec<String> {
+	let mut args = vec!["exec".to_string()];
 
-    if !model.is_empty() {
-        args.push("-m".to_string());
-        args.push(model.to_string());
-    }
+	if !model.is_empty() {
+		args.push("-m".to_string());
+		args.push(model.to_string());
+	}
 
-    // Per-call effort takes precedence over the provider's env-configured default.
-    // codex CLI accepts: low | medium | high (no "none"/"xhigh").
-    let effort_str: String = match effort_override {
-        Some(ReasoningEffort::None) | Some(ReasoningEffort::Low) => "low".to_string(),
-        Some(ReasoningEffort::Medium) => "medium".to_string(),
-        Some(ReasoningEffort::High) => "high".to_string(),
-        Some(ReasoningEffort::XHigh) => "high".to_string(),
-        Some(ReasoningEffort::Max) => "high".to_string(),
-        None => provider.reasoning_effort.clone(),
-    };
+	// Per-call effort takes precedence over the provider's env-configured default.
+	// codex CLI accepts: low | medium | high (no "none"/"xhigh").
+	let effort_str: String = match effort_override {
+		Some(ReasoningEffort::None) | Some(ReasoningEffort::Low) => "low".to_string(),
+		Some(ReasoningEffort::Medium) => "medium".to_string(),
+		Some(ReasoningEffort::High) => "high".to_string(),
+		Some(ReasoningEffort::XHigh) => "high".to_string(),
+		Some(ReasoningEffort::Max) => "high".to_string(),
+		None => provider.reasoning_effort.clone(),
+	};
 
-    args.push("-c".to_string());
-    args.push(format!("model_reasoning_effort=\"{}\"", effort_str));
+	args.push("-c".to_string());
+	args.push(format!("model_reasoning_effort=\"{}\"", effort_str));
 
-    if provider.skip_git_check {
-        args.push("--skip-git-repo-check".to_string());
-    }
+	if provider.skip_git_check {
+		args.push("--skip-git-repo-check".to_string());
+	}
 
-    args.push("--json".to_string());
-    args.push("-".to_string());
+	args.push("--json".to_string());
+	args.push("-".to_string());
 
-    args
+	args
 }
 
-pub(crate) fn parse_response(
-    lines: &[String],
-) -> Result<(String, Option<ThinkingBlock>, Option<TokenUsage>)> {
-    let mut all_text_content: Vec<String> = Vec::new();
-    let mut reasoning_chunks: Vec<String> = Vec::new();
-    let mut error_message: Option<String> = None;
-    let mut input_tokens: Option<u64> = None;
-    let mut output_tokens: Option<u64> = None;
-    let mut cached_tokens: Option<u64> = None;
-    let mut reasoning_tokens: Option<u64> = None;
-    let mut total_tokens: Option<u64> = None;
+pub(crate) fn parse_response(lines: &[String]) -> Result<(String, Option<ThinkingBlock>, Option<TokenUsage>)> {
+	let mut all_text_content: Vec<String> = Vec::new();
+	let mut reasoning_chunks: Vec<String> = Vec::new();
+	let mut error_message: Option<String> = None;
+	let mut input_tokens: Option<u64> = None;
+	let mut output_tokens: Option<u64> = None;
+	let mut cached_tokens: Option<u64> = None;
+	let mut reasoning_tokens: Option<u64> = None;
+	let mut total_tokens: Option<u64> = None;
 
-    for line in lines {
-        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(line) {
-            if let Some(event_type) = parsed.get("type").and_then(|t| t.as_str()) {
-                match event_type {
-                    "item.completed" => {
-                        if let Some(item) = parsed.get("item") {
-                            let item_type = item.get("type").and_then(|t| t.as_str());
-                            if item_type == Some("agent_message") {
-                                if let Some(text) = item
-                                    .get("text")
-                                    .and_then(|t| t.as_str())
-                                    .map(|t| t.trim())
-                                    .filter(|t| !t.is_empty())
-                                {
-                                    all_text_content.push(text.to_string());
-                                }
-                            } else if item_type == Some("reasoning") {
-                                if let Some(text) = item
-                                    .get("text")
-                                    .and_then(|t| t.as_str())
-                                    .map(|t| t.trim())
-                                    .filter(|t| !t.is_empty())
-                                {
-                                    reasoning_chunks.push(text.to_string());
-                                }
-                            }
-                        }
-                    }
-                    "turn.completed" | "result" | "done" => {
-                        if let Some(usage_info) = parsed.get("usage") {
-                            if input_tokens.is_none() {
-                                input_tokens =
-                                    usage_info.get("input_tokens").and_then(|v| v.as_u64());
-                            }
-                            if output_tokens.is_none() {
-                                output_tokens =
-                                    usage_info.get("output_tokens").and_then(|v| v.as_u64());
-                            }
-                            if cached_tokens.is_none() {
-                                cached_tokens = usage_info
-                                    .get("cached_input_tokens")
-                                    .and_then(|v| v.as_u64());
-                            }
-                            if reasoning_tokens.is_none() {
-                                reasoning_tokens =
-                                    usage_info.get("reasoning_tokens").and_then(|v| v.as_u64());
-                            }
-                            if total_tokens.is_none() {
-                                total_tokens =
-                                    usage_info.get("total_tokens").and_then(|v| v.as_u64());
-                            }
-                        }
-                        all_text_content.extend(extract_legacy_text(&parsed));
-                    }
-                    "error" | "turn.failed" => {
-                        error_message = extract_error(&parsed);
-                    }
-                    "message" | "assistant" => {
-                        all_text_content.extend(extract_legacy_text(&parsed));
-                    }
-                    _ => {}
-                }
-            }
-        }
-    }
+	for line in lines {
+		if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(line) {
+			if let Some(event_type) = parsed.get("type").and_then(|t| t.as_str()) {
+				match event_type {
+					"item.completed" => {
+						if let Some(item) = parsed.get("item") {
+							let item_type = item.get("type").and_then(|t| t.as_str());
+							if item_type == Some("agent_message") {
+								if let Some(text) = item
+									.get("text")
+									.and_then(|t| t.as_str())
+									.map(|t| t.trim())
+									.filter(|t| !t.is_empty())
+								{
+									all_text_content.push(text.to_string());
+								}
+							} else if item_type == Some("reasoning") {
+								if let Some(text) = item
+									.get("text")
+									.and_then(|t| t.as_str())
+									.map(|t| t.trim())
+									.filter(|t| !t.is_empty())
+								{
+									reasoning_chunks.push(text.to_string());
+								}
+							}
+						}
+					}
+					"turn.completed" | "result" | "done" => {
+						if let Some(usage_info) = parsed.get("usage") {
+							if input_tokens.is_none() {
+								input_tokens = usage_info.get("input_tokens").and_then(|v| v.as_u64());
+							}
+							if output_tokens.is_none() {
+								output_tokens = usage_info.get("output_tokens").and_then(|v| v.as_u64());
+							}
+							if cached_tokens.is_none() {
+								cached_tokens = usage_info.get("cached_input_tokens").and_then(|v| v.as_u64());
+							}
+							if reasoning_tokens.is_none() {
+								reasoning_tokens = usage_info.get("reasoning_tokens").and_then(|v| v.as_u64());
+							}
+							if total_tokens.is_none() {
+								total_tokens = usage_info.get("total_tokens").and_then(|v| v.as_u64());
+							}
+						}
+						all_text_content.extend(extract_legacy_text(&parsed));
+					}
+					"error" | "turn.failed" => {
+						error_message = extract_error(&parsed);
+					}
+					"message" | "assistant" => {
+						all_text_content.extend(extract_legacy_text(&parsed));
+					}
+					_ => {}
+				}
+			}
+		}
+	}
 
-    if let Some(err) = error_message {
-        if all_text_content.is_empty() {
-            return Err(anyhow::anyhow!("Codex CLI error: {}", err));
-        }
-    }
+	if let Some(err) = error_message {
+		if all_text_content.is_empty() {
+			return Err(anyhow::anyhow!("Codex CLI error: {}", err));
+		}
+	}
 
-    if all_text_content.is_empty() {
-        if let Some(fallback) = build_fallback_text(lines) {
-            all_text_content.push(fallback);
-        }
-    }
+	if all_text_content.is_empty() {
+		if let Some(fallback) = build_fallback_text(lines) {
+			all_text_content.push(fallback);
+		}
+	}
 
-    let combined_text = all_text_content.join("\n\n");
-    if combined_text.trim().is_empty() {
-        return Err(anyhow::anyhow!("Empty response from Codex CLI"));
-    }
+	let combined_text = all_text_content.join("\n\n");
+	if combined_text.trim().is_empty() {
+		return Err(anyhow::anyhow!("Empty response from Codex CLI"));
+	}
 
-    let thinking = if reasoning_chunks.is_empty() {
-        None
-    } else {
-        let content = reasoning_chunks.join("\n\n");
-        Some(ThinkingBlock {
-            tokens: (content.len() / 4) as u64,
-            content,
-        })
-    };
+	let thinking = if reasoning_chunks.is_empty() {
+		None
+	} else {
+		let content = reasoning_chunks.join("\n\n");
+		Some(ThinkingBlock {
+			tokens: (content.len() / 4) as u64,
+			content,
+		})
+	};
 
-    let usage = if input_tokens.is_some()
-        || output_tokens.is_some()
-        || cached_tokens.is_some()
-        || reasoning_tokens.is_some()
-        || total_tokens.is_some()
-    {
-        let input_tokens_val = input_tokens.unwrap_or(0);
-        let output_tokens_val = output_tokens.unwrap_or(0);
-        let reasoning_tokens_val = reasoning_tokens.unwrap_or(0);
-        let cache_read_tokens = cached_tokens.unwrap_or(0);
+	let usage = if input_tokens.is_some()
+		|| output_tokens.is_some()
+		|| cached_tokens.is_some()
+		|| reasoning_tokens.is_some()
+		|| total_tokens.is_some()
+	{
+		let input_tokens_val = input_tokens.unwrap_or(0);
+		let output_tokens_val = output_tokens.unwrap_or(0);
+		let reasoning_tokens_val = reasoning_tokens.unwrap_or(0);
+		let cache_read_tokens = cached_tokens.unwrap_or(0);
 
-        // Calculate CLEAN input tokens (no cache)
-        let input_tokens_clean = input_tokens_val.saturating_sub(cache_read_tokens);
+		// Calculate CLEAN input tokens (no cache)
+		let input_tokens_clean = input_tokens_val.saturating_sub(cache_read_tokens);
 
-        let total =
-            total_tokens.unwrap_or(input_tokens_val + output_tokens_val + reasoning_tokens_val);
+		let total = total_tokens.unwrap_or(input_tokens_val + output_tokens_val + reasoning_tokens_val);
 
-        Some(TokenUsage {
-            input_tokens: input_tokens_clean, // CLEAN input (no cache)
-            cache_read_tokens,                // Tokens read from cache
-            cache_write_tokens: 0,            // Codex doesn't expose this
-            output_tokens: output_tokens_val,
-            reasoning_tokens: reasoning_tokens_val,
-            total_tokens: total,
-            cost: None,
-            request_time_ms: None,
-        })
-    } else {
-        None
-    };
+		Some(TokenUsage {
+			input_tokens: input_tokens_clean, // CLEAN input (no cache)
+			cache_read_tokens,                // Tokens read from cache
+			cache_write_tokens: 0,            // Codex doesn't expose this
+			output_tokens: output_tokens_val,
+			reasoning_tokens: reasoning_tokens_val,
+			total_tokens: total,
+			cost: None,
+			request_time_ms: None,
+		})
+	} else {
+		None
+	};
 
-    Ok((combined_text, thinking, usage))
+	Ok((combined_text, thinking, usage))
 }
 
 fn extract_error(parsed: &serde_json::Value) -> Option<String> {
-    parsed
-        .get("message")
-        .and_then(|m| m.as_str())
-        .map(|s| s.to_string())
-        .or_else(|| {
-            parsed
-                .get("error")
-                .and_then(|e| e.get("message"))
-                .and_then(|m| m.as_str())
-                .map(|s| s.to_string())
-        })
+	parsed
+		.get("message")
+		.and_then(|m| m.as_str())
+		.map(|s| s.to_string())
+		.or_else(|| {
+			parsed
+				.get("error")
+				.and_then(|e| e.get("message"))
+				.and_then(|m| m.as_str())
+				.map(|s| s.to_string())
+		})
 }
 
 fn extract_legacy_text(parsed: &serde_json::Value) -> Vec<String> {
-    let mut texts = Vec::new();
-    if let Some(content) = parsed.get("content").and_then(|c| c.as_array()) {
-        for item in content {
-            if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
-                let trimmed = text.trim();
-                if !trimmed.is_empty() {
-                    texts.push(trimmed.to_string());
-                }
-            }
-        }
-    }
-    if let Some(text) = parsed.get("text").and_then(|t| t.as_str()) {
-        let trimmed = text.trim();
-        if !trimmed.is_empty() {
-            texts.push(trimmed.to_string());
-        }
-    }
-    if let Some(text) = parsed.get("result").and_then(|r| r.as_str()) {
-        let trimmed = text.trim();
-        if !trimmed.is_empty() {
-            texts.push(trimmed.to_string());
-        }
-    }
-    texts
+	let mut texts = Vec::new();
+	if let Some(content) = parsed.get("content").and_then(|c| c.as_array()) {
+		for item in content {
+			if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
+				let trimmed = text.trim();
+				if !trimmed.is_empty() {
+					texts.push(trimmed.to_string());
+				}
+			}
+		}
+	}
+	if let Some(text) = parsed.get("text").and_then(|t| t.as_str()) {
+		let trimmed = text.trim();
+		if !trimmed.is_empty() {
+			texts.push(trimmed.to_string());
+		}
+	}
+	if let Some(text) = parsed.get("result").and_then(|r| r.as_str()) {
+		let trimmed = text.trim();
+		if !trimmed.is_empty() {
+			texts.push(trimmed.to_string());
+		}
+	}
+	texts
 }
 
 fn build_fallback_text(lines: &[String]) -> Option<String> {
-    let response_text = lines
-        .iter()
-        .filter(|line| {
-            !line.starts_with('{')
-                || serde_json::from_str::<serde_json::Value>(line)
-                    .map(|v| v.get("type").is_none())
-                    .unwrap_or(true)
-        })
-        .cloned()
-        .collect::<Vec<_>>()
-        .join("\n");
+	let response_text = lines
+		.iter()
+		.filter(|line| {
+			!line.starts_with('{')
+				|| serde_json::from_str::<serde_json::Value>(line)
+					.map(|v| v.get("type").is_none())
+					.unwrap_or(true)
+		})
+		.cloned()
+		.collect::<Vec<_>>()
+		.join("\n");
 
-    if response_text.trim().is_empty() {
-        None
-    } else {
-        Some(response_text)
-    }
+	if response_text.trim().is_empty() {
+		None
+	} else {
+		Some(response_text)
+	}
 }

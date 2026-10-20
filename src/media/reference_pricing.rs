@@ -48,32 +48,27 @@ use crate::utils::naming::{normalize_model_name, sanitize_model_name};
 /// callers surface the pattern when explaining where a price came from.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MediaModelPricing {
-    pub provider: &'static str,
-    pub pattern: &'static str,
-    pub unit: UsageUnit,
-    pub usd_per_unit: f64,
+	pub provider: &'static str,
+	pub pattern: &'static str,
+	pub unit: UsageUnit,
+	pub usd_per_unit: f64,
 }
 
 #[derive(Debug, Clone, Copy)]
 struct MediaPricingEntry {
-    provider: &'static str,
-    pattern: &'static str,
-    unit: UsageUnit,
-    usd_per_unit: f64,
+	provider: &'static str,
+	pattern: &'static str,
+	unit: UsageUnit,
+	usd_per_unit: f64,
 }
 
-const fn entry(
-    provider: &'static str,
-    pattern: &'static str,
-    unit: UsageUnit,
-    usd_per_unit: f64,
-) -> MediaPricingEntry {
-    MediaPricingEntry {
-        provider,
-        pattern,
-        unit,
-        usd_per_unit,
-    }
+const fn entry(provider: &'static str, pattern: &'static str, unit: UsageUnit, usd_per_unit: f64) -> MediaPricingEntry {
+	MediaPricingEntry {
+		provider,
+		pattern,
+		unit,
+		usd_per_unit,
+	}
 }
 
 /// Reference media pricing, USD per unit.
@@ -89,102 +84,79 @@ const fn entry(
 /// same way model names are, so they must be written with the model's own
 /// separators — `gen4_turbo`, not `gen4-turbo`.
 const REFERENCE_MEDIA_MODELS: &[MediaPricingEntry] = &[
-    // ── Cloudflare Workers AI (verified Sep 18, 2026 at the model pages) ──
-    // Audio only: images bill per 512x512 output tile plus per step, which
-    // one unit cannot express, so the adapter prices those itself. Per-minute
-    // rates are stored per second; the duration comes from the response.
-    entry("cloudflare", "aura-2", UsageUnit::Characters, 0.000_03),
-    entry("cloudflare", "aura-1", UsageUnit::Characters, 0.000_015),
-    entry(
-        "cloudflare",
-        "melotts",
-        UsageUnit::AudioSeconds,
-        0.000_205 / 60.0,
-    ),
-    entry(
-        "cloudflare",
-        "whisper-large-v3-turbo",
-        UsageUnit::AudioSeconds,
-        0.000_513 / 60.0,
-    ),
-    entry(
-        "cloudflare",
-        "whisper",
-        UsageUnit::AudioSeconds,
-        0.000_453 / 60.0,
-    ),
-    entry(
-        "cloudflare",
-        "nova-3",
-        UsageUnit::AudioSeconds,
-        0.0052 / 60.0,
-    ),
-    // ── ElevenLabs (estimate — verify at elevenlabs.io/pricing) ──
-    // Billed against a subscription character quota; these are the
-    // pay-as-you-go per-character equivalents. Scribe bills input audio, which
-    // is not known until the upload completes, so it stays unpriced at submit.
-    entry("elevenlabs", "flash", UsageUnit::Characters, 0.000_03),
-    entry("elevenlabs", "turbo", UsageUnit::Characters, 0.000_03),
-    entry(
-        "elevenlabs",
-        "multilingual",
-        UsageUnit::Characters,
-        0.000_06,
-    ),
-    // ── fal (estimate — verify per endpoint at fal.ai/pricing) ──
-    // fal prices per endpoint, not per family. Video endpoints bill the
-    // requested duration; everything else falls back to GPU wall-clock, which
-    // is the only quantity fal's queue metrics report.
-    entry("fal", "veo", UsageUnit::VideoSeconds, 0.20),
-    entry("fal", "kling", UsageUnit::VideoSeconds, 0.09),
-    entry("fal", "minimax", UsageUnit::VideoSeconds, 0.07),
-    entry("fal", "fal-ai", UsageUnit::ComputeSeconds, 0.000_56),
-    // ── Replicate (estimate — verify at replicate.com/pricing) ──
-    // Official models carry a flat per-output price; community models bill
-    // GPU-seconds, which the trailing per-owner entries cannot express — those
-    // resolve to nothing and stay unpriced rather than guess a GPU class.
-    entry("replicate", "flux-1.1-pro-ultra", UsageUnit::Images, 0.055),
-    entry("replicate", "flux-1.1-pro", UsageUnit::Images, 0.04),
-    entry("replicate", "flux-schnell", UsageUnit::Images, 0.003),
-    entry("replicate", "flux-dev", UsageUnit::Images, 0.025),
-    entry("replicate", "veo", UsageUnit::VideoSeconds, 0.50),
-    entry("replicate", "kling", UsageUnit::VideoSeconds, 0.09),
-    // ── Runway (estimate — verify at runwayml.com/pricing) ──
-    // Runway sells credits; these are one second of generated video converted
-    // at the standard plan's credit price. The video models are listed by name
-    // rather than as a `gen4` prefix: that prefix would also catch gen4_image,
-    // and stamping a per-second video rate onto an image job is worse than
-    // leaving it unpriced.
-    entry("runway", "gen4_turbo", UsageUnit::VideoSeconds, 0.05),
-    entry("runway", "gen3a_turbo", UsageUnit::VideoSeconds, 0.05),
-    entry("runway", "gen4_aleph", UsageUnit::VideoSeconds, 0.15),
+	// ── Cloudflare Workers AI (verified Sep 18, 2026 at the model pages) ──
+	// Audio only: images bill per 512x512 output tile plus per step, which
+	// one unit cannot express, so the adapter prices those itself. Per-minute
+	// rates are stored per second; the duration comes from the response.
+	entry("cloudflare", "aura-2", UsageUnit::Characters, 0.000_03),
+	entry("cloudflare", "aura-1", UsageUnit::Characters, 0.000_015),
+	entry("cloudflare", "melotts", UsageUnit::AudioSeconds, 0.000_205 / 60.0),
+	entry(
+		"cloudflare",
+		"whisper-large-v3-turbo",
+		UsageUnit::AudioSeconds,
+		0.000_513 / 60.0,
+	),
+	entry("cloudflare", "whisper", UsageUnit::AudioSeconds, 0.000_453 / 60.0),
+	entry("cloudflare", "nova-3", UsageUnit::AudioSeconds, 0.0052 / 60.0),
+	// ── ElevenLabs (estimate — verify at elevenlabs.io/pricing) ──
+	// Billed against a subscription character quota; these are the
+	// pay-as-you-go per-character equivalents. Scribe bills input audio, which
+	// is not known until the upload completes, so it stays unpriced at submit.
+	entry("elevenlabs", "flash", UsageUnit::Characters, 0.000_03),
+	entry("elevenlabs", "turbo", UsageUnit::Characters, 0.000_03),
+	entry("elevenlabs", "multilingual", UsageUnit::Characters, 0.000_06),
+	// ── fal (estimate — verify per endpoint at fal.ai/pricing) ──
+	// fal prices per endpoint, not per family. Video endpoints bill the
+	// requested duration; everything else falls back to GPU wall-clock, which
+	// is the only quantity fal's queue metrics report.
+	entry("fal", "veo", UsageUnit::VideoSeconds, 0.20),
+	entry("fal", "kling", UsageUnit::VideoSeconds, 0.09),
+	entry("fal", "minimax", UsageUnit::VideoSeconds, 0.07),
+	entry("fal", "fal-ai", UsageUnit::ComputeSeconds, 0.000_56),
+	// ── Replicate (estimate — verify at replicate.com/pricing) ──
+	// Official models carry a flat per-output price; community models bill
+	// GPU-seconds, which the trailing per-owner entries cannot express — those
+	// resolve to nothing and stay unpriced rather than guess a GPU class.
+	entry("replicate", "flux-1.1-pro-ultra", UsageUnit::Images, 0.055),
+	entry("replicate", "flux-1.1-pro", UsageUnit::Images, 0.04),
+	entry("replicate", "flux-schnell", UsageUnit::Images, 0.003),
+	entry("replicate", "flux-dev", UsageUnit::Images, 0.025),
+	entry("replicate", "veo", UsageUnit::VideoSeconds, 0.50),
+	entry("replicate", "kling", UsageUnit::VideoSeconds, 0.09),
+	// ── Runway (estimate — verify at runwayml.com/pricing) ──
+	// Runway sells credits; these are one second of generated video converted
+	// at the standard plan's credit price. The video models are listed by name
+	// rather than as a `gen4` prefix: that prefix would also catch gen4_image,
+	// and stamping a per-second video rate onto an image job is worse than
+	// leaving it unpriced.
+	entry("runway", "gen4_turbo", UsageUnit::VideoSeconds, 0.05),
+	entry("runway", "gen3a_turbo", UsageUnit::VideoSeconds, 0.05),
+	entry("runway", "gen4_aleph", UsageUnit::VideoSeconds, 0.15),
 ];
 
 fn matches_model(normalized: &str, pattern: &str) -> bool {
-    normalized.contains(&sanitize_model_name(pattern))
+	normalized.contains(&sanitize_model_name(pattern))
 }
 
 fn normalized_model(model: &str) -> String {
-    sanitize_model_name(&normalize_model_name(model))
+	sanitize_model_name(&normalize_model_name(model))
 }
 
 /// Look up the reference rate for a media model. `provider` is the octolib
 /// adapter name (`fal`, `replicate`, …) and is matched exactly, because the
 /// same model bills differently on different hosts.
 pub fn get_reference_pricing(provider: &str, model: &str) -> Option<MediaModelPricing> {
-    let normalized = normalized_model(model);
-    REFERENCE_MEDIA_MODELS
-        .iter()
-        .find(|entry| {
-            entry.provider.eq_ignore_ascii_case(provider)
-                && matches_model(&normalized, entry.pattern)
-        })
-        .map(|entry| MediaModelPricing {
-            provider: entry.provider,
-            pattern: entry.pattern,
-            unit: entry.unit,
-            usd_per_unit: entry.usd_per_unit,
-        })
+	let normalized = normalized_model(model);
+	REFERENCE_MEDIA_MODELS
+		.iter()
+		.find(|entry| entry.provider.eq_ignore_ascii_case(provider) && matches_model(&normalized, entry.pattern))
+		.map(|entry| MediaModelPricing {
+			provider: entry.provider,
+			pattern: entry.pattern,
+			unit: entry.unit,
+			usd_per_unit: entry.usd_per_unit,
+		})
 }
 
 /// The reference rate as a [`CostEstimate`], ready to hand to an adapter's
@@ -203,19 +175,19 @@ pub fn get_reference_pricing(provider: &str, model: &str) -> Option<MediaModelPr
 /// at the rate it was submitted under and never re-reads a table that has
 /// since changed.
 pub fn reference_cost_estimate(
-    provider: &str,
-    model: &str,
-    known_quantity: Option<(UsageUnit, f64)>,
+	provider: &str,
+	model: &str,
+	known_quantity: Option<(UsageUnit, f64)>,
 ) -> Option<CostEstimate> {
-    let pricing = get_reference_pricing(provider, model)?;
-    Some(CostEstimate {
-        unit: pricing.unit,
-        usd_per_unit: pricing.usd_per_unit,
-        quantity: known_quantity
-            .filter(|(unit, _)| *unit == pricing.unit)
-            .map(|(_, quantity)| quantity)
-            .filter(|value| value.is_finite() && *value >= 0.0),
-    })
+	let pricing = get_reference_pricing(provider, model)?;
+	Some(CostEstimate {
+		unit: pricing.unit,
+		usd_per_unit: pricing.usd_per_unit,
+		quantity: known_quantity
+			.filter(|(unit, _)| *unit == pricing.unit)
+			.map(|(_, quantity)| quantity)
+			.filter(|value| value.is_finite() && *value >= 0.0),
+	})
 }
 
 #[cfg(test)]

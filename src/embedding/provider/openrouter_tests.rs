@@ -16,23 +16,21 @@ use super::*;
 
 #[tokio::test]
 async fn test_openrouter_provider_dimension_probe() {
-    if std::env::var("OPENROUTER_API_KEY").is_err() {
-        return;
-    }
-    super::super::tests::refresh_http_client();
-    let provider = OpenRouterProviderImpl::new("qwen/qwen3-embedding-8b")
-        .await
-        .unwrap();
-    assert_eq!(provider.get_dimension(), 4096);
-    assert!(provider.is_model_supported());
+	if std::env::var("OPENROUTER_API_KEY").is_err() {
+		return;
+	}
+	super::super::tests::refresh_http_client();
+	let provider = OpenRouterProviderImpl::new("qwen/qwen3-embedding-8b").await.unwrap();
+	assert_eq!(provider.get_dimension(), 4096);
+	assert!(provider.is_model_supported());
 }
 
 #[tokio::test]
 async fn test_openrouter_invalid_model_rejected() {
-    if std::env::var("OPENROUTER_API_KEY").is_err() {
-        return;
-    }
-    super::super::tests::refresh_http_client();
-    let result = OpenRouterProviderImpl::new("not/a-real-model-xyz").await;
-    assert!(result.is_err());
+	if std::env::var("OPENROUTER_API_KEY").is_err() {
+		return;
+	}
+	super::super::tests::refresh_http_client();
+	let result = OpenRouterProviderImpl::new("not/a-real-model-xyz").await;
+	assert!(result.is_err());
 }

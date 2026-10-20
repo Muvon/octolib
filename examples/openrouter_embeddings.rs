@@ -31,40 +31,38 @@ use octolib::embedding::{generate_embeddings, generate_embeddings_batch};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt::init();
+	tracing_subscriber::fmt::init();
 
-    let provider = "openrouter";
-    let model = "qwen/qwen3-embedding-8b";
+	let provider = "openrouter";
+	let model = "qwen/qwen3-embedding-8b";
 
-    println!("=== OpenRouter Embeddings Example ===");
-    println!("Provider: {}", provider);
-    println!("Model:    {}\n", model);
+	println!("=== OpenRouter Embeddings Example ===");
+	println!("Provider: {}", provider);
+	println!("Model:    {}\n", model);
 
-    // Single embedding
-    let text = "Rust is a systems programming language focused on safety and performance.";
-    println!("Input: \"{}\"\n", text);
+	// Single embedding
+	let text = "Rust is a systems programming language focused on safety and performance.";
+	println!("Input: \"{}\"\n", text);
 
-    let embedding = generate_embeddings(text, provider, model).await?;
-    println!("Embedding dimension: {}", embedding.len());
-    println!("First 8 values: {:?}\n", &embedding[..8]);
+	let embedding = generate_embeddings(text, provider, model).await?;
+	println!("Embedding dimension: {}", embedding.len());
+	println!("First 8 values: {:?}\n", &embedding[..8]);
 
-    // Batch embeddings
-    let texts = vec![
-        "The quick brown fox jumps over the lazy dog.".to_string(),
-        "Machine learning models learn patterns from data.".to_string(),
-        "OpenRouter provides a unified API for many AI providers.".to_string(),
-    ];
+	// Batch embeddings
+	let texts = vec![
+		"The quick brown fox jumps over the lazy dog.".to_string(),
+		"Machine learning models learn patterns from data.".to_string(),
+		"OpenRouter provides a unified API for many AI providers.".to_string(),
+	];
 
-    println!("=== Batch Embeddings ({} texts) ===", texts.len());
-    let batch =
-        generate_embeddings_batch(texts.clone(), provider, model, InputType::None, 10, 8192)
-            .await?;
+	println!("=== Batch Embeddings ({} texts) ===", texts.len());
+	let batch = generate_embeddings_batch(texts.clone(), provider, model, InputType::None, 10, 8192).await?;
 
-    for (text, emb) in texts.iter().zip(batch.iter()) {
-        println!("Text:      \"{}\"", text);
-        println!("Dimension: {}", emb.len());
-        println!("First 4:   {:?}\n", &emb[..4]);
-    }
+	for (text, emb) in texts.iter().zip(batch.iter()) {
+		println!("Text:      \"{}\"", text);
+		println!("Dimension: {}", emb.len());
+		println!("First 4:   {:?}\n", &emb[..4]);
+	}
 
-    Ok(())
+	Ok(())
 }

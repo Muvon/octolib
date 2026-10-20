@@ -23,148 +23,138 @@ use super::{http_client, EmbeddingProvider};
 
 /// OpenAI provider implementation for trait
 pub struct OpenAIProviderImpl {
-    model_name: String,
-    dimension: usize,
+	model_name: String,
+	dimension: usize,
 }
 
 impl OpenAIProviderImpl {
-    pub fn new(model: &str) -> Result<Self> {
-        // Validate model first - fail fast if unsupported
-        let supported_models = [
-            "text-embedding-3-small",
-            "text-embedding-3-large",
-            "text-embedding-ada-002",
-        ];
+	pub fn new(model: &str) -> Result<Self> {
+		// Validate model first - fail fast if unsupported
+		let supported_models = [
+			"text-embedding-3-small",
+			"text-embedding-3-large",
+			"text-embedding-ada-002",
+		];
 
-        if !supported_models.contains(&model) {
-            return Err(anyhow::anyhow!(
-                "Unsupported OpenAI model: '{}'. Supported models: {:?}",
-                model,
-                supported_models
-            ));
-        }
+		if !supported_models.contains(&model) {
+			return Err(anyhow::anyhow!(
+				"Unsupported OpenAI model: '{}'. Supported models: {:?}",
+				model,
+				supported_models
+			));
+		}
 
-        let dimension = Self::get_model_dimension(model);
-        Ok(Self {
-            model_name: model.to_string(),
-            dimension,
-        })
-    }
+		let dimension = Self::get_model_dimension(model);
+		Ok(Self {
+			model_name: model.to_string(),
+			dimension,
+		})
+	}
 
-    fn get_model_dimension(model: &str) -> usize {
-        match model {
+	fn get_model_dimension(model: &str) -> usize {
+		match model {
             "text-embedding-3-small" => 1536,
             "text-embedding-3-large" => 3072,
             "text-embedding-ada-002" => 1536,
             _ => unreachable!("Invalid OpenAI model '{}' passed to get_model_dimension - this is a bug as model should be validated in new()", model),
         }
-    }
+	}
 }
 
 #[async_trait::async_trait]
 impl EmbeddingProvider for OpenAIProviderImpl {
-    async fn generate_embedding(&self, text: &str) -> Result<(Vec<f32>, EmbeddingUsage)> {
-        OpenAIProvider::generate_embeddings(text, &self.model_name).await
-    }
+	async fn generate_embedding(&self, text: &str) -> Result<(Vec<f32>, EmbeddingUsage)> {
+		OpenAIProvider::generate_embeddings(text, &self.model_name).await
+	}
 
-    async fn generate_embeddings_batch(
-        &self,
-        texts: Vec<String>,
-        input_type: InputType,
-    ) -> Result<(Vec<Vec<f32>>, EmbeddingUsage)> {
-        OpenAIProvider::generate_embeddings_batch(texts, &self.model_name, input_type).await
-    }
+	async fn generate_embeddings_batch(
+		&self,
+		texts: Vec<String>,
+		input_type: InputType,
+	) -> Result<(Vec<Vec<f32>>, EmbeddingUsage)> {
+		OpenAIProvider::generate_embeddings_batch(texts, &self.model_name, input_type).await
+	}
 
-    fn get_dimension(&self) -> usize {
-        self.dimension
-    }
+	fn get_dimension(&self) -> usize {
+		self.dimension
+	}
 
-    fn is_model_supported(&self) -> bool {
-        // REAL validation - only support actual OpenAI models, NO HALLUCINATIONS
-        matches!(
-            self.model_name.as_str(),
-            "text-embedding-3-small" | "text-embedding-3-large" | "text-embedding-ada-002"
-        )
-    }
+	fn is_model_supported(&self) -> bool {
+		// REAL validation - only support actual OpenAI models, NO HALLUCINATIONS
+		matches!(
+			self.model_name.as_str(),
+			"text-embedding-3-small" | "text-embedding-3-large" | "text-embedding-ada-002"
+		)
+	}
 }
 
 /// OpenAI provider implementation
 pub struct OpenAIProvider;
 
 impl OpenAIProvider {
-    pub async fn generate_embeddings(
-        contents: &str,
-        model: &str,
-    ) -> Result<(Vec<f32>, EmbeddingUsage)> {
-        let (vectors, usage) =
-            Self::generate_embeddings_batch(vec![contents.to_string()], model, InputType::None)
-                .await?;
-        let first = vectors
-            .into_iter()
-            .next()
-            .ok_or_else(|| anyhow::anyhow!("No embeddings found"))?;
-        Ok((first, usage))
-    }
+	pub async fn generate_embeddings(contents: &str, model: &str) -> Result<(Vec<f32>, EmbeddingUsage)> {
+		let (vectors, usage) =
+			Self::generate_embeddings_batch(vec![contents.to_string()], model, InputType::None).await?;
+		let first = vectors
+			.into_iter()
+			.next()
+			.ok_or_else(|| anyhow::anyhow!("No embeddings found"))?;
+		Ok((first, usage))
+	}
 
-    pub async fn generate_embeddings_batch(
-        texts: Vec<String>,
-        model: &str,
-        input_type: InputType,
-    ) -> Result<(Vec<Vec<f32>>, EmbeddingUsage)> {
-        let openai_api_key = std::env::var("OPENAI_API_KEY")
-            .context("OPENAI_API_KEY environment variable not set")?;
+	pub async fn generate_embeddings_batch(
+		texts: Vec<String>,
+		model: &str,
+		input_type: InputType,
+	) -> Result<(Vec<Vec<f32>>, EmbeddingUsage)> {
+		let openai_api_key = std::env::var("OPENAI_API_KEY").context("OPENAI_API_KEY environment variable not set")?;
 
-        // Apply input type prefixes since OpenAI doesn't have native input_type support
-        let processed_texts: Vec<String> = texts
-            .into_iter()
-            .map(|text| input_type.apply_prefix(&text))
-            .collect();
-        let est_tokens: u64 = processed_texts
-            .iter()
-            .map(|t| crate::embedding::count_tokens(t) as u64)
-            .sum();
+		// Apply input type prefixes since OpenAI doesn't have native input_type support
+		let processed_texts: Vec<String> = texts.into_iter().map(|text| input_type.apply_prefix(&text)).collect();
+		let est_tokens: u64 = processed_texts
+			.iter()
+			.map(|t| crate::embedding::count_tokens(t) as u64)
+			.sum();
 
-        // Build request body
-        let request_body = json!({
-            "input": processed_texts,
-            "model": model,
-            "encoding_format": "float"
-        });
+		// Build request body
+		let request_body = json!({
+			"input": processed_texts,
+			"model": model,
+			"encoding_format": "float"
+		});
 
-        let response = http_client()
-            .post("https://api.openai.com/v1/embeddings")
-            .header("Authorization", format!("Bearer {}", openai_api_key))
-            .header("Content-Type", "application/json")
-            .json(&request_body)
-            .send()
-            .await?;
+		let response = http_client()
+			.post("https://api.openai.com/v1/embeddings")
+			.header("Authorization", format!("Bearer {}", openai_api_key))
+			.header("Content-Type", "application/json")
+			.json(&request_body)
+			.send()
+			.await?;
 
-        if !response.status().is_success() {
-            let error_text = response.text().await?;
-            return Err(anyhow::anyhow!("OpenAI API error: {}", error_text));
-        }
+		if !response.status().is_success() {
+			let error_text = response.text().await?;
+			return Err(anyhow::anyhow!("OpenAI API error: {}", error_text));
+		}
 
-        let response_json: Value = response.json().await?;
+		let response_json: Value = response.json().await?;
 
-        let embeddings = response_json["data"]
-            .as_array()
-            .context("Failed to get embeddings array")?
-            .iter()
-            .map(|data| {
-                data["embedding"]
-                    .as_array()
-                    .unwrap_or(&Vec::new())
-                    .iter()
-                    .map(|v| v.as_f64().unwrap_or_default() as f32)
-                    .collect()
-            })
-            .collect();
+		let embeddings = response_json["data"]
+			.as_array()
+			.context("Failed to get embeddings array")?
+			.iter()
+			.map(|data| {
+				data["embedding"]
+					.as_array()
+					.unwrap_or(&Vec::new())
+					.iter()
+					.map(|v| v.as_f64().unwrap_or_default() as f32)
+					.collect()
+			})
+			.collect();
 
-        let input_tokens = response_json["usage"]["total_tokens"]
-            .as_u64()
-            .unwrap_or(est_tokens);
-        Ok((embeddings, EmbeddingUsage::from_tokens(model, input_tokens)))
-    }
+		let input_tokens = response_json["usage"]["total_tokens"].as_u64().unwrap_or(est_tokens);
+		Ok((embeddings, EmbeddingUsage::from_tokens(model, input_tokens)))
+	}
 }
 
 #[cfg(test)]

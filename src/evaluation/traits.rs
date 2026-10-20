@@ -20,8 +20,8 @@ use super::types::{EvaluationPricing, EvaluationRequest, EvaluationResponse};
 /// every call completes on return.
 #[async_trait::async_trait]
 pub trait EvaluationProvider: Send + Sync {
-    fn name(&self) -> &str;
-    fn supports_model(&self, model: &str) -> bool;
-    fn get_model_pricing(&self, model: &str) -> Option<EvaluationPricing>;
-    async fn evaluate(&self, request: EvaluationRequest) -> EvaluationResult<EvaluationResponse>;
+	fn name(&self) -> &str;
+	fn supports_model(&self, model: &str) -> bool;
+	fn get_model_pricing(&self, model: &str) -> Option<EvaluationPricing>;
+	async fn evaluate(&self, request: EvaluationRequest) -> EvaluationResult<EvaluationResponse>;
 }

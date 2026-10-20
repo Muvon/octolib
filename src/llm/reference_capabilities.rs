@@ -21,7 +21,7 @@ pub use crate::llm::reference_models::ModelCapabilities;
 
 /// Look up reference capabilities for a model by fuzzy name matching.
 pub fn get_reference_capabilities(model: &str) -> Option<ModelCapabilities> {
-    crate::llm::reference_models::get_reference_capabilities(model)
+	crate::llm::reference_models::get_reference_capabilities(model)
 }
 
 #[cfg(test)]

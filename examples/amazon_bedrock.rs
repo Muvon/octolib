@@ -33,101 +33,100 @@ use std::env;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Check for API key
-    let api_key = env::var("AWS_BEARER_TOKEN_BEDROCK");
-    if api_key.is_err() {
-        eprintln!("Error: AWS_BEARER_TOKEN_BEDROCK environment variable not set");
-        eprintln!("Get your API key from: https://console.aws.amazon.com/bedrock/home");
-        std::process::exit(1);
-    }
+	// Check for API key
+	let api_key = env::var("AWS_BEARER_TOKEN_BEDROCK");
+	if api_key.is_err() {
+		eprintln!("Error: AWS_BEARER_TOKEN_BEDROCK environment variable not set");
+		eprintln!("Get your API key from: https://console.aws.amazon.com/bedrock/home");
+		std::process::exit(1);
+	}
 
-    println!("🚀 Amazon Bedrock Example");
-    println!("====================");
+	println!("🚀 Amazon Bedrock Example");
+	println!("====================");
 
-    // Example 1: Basic chat completion with Anthropic Claude
-    println!("\n📝 Example 1: Anthropic Claude 3.5 Sonnet");
-    let (provider, model) =
-        ProviderFactory::get_provider_for_model("amazon:anthropic.claude-3-5-sonnet")?;
-    println!("Provider: {}", provider.name());
-    println!("Model: {}", model);
+	// Example 1: Basic chat completion with Anthropic Claude
+	println!("\n📝 Example 1: Anthropic Claude 3.5 Sonnet");
+	let (provider, model) = ProviderFactory::get_provider_for_model("amazon:anthropic.claude-3-5-sonnet")?;
+	println!("Provider: {}", provider.name());
+	println!("Model: {}", model);
 
-    let messages = vec![Message::user("What is the capital of France?")];
+	let messages = vec![Message::user("What is the capital of France?")];
 
-    let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000);
+	let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000);
 
-    match provider.chat_completion(params).await {
-        Ok(response) => {
-            println!("Response: {}", response.content);
-            if let Some(usage) = &response.exchange.usage {
-                println!("Input tokens: {}", usage.input_tokens);
-                println!("Output tokens: {}", usage.output_tokens);
-                println!("Total tokens: {}", usage.total_tokens);
-                if let Some(cost) = usage.cost {
-                    println!("Cost: ${:.6}", cost);
-                }
-            }
-        }
-        Err(e) => {
-            eprintln!("Error: {}", e);
-        }
-    }
+	match provider.chat_completion(params).await {
+		Ok(response) => {
+			println!("Response: {}", response.content);
+			if let Some(usage) = &response.exchange.usage {
+				println!("Input tokens: {}", usage.input_tokens);
+				println!("Output tokens: {}", usage.output_tokens);
+				println!("Total tokens: {}", usage.total_tokens);
+				if let Some(cost) = usage.cost {
+					println!("Cost: ${:.6}", cost);
+				}
+			}
+		}
+		Err(e) => {
+			eprintln!("Error: {}", e);
+		}
+	}
 
-    // Example 2: Chat completion with Meta Llama
-    println!("\n📝 Example 2: Meta Llama 3.1 70B");
-    let (provider, model) = ProviderFactory::get_provider_for_model("amazon:meta.llama-3.1-70b")?;
-    println!("Provider: {}", provider.name());
-    println!("Model: {}", model);
+	// Example 2: Chat completion with Meta Llama
+	println!("\n📝 Example 2: Meta Llama 3.1 70B");
+	let (provider, model) = ProviderFactory::get_provider_for_model("amazon:meta.llama-3.1-70b")?;
+	println!("Provider: {}", provider.name());
+	println!("Model: {}", model);
 
-    let messages = vec![Message::user("Explain quantum computing in simple terms")];
+	let messages = vec![Message::user("Explain quantum computing in simple terms")];
 
-    let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000);
+	let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000);
 
-    match provider.chat_completion(params).await {
-        Ok(response) => {
-            println!("Response: {}", response.content);
-            if let Some(usage) = &response.exchange.usage {
-                println!("Input tokens: {}", usage.input_tokens);
-                println!("Output tokens: {}", usage.output_tokens);
-                println!("Total tokens: {}", usage.total_tokens);
-                if let Some(cost) = usage.cost {
-                    println!("Cost: ${:.6}", cost);
-                }
-            }
-        }
-        Err(e) => {
-            eprintln!("Error: {}", e);
-        }
-    }
+	match provider.chat_completion(params).await {
+		Ok(response) => {
+			println!("Response: {}", response.content);
+			if let Some(usage) = &response.exchange.usage {
+				println!("Input tokens: {}", usage.input_tokens);
+				println!("Output tokens: {}", usage.output_tokens);
+				println!("Total tokens: {}", usage.total_tokens);
+				if let Some(cost) = usage.cost {
+					println!("Cost: ${:.6}", cost);
+				}
+			}
+		}
+		Err(e) => {
+			eprintln!("Error: {}", e);
+		}
+	}
 
-    // Example 3: Chat completion with Amazon Nova
-    println!("\n📝 Example 3: Amazon Nova Pro");
-    let (provider, model) = ProviderFactory::get_provider_for_model("amazon:amazon.nova-pro")?;
-    println!("Provider: {}", provider.name());
-    println!("Model: {}", model);
+	// Example 3: Chat completion with Amazon Nova
+	println!("\n📝 Example 3: Amazon Nova Pro");
+	let (provider, model) = ProviderFactory::get_provider_for_model("amazon:amazon.nova-pro")?;
+	println!("Provider: {}", provider.name());
+	println!("Model: {}", model);
 
-    let messages = vec![Message::user("Write a haiku about technology")];
+	let messages = vec![Message::user("Write a haiku about technology")];
 
-    let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000);
+	let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000);
 
-    match provider.chat_completion(params).await {
-        Ok(response) => {
-            println!("Response: {}", response.content);
-            if let Some(usage) = &response.exchange.usage {
-                println!("Input tokens: {}", usage.input_tokens);
-                println!("Output tokens: {}", usage.output_tokens);
-                println!("Total tokens: {}", usage.total_tokens);
-                if let Some(cost) = usage.cost {
-                    println!("Cost: ${:.6}", cost);
-                }
-            }
-        }
-        Err(e) => {
-            eprintln!("Error: {}", e);
-        }
-    }
+	match provider.chat_completion(params).await {
+		Ok(response) => {
+			println!("Response: {}", response.content);
+			if let Some(usage) = &response.exchange.usage {
+				println!("Input tokens: {}", usage.input_tokens);
+				println!("Output tokens: {}", usage.output_tokens);
+				println!("Total tokens: {}", usage.total_tokens);
+				if let Some(cost) = usage.cost {
+					println!("Cost: ${:.6}", cost);
+				}
+			}
+		}
+		Err(e) => {
+			eprintln!("Error: {}", e);
+		}
+	}
 
-    println!("\n====================");
-    println!("✅ Examples completed!");
+	println!("\n====================");
+	println!("✅ Examples completed!");
 
-    Ok(())
+	Ok(())
 }

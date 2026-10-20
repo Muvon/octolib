@@ -19,145 +19,145 @@ use thiserror::Error;
 /// Errors that can occur during message operations
 #[derive(Debug, Error)]
 pub enum MessageError {
-    #[error("Tool message missing required field: {field}")]
-    MissingToolField { field: String },
+	#[error("Tool message missing required field: {field}")]
+	MissingToolField { field: String },
 
-    #[error("Invalid role: {role}")]
-    InvalidRole { role: String },
+	#[error("Invalid role: {role}")]
+	InvalidRole { role: String },
 
-    #[error("Missing required content for message")]
-    MissingContent,
+	#[error("Missing required content for message")]
+	MissingContent,
 
-    #[error("Invalid timestamp: {0}")]
-    InvalidTimestamp(#[from] std::time::SystemTimeError),
+	#[error("Invalid timestamp: {0}")]
+	InvalidTimestamp(#[from] std::time::SystemTimeError),
 
-    #[error("Image conversion failed: {0}")]
-    ImageConversionError(String),
+	#[error("Image conversion failed: {0}")]
+	ImageConversionError(String),
 
-    #[error("Cache marker application failed: {reason}")]
-    CacheMarkerError { reason: String },
+	#[error("Cache marker application failed: {reason}")]
+	CacheMarkerError { reason: String },
 
-    #[error("Tool calls deserialization failed: {0}")]
-    ToolCallsError(#[from] serde_json::Error),
+	#[error("Tool calls deserialization failed: {0}")]
+	ToolCallsError(#[from] serde_json::Error),
 
-    #[error("Structured output error: {0}")]
-    StructuredOutputError(#[from] StructuredOutputError),
+	#[error("Structured output error: {0}")]
+	StructuredOutputError(#[from] StructuredOutputError),
 }
 
 /// Errors that can occur during tool call operations
 #[derive(Debug, Error)]
 pub enum ToolCallError {
-    #[error("Failed to deserialize tool calls: {0}")]
-    DeserializationError(#[from] serde_json::Error),
+	#[error("Failed to deserialize tool calls: {0}")]
+	DeserializationError(#[from] serde_json::Error),
 
-    #[error("Tool call missing required field: {field}")]
-    MissingField { field: String },
+	#[error("Tool call missing required field: {field}")]
+	MissingField { field: String },
 
-    #[error("Invalid tool call format for provider {provider}: {reason}")]
-    InvalidFormat { provider: String, reason: String },
+	#[error("Invalid tool call format for provider {provider}: {reason}")]
+	InvalidFormat { provider: String, reason: String },
 
-    #[error("No tool calls found in provider response")]
-    NoToolCalls,
+	#[error("No tool calls found in provider response")]
+	NoToolCalls,
 
-    #[error("Unsupported provider format: {provider}")]
-    UnsupportedProvider { provider: String },
+	#[error("Unsupported provider format: {provider}")]
+	UnsupportedProvider { provider: String },
 
-    #[error("Invalid JSON in tool call arguments: {0}")]
-    InvalidArguments(serde_json::Error),
+	#[error("Invalid JSON in tool call arguments: {0}")]
+	InvalidArguments(serde_json::Error),
 }
 
 /// Errors that can occur during provider operations
 #[derive(Debug, Error)]
 pub enum ProviderError {
-    #[error("Provider not found: {provider}")]
-    ProviderNotFound { provider: String },
+	#[error("Provider not found: {provider}")]
+	ProviderNotFound { provider: String },
 
-    #[error("Model not supported by provider {provider}: {model}")]
-    ModelNotSupported { provider: String, model: String },
+	#[error("Model not supported by provider {provider}: {model}")]
+	ModelNotSupported { provider: String, model: String },
 
-    #[error("API key not found for provider {provider}: set {env_var}")]
-    ApiKeyNotFound { provider: String, env_var: String },
+	#[error("API key not found for provider {provider}: set {env_var}")]
+	ApiKeyNotFound { provider: String, env_var: String },
 
-    #[error("Invalid API key for provider: {provider}")]
-    InvalidApiKey { provider: String },
+	#[error("Invalid API key for provider: {provider}")]
+	InvalidApiKey { provider: String },
 
-    #[error("Rate limit exceeded for provider: {provider}")]
-    RateLimitExceeded { provider: String },
+	#[error("Rate limit exceeded for provider: {provider}")]
+	RateLimitExceeded { provider: String },
 
-    #[error("Provider API error: {provider} - {status}: {message}")]
-    ApiError {
-        provider: String,
-        status: u16,
-        message: String,
-    },
+	#[error("Provider API error: {provider} - {status}: {message}")]
+	ApiError {
+		provider: String,
+		status: u16,
+		message: String,
+	},
 
-    #[error("Network error: {0}")]
-    NetworkError(#[from] reqwest::Error),
+	#[error("Network error: {0}")]
+	NetworkError(#[from] reqwest::Error),
 
-    #[error("Timeout error for provider: {provider}")]
-    TimeoutError { provider: String },
+	#[error("Timeout error for provider: {provider}")]
+	TimeoutError { provider: String },
 
-    #[error("Message processing failed: {0}")]
-    MessageError(#[from] MessageError),
+	#[error("Message processing failed: {0}")]
+	MessageError(#[from] MessageError),
 
-    #[error("Tool call processing failed: {0}")]
-    ToolCallError(#[from] ToolCallError),
+	#[error("Tool call processing failed: {0}")]
+	ToolCallError(#[from] ToolCallError),
 
-    #[error("Configuration error: {message}")]
-    ConfigurationError { message: String },
+	#[error("Configuration error: {message}")]
+	ConfigurationError { message: String },
 
-    #[error("Unsupported operation for provider {provider}: {operation}")]
-    UnsupportedOperation { provider: String, operation: String },
+	#[error("Unsupported operation for provider {provider}: {operation}")]
+	UnsupportedOperation { provider: String, operation: String },
 
-    #[error("Request cancelled")]
-    Cancelled,
+	#[error("Request cancelled")]
+	Cancelled,
 
-    #[error("Response parsing failed: {0}")]
-    ResponseParsingError(#[from] serde_json::Error),
+	#[error("Response parsing failed: {0}")]
+	ResponseParsingError(#[from] serde_json::Error),
 
-    #[error("Structured output error: {0}")]
-    StructuredOutputError(#[from] StructuredOutputError),
+	#[error("Structured output error: {0}")]
+	StructuredOutputError(#[from] StructuredOutputError),
 }
 
 /// Errors that can occur during structured output operations
 #[derive(Debug, Error)]
 pub enum StructuredOutputError {
-    #[error("Provider {provider} does not support structured output")]
-    UnsupportedProvider { provider: String },
+	#[error("Provider {provider} does not support structured output")]
+	UnsupportedProvider { provider: String },
 
-    #[error("Invalid JSON schema: {reason}")]
-    InvalidSchema { reason: String },
+	#[error("Invalid JSON schema: {reason}")]
+	InvalidSchema { reason: String },
 
-    #[error("Schema validation failed: {reason}")]
-    ValidationFailed { reason: String },
+	#[error("Schema validation failed: {reason}")]
+	ValidationFailed { reason: String },
 
-    #[error("Failed to parse structured output: {reason}")]
-    ParsingFailed { reason: String },
+	#[error("Failed to parse structured output: {reason}")]
+	ParsingFailed { reason: String },
 
-    #[error("Model {model} does not support structured output")]
-    UnsupportedModel { model: String },
+	#[error("Model {model} does not support structured output")]
+	UnsupportedModel { model: String },
 
-    #[error("JSON schema serialization failed: {0}")]
-    SchemaSerializationError(#[from] serde_json::Error),
+	#[error("JSON schema serialization failed: {0}")]
+	SchemaSerializationError(#[from] serde_json::Error),
 }
 
 /// Errors that can occur during configuration operations
 #[derive(Debug, Error)]
 pub enum ConfigError {
-    #[error("Invalid cache TTL value: {value}")]
-    InvalidCacheTTL { value: String },
+	#[error("Invalid cache TTL value: {value}")]
+	InvalidCacheTTL { value: String },
 
-    #[error("Invalid duration format: {format}")]
-    InvalidDurationFormat { format: String },
+	#[error("Invalid duration format: {format}")]
+	InvalidDurationFormat { format: String },
 
-    #[error("Configuration validation failed: {field} - {reason}")]
-    ValidationFailed { field: String, reason: String },
+	#[error("Configuration validation failed: {field} - {reason}")]
+	ValidationFailed { field: String, reason: String },
 
-    #[error("Missing required configuration: {field}")]
-    MissingRequired { field: String },
+	#[error("Missing required configuration: {field}")]
+	MissingRequired { field: String },
 
-    #[error("Invalid configuration value for {field}: {value}")]
-    InvalidValue { field: String, value: String },
+	#[error("Invalid configuration value for {field}: {value}")]
+	InvalidValue { field: String, value: String },
 }
 
 /// Result type for provider operations
@@ -177,72 +177,72 @@ pub type StructuredOutputResult<T> = Result<T, StructuredOutputError>;
 
 /// Extension trait for adding context to errors
 pub trait ErrorContext<T> {
-    /// Add general context to an error
-    fn with_context(self, context: &str) -> ProviderResult<T>;
+	/// Add general context to an error
+	fn with_context(self, context: &str) -> ProviderResult<T>;
 
-    /// Add provider-specific context to an error
-    fn with_provider_context(self, provider: &str) -> ProviderResult<T>;
+	/// Add provider-specific context to an error
+	fn with_provider_context(self, provider: &str) -> ProviderResult<T>;
 
-    /// Add operation context to an error
-    fn with_operation_context(self, operation: &str) -> ProviderResult<T>;
+	/// Add operation context to an error
+	fn with_operation_context(self, operation: &str) -> ProviderResult<T>;
 }
 
 impl<T, E> ErrorContext<T> for Result<T, E>
 where
-    E: std::error::Error + Send + Sync + 'static,
+	E: std::error::Error + Send + Sync + 'static,
 {
-    fn with_context(self, context: &str) -> ProviderResult<T> {
-        self.map_err(|e| ProviderError::ConfigurationError {
-            message: format!("{}: {}", context, e),
-        })
-    }
+	fn with_context(self, context: &str) -> ProviderResult<T> {
+		self.map_err(|e| ProviderError::ConfigurationError {
+			message: format!("{}: {}", context, e),
+		})
+	}
 
-    fn with_provider_context(self, provider: &str) -> ProviderResult<T> {
-        self.map_err(|e| ProviderError::ApiError {
-            provider: provider.to_string(),
-            status: 0, // Unknown status
-            message: e.to_string(),
-        })
-    }
+	fn with_provider_context(self, provider: &str) -> ProviderResult<T> {
+		self.map_err(|e| ProviderError::ApiError {
+			provider: provider.to_string(),
+			status: 0, // Unknown status
+			message: e.to_string(),
+		})
+	}
 
-    fn with_operation_context(self, operation: &str) -> ProviderResult<T> {
-        self.map_err(|e| ProviderError::UnsupportedOperation {
-            provider: "unknown".to_string(),
-            operation: format!("{}: {}", operation, e),
-        })
-    }
+	fn with_operation_context(self, operation: &str) -> ProviderResult<T> {
+		self.map_err(|e| ProviderError::UnsupportedOperation {
+			provider: "unknown".to_string(),
+			operation: format!("{}: {}", operation, e),
+		})
+	}
 }
 
 /// Helper function to create API errors with status codes
 pub fn api_error(provider: &str, status: u16, message: &str) -> ProviderError {
-    ProviderError::ApiError {
-        provider: provider.to_string(),
-        status,
-        message: message.to_string(),
-    }
+	ProviderError::ApiError {
+		provider: provider.to_string(),
+		status,
+		message: message.to_string(),
+	}
 }
 
 /// Helper function to create configuration errors
 pub fn config_error(message: &str) -> ProviderError {
-    ProviderError::ConfigurationError {
-        message: message.to_string(),
-    }
+	ProviderError::ConfigurationError {
+		message: message.to_string(),
+	}
 }
 
 /// Helper function to create missing API key errors
 pub fn missing_api_key(provider: &str, env_var: &str) -> ProviderError {
-    ProviderError::ApiKeyNotFound {
-        provider: provider.to_string(),
-        env_var: env_var.to_string(),
-    }
+	ProviderError::ApiKeyNotFound {
+		provider: provider.to_string(),
+		env_var: env_var.to_string(),
+	}
 }
 
 /// Helper function to create tool call errors
 pub fn tool_call_error(provider: &str, reason: &str) -> ToolCallError {
-    ToolCallError::InvalidFormat {
-        provider: provider.to_string(),
-        reason: reason.to_string(),
-    }
+	ToolCallError::InvalidFormat {
+		provider: provider.to_string(),
+		reason: reason.to_string(),
+	}
 }
 
 #[cfg(test)]

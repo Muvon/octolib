@@ -16,172 +16,172 @@ use super::*;
 
 #[test]
 fn tool_choice_is_explicitly_mapped() {
-    assert_eq!(
-        openai_tool_choice_value(Some(&ToolChoice::Required)),
-        serde_json::json!("required")
-    );
-    assert_eq!(
-        openai_tool_choice_value(Some(&ToolChoice::Function("emit".to_string()))),
-        serde_json::json!({"type": "function", "function": {"name": "emit"}})
-    );
-    assert_eq!(openai_tool_choice_value(None), serde_json::json!("auto"));
+	assert_eq!(
+		openai_tool_choice_value(Some(&ToolChoice::Required)),
+		serde_json::json!("required")
+	);
+	assert_eq!(
+		openai_tool_choice_value(Some(&ToolChoice::Function("emit".to_string()))),
+		serde_json::json!({"type": "function", "function": {"name": "emit"}})
+	);
+	assert_eq!(openai_tool_choice_value(None), serde_json::json!("auto"));
 }
 
 #[test]
 fn test_gemini_thought_signature_round_trip() {
-    // Response side: extra_content survives deserialization
-    let call: OpenAiCompatToolCall = serde_json::from_value(serde_json::json!({
-        "id": "call_1",
-        "type": "function",
-        "function": {"name": "search", "arguments": "{}"},
-        "extra_content": {"google": {"thought_signature": "sig123"}}
-    }))
-    .unwrap();
-    assert!(call.extra_content.is_some());
+	// Response side: extra_content survives deserialization
+	let call: OpenAiCompatToolCall = serde_json::from_value(serde_json::json!({
+		"id": "call_1",
+		"type": "function",
+		"function": {"name": "search", "arguments": "{}"},
+		"extra_content": {"google": {"thought_signature": "sig123"}}
+	}))
+	.unwrap();
+	assert!(call.extra_content.is_some());
 
-    // Replay side: meta.extra_content is emitted back on the tool call
-    let tool_calls_json = serde_json::to_value(vec![crate::llm::tool_calls::GenericToolCall {
-        id: "call_1".to_string(),
-        name: "search".to_string(),
-        arguments: serde_json::json!({}),
-        meta: serde_json::json!({
-            "extra_content": {"google": {"thought_signature": "sig123"}}
-        })
-        .as_object()
-        .cloned(),
-    }])
-    .unwrap();
+	// Replay side: meta.extra_content is emitted back on the tool call
+	let tool_calls_json = serde_json::to_value(vec![crate::llm::tool_calls::GenericToolCall {
+		id: "call_1".to_string(),
+		name: "search".to_string(),
+		arguments: serde_json::json!({}),
+		meta: serde_json::json!({
+			"extra_content": {"google": {"thought_signature": "sig123"}}
+		})
+		.as_object()
+		.cloned(),
+	}])
+	.unwrap();
 
-    let msg = Message {
-        role: "assistant".to_string(),
-        content: String::new(),
-        timestamp: 0,
-        cached: false,
-        cache_ttl: None,
-        tool_call_id: None,
-        name: None,
-        tool_calls: Some(tool_calls_json),
-        images: None,
-        videos: None,
-        thinking: None,
-        id: None,
-    };
-    let converted = convert_messages(std::slice::from_ref(&msg), "local", "test-model");
-    let json = serde_json::to_value(&converted[0]).unwrap();
-    assert_eq!(
-        json["tool_calls"][0]["extra_content"]["google"]["thought_signature"],
-        "sig123"
-    );
+	let msg = Message {
+		role: "assistant".to_string(),
+		content: String::new(),
+		timestamp: 0,
+		cached: false,
+		cache_ttl: None,
+		tool_call_id: None,
+		name: None,
+		tool_calls: Some(tool_calls_json),
+		images: None,
+		videos: None,
+		thinking: None,
+		id: None,
+	};
+	let converted = convert_messages(std::slice::from_ref(&msg), "local", "test-model");
+	let json = serde_json::to_value(&converted[0]).unwrap();
+	assert_eq!(
+		json["tool_calls"][0]["extra_content"]["google"]["thought_signature"],
+		"sig123"
+	);
 
-    // Tool calls without meta must not gain an extra_content field
-    let plain = serde_json::to_value(vec![crate::llm::tool_calls::GenericToolCall {
-        id: "call_2".to_string(),
-        name: "search".to_string(),
-        arguments: serde_json::json!({}),
-        meta: None,
-    }])
-    .unwrap();
-    let msg_plain = Message {
-        tool_calls: Some(plain),
-        ..msg
-    };
-    let converted = convert_messages(std::slice::from_ref(&msg_plain), "local", "test-model");
-    let json = serde_json::to_value(&converted[0]).unwrap();
-    assert!(json["tool_calls"][0].get("extra_content").is_none());
+	// Tool calls without meta must not gain an extra_content field
+	let plain = serde_json::to_value(vec![crate::llm::tool_calls::GenericToolCall {
+		id: "call_2".to_string(),
+		name: "search".to_string(),
+		arguments: serde_json::json!({}),
+		meta: None,
+	}])
+	.unwrap();
+	let msg_plain = Message {
+		tool_calls: Some(plain),
+		..msg
+	};
+	let converted = convert_messages(std::slice::from_ref(&msg_plain), "local", "test-model");
+	let json = serde_json::to_value(&converted[0]).unwrap();
+	assert!(json["tool_calls"][0].get("extra_content").is_none());
 }
 
 #[test]
 fn test_ollama_reasoning_is_stored_and_replayed() {
-    let response_message: OpenAiCompatResponseMessage = serde_json::from_value(serde_json::json!({
-        "content": "I need the repository state.",
-        "reasoning": "The first step is to inspect git status.",
-        "tool_calls": [{
-            "id": "call_1",
-            "type": "function",
-            "function": {"name": "git_status", "arguments": "{}"}
-        }]
-    }))
-    .unwrap();
+	let response_message: OpenAiCompatResponseMessage = serde_json::from_value(serde_json::json!({
+		"content": "I need the repository state.",
+		"reasoning": "The first step is to inspect git status.",
+		"tool_calls": [{
+			"id": "call_1",
+			"type": "function",
+			"function": {"name": "git_status", "arguments": "{}"}
+		}]
+	}))
+	.unwrap();
 
-    let thinking = extract_thinking(&response_message).expect("reasoning must be stored");
-    assert_eq!(thinking.content, "The first step is to inspect git status.");
+	let thinking = extract_thinking(&response_message).expect("reasoning must be stored");
+	assert_eq!(thinking.content, "The first step is to inspect git status.");
 
-    let tool_calls = serde_json::to_value(vec![crate::llm::tool_calls::GenericToolCall {
-        id: "call_1".to_string(),
-        name: "git_status".to_string(),
-        arguments: serde_json::json!({}),
-        meta: None,
-    }])
-    .unwrap();
-    let history = Message {
-        role: "assistant".to_string(),
-        content: "I need the repository state.".to_string(),
-        timestamp: 0,
-        cached: false,
-        cache_ttl: None,
-        tool_call_id: None,
-        name: None,
-        tool_calls: Some(tool_calls),
-        images: None,
-        videos: None,
-        thinking: Some(thinking),
-        id: None,
-    };
+	let tool_calls = serde_json::to_value(vec![crate::llm::tool_calls::GenericToolCall {
+		id: "call_1".to_string(),
+		name: "git_status".to_string(),
+		arguments: serde_json::json!({}),
+		meta: None,
+	}])
+	.unwrap();
+	let history = Message {
+		role: "assistant".to_string(),
+		content: "I need the repository state.".to_string(),
+		timestamp: 0,
+		cached: false,
+		cache_ttl: None,
+		tool_call_id: None,
+		name: None,
+		tool_calls: Some(tool_calls),
+		images: None,
+		videos: None,
+		thinking: Some(thinking),
+		id: None,
+	};
 
-    let converted = convert_messages(&[history], "ollama", "glm-5.2");
-    let json = serde_json::to_value(&converted[0]).unwrap();
-    assert_eq!(
-        json.get("reasoning").and_then(serde_json::Value::as_str),
-        Some("The first step is to inspect git status.")
-    );
+	let converted = convert_messages(&[history], "ollama", "glm-5.2");
+	let json = serde_json::to_value(&converted[0]).unwrap();
+	assert_eq!(
+		json.get("reasoning").and_then(serde_json::Value::as_str),
+		Some("The first step is to inspect git status.")
+	);
 }
 
 #[test]
 fn test_ollama_reasoning_replays_only_on_last_assistant() {
-    let assistant = |text: &str| Message {
-        role: "assistant".to_string(),
-        content: text.to_string(),
-        timestamp: 0,
-        cached: false,
-        cache_ttl: None,
-        tool_call_id: None,
-        name: None,
-        tool_calls: None,
-        images: None,
-        videos: None,
-        thinking: Some(ThinkingBlock {
-            content: format!("thinking for {text}"),
-            tokens: 4,
-        }),
-        id: None,
-    };
-    let messages = [assistant("one"), assistant("two")];
+	let assistant = |text: &str| Message {
+		role: "assistant".to_string(),
+		content: text.to_string(),
+		timestamp: 0,
+		cached: false,
+		cache_ttl: None,
+		tool_call_id: None,
+		name: None,
+		tool_calls: None,
+		images: None,
+		videos: None,
+		thinking: Some(ThinkingBlock {
+			content: format!("thinking for {text}"),
+			tokens: 4,
+		}),
+		id: None,
+	};
+	let messages = [assistant("one"), assistant("two")];
 
-    let converted = convert_messages(&messages, "ollama", "glm-5.2");
-    assert!(converted[0].reasoning.is_none());
-    assert_eq!(converted[1].reasoning.as_deref(), Some("thinking for two"));
+	let converted = convert_messages(&messages, "ollama", "glm-5.2");
+	assert!(converted[0].reasoning.is_none());
+	assert_eq!(converted[1].reasoning.as_deref(), Some("thinking for two"));
 
-    // Kimi preserve-thinking models keep reasoning on every assistant turn.
-    let converted = convert_messages(&messages, "ollama", "kimi-k2.7-code");
-    assert_eq!(converted[0].reasoning.as_deref(), Some("thinking for one"));
-    assert_eq!(converted[1].reasoning.as_deref(), Some("thinking for two"));
+	// Kimi preserve-thinking models keep reasoning on every assistant turn.
+	let converted = convert_messages(&messages, "ollama", "kimi-k2.7-code");
+	assert_eq!(converted[0].reasoning.as_deref(), Some("thinking for one"));
+	assert_eq!(converted[1].reasoning.as_deref(), Some("thinking for two"));
 }
 
 #[test]
 fn test_openai_compat_reasoning_field_variants_are_stored() {
-    for (field, value) in [
-        ("reasoning_content", "reasoning-content trace"),
-        ("reasoning", "reasoning trace"),
-        ("thinking", "native Ollama trace"),
-    ] {
-        let mut json = serde_json::json!({"content": "answer"});
-        json[field] = serde_json::json!(value);
-        let message: OpenAiCompatResponseMessage = serde_json::from_value(json).unwrap();
-        assert_eq!(
-            extract_thinking(&message).map(|thinking| thinking.content),
-            Some(value.to_string())
-        );
-    }
+	for (field, value) in [
+		("reasoning_content", "reasoning-content trace"),
+		("reasoning", "reasoning trace"),
+		("thinking", "native Ollama trace"),
+	] {
+		let mut json = serde_json::json!({"content": "answer"});
+		json[field] = serde_json::json!(value);
+		let message: OpenAiCompatResponseMessage = serde_json::from_value(json).unwrap();
+		assert_eq!(
+			extract_thinking(&message).map(|thinking| thinking.content),
+			Some(value.to_string())
+		);
+	}
 }
 
 /// Model Studio ignores historical `reasoning_content` for DeepSeek (its
@@ -189,18 +189,18 @@ fn test_openai_compat_reasoning_field_variants_are_stored() {
 /// carries reasoning fields on the Alibaba route.
 #[test]
 fn test_alibaba_deepseek_sends_no_reasoning_fields() {
-    let assistant = |text: &str| {
-        Message::assistant(text).with_thinking(ThinkingBlock {
-            content: format!("thinking for {text}"),
-            tokens: 4,
-        })
-    };
-    let messages = [assistant("one"), assistant("two")];
+	let assistant = |text: &str| {
+		Message::assistant(text).with_thinking(ThinkingBlock {
+			content: format!("thinking for {text}"),
+			tokens: 4,
+		})
+	};
+	let messages = [assistant("one"), assistant("two")];
 
-    let converted = convert_messages(&messages, "alibaba", "deepseek-v4-flash-0731");
-    assert!(converted
-        .iter()
-        .all(|message| message.reasoning.is_none() && message.reasoning_content.is_none()));
+	let converted = convert_messages(&messages, "alibaba", "deepseek-v4-flash-0731");
+	assert!(converted
+		.iter()
+		.all(|message| message.reasoning.is_none() && message.reasoning_content.is_none()));
 }
 
 /// Model Studio's GLM models keep earlier turns' reasoning by default
@@ -208,233 +208,210 @@ fn test_alibaba_deepseek_sends_no_reasoning_fields() {
 /// assistant turn, with or without tool calls, replays it as `reasoning_content`.
 #[test]
 fn test_alibaba_glm_replays_every_reasoning_turn_as_reasoning_content() {
-    let thinking = |text: &str| ThinkingBlock {
-        content: format!("thinking for {text}"),
-        tokens: 4,
-    };
-    let call = crate::llm::tool_calls::GenericToolCall {
-        id: "call_1".to_string(),
-        name: "view".to_string(),
-        arguments: serde_json::json!({"path": "src/lib.rs"}),
-        meta: None,
-    };
-    let mut tool_turn = Message::assistant("").with_thinking(thinking("plan"));
-    tool_turn.tool_calls = Some(serde_json::to_value([call]).unwrap());
-    let messages = [
-        Message::user("fix the bug"),
-        tool_turn,
-        Message::tool("fn main() {}", "call_1", "view"),
-        Message::assistant("done").with_thinking(thinking("answer")),
-    ];
+	let thinking = |text: &str| ThinkingBlock {
+		content: format!("thinking for {text}"),
+		tokens: 4,
+	};
+	let call = crate::llm::tool_calls::GenericToolCall {
+		id: "call_1".to_string(),
+		name: "view".to_string(),
+		arguments: serde_json::json!({"path": "src/lib.rs"}),
+		meta: None,
+	};
+	let mut tool_turn = Message::assistant("").with_thinking(thinking("plan"));
+	tool_turn.tool_calls = Some(serde_json::to_value([call]).unwrap());
+	let messages = [
+		Message::user("fix the bug"),
+		tool_turn,
+		Message::tool("fn main() {}", "call_1", "view"),
+		Message::assistant("done").with_thinking(thinking("answer")),
+	];
 
-    let converted = convert_messages(&messages, "alibaba", "glm-5.3");
-    let json: Vec<serde_json::Value> = converted
-        .iter()
-        .map(|message| serde_json::to_value(message).unwrap())
-        .collect();
-    let replayed: Vec<Option<&str>> = json
-        .iter()
-        .map(|message| {
-            message
-                .get("reasoning_content")
-                .and_then(serde_json::Value::as_str)
-        })
-        .collect();
-    assert_eq!(
-        replayed,
-        [
-            None,
-            Some("thinking for plan"),
-            None,
-            Some("thinking for answer")
-        ]
-    );
-    assert!(json
-        .iter()
-        .all(|message| message.get("reasoning").is_none()));
+	let converted = convert_messages(&messages, "alibaba", "glm-5.3");
+	let json: Vec<serde_json::Value> = converted
+		.iter()
+		.map(|message| serde_json::to_value(message).unwrap())
+		.collect();
+	let replayed: Vec<Option<&str>> = json
+		.iter()
+		.map(|message| message.get("reasoning_content").and_then(serde_json::Value::as_str))
+		.collect();
+	assert_eq!(
+		replayed,
+		[None, Some("thinking for plan"), None, Some("thinking for answer")]
+	);
+	assert!(json.iter().all(|message| message.get("reasoning").is_none()));
 
-    // The field is Model Studio's: the same GLM model on Ollama keeps Ollama's rule.
-    let converted = convert_messages(&messages, "ollama", "glm-5.3");
-    assert!(converted
-        .iter()
-        .all(|message| message.reasoning_content.is_none()));
+	// The field is Model Studio's: the same GLM model on Ollama keeps Ollama's rule.
+	let converted = convert_messages(&messages, "ollama", "glm-5.3");
+	assert!(converted.iter().all(|message| message.reasoning_content.is_none()));
 }
 
 #[test]
 fn test_alibaba_deepseek_uses_json_object_guidance_not_json_schema() {
-    let schema = serde_json::json!({
-        "type": "object",
-        "properties": {"answer": {"type": "integer"}},
-        "required": ["answer"]
-    });
-    let response_format = crate::llm::types::StructuredOutputRequest::json_schema(schema.clone());
-    let mut request_body = serde_json::json!({
-        "messages": [{"role": "user", "content": "answer"}]
-    });
+	let schema = serde_json::json!({
+		"type": "object",
+		"properties": {"answer": {"type": "integer"}},
+		"required": ["answer"]
+	});
+	let response_format = crate::llm::types::StructuredOutputRequest::json_schema(schema.clone());
+	let mut request_body = serde_json::json!({
+		"messages": [{"role": "user", "content": "answer"}]
+	});
 
-    apply_response_format(
-        &mut request_body,
-        "alibaba",
-        "deepseek-v4-flash-0731",
-        &response_format,
-    );
+	apply_response_format(&mut request_body, "alibaba", "deepseek-v4-flash-0731", &response_format);
 
-    assert_eq!(
-        request_body["response_format"],
-        serde_json::json!({"type": "json_object"})
-    );
-    assert!(request_body["response_format"].get("json_schema").is_none());
-    let guidance = request_body["messages"]
-        .as_array()
-        .and_then(|messages| messages.last())
-        .and_then(|message| message["content"].as_str())
-        .expect("schema guidance message");
-    assert!(guidance.contains("JSON schema"));
-    assert!(guidance.contains(&schema.to_string()));
+	assert_eq!(
+		request_body["response_format"],
+		serde_json::json!({"type": "json_object"})
+	);
+	assert!(request_body["response_format"].get("json_schema").is_none());
+	let guidance = request_body["messages"]
+		.as_array()
+		.and_then(|messages| messages.last())
+		.and_then(|message| message["content"].as_str())
+		.expect("schema guidance message");
+	assert!(guidance.contains("JSON schema"));
+	assert!(guidance.contains(&schema.to_string()));
 }
 
 /// Model Studio rejects json_object requests unless the word "JSON" appears
 /// in the messages, so the Alibaba route injects a guidance line.
 #[test]
 fn test_alibaba_json_mode_injects_json_keyword() {
-    let response_format = crate::llm::types::StructuredOutputRequest::json();
-    let mut request_body = serde_json::json!({
-        "messages": [{"role": "user", "content": "answer"}]
-    });
+	let response_format = crate::llm::types::StructuredOutputRequest::json();
+	let mut request_body = serde_json::json!({
+		"messages": [{"role": "user", "content": "answer"}]
+	});
 
-    apply_response_format(
-        &mut request_body,
-        "alibaba",
-        "qwen3.8-flash",
-        &response_format,
-    );
+	apply_response_format(&mut request_body, "alibaba", "qwen3.8-flash", &response_format);
 
-    assert_eq!(
-        request_body["response_format"],
-        serde_json::json!({"type": "json_object"})
-    );
-    let guidance = request_body["messages"]
-        .as_array()
-        .and_then(|messages| messages.last())
-        .and_then(|message| message["content"].as_str())
-        .expect("JSON guidance message");
-    assert!(guidance.contains("JSON"));
+	assert_eq!(
+		request_body["response_format"],
+		serde_json::json!({"type": "json_object"})
+	);
+	let guidance = request_body["messages"]
+		.as_array()
+		.and_then(|messages| messages.last())
+		.and_then(|message| message["content"].as_str())
+		.expect("JSON guidance message");
+	assert!(guidance.contains("JSON"));
 
-    // Other providers keep the request untouched.
-    let mut other_body = serde_json::json!({
-        "messages": [{"role": "user", "content": "answer"}]
-    });
-    apply_response_format(&mut other_body, "groq", "some-model", &response_format);
-    assert_eq!(other_body["messages"].as_array().map(Vec::len), Some(1));
+	// Other providers keep the request untouched.
+	let mut other_body = serde_json::json!({
+		"messages": [{"role": "user", "content": "answer"}]
+	});
+	apply_response_format(&mut other_body, "groq", "some-model", &response_format);
+	assert_eq!(other_body["messages"].as_array().map(Vec::len), Some(1));
 }
 
 #[test]
 fn test_alibaba_deepseek_reasoning_effort_preserves_supported_values() {
-    use crate::llm::types::ReasoningEffort;
+	use crate::llm::types::ReasoningEffort;
 
-    // Model Studio accepts the standard values and performs each model's
-    // documented equivalence mapping itself. Preserve caller intent verbatim.
-    assert_eq!(
-        reasoning_effort_value("alibaba", "deepseek-v4-flash", ReasoningEffort::Low),
-        "low"
-    );
-    assert_eq!(
-        reasoning_effort_value("alibaba", "deepseek-v4-flash", ReasoningEffort::Medium),
-        "medium"
-    );
-    assert_eq!(
-        reasoning_effort_value("alibaba", "deepseek-v4-flash", ReasoningEffort::XHigh),
-        "xhigh"
-    );
-    assert_eq!(
-        reasoning_effort_value("alibaba", "deepseek-v4-pro", ReasoningEffort::Max),
-        "max"
-    );
+	// Model Studio accepts the standard values and performs each model's
+	// documented equivalence mapping itself. Preserve caller intent verbatim.
+	assert_eq!(
+		reasoning_effort_value("alibaba", "deepseek-v4-flash", ReasoningEffort::Low),
+		"low"
+	);
+	assert_eq!(
+		reasoning_effort_value("alibaba", "deepseek-v4-flash", ReasoningEffort::Medium),
+		"medium"
+	);
+	assert_eq!(
+		reasoning_effort_value("alibaba", "deepseek-v4-flash", ReasoningEffort::XHigh),
+		"xhigh"
+	);
+	assert_eq!(
+		reasoning_effort_value("alibaba", "deepseek-v4-pro", ReasoningEffort::Max),
+		"max"
+	);
 
-    // Snapshot aliases receive the same accepted values; Model Studio owns any
-    // snapshot-specific equivalence between them.
-    assert_eq!(
-        reasoning_effort_value("alibaba", "deepseek-v4-flash-0731", ReasoningEffort::Low),
-        "low"
-    );
-    assert_eq!(
-        reasoning_effort_value("alibaba", "deepseek-v4-flash-0731", ReasoningEffort::Medium),
-        "medium"
-    );
-    assert_eq!(
-        reasoning_effort_value("alibaba", "deepseek-v4-flash-0731", ReasoningEffort::XHigh),
-        "xhigh"
-    );
-    assert_eq!(
-        reasoning_effort_value("alibaba", "deepseek-v4-flash-0731", ReasoningEffort::Max),
-        "max"
-    );
+	// Snapshot aliases receive the same accepted values; Model Studio owns any
+	// snapshot-specific equivalence between them.
+	assert_eq!(
+		reasoning_effort_value("alibaba", "deepseek-v4-flash-0731", ReasoningEffort::Low),
+		"low"
+	);
+	assert_eq!(
+		reasoning_effort_value("alibaba", "deepseek-v4-flash-0731", ReasoningEffort::Medium),
+		"medium"
+	);
+	assert_eq!(
+		reasoning_effort_value("alibaba", "deepseek-v4-flash-0731", ReasoningEffort::XHigh),
+		"xhigh"
+	);
+	assert_eq!(
+		reasoning_effort_value("alibaba", "deepseek-v4-flash-0731", ReasoningEffort::Max),
+		"max"
+	);
 }
 
 #[test]
 fn test_alibaba_glm_reasoning_effort_follows_model_studio_ladder() {
-    use crate::llm::types::ReasoningEffort;
+	use crate::llm::types::ReasoningEffort;
 
-    // glm-5.3 accepts only low/high/max; "medium" is an invalid_parameter_error.
-    // It has no off level either, so no reasoning floors to low.
-    assert_eq!(
-        reasoning_effort_value("alibaba", "glm-5.3", ReasoningEffort::None),
-        "low"
-    );
-    assert_eq!(
-        reasoning_effort_value("alibaba", "glm-5.3", ReasoningEffort::Low),
-        "low"
-    );
-    assert_eq!(
-        reasoning_effort_value("alibaba", "glm-5.3", ReasoningEffort::Medium),
-        "low"
-    );
-    assert_eq!(
-        reasoning_effort_value("alibaba", "glm-5.3", ReasoningEffort::High),
-        "high"
-    );
-    assert_eq!(
-        reasoning_effort_value("alibaba", "glm-5.3", ReasoningEffort::XHigh),
-        "high"
-    );
-    assert_eq!(
-        reasoning_effort_value("alibaba", "glm-5.3", ReasoningEffort::Max),
-        "max"
-    );
+	// glm-5.3 accepts only low/high/max; "medium" is an invalid_parameter_error.
+	// It has no off level either, so no reasoning floors to low.
+	assert_eq!(
+		reasoning_effort_value("alibaba", "glm-5.3", ReasoningEffort::None),
+		"low"
+	);
+	assert_eq!(
+		reasoning_effort_value("alibaba", "glm-5.3", ReasoningEffort::Low),
+		"low"
+	);
+	assert_eq!(
+		reasoning_effort_value("alibaba", "glm-5.3", ReasoningEffort::Medium),
+		"low"
+	);
+	assert_eq!(
+		reasoning_effort_value("alibaba", "glm-5.3", ReasoningEffort::High),
+		"high"
+	);
+	assert_eq!(
+		reasoning_effort_value("alibaba", "glm-5.3", ReasoningEffort::XHigh),
+		"high"
+	);
+	assert_eq!(
+		reasoning_effort_value("alibaba", "glm-5.3", ReasoningEffort::Max),
+		"max"
+	);
 
-    // glm-5.2 accepts the full ladder through max.
-    assert_eq!(
-        reasoning_effort_value("alibaba", "glm-5.2", ReasoningEffort::Medium),
-        "medium"
-    );
-    assert_eq!(
-        reasoning_effort_value("alibaba", "glm-5.2", ReasoningEffort::XHigh),
-        "xhigh"
-    );
-    assert_eq!(
-        reasoning_effort_value("alibaba", "glm-5.2-fast-preview", ReasoningEffort::Max),
-        "max"
-    );
+	// glm-5.2 accepts the full ladder through max.
+	assert_eq!(
+		reasoning_effort_value("alibaba", "glm-5.2", ReasoningEffort::Medium),
+		"medium"
+	);
+	assert_eq!(
+		reasoning_effort_value("alibaba", "glm-5.2", ReasoningEffort::XHigh),
+		"xhigh"
+	);
+	assert_eq!(
+		reasoning_effort_value("alibaba", "glm-5.2-fast-preview", ReasoningEffort::Max),
+		"max"
+	);
 
-    // glm-5.1 tops out at xhigh.
-    assert_eq!(
-        reasoning_effort_value("alibaba", "glm-5.1", ReasoningEffort::XHigh),
-        "xhigh"
-    );
-    assert_eq!(
-        reasoning_effort_value("alibaba", "glm-5.1", ReasoningEffort::Max),
-        "xhigh"
-    );
+	// glm-5.1 tops out at xhigh.
+	assert_eq!(
+		reasoning_effort_value("alibaba", "glm-5.1", ReasoningEffort::XHigh),
+		"xhigh"
+	);
+	assert_eq!(
+		reasoning_effort_value("alibaba", "glm-5.1", ReasoningEffort::Max),
+		"xhigh"
+	);
 
-    // Undocumented GLM models and non-GLM models keep the generic ladder.
-    assert_eq!(
-        reasoning_effort_value("alibaba", "glm-4.7", ReasoningEffort::Max),
-        "high"
-    );
-    assert_eq!(
-        reasoning_effort_value("alibaba", "qwen3.8-max", ReasoningEffort::Max),
-        "high"
-    );
+	// Undocumented GLM models and non-GLM models keep the generic ladder.
+	assert_eq!(
+		reasoning_effort_value("alibaba", "glm-4.7", ReasoningEffort::Max),
+		"high"
+	);
+	assert_eq!(
+		reasoning_effort_value("alibaba", "qwen3.8-max", ReasoningEffort::Max),
+		"high"
+	);
 }
 
 /// Ollama Cloud resolves an unsupported effort name to the model default, which
@@ -442,174 +419,136 @@ fn test_alibaba_glm_reasoning_effort_follows_model_studio_ladder() {
 /// ladder must not send `medium` there.
 #[test]
 fn test_ollama_glm_5_3_reasoning_effort_floors_to_listed_levels() {
-    use crate::llm::types::ReasoningEffort;
+	use crate::llm::types::ReasoningEffort;
 
-    for (effort, expected) in [
-        (ReasoningEffort::None, "low"),
-        (ReasoningEffort::Low, "low"),
-        (ReasoningEffort::Medium, "low"),
-        (ReasoningEffort::High, "high"),
-        (ReasoningEffort::XHigh, "high"),
-        (ReasoningEffort::Max, "max"),
-    ] {
-        assert_eq!(
-            reasoning_effort_value("ollama", "glm-5.3:cloud", effort),
-            expected
-        );
-    }
+	for (effort, expected) in [
+		(ReasoningEffort::None, "low"),
+		(ReasoningEffort::Low, "low"),
+		(ReasoningEffort::Medium, "low"),
+		(ReasoningEffort::High, "high"),
+		(ReasoningEffort::XHigh, "high"),
+		(ReasoningEffort::Max, "max"),
+	] {
+		assert_eq!(reasoning_effort_value("ollama", "glm-5.3:cloud", effort), expected);
+	}
 
-    let mut body = serde_json::json!({});
-    apply_reasoning_effort(&mut body, "ollama", "glm-5.3", Some(ReasoningEffort::None));
-    assert_eq!(body["reasoning_effort"], "low");
+	let mut body = serde_json::json!({});
+	apply_reasoning_effort(&mut body, "ollama", "glm-5.3", Some(ReasoningEffort::None));
+	assert_eq!(body["reasoning_effort"], "low");
 }
 
 #[test]
 fn test_fireworks_glm_5_2_reasoning_effort_reaches_max_tier() {
-    use crate::llm::types::ReasoningEffort;
+	use crate::llm::types::ReasoningEffort;
 
-    // Fireworks collapses low/medium to High and xhigh/max to Max itself.
-    let model = "accounts/fireworks/models/glm-5p2";
-    assert_eq!(
-        reasoning_effort_value("fireworks", model, ReasoningEffort::Medium),
-        "medium"
-    );
-    assert_eq!(
-        reasoning_effort_value("fireworks", model, ReasoningEffort::XHigh),
-        "xhigh"
-    );
-    assert_eq!(
-        reasoning_effort_value("fireworks", model, ReasoningEffort::Max),
-        "max"
-    );
+	// Fireworks collapses low/medium to High and xhigh/max to Max itself.
+	let model = "accounts/fireworks/models/glm-5p2";
+	assert_eq!(
+		reasoning_effort_value("fireworks", model, ReasoningEffort::Medium),
+		"medium"
+	);
+	assert_eq!(
+		reasoning_effort_value("fireworks", model, ReasoningEffort::XHigh),
+		"xhigh"
+	);
+	assert_eq!(reasoning_effort_value("fireworks", model, ReasoningEffort::Max), "max");
 
-    // Other Fireworks models keep the generic cap.
-    assert_eq!(
-        reasoning_effort_value(
-            "fireworks",
-            "accounts/fireworks/models/glm-4p7",
-            ReasoningEffort::Max
-        ),
-        "high"
-    );
+	// Other Fireworks models keep the generic cap.
+	assert_eq!(
+		reasoning_effort_value("fireworks", "accounts/fireworks/models/glm-4p7", ReasoningEffort::Max),
+		"high"
+	);
 }
 
 #[test]
 fn test_ollama_max_reasoning_effort_is_not_downgraded() {
-    assert_eq!(
-        reasoning_effort_value("ollama", "qwen3", crate::llm::types::ReasoningEffort::Max),
-        "max"
-    );
-    assert_eq!(
-        reasoning_effort_value(
-            "nvidia",
-            "nemotron",
-            crate::llm::types::ReasoningEffort::Max
-        ),
-        "high"
-    );
+	assert_eq!(
+		reasoning_effort_value("ollama", "qwen3", crate::llm::types::ReasoningEffort::Max),
+		"max"
+	);
+	assert_eq!(
+		reasoning_effort_value("nvidia", "nemotron", crate::llm::types::ReasoningEffort::Max),
+		"high"
+	);
 }
 
 #[test]
 fn test_opencode_kimi_k3_max_reasoning_effort_is_kept() {
-    // OpenCode forwards verbatim to Moonshot: kimi-k3's top tier is "max"
-    assert_eq!(
-        reasoning_effort_value(
-            "opencode-go",
-            "kimi-k3",
-            crate::llm::types::ReasoningEffort::Max
-        ),
-        "max"
-    );
-    assert_eq!(
-        reasoning_effort_value(
-            "opencode-zen",
-            "kimi-k3",
-            crate::llm::types::ReasoningEffort::Max
-        ),
-        "max"
-    );
-    // Non-Kimi models through OpenCode keep the generic downgrade
-    assert_eq!(
-        reasoning_effort_value(
-            "opencode-go",
-            "gpt-5.5",
-            crate::llm::types::ReasoningEffort::Max
-        ),
-        "high"
-    );
+	// OpenCode forwards verbatim to Moonshot: kimi-k3's top tier is "max"
+	assert_eq!(
+		reasoning_effort_value("opencode-go", "kimi-k3", crate::llm::types::ReasoningEffort::Max),
+		"max"
+	);
+	assert_eq!(
+		reasoning_effort_value("opencode-zen", "kimi-k3", crate::llm::types::ReasoningEffort::Max),
+		"max"
+	);
+	// Non-Kimi models through OpenCode keep the generic downgrade
+	assert_eq!(
+		reasoning_effort_value("opencode-go", "gpt-5.5", crate::llm::types::ReasoningEffort::Max),
+		"high"
+	);
 }
 
 #[test]
 fn test_meta_reasoning_effort_xhigh_ceiling() {
-    // Muse Spark accepts minimal..xhigh ("none" is a 400): XHigh maps
-    // through and Max collapses onto the same xhigh ceiling.
-    assert_eq!(
-        reasoning_effort_value(
-            "meta",
-            "muse-spark-1.3",
-            crate::llm::types::ReasoningEffort::Low
-        ),
-        "low"
-    );
-    assert_eq!(
-        reasoning_effort_value(
-            "meta",
-            "muse-spark-1.3",
-            crate::llm::types::ReasoningEffort::XHigh
-        ),
-        "xhigh"
-    );
-    assert_eq!(
-        reasoning_effort_value(
-            "meta",
-            "muse-spark-1.3",
-            crate::llm::types::ReasoningEffort::Max
-        ),
-        "xhigh"
-    );
+	// Muse Spark accepts minimal..xhigh ("none" is a 400): XHigh maps
+	// through and Max collapses onto the same xhigh ceiling.
+	assert_eq!(
+		reasoning_effort_value("meta", "muse-spark-1.3", crate::llm::types::ReasoningEffort::Low),
+		"low"
+	);
+	assert_eq!(
+		reasoning_effort_value("meta", "muse-spark-1.3", crate::llm::types::ReasoningEffort::XHigh),
+		"xhigh"
+	);
+	assert_eq!(
+		reasoning_effort_value("meta", "muse-spark-1.3", crate::llm::types::ReasoningEffort::Max),
+		"xhigh"
+	);
 }
 
 #[test]
 fn test_tinker_reasoning_effort_xhigh_ceiling() {
-    // Tinker accepts the full OpenAI ladder including "xhigh" (0.99):
-    // XHigh maps through and Max collapses onto the same ceiling.
-    assert_eq!(
-        reasoning_effort_value(
-            "tinker",
-            "thinkingmachines/Inkling",
-            crate::llm::types::ReasoningEffort::Low
-        ),
-        "low"
-    );
-    assert_eq!(
-        reasoning_effort_value(
-            "tinker",
-            "thinkingmachines/Inkling",
-            crate::llm::types::ReasoningEffort::XHigh
-        ),
-        "xhigh"
-    );
-    assert_eq!(
-        reasoning_effort_value(
-            "tinker",
-            "thinkingmachines/Inkling",
-            crate::llm::types::ReasoningEffort::Max
-        ),
-        "xhigh"
-    );
+	// Tinker accepts the full OpenAI ladder including "xhigh" (0.99):
+	// XHigh maps through and Max collapses onto the same ceiling.
+	assert_eq!(
+		reasoning_effort_value(
+			"tinker",
+			"thinkingmachines/Inkling",
+			crate::llm::types::ReasoningEffort::Low
+		),
+		"low"
+	);
+	assert_eq!(
+		reasoning_effort_value(
+			"tinker",
+			"thinkingmachines/Inkling",
+			crate::llm::types::ReasoningEffort::XHigh
+		),
+		"xhigh"
+	);
+	assert_eq!(
+		reasoning_effort_value(
+			"tinker",
+			"thinkingmachines/Inkling",
+			crate::llm::types::ReasoningEffort::Max
+		),
+		"xhigh"
+	);
 }
 
 #[test]
 fn test_reasoning_effort_value_none_maps_to_the_none_level() {
-    use crate::llm::types::ReasoningEffort;
-    assert_eq!(
-        reasoning_effort_value("alibaba", "deepseek-v4-flash-0731", ReasoningEffort::None),
-        "none"
-    );
-    assert_eq!(
-        reasoning_effort_value("openrouter", "any", ReasoningEffort::None),
-        "none"
-    );
+	use crate::llm::types::ReasoningEffort;
+	assert_eq!(
+		reasoning_effort_value("alibaba", "deepseek-v4-flash-0731", ReasoningEffort::None),
+		"none"
+	);
+	assert_eq!(
+		reasoning_effort_value("openrouter", "any", ReasoningEffort::None),
+		"none"
+	);
 }
 
 /// Model Studio's GLM-5.3 rejects both `enable_thinking=false` and
@@ -618,48 +557,34 @@ fn test_reasoning_effort_value_none_maps_to_the_none_level() {
 /// with a switch still get `enable_thinking=false`.
 #[test]
 fn test_alibaba_no_reasoning_uses_the_switch_or_the_lowest_level() {
-    use crate::llm::types::ReasoningEffort;
+	use crate::llm::types::ReasoningEffort;
 
-    let body = |model: &str| {
-        let mut request_body = serde_json::json!({});
-        apply_reasoning_effort(
-            &mut request_body,
-            "alibaba",
-            model,
-            Some(ReasoningEffort::None),
-        );
-        request_body
-    };
-    assert_eq!(
-        body("glm-5.3"),
-        serde_json::json!({ "reasoning_effort": "low" })
-    );
-    assert_eq!(
-        body("glm-5.2"),
-        serde_json::json!({ "enable_thinking": false })
-    );
-    assert_eq!(
-        body("qwen3.7-plus"),
-        serde_json::json!({ "enable_thinking": false })
-    );
+	let body = |model: &str| {
+		let mut request_body = serde_json::json!({});
+		apply_reasoning_effort(&mut request_body, "alibaba", model, Some(ReasoningEffort::None));
+		request_body
+	};
+	assert_eq!(body("glm-5.3"), serde_json::json!({ "reasoning_effort": "low" }));
+	assert_eq!(body("glm-5.2"), serde_json::json!({ "enable_thinking": false }));
+	assert_eq!(body("qwen3.7-plus"), serde_json::json!({ "enable_thinking": false }));
 }
 
 /// Request fields a requested effort produces on `provider_name`.
 fn effort_body(provider_name: &str, model: &str, effort: Effort) -> serde_json::Value {
-    let mut request_body = serde_json::json!({});
-    apply_reasoning_effort(&mut request_body, provider_name, model, Some(effort));
-    request_body
+	let mut request_body = serde_json::json!({});
+	apply_reasoning_effort(&mut request_body, provider_name, model, Some(effort));
+	request_body
 }
 
 /// Asserts the `reasoning_effort` sent for each `(requested, sent)` pair.
 fn assert_effort_ladder(provider_name: &str, model: &str, ladder: &[(Effort, &str)]) {
-    for (effort, expected) in ladder {
-        assert_eq!(
-            effort_body(provider_name, model, *effort),
-            serde_json::json!({ "reasoning_effort": expected }),
-            "{provider_name} {model} {effort:?}"
-        );
-    }
+	for (effort, expected) in ladder {
+		assert_eq!(
+			effort_body(provider_name, model, *effort),
+			serde_json::json!({ "reasoning_effort": expected }),
+			"{provider_name} {model} {effort:?}"
+		);
+	}
 }
 
 /// Ollama Cloud resolves an unlisted effort name to the model default, so
@@ -667,63 +592,42 @@ fn assert_effort_ladder(provider_name: &str, model: &str, ladder: &[(Effort, &st
 /// "none" only where the model lists `false`.
 #[test]
 fn test_ollama_reasoning_effort_follows_api_show_levels() {
-    use Effort::{High, Low, Max, Medium, None, XHigh};
+	use Effort::{High, Low, Max, Medium, None, XHigh};
 
-    for model in ["kimi-k3", "deepseek-v4.1-flash", "deepseek-v4-pro"] {
-        assert_effort_ladder(
-            "ollama",
-            model,
-            &[
-                (None, "none"),
-                (Low, "low"),
-                (Medium, "low"),
-                (High, "high"),
-                (XHigh, "high"),
-                (Max, "max"),
-            ],
-        );
-    }
-    assert_effort_ladder(
-        "ollama",
-        "glm-5.2",
-        &[
-            (None, "none"),
-            (Low, "high"),
-            (Medium, "high"),
-            (Max, "max"),
-        ],
-    );
-    // gpt-oss has no level above high: "max" ran at its medium default.
-    assert_effort_ladder(
-        "ollama",
-        "gpt-oss:120b",
-        &[
-            (None, "none"),
-            (Medium, "medium"),
-            (XHigh, "high"),
-            (Max, "high"),
-        ],
-    );
-    // Boolean models map any recognized level to thinking on.
-    for model in [
-        "kimi-k2.6",
-        "kimi-k2.7-code",
-        "nemotron-3-super",
-        "gemma4:31b",
-    ] {
-        assert_effort_ladder("ollama", model, &[(None, "none"), (Max, "high")]);
-    }
-    // minimax-m2.7 lists only `true`: no reasoning keeps the default.
-    assert_eq!(
-        effort_body("ollama", "minimax-m2.7", None),
-        serde_json::json!({})
-    );
-    // Models without thinking metadata keep the compatibility aliases.
-    assert_eq!(
-        effort_body("ollama", "minimax-m3", None),
-        serde_json::json!({})
-    );
-    assert_effort_ladder("ollama", "minimax-m3", &[(Max, "max")]);
+	for model in ["kimi-k3", "deepseek-v4.1-flash", "deepseek-v4-pro"] {
+		assert_effort_ladder(
+			"ollama",
+			model,
+			&[
+				(None, "none"),
+				(Low, "low"),
+				(Medium, "low"),
+				(High, "high"),
+				(XHigh, "high"),
+				(Max, "max"),
+			],
+		);
+	}
+	assert_effort_ladder(
+		"ollama",
+		"glm-5.2",
+		&[(None, "none"), (Low, "high"), (Medium, "high"), (Max, "max")],
+	);
+	// gpt-oss has no level above high: "max" ran at its medium default.
+	assert_effort_ladder(
+		"ollama",
+		"gpt-oss:120b",
+		&[(None, "none"), (Medium, "medium"), (XHigh, "high"), (Max, "high")],
+	);
+	// Boolean models map any recognized level to thinking on.
+	for model in ["kimi-k2.6", "kimi-k2.7-code", "nemotron-3-super", "gemma4:31b"] {
+		assert_effort_ladder("ollama", model, &[(None, "none"), (Max, "high")]);
+	}
+	// minimax-m2.7 lists only `true`: no reasoning keeps the default.
+	assert_eq!(effort_body("ollama", "minimax-m2.7", None), serde_json::json!({}));
+	// Models without thinking metadata keep the compatibility aliases.
+	assert_eq!(effort_body("ollama", "minimax-m3", None), serde_json::json!({}));
+	assert_effort_ladder("ollama", "minimax-m3", &[(Max, "max")]);
 }
 
 /// Fireworks collapses the five levels onto each model's tiers itself, so
@@ -731,146 +635,126 @@ fn test_ollama_reasoning_effort_follows_api_show_levels() {
 /// on gpt-oss and MiniMax M2, which reject it.
 #[test]
 fn test_fireworks_reasoning_effort_reaches_documented_tiers() {
-    use Effort::{High, Low, Max, Medium, None, XHigh};
+	use Effort::{High, Low, Max, Medium, None, XHigh};
 
-    for model in [
-        "accounts/fireworks/models/kimi-k3",
-        "accounts/fireworks/models/qwen3p8-max",
-        "accounts/fireworks/models/deepseek-v4p1-flash",
-        "accounts/fireworks/models/glm-5p2",
-    ] {
-        assert_effort_ladder(
-            "fireworks",
-            model,
-            &[
-                (None, "none"),
-                (Medium, "medium"),
-                (XHigh, "xhigh"),
-                (Max, "max"),
-            ],
-        );
-    }
-    assert_effort_ladder(
-        "fireworks",
-        "accounts/fireworks/models/glm-5p1",
-        &[(None, "none"), (Max, "high")],
-    );
-    // glm-5p3 and qwen3p8-2p4t-a95b list no off toggle.
-    assert_effort_ladder(
-        "fireworks",
-        "accounts/fireworks/models/glm-5p3-fast",
-        &[
-            (None, "low"),
-            (Medium, "low"),
-            (XHigh, "high"),
-            (Max, "max"),
-        ],
-    );
-    assert_effort_ladder(
-        "fireworks",
-        "accounts/fireworks/models/qwen3p8-2p4t-a95b",
-        &[(None, "low"), (High, "medium"), (Max, "xhigh")],
-    );
-    for model in [
-        "accounts/fireworks/models/gpt-oss-120b",
-        "accounts/fireworks/models/minimax-m2p5",
-    ] {
-        assert_eq!(effort_body("fireworks", model, None), serde_json::json!({}));
-        assert_effort_ladder("fireworks", model, &[(Low, "low"), (Max, "high")]);
-    }
+	for model in [
+		"accounts/fireworks/models/kimi-k3",
+		"accounts/fireworks/models/qwen3p8-max",
+		"accounts/fireworks/models/deepseek-v4p1-flash",
+		"accounts/fireworks/models/glm-5p2",
+	] {
+		assert_effort_ladder(
+			"fireworks",
+			model,
+			&[(None, "none"), (Medium, "medium"), (XHigh, "xhigh"), (Max, "max")],
+		);
+	}
+	assert_effort_ladder(
+		"fireworks",
+		"accounts/fireworks/models/glm-5p1",
+		&[(None, "none"), (Max, "high")],
+	);
+	// glm-5p3 and qwen3p8-2p4t-a95b list no off toggle.
+	assert_effort_ladder(
+		"fireworks",
+		"accounts/fireworks/models/glm-5p3-fast",
+		&[(None, "low"), (Medium, "low"), (XHigh, "high"), (Max, "max")],
+	);
+	assert_effort_ladder(
+		"fireworks",
+		"accounts/fireworks/models/qwen3p8-2p4t-a95b",
+		&[(None, "low"), (High, "medium"), (Max, "xhigh")],
+	);
+	for model in [
+		"accounts/fireworks/models/gpt-oss-120b",
+		"accounts/fireworks/models/minimax-m2p5",
+	] {
+		assert_eq!(effort_body("fireworks", model, None), serde_json::json!({}));
+		assert_effort_ladder("fireworks", model, &[(Low, "low"), (Max, "high")]);
+	}
 }
 
 #[test]
 fn test_nvidia_reasoning_effort_follows_model_levels() {
-    use Effort::{High, Low, Max, Medium, None, XHigh};
+	use Effort::{High, Low, Max, Medium, None, XHigh};
 
-    // glm-5.3 cannot stop thinking and defaults to max.
-    assert_effort_ladder(
-        "nvidia",
-        "z-ai/glm-5.3",
-        &[
-            (None, "low"),
-            (Medium, "low"),
-            (High, "high"),
-            (XHigh, "high"),
-            (Max, "max"),
-        ],
-    );
-    assert_effort_ladder(
-        "nvidia",
-        "deepseek-ai/deepseek-v4.1-flash",
-        &[(None, "none"), (Medium, "low"), (Max, "max")],
-    );
-    assert_effort_ladder(
-        "nvidia",
-        "deepseek-ai/deepseek-v4-pro",
-        &[(None, "none"), (Low, "high"), (Max, "max")],
-    );
-    // Nemotron 3 has no effort field; the chat template switches thinking off.
-    assert_eq!(
-        effort_body("nvidia", "nvidia/nemotron-3-super-120b-a12b", None),
-        serde_json::json!({ "chat_template_kwargs": { "enable_thinking": false } })
-    );
+	// glm-5.3 cannot stop thinking and defaults to max.
+	assert_effort_ladder(
+		"nvidia",
+		"z-ai/glm-5.3",
+		&[
+			(None, "low"),
+			(Medium, "low"),
+			(High, "high"),
+			(XHigh, "high"),
+			(Max, "max"),
+		],
+	);
+	assert_effort_ladder(
+		"nvidia",
+		"deepseek-ai/deepseek-v4.1-flash",
+		&[(None, "none"), (Medium, "low"), (Max, "max")],
+	);
+	assert_effort_ladder(
+		"nvidia",
+		"deepseek-ai/deepseek-v4-pro",
+		&[(None, "none"), (Low, "high"), (Max, "max")],
+	);
+	// Nemotron 3 has no effort field; the chat template switches thinking off.
+	assert_eq!(
+		effort_body("nvidia", "nvidia/nemotron-3-super-120b-a12b", None),
+		serde_json::json!({ "chat_template_kwargs": { "enable_thinking": false } })
+	);
 }
 
 #[test]
 fn test_opencode_reasoning_effort_follows_catalog_levels() {
-    use Effort::{High, Low, Max, Medium, None, XHigh};
+	use Effort::{High, Low, Max, Medium, None, XHigh};
 
-    for provider_name in ["opencode-zen", "opencode-go"] {
-        assert_effort_ladder(
-            provider_name,
-            "glm-5.3",
-            &[
-                (None, "low"),
-                (Medium, "low"),
-                (XHigh, "high"),
-                (Max, "max"),
-            ],
-        );
-        assert_effort_ladder(
-            provider_name,
-            "deepseek-v4-pro",
-            &[(Low, "high"), (Medium, "high"), (Max, "max")],
-        );
-        assert_effort_ladder(
-            provider_name,
-            "deepseek-v4.1-flash",
-            &[(Medium, "low"), (High, "high"), (Max, "max")],
-        );
-        assert_effort_ladder(
-            provider_name,
-            "qwen3.8-max",
-            &[
-                (Medium, "medium"),
-                (High, "medium"),
-                (XHigh, "xhigh"),
-                (Max, "xhigh"),
-            ],
-        );
-        assert_effort_ladder(provider_name, "glm-5.2", &[(Low, "high"), (Max, "max")]);
-        // No documented off level: nothing is sent.
-        assert_eq!(
-            effort_body(provider_name, "deepseek-v4-pro", None),
-            serde_json::json!({})
-        );
-    }
+	for provider_name in ["opencode-zen", "opencode-go"] {
+		assert_effort_ladder(
+			provider_name,
+			"glm-5.3",
+			&[(None, "low"), (Medium, "low"), (XHigh, "high"), (Max, "max")],
+		);
+		assert_effort_ladder(
+			provider_name,
+			"deepseek-v4-pro",
+			&[(Low, "high"), (Medium, "high"), (Max, "max")],
+		);
+		assert_effort_ladder(
+			provider_name,
+			"deepseek-v4.1-flash",
+			&[(Medium, "low"), (High, "high"), (Max, "max")],
+		);
+		assert_effort_ladder(
+			provider_name,
+			"qwen3.8-max",
+			&[(Medium, "medium"), (High, "medium"), (XHigh, "xhigh"), (Max, "xhigh")],
+		);
+		assert_effort_ladder(provider_name, "glm-5.2", &[(Low, "high"), (Max, "max")]);
+		// No documented off level: nothing is sent.
+		assert_eq!(
+			effort_body(provider_name, "deepseek-v4-pro", None),
+			serde_json::json!({})
+		);
+	}
 }
 
 /// Cerebras and Groq disable Qwen3.8 reasoning with "none"; gpt-oss has no
 /// off level there, so nothing is sent.
 #[test]
 fn test_qwen_3_8_no_reasoning_sends_none_on_cerebras_and_groq() {
-    assert_effort_ladder("cerebras", "qwen-3.8-27b", &[(Effort::None, "none")]);
-    assert_effort_ladder("groq", "qwen/qwen3.8-27b", &[(Effort::None, "none")]);
-    assert_eq!(
-        effort_body("cerebras", "gpt-oss-120b", Effort::None),
-        serde_json::json!({})
-    );
-    assert_eq!(
-        effort_body("groq", "openai/gpt-oss-120b", Effort::None),
-        serde_json::json!({})
-    );
+	assert_effort_ladder("cerebras", "qwen-3.8-27b", &[(Effort::None, "none")]);
+	assert_effort_ladder("groq", "qwen/qwen3.8-27b", &[(Effort::None, "none")]);
+	assert_eq!(
+		effort_body("cerebras", "gpt-oss-120b", Effort::None),
+		serde_json::json!({})
+	);
+	assert_eq!(
+		effort_body("groq", "openai/gpt-oss-120b", Effort::None),
+		serde_json::json!({})
+	);
 }
 
 /// Model Studio's thinking-only models reject the off switch: kimi-k3 and
@@ -878,76 +762,66 @@ fn test_qwen_3_8_no_reasoning_sends_none_on_cerebras_and_groq() {
 /// which document no effort level, keep their default.
 #[test]
 fn test_alibaba_thinking_only_models_never_send_the_off_switch() {
-    for model in ["kimi-k3", "qwen3.8-2.4t-a95b"] {
-        assert_eq!(
-            effort_body("alibaba", model, Effort::None),
-            serde_json::json!({ "reasoning_effort": "low" })
-        );
-    }
-    for model in ["qwen3.7-max-preview", "qwen3.7-max-2026-05-17"] {
-        assert_eq!(
-            effort_body("alibaba", model, Effort::None),
-            serde_json::json!({})
-        );
-    }
-    assert_eq!(
-        effort_body("alibaba", "qwen3.7-max", Effort::None),
-        serde_json::json!({ "enable_thinking": false })
-    );
+	for model in ["kimi-k3", "qwen3.8-2.4t-a95b"] {
+		assert_eq!(
+			effort_body("alibaba", model, Effort::None),
+			serde_json::json!({ "reasoning_effort": "low" })
+		);
+	}
+	for model in ["qwen3.7-max-preview", "qwen3.7-max-2026-05-17"] {
+		assert_eq!(effort_body("alibaba", model, Effort::None), serde_json::json!({}));
+	}
+	assert_eq!(
+		effort_body("alibaba", "qwen3.7-max", Effort::None),
+		serde_json::json!({ "enable_thinking": false })
+	);
 }
 
 #[test]
 fn test_openai_compat_transport_drops_thinking_by_default() {
-    // The shared transport family (Alibaba except GLM, Ollama minus Kimi,
-    // OpenRouter, OctoHub, ...) never replays historical reasoning, so callers
-    // must not count it towards the prompt.
-    let provider = crate::llm::providers::alibaba::AlibabaProvider::new();
-    assert!(!provider.replays_thinking("deepseek-v4-flash-0731"));
+	// The shared transport family (Alibaba except GLM, Ollama minus Kimi,
+	// OpenRouter, OctoHub, ...) never replays historical reasoning, so callers
+	// must not count it towards the prompt.
+	let provider = crate::llm::providers::alibaba::AlibabaProvider::new();
+	assert!(!provider.replays_thinking("deepseek-v4-flash-0731"));
 }
 
 #[test]
 fn tool_images_follow_plain_tool_content_in_an_attributed_user_turn() {
-    for text in ["caption", ""] {
-        let messages = [shared::tests::tool_image_message(text)];
-        let value =
-            serde_json::to_value(convert_messages(&messages, "openai", "vision-model")).unwrap();
-        assert_eq!(value.as_array().unwrap().len(), 2);
-        assert_eq!(value[0]["role"], "tool");
-        assert_eq!(value[0]["tool_call_id"], "call_image");
-        assert_eq!(value[0]["content"], text);
-        assert_eq!(value[1]["role"], "user");
-        assert!(value[1]["content"][0]["text"]
-            .as_str()
-            .unwrap()
-            .contains("call_image"));
-        assert_eq!(
-            value[1]["content"][1]["image_url"]["url"],
-            "data:image/png;base64,aW1hZ2U="
-        );
-        assert_eq!(
-            value[1]["content"][2]["image_url"]["url"],
-            "https://example.com/screenshot.jpg"
-        );
-    }
+	for text in ["caption", ""] {
+		let messages = [shared::tests::tool_image_message(text)];
+		let value = serde_json::to_value(convert_messages(&messages, "openai", "vision-model")).unwrap();
+		assert_eq!(value.as_array().unwrap().len(), 2);
+		assert_eq!(value[0]["role"], "tool");
+		assert_eq!(value[0]["tool_call_id"], "call_image");
+		assert_eq!(value[0]["content"], text);
+		assert_eq!(value[1]["role"], "user");
+		assert!(value[1]["content"][0]["text"].as_str().unwrap().contains("call_image"));
+		assert_eq!(
+			value[1]["content"][1]["image_url"]["url"],
+			"data:image/png;base64,aW1hZ2U="
+		);
+		assert_eq!(
+			value[1]["content"][2]["image_url"]["url"],
+			"https://example.com/screenshot.jpg"
+		);
+	}
 }
 
 #[test]
 fn test_webwright_reasoning_effort_standard_ceiling() {
-    // WebWright's Standard tier includes low and medium reasoning only, so a
-    // higher request collapses onto "medium" and a no-reasoning request floors
-    // to "low".
-    let cases = [
-        (crate::llm::types::ReasoningEffort::None, "low"),
-        (crate::llm::types::ReasoningEffort::Low, "low"),
-        (crate::llm::types::ReasoningEffort::Medium, "medium"),
-        (crate::llm::types::ReasoningEffort::High, "medium"),
-        (crate::llm::types::ReasoningEffort::XHigh, "medium"),
-        (crate::llm::types::ReasoningEffort::Max, "medium"),
-    ];
-    for (effort, expected) in cases {
-        assert_eq!(
-            reasoning_effort_value("webwright", "wren-r1", effort),
-            expected
-        );
-    }
+	// WebWright's Standard tier includes low and medium reasoning only, so a
+	// higher request collapses onto "medium" and a no-reasoning request floors
+	// to "low".
+	let cases = [
+		(crate::llm::types::ReasoningEffort::None, "low"),
+		(crate::llm::types::ReasoningEffort::Low, "low"),
+		(crate::llm::types::ReasoningEffort::Medium, "medium"),
+		(crate::llm::types::ReasoningEffort::High, "medium"),
+		(crate::llm::types::ReasoningEffort::XHigh, "medium"),
+		(crate::llm::types::ReasoningEffort::Max, "medium"),
+	];
+	for (effort, expected) in cases {
+		assert_eq!(reasoning_effort_value("webwright", "wren-r1", effort), expected);
+	}
 }

@@ -44,169 +44,156 @@ const LOCAL_EMBED_API_URL: &str = "http://localhost:11434/v1/embeddings";
 /// round-trip every time. Locks are handled poison-safely so a panic in another
 /// thread can never wedge dimension lookups.
 static DIMENSION_CACHE: LazyLock<RwLock<HashMap<(String, String), usize>>> =
-    LazyLock::new(|| RwLock::new(HashMap::new()));
+	LazyLock::new(|| RwLock::new(HashMap::new()));
 
 /// Local embedding provider for OpenAI-compatible local servers.
 pub struct LocalEmbeddingProvider {
-    model_name: String,
-    dimension: usize,
+	model_name: String,
+	dimension: usize,
 }
 
 impl LocalEmbeddingProvider {
-    /// Construct the provider and probe its embedding dimension.
-    ///
-    /// An OpenAI-compatible server does not advertise its embedding dimension,
-    /// so — like the OpenRouter provider — we learn it from a single embedding
-    /// response at construction time and cache it for `get_dimension`. The
-    /// dimension is required up front to build the vector store schema.
-    pub async fn new(model: &str) -> Result<Self> {
-        if model.is_empty() {
-            return Err(anyhow::anyhow!("Model name cannot be empty"));
-        }
-        let cache_key = (Self::api_url(), model.to_string());
+	/// Construct the provider and probe its embedding dimension.
+	///
+	/// An OpenAI-compatible server does not advertise its embedding dimension,
+	/// so — like the OpenRouter provider — we learn it from a single embedding
+	/// response at construction time and cache it for `get_dimension`. The
+	/// dimension is required up front to build the vector store schema.
+	pub async fn new(model: &str) -> Result<Self> {
+		if model.is_empty() {
+			return Err(anyhow::anyhow!("Model name cannot be empty"));
+		}
+		let cache_key = (Self::api_url(), model.to_string());
 
-        // Reuse a dimension already probed for this (endpoint, model) — no network.
-        if let Some(dimension) = DIMENSION_CACHE
-            .read()
-            .ok()
-            .and_then(|cache| cache.get(&cache_key).copied())
-        {
-            return Ok(Self {
-                model_name: model.to_string(),
-                dimension,
-            });
-        }
+		// Reuse a dimension already probed for this (endpoint, model) — no network.
+		if let Some(dimension) = DIMENSION_CACHE
+			.read()
+			.ok()
+			.and_then(|cache| cache.get(&cache_key).copied())
+		{
+			return Ok(Self {
+				model_name: model.to_string(),
+				dimension,
+			});
+		}
 
-        let mut provider = Self {
-            model_name: model.to_string(),
-            dimension: 0,
-        };
-        let probe = provider
-            .generate_embedding("dimension probe")
-            .await
-            .context("Failed to probe embedding dimension from the local server")?;
-        provider.dimension = probe.0.len();
-        if provider.dimension == 0 {
-            return Err(anyhow::anyhow!(
-                "Local embedding model '{}' returned a zero-length embedding while probing dimension",
-                model
-            ));
-        }
-        if let Ok(mut cache) = DIMENSION_CACHE.write() {
-            cache.insert(cache_key, provider.dimension);
-        }
-        Ok(provider)
-    }
+		let mut provider = Self {
+			model_name: model.to_string(),
+			dimension: 0,
+		};
+		let probe = provider
+			.generate_embedding("dimension probe")
+			.await
+			.context("Failed to probe embedding dimension from the local server")?;
+		provider.dimension = probe.0.len();
+		if provider.dimension == 0 {
+			return Err(anyhow::anyhow!(
+				"Local embedding model '{}' returned a zero-length embedding while probing dimension",
+				model
+			));
+		}
+		if let Ok(mut cache) = DIMENSION_CACHE.write() {
+			cache.insert(cache_key, provider.dimension);
+		}
+		Ok(provider)
+	}
 
-    fn api_url() -> String {
-        std::env::var(LOCAL_EMBED_API_URL_ENV).unwrap_or_else(|_| LOCAL_EMBED_API_URL.to_string())
-    }
+	fn api_url() -> String {
+		std::env::var(LOCAL_EMBED_API_URL_ENV).unwrap_or_else(|_| LOCAL_EMBED_API_URL.to_string())
+	}
 
-    fn api_key() -> Option<String> {
-        std::env::var(LOCAL_EMBED_API_KEY_ENV).ok()
-    }
+	fn api_key() -> Option<String> {
+		std::env::var(LOCAL_EMBED_API_KEY_ENV).ok()
+	}
 }
 
 #[derive(Debug, Deserialize)]
 struct LocalEmbeddingResponse {
-    data: Vec<LocalEmbeddingData>,
+	data: Vec<LocalEmbeddingData>,
 }
 
 #[derive(Debug, Deserialize)]
 struct LocalEmbeddingData {
-    embedding: Vec<f32>,
-    index: usize,
+	embedding: Vec<f32>,
+	index: usize,
 }
 
 #[async_trait::async_trait]
 impl EmbeddingProvider for LocalEmbeddingProvider {
-    async fn generate_embedding(&self, text: &str) -> Result<(Vec<f32>, EmbeddingUsage)> {
-        let texts = vec![text.to_string()];
-        let (batch, usage) = self
-            .generate_embeddings_batch(texts, InputType::None)
-            .await?;
-        let first = batch
-            .into_iter()
-            .next()
-            .ok_or_else(|| anyhow::anyhow!("No embedding returned"))?;
-        Ok((first, usage))
-    }
+	async fn generate_embedding(&self, text: &str) -> Result<(Vec<f32>, EmbeddingUsage)> {
+		let texts = vec![text.to_string()];
+		let (batch, usage) = self.generate_embeddings_batch(texts, InputType::None).await?;
+		let first = batch
+			.into_iter()
+			.next()
+			.ok_or_else(|| anyhow::anyhow!("No embedding returned"))?;
+		Ok((first, usage))
+	}
 
-    async fn generate_embeddings_batch(
-        &self,
-        texts: Vec<String>,
-        input_type: InputType,
-    ) -> Result<(Vec<Vec<f32>>, EmbeddingUsage)> {
-        if texts.is_empty() {
-            return Ok((Vec::new(), EmbeddingUsage::from_tokens(&self.model_name, 0)));
-        }
+	async fn generate_embeddings_batch(
+		&self,
+		texts: Vec<String>,
+		input_type: InputType,
+	) -> Result<(Vec<Vec<f32>>, EmbeddingUsage)> {
+		if texts.is_empty() {
+			return Ok((Vec::new(), EmbeddingUsage::from_tokens(&self.model_name, 0)));
+		}
 
-        let processed_texts: Vec<String> = texts
-            .into_iter()
-            .map(|text| input_type.apply_prefix(&text))
-            .collect();
-        // Local servers are unpriced (cost stays None); estimate tokens with tiktoken.
-        let est_tokens: u64 = processed_texts
-            .iter()
-            .map(|t| crate::embedding::count_tokens(t) as u64)
-            .sum();
+		let processed_texts: Vec<String> = texts.into_iter().map(|text| input_type.apply_prefix(&text)).collect();
+		// Local servers are unpriced (cost stays None); estimate tokens with tiktoken.
+		let est_tokens: u64 = processed_texts
+			.iter()
+			.map(|t| crate::embedding::count_tokens(t) as u64)
+			.sum();
 
-        let url = Self::api_url();
+		let url = Self::api_url();
 
-        let body = json!({
-            "model": self.model_name,
-            "input": processed_texts,
-        });
+		let body = json!({
+			"model": self.model_name,
+			"input": processed_texts,
+		});
 
-        let mut req = http_client()
-            .post(&url)
-            .header("Content-Type", "application/json");
+		let mut req = http_client().post(&url).header("Content-Type", "application/json");
 
-        if let Some(key) = Self::api_key() {
-            req = req.header("Authorization", format!("Bearer {}", key));
-        }
+		if let Some(key) = Self::api_key() {
+			req = req.header("Authorization", format!("Bearer {}", key));
+		}
 
-        let response =
-            req.json(&body).send().await.with_context(|| {
-                format!("Failed to connect to local embedding server at {}", url)
-            })?;
+		let response = req
+			.json(&body)
+			.send()
+			.await
+			.with_context(|| format!("Failed to connect to local embedding server at {}", url))?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(anyhow::anyhow!(
-                "Local embedding API error ({}): {}",
-                status,
-                error_text
-            ));
-        }
+		if !response.status().is_success() {
+			let status = response.status();
+			let error_text = response.text().await.unwrap_or_default();
+			return Err(anyhow::anyhow!(
+				"Local embedding API error ({}): {}",
+				status,
+				error_text
+			));
+		}
 
-        let result: LocalEmbeddingResponse = response
-            .json()
-            .await
-            .context("Failed to parse local embedding response")?;
+		let result: LocalEmbeddingResponse = response
+			.json()
+			.await
+			.context("Failed to parse local embedding response")?;
 
-        let mut embeddings: Vec<(usize, Vec<f32>)> = result
-            .data
-            .into_iter()
-            .map(|d| (d.index, d.embedding))
-            .collect();
-        embeddings.sort_by_key(|(i, _)| *i);
+		let mut embeddings: Vec<(usize, Vec<f32>)> = result.data.into_iter().map(|d| (d.index, d.embedding)).collect();
+		embeddings.sort_by_key(|(i, _)| *i);
 
-        let vectors: Vec<Vec<f32>> = embeddings.into_iter().map(|(_, e)| e).collect();
-        Ok((
-            vectors,
-            EmbeddingUsage::from_tokens(&self.model_name, est_tokens),
-        ))
-    }
+		let vectors: Vec<Vec<f32>> = embeddings.into_iter().map(|(_, e)| e).collect();
+		Ok((vectors, EmbeddingUsage::from_tokens(&self.model_name, est_tokens)))
+	}
 
-    fn get_dimension(&self) -> usize {
-        self.dimension
-    }
+	fn get_dimension(&self) -> usize {
+		self.dimension
+	}
 
-    fn is_model_supported(&self) -> bool {
-        !self.model_name.is_empty()
-    }
+	fn is_model_supported(&self) -> bool {
+		!self.model_name.is_empty()
+	}
 }
 
 #[cfg(test)]

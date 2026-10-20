@@ -25,7 +25,7 @@
 //! - `NVIDIA_API_URL`: Optional endpoint override
 
 use crate::llm::providers::openai_compat::{
-    chat_completion as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
+	chat_completion as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
 };
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderResponse};
@@ -37,15 +37,15 @@ use std::env;
 pub struct NvidiaProvider;
 
 impl Default for NvidiaProvider {
-    fn default() -> Self {
-        Self::new()
-    }
+	fn default() -> Self {
+		Self::new()
+	}
 }
 
 impl NvidiaProvider {
-    pub fn new() -> Self {
-        Self
-    }
+	pub fn new() -> Self {
+		Self
+	}
 }
 
 const NVIDIA_API_KEY_ENV: &str = "NVIDIA_API_KEY";
@@ -54,72 +54,71 @@ const NVIDIA_API_URL: &str = "https://integrate.api.nvidia.com/v1/chat/completio
 
 #[async_trait::async_trait]
 impl AiProvider for NvidiaProvider {
-    fn name(&self) -> &str {
-        "nvidia"
-    }
+	fn name(&self) -> &str {
+		"nvidia"
+	}
 
-    fn supports_model(&self, model: &str) -> bool {
-        !model.is_empty()
-    }
+	fn supports_model(&self, model: &str) -> bool {
+		!model.is_empty()
+	}
 
-    fn get_api_key(&self) -> Result<String> {
-        env::var(NVIDIA_API_KEY_ENV)
-            .map_err(|_| crate::errors::missing_api_key("nvidia", NVIDIA_API_KEY_ENV).into())
-    }
+	fn get_api_key(&self) -> Result<String> {
+		env::var(NVIDIA_API_KEY_ENV).map_err(|_| crate::errors::missing_api_key("nvidia", NVIDIA_API_KEY_ENV).into())
+	}
 
-    fn supports_caching(&self, _model: &str) -> bool {
-        false
-    }
+	fn supports_caching(&self, _model: &str) -> bool {
+		false
+	}
 
-    fn supports_structured_output(&self, _model: &str) -> bool {
-        true
-    }
+	fn supports_structured_output(&self, _model: &str) -> bool {
+		true
+	}
 
-    fn enforces_response_schema(&self, _model: &str) -> bool {
-        true
-    }
+	fn enforces_response_schema(&self, _model: &str) -> bool {
+		true
+	}
 
-    fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
-        // NVIDIA NIM doesn't expose its own pricing — fall back to reference pricing
-        // based on the underlying model (e.g., z-ai/glm-5.1 → glm-5.1 reference entry).
-        crate::llm::reference_models::get_reference_pricing(model)
-    }
+	fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
+		// NVIDIA NIM doesn't expose its own pricing — fall back to reference pricing
+		// based on the underlying model (e.g., z-ai/glm-5.1 → glm-5.1 reference entry).
+		crate::llm::reference_models::get_reference_pricing(model)
+	}
 
-    async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-        let api_key = self.get_api_key()?;
-        let api_url = get_api_url(NVIDIA_API_URL_ENV, NVIDIA_API_URL);
-        let model = params.model.clone();
+	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
+		let api_key = self.get_api_key()?;
+		let api_url = get_api_url(NVIDIA_API_URL_ENV, NVIDIA_API_URL);
+		let model = params.model.clone();
 
-        let mut response = openai_compat_chat_completion(
-            OpenAiCompatConfig {
-                provider_name: "nvidia",
-                usage_fallback_cost: None,
-                use_response_cost: true,
-                enforces_response_schema: true,
-                supports_required_tool_choice: false,
-                supports_parallel_tool_calls: true,
-            },
-            api_key,
-            api_url,
-            params,
-        )
-        .await?;
+		let mut response = openai_compat_chat_completion(
+			OpenAiCompatConfig {
+				provider_name: "nvidia",
+				usage_fallback_cost: None,
+				use_response_cost: true,
+				enforces_response_schema: true,
+				supports_required_tool_choice: false,
+				supports_parallel_tool_calls: true,
+			},
+			api_key,
+			api_url,
+			params,
+		)
+		.await?;
 
-        // NVIDIA doesn't return cost in the response — derive it from reference pricing
-        // so downstream consumers (CLI token display, cost tracking) see a value.
-        if let Some(ref mut usage) = response.exchange.usage {
-            if usage.cost.is_none() {
-                usage.cost = crate::llm::reference_models::calculate_reference_cost(
-                    &model,
-                    usage.input_tokens,
-                    usage.cache_read_tokens,
-                    usage.billable_output_tokens(),
-                );
-            }
-        }
+		// NVIDIA doesn't return cost in the response — derive it from reference pricing
+		// so downstream consumers (CLI token display, cost tracking) see a value.
+		if let Some(ref mut usage) = response.exchange.usage {
+			if usage.cost.is_none() {
+				usage.cost = crate::llm::reference_models::calculate_reference_cost(
+					&model,
+					usage.input_tokens,
+					usage.cache_read_tokens,
+					usage.billable_output_tokens(),
+				);
+			}
+		}
 
-        Ok(response)
-    }
+		Ok(response)
+	}
 }
 
 #[cfg(test)]

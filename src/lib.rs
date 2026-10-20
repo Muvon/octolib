@@ -161,57 +161,51 @@ pub use http::set_user_agent;
 // Re-export main types and traits for easy access (backward compatibility)
 #[cfg(feature = "embeddings")]
 pub use embedding::{
-    calculate_embedding_cost, count_tokens, create_embedding_provider_from_parts,
-    generate_embeddings, generate_embeddings_batch, split_texts_into_token_limited_batches,
-    truncate_output, EmbeddingProvider, EmbeddingProviderType, InputType, LocalEmbeddingProvider,
-    OctoHubEmbeddingProvider,
+	calculate_embedding_cost, count_tokens, create_embedding_provider_from_parts, generate_embeddings,
+	generate_embeddings_batch, split_texts_into_token_limited_batches, truncate_output, EmbeddingProvider,
+	EmbeddingProviderType, InputType, LocalEmbeddingProvider, OctoHubEmbeddingProvider,
 };
 pub use errors::{
-    ConfigError, ConfigResult, MessageError, MessageResult, ProviderError, ProviderResult,
-    StructuredOutputError, StructuredOutputResult, ToolCallError, ToolCallResult,
+	ConfigError, ConfigResult, MessageError, MessageResult, ProviderError, ProviderResult, StructuredOutputError,
+	StructuredOutputResult, ToolCallError, ToolCallResult,
 };
 #[cfg(feature = "evaluation")]
 pub use evaluation::{
-    evaluate, Answer, BoundingBox, EvaluationError, EvaluationImageFormat, EvaluationProvider,
-    EvaluationProviderFactory, EvaluationRequest, EvaluationResponse, EvaluationResult,
-    EvaluationUsage, ImageAsset, Question,
+	evaluate, Answer, BoundingBox, EvaluationError, EvaluationImageFormat, EvaluationProvider,
+	EvaluationProviderFactory, EvaluationRequest, EvaluationResponse, EvaluationResult, EvaluationUsage, ImageAsset,
+	Question,
 };
 #[cfg(feature = "llm")]
 pub use llm::{
-    chat_completion_enforced, AiProvider, AmazonBedrockProvider, AnthropicProvider, CacheConfig,
-    CacheTTL, CacheType, CerebrasProvider, ChatCompletionParams, CloudflareWorkersAiProvider,
-    DeepSeekProvider, EffectiveSamplingParams, FireworksProvider, FunctionDefinition,
-    GenericToolCall, GoogleStudioProvider, GoogleVertexProvider, ImageAttachment, ImageData,
-    LocalProvider, Message, MessageBuilder, MetaProvider, MinimaxProvider, ModelLimits,
-    MoonshotProvider, OllamaProvider, OpenAiProvider, OpenRouterProvider, OutputFormat,
-    ProviderExchange, ProviderFactory, ProviderResponse, ProviderStrategy, ProviderToolCalls,
-    ReasoningEffort, ResponseMode, SamplingSupport, SourceType, StrategyFactory,
-    StructuredOutputRequest, ThinkingBlock, TogetherProvider, TokenUsage, ToolCall, ToolChoice,
-    ToolResult, VideoAttachment, VideoData, WebWrightProvider, XaiProvider, ZaiProvider,
+	chat_completion_enforced, AiProvider, AmazonBedrockProvider, AnthropicProvider, CacheConfig, CacheTTL, CacheType,
+	CerebrasProvider, ChatCompletionParams, CloudflareWorkersAiProvider, DeepSeekProvider, EffectiveSamplingParams,
+	FireworksProvider, FunctionDefinition, GenericToolCall, GoogleStudioProvider, GoogleVertexProvider,
+	ImageAttachment, ImageData, LocalProvider, Message, MessageBuilder, MetaProvider, MinimaxProvider, ModelLimits,
+	MoonshotProvider, OllamaProvider, OpenAiProvider, OpenRouterProvider, OutputFormat, ProviderExchange,
+	ProviderFactory, ProviderResponse, ProviderStrategy, ProviderToolCalls, ReasoningEffort, ResponseMode,
+	SamplingSupport, SourceType, StrategyFactory, StructuredOutputRequest, ThinkingBlock, TogetherProvider, TokenUsage,
+	ToolCall, ToolChoice, ToolResult, VideoAttachment, VideoData, WebWrightProvider, XaiProvider, ZaiProvider,
 };
 #[cfg(feature = "media")]
 pub use media::{
-    download_artifact, generate_image, generate_video, reference_cost_estimate, synthesize_speech,
-    transcribe, ArtifactSource, AudioFormat, AudioOutputSpec, CapabilitySupport, CostEstimate,
-    Dimensions, ElevenLabsMediaOptions, ElevenLabsMediaProvider, FailureCategory, FalMediaOptions,
-    FalMediaProvider, HiggsfieldMediaOptions, HiggsfieldMediaProvider, ImageCapabilities,
-    ImageFormat, ImageGenerationMode, ImageGenerationProvider, ImageGenerationRequest,
-    ImageGenerationResult, JobHandle, MediaArtifact, MediaError, MediaKind, MediaLimits,
-    MediaModelDescriptor, MediaModelPricing, MediaProviderFactory, MediaResult, MediaSource,
-    MediaTask, MediaUsage, Modality, OpenRouterMediaOptions, OpenRouterMediaProvider, Operation,
-    OperationStatus, OutputGeometry, ParameterCapabilities, ProviderOptions, ProviderWarning,
-    ReplicateMediaOptions, ReplicateMediaProvider, RequestOptions, RunwayMediaOptions,
-    RunwayMediaProvider, SafetyReport, SafetyStatus, SpeechCapabilities, SpeechStream,
-    SpeechSynthesisProvider, SpeechSynthesisRequest, SpeechSynthesisResult, TimestampGranularity,
-    TranscriptSegment, TranscriptWord, TranscriptionCapabilities, TranscriptionProvider,
-    TranscriptionRequest, TranscriptionResult, UnsupportedParameterPolicy, UsageLineItem,
-    UsageUnit, VideoCapabilities, VideoFormat, VideoGenerationMode, VideoGenerationProvider,
-    VideoGenerationRequest, VideoGenerationResult, WarningCode,
+	download_artifact, generate_image, generate_video, reference_cost_estimate, synthesize_speech, transcribe,
+	ArtifactSource, AudioFormat, AudioOutputSpec, CapabilitySupport, CostEstimate, Dimensions, ElevenLabsMediaOptions,
+	ElevenLabsMediaProvider, FailureCategory, FalMediaOptions, FalMediaProvider, HiggsfieldMediaOptions,
+	HiggsfieldMediaProvider, ImageCapabilities, ImageFormat, ImageGenerationMode, ImageGenerationProvider,
+	ImageGenerationRequest, ImageGenerationResult, JobHandle, MediaArtifact, MediaError, MediaKind, MediaLimits,
+	MediaModelDescriptor, MediaModelPricing, MediaProviderFactory, MediaResult, MediaSource, MediaTask, MediaUsage,
+	Modality, OpenRouterMediaOptions, OpenRouterMediaProvider, Operation, OperationStatus, OutputGeometry,
+	ParameterCapabilities, ProviderOptions, ProviderWarning, ReplicateMediaOptions, ReplicateMediaProvider,
+	RequestOptions, RunwayMediaOptions, RunwayMediaProvider, SafetyReport, SafetyStatus, SpeechCapabilities,
+	SpeechStream, SpeechSynthesisProvider, SpeechSynthesisRequest, SpeechSynthesisResult, TimestampGranularity,
+	TranscriptSegment, TranscriptWord, TranscriptionCapabilities, TranscriptionProvider, TranscriptionRequest,
+	TranscriptionResult, UnsupportedParameterPolicy, UsageLineItem, UsageUnit, VideoCapabilities, VideoFormat,
+	VideoGenerationMode, VideoGenerationProvider, VideoGenerationRequest, VideoGenerationResult, WarningCode,
 };
 #[cfg(feature = "reranker")]
 pub use reranker::{
-    create_rerank_provider_from_parts, parse_provider_model as parse_rerank_provider_model, rerank,
-    rerank_with_truncation, RerankProvider, RerankProviderType, RerankResponse, RerankResult,
+	create_rerank_provider_from_parts, parse_provider_model as parse_rerank_provider_model, rerank,
+	rerank_with_truncation, RerankProvider, RerankProviderType, RerankResponse, RerankResult,
 };
 /// The tokenizer type handed out by [`EmbeddingProvider::tokenizer`].
 #[cfg(any(feature = "huggingface", feature = "onnx"))]

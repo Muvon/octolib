@@ -29,7 +29,7 @@
 //! is automatic; cached input is billed at a discount and reported via
 //! `prompt_tokens_details.cached_tokens`.
 //!
-//! PRICING UPDATE: September 2026 (Mercury 2.5 at 80% launch discount)
+//! PRICING UPDATE: October 2026 (Mercury 3 at 50% launch discount)
 //! Source: <https://docs.inceptionlabs.ai/get-started/models>
 //!
 //! Configuration:
@@ -61,15 +61,20 @@ const INCEPTION_API_URL: &str = "https://api.inceptionlabs.ai/v1/chat/completion
 
 /// (model id, max input tokens) — from the Inception models table
 /// (`GET /v1/models` reports `context_length`).
-const MODELS: &[(&str, usize)] = &[("mercury-2.5", 260_000), ("mercury-2", 128_000)];
+const MODELS: &[(&str, usize)] = &[
+	("mercury-3", 1_000_000),
+	("mercury-2.5", 260_000),
+	("mercury-2", 128_000),
+];
 
-// Inception pricing (per 1M tokens in USD) - Sep 2026
+// Inception pricing (per 1M tokens in USD) - Oct 2026
 // Source: https://docs.inceptionlabs.ai/get-started/models
 // Format: (model, input, output, cache_write, cache_read)
 // cache_write priced at input rate (Inception bills no separate write fee)
 const PRICING: &[PricingTuple] = &[
-	// Mercury 2.5 at 80% launch discount: $0.04 in / $0.004 cached / $0.15 out
-	("mercury-2.5", 0.04, 0.15, 0.04, 0.004),
+	// Mercury 3 at 50% launch discount (no end date): regular $0.20 / $0.02 / $0.70
+	("mercury-3", 0.10, 0.35, 0.10, 0.01),
+	("mercury-2.5", 0.20, 0.75, 0.20, 0.02),
 	("mercury-2", 0.25, 0.75, 0.25, 0.025),
 ];
 

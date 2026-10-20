@@ -34,8 +34,12 @@ use std::env;
 const PRICING: &[PricingTuple] = &[
 	// MiniMax M3.1 Flash Preview: Token Plan / MiniMax Code only, no pay-as-you-go
 	// rate published (verified Oct 5, 2026), so requests carry no per-token cost.
-	// Must precede MiniMax-M3 (substring match, first wins).
+	// Superseded by the GA ID below; must precede it (substring match, first wins).
 	("MiniMax-M3.1-Flash-Preview", 0.0, 0.0, 0.0, 0.0),
+	// MiniMax M3.1 Flash (GA Oct 19, 2026; single tier, no cache-write column)
+	// Source: https://platform.minimax.io/docs/guides/pricing (verified Oct 20, 2026)
+	// Must precede MiniMax-M3 (substring match, first wins).
+	("MiniMax-M3.1-Flash", 0.15, 0.60, 0.0, 0.015),
 	// MiniMax M3 (latest generation, natively multimodal — image + video input)
 	// ≤512k input tokens: 0.30 / 1.20 / cache read 0.06; >512k input tokens:
 	// 0.60 / 2.40 / cache read 0.12 (tier applied in `calculate_cost_with_cache`).
@@ -61,10 +65,13 @@ fn is_m3_model(model: &str) -> bool {
 	normalize_model_name(model) == "minimax-m3"
 }
 
-/// MiniMax-M3.1-Flash-Preview takes `output_config.effort` (defaults to `max`
-/// when omitted). Thinking cannot be disabled, so an explicit `None` runs at `low`.
+/// MiniMax-M3.1-Flash (and its Preview ID) takes `output_config.effort` (defaults to
+/// `max` when omitted). Thinking cannot be disabled, so an explicit `None` runs at `low`.
 fn effort_value(model: &str, effort: ReasoningEffort) -> Option<&'static str> {
-	if normalize_model_name(model) != "minimax-m3.1-flash-preview" {
+	if !matches!(
+		normalize_model_name(model).as_str(),
+		"minimax-m3.1-flash" | "minimax-m3.1-flash-preview"
+	) {
 		return None;
 	}
 	Some(match effort {

@@ -323,7 +323,7 @@ fn test_sonnet_5_5() {
 	assert_eq!(pricing.input_price_per_1m, 2.0);
 	assert_eq!(pricing.output_price_per_1m, 10.0);
 	assert_eq!(pricing.cache_write_price_per_1m, 2.50);
-	assert_eq!(pricing.cache_read_price_per_1m, 0.20);
+	assert_eq!(pricing.cache_read_price_per_1m, 0.10);
 
 	assert_eq!(provider.get_max_input_tokens(model), 1_000_000);
 	assert!(provider.supports_vision(model));

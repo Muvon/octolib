@@ -242,6 +242,11 @@ fn test_pricing_added_models() {
 	assert_eq!(p.input_price_per_1m, 3.00);
 	assert_eq!(p.output_price_per_1m, 15.00);
 	assert_eq!(p.cache_read_price_per_1m, 0.60);
+
+	let p = provider.get_model_pricing("kimi-k2.7-code").unwrap();
+	assert_eq!(p.input_price_per_1m, 0.95);
+	assert_eq!(p.output_price_per_1m, 4.00);
+	assert_eq!(p.cache_read_price_per_1m, 0.19);
 }
 
 #[test]

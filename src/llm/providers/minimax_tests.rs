@@ -17,6 +17,7 @@ use super::*;
 #[test]
 fn test_model_support() {
 	let provider = MinimaxProvider::new();
+	assert!(provider.supports_model("MiniMax-M3.1-Flash"));
 	assert!(provider.supports_model("MiniMax-M3.1-Flash-Preview"));
 	assert!(provider.supports_model("MiniMax-M3"));
 	assert!(provider.supports_model("MiniMax-M2.7"));
@@ -37,6 +38,7 @@ fn test_context_windows_follow_model_table() {
 	let provider = MinimaxProvider::new();
 	assert_eq!(provider.get_max_input_tokens("MiniMax-M3"), 1_000_000);
 	assert_eq!(provider.get_max_input_tokens("MiniMax-M3.1-Flash-Preview"), 1_000_000);
+	assert_eq!(provider.get_max_input_tokens("MiniMax-M3.1-Flash"), 1_000_000);
 	for model in [
 		"MiniMax-M2.7",
 		"MiniMax-M2.7-highspeed",
@@ -137,6 +139,20 @@ fn test_m3_1_flash_preview_has_no_per_token_cost() {
 }
 
 #[test]
+fn test_m3_1_flash_single_tier_pricing() {
+	// Must not fall through to the MiniMax-M3 row, and has no >512k tier
+	let cost = calculate_minimax_cost("MiniMax-M3.1-Flash", 600_000, 1_000_000, 0, 1_000_000).unwrap();
+	assert!((cost - (0.09 + 0.60 + 0.015)).abs() < 1e-9);
+}
+
+#[test]
+fn test_effort_for_m3_1_flash_ga() {
+	assert_eq!(effort_value("MiniMax-M3.1-Flash", ReasoningEffort::None), Some("low"));
+	assert_eq!(effort_value("MiniMax-M3.1-Flash", ReasoningEffort::Max), Some("max"));
+	assert_eq!(thinking_value("MiniMax-M3.1-Flash", ReasoningEffort::High), None);
+}
+
+#[test]
 fn test_effort_only_for_m3_1_flash_preview() {
 	let model = "MiniMax-M3.1-Flash-Preview";
 	assert_eq!(effort_value(model, ReasoningEffort::None), Some("low"));
@@ -187,6 +203,7 @@ fn test_provider_capabilities() {
 	assert!(provider.supports_caching("MiniMax-M3"));
 	assert!(provider.supports_vision("MiniMax-M3.1-Flash-Preview"));
 	assert!(provider.supports_video("MiniMax-M3.1-Flash-Preview"));
+	assert!(provider.supports_vision("MiniMax-M3.1-Flash"));
 }
 
 #[test]

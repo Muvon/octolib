@@ -130,6 +130,7 @@ const PRICING: &[PricingTuple] = &[
 	("glm-5.2", 1.40, 4.40, 1.40, 0.35),
 	("glm-5.1", 1.40, 4.40, 1.40, 0.28),
 	("kimi-k3", 3.00, 15.00, 3.00, 0.60),
+	("kimi-k2.7-code", 0.95, 4.00, 0.95, 0.19),
 ];
 
 const QWEN_PLUS_LONG_CONTEXT_THRESHOLD: u64 = 256_000;

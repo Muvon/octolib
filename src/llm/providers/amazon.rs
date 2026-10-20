@@ -61,7 +61,8 @@ const AWS_BEDROCK_API_URL_ENV: &str = "AWS_BEDROCK_API_URL";
 /// maker's. Patterns keep Bedrock's `vendor.` prefix and match raw (no
 /// sanitizing), so `deepseek.v3.2` never catches DeepSeek's own
 /// `deepseek-v3.2`. Source: AWS Price List API, AmazonBedrock offer published
-/// 2026-09-30. `global.` cross-region IDs bill below in-region IDs and must
+/// 2026-09-30; GLM 5.3 and the Qwen3 Next rate from aws.amazon.com/bedrock/pricing
+/// (verified 2026-10-20). `global.` cross-region IDs bill below in-region IDs and must
 /// precede them. Models without prompt caching bill cache columns at input.
 /// Format: (model, input, output, cache_write, cache_read)
 const PRICING: &[PricingTuple] = &[
@@ -75,7 +76,7 @@ const PRICING: &[PricingTuple] = &[
 	("qwen.qwen3-32b", 0.15, 0.60, 0.15, 0.15),
 	("qwen.qwen3-coder-480b-a35b", 0.45, 1.80, 0.45, 0.45),
 	("qwen.qwen3-coder-next", 0.50, 1.20, 0.50, 0.50),
-	("qwen.qwen3-next-80b-a3b", 0.14, 1.20, 0.14, 0.14),
+	("qwen.qwen3-next-80b-a3b", 0.15, 1.20, 0.15, 0.15),
 	("openai.gpt-oss-120b", 0.15, 0.60, 0.15, 0.15),
 	("openai.gpt-oss-20b", 0.07, 0.30, 0.07, 0.07),
 	("deepseek.v3.2", 0.62, 1.85, 0.62, 0.62),
@@ -84,6 +85,9 @@ const PRICING: &[PricingTuple] = &[
 	("deepseek.v3.1", 0.58, 1.68, 0.58, 0.58),
 	("deepseek.v3-v1", 0.58, 1.68, 0.58, 0.58),
 	("deepseek.r1", 1.35, 5.40, 1.35, 1.35),
+	// GLM 5.3: cache write is the 30-minute rate; the bare row carries the US CRIS rate.
+	("global.zai.glm-5.3", 1.68, 5.28, 2.10, 0.312),
+	("zai.glm-5.3", 1.848, 5.808, 2.31, 0.3432),
 	("zai.glm-4.7-flash", 0.07, 0.40, 0.07, 0.07),
 	("minimax.minimax-m2.1", 0.30, 1.20, 0.30, 0.30),
 	("google.gemma-4-31b", 0.14, 0.40, 0.14, 0.14),

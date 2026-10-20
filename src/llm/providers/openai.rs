@@ -88,6 +88,7 @@ const PRICING: &[PricingTuple] = &[
 	("chat-latest", 5.00, 30.00, 5.00, 0.50),
 	// Billing starts Oct 5, 2026; cache-write pricing does not apply.
 	("gpt-rosalind-research", 5.00, 25.00, 5.00, 0.50),
+	("gpt-rosalind-discovery", 5.00, 25.00, 5.00, 0.50),
 	// GPT-4.1 family
 	("gpt-4.1-mini", 0.40, 1.60, 0.40, 0.10),
 	("gpt-4.1-nano", 0.10, 0.40, 0.10, 0.025),

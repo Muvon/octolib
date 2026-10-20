@@ -140,11 +140,20 @@ fn test_pricing_third_party_models() {
 	assert_eq!(p.cache_read_price_per_1m, 0.03);
 
 	// V4.1 Flash is priced at the peak-hour rate and must not fall through to
-	// the V4 Flash row.
-	let p = provider.get_model_pricing("deepseek-v4-1-flash-260910").unwrap();
-	assert_eq!(p.input_price_per_1m, 0.30);
-	assert_eq!(p.output_price_per_1m, 1.20);
-	assert_eq!(p.cache_read_price_per_1m, 0.006);
+	// the V4 Flash row; both snapshots share one rate card.
+	for model in ["deepseek-v4-1-flash-260910", "deepseek-v4-1-flash-261017"] {
+		let p = provider.get_model_pricing(model).unwrap();
+		assert_eq!(p.input_price_per_1m, 0.30, "{model}");
+		assert_eq!(p.output_price_per_1m, 1.20, "{model}");
+		assert_eq!(p.cache_read_price_per_1m, 0.006, "{model}");
+	}
+
+	let p = provider
+		.get_model_pricing("deepseek-v4-1-flash-economy-261017")
+		.unwrap();
+	assert_eq!(p.input_price_per_1m, 0.24);
+	assert_eq!(p.output_price_per_1m, 0.96);
+	assert_eq!(p.cache_read_price_per_1m, 0.0048);
 }
 
 #[test]

@@ -17,6 +17,7 @@ use super::*;
 #[test]
 fn test_supports_model() {
 	let provider = InceptionProvider::new();
+	assert!(provider.supports_model("mercury-3"));
 	assert!(provider.supports_model("mercury-2.5"));
 	assert!(provider.supports_model("mercury-2"));
 	// Mercury Edit 2 is FIM/edit-only; the chat endpoint 404s it
@@ -34,6 +35,7 @@ fn test_model_capabilities() {
 	let provider = InceptionProvider::new();
 	// Text-only models (input_modalities: ["text"])
 	assert!(!provider.supports_vision("mercury-2.5"));
+	assert_eq!(provider.get_max_input_tokens("mercury-3"), 1_000_000);
 	assert_eq!(provider.get_max_input_tokens("mercury-2.5"), 260_000);
 	assert_eq!(provider.get_max_input_tokens("mercury-2"), 128_000);
 	assert_eq!(provider.get_max_input_tokens("unknown-model"), 128_000);
@@ -58,11 +60,17 @@ fn test_chat_features() {
 #[test]
 fn test_pricing() {
 	let provider = InceptionProvider::new();
-	// Mercury 2.5 launch pricing (80% off): $0.04 in / $0.15 out / $0.004 cached
+	// Mercury 3 launch pricing (50% off): $0.10 in / $0.35 out / $0.01 cached
+	let pricing = provider.get_model_pricing("mercury-3").unwrap();
+	assert_eq!(pricing.input_price_per_1m, 0.10);
+	assert_eq!(pricing.output_price_per_1m, 0.35);
+	assert_eq!(pricing.cache_read_price_per_1m, 0.01);
+
+	// Mercury 2.5 launch discount ended: $0.20 in / $0.75 out / $0.02 cached
 	let pricing = provider.get_model_pricing("mercury-2.5").unwrap();
-	assert_eq!(pricing.input_price_per_1m, 0.04);
-	assert_eq!(pricing.output_price_per_1m, 0.15);
-	assert_eq!(pricing.cache_read_price_per_1m, 0.004);
+	assert_eq!(pricing.input_price_per_1m, 0.20);
+	assert_eq!(pricing.output_price_per_1m, 0.75);
+	assert_eq!(pricing.cache_read_price_per_1m, 0.02);
 
 	let pricing = provider.get_model_pricing("mercury-2").unwrap();
 	assert_eq!(pricing.input_price_per_1m, 0.25);

@@ -94,7 +94,7 @@ fn bedrock_rates_override_maker_reference_rates() {
 		("qwen.qwen3-235b-a22b-2507-v1:0", 0.22, 0.88),
 		("qwen.qwen3-coder-480b-a35b-v1:0", 0.45, 1.80),
 		("qwen.qwen3-coder-next", 0.50, 1.20),
-		("qwen.qwen3-next-80b-a3b-instruct", 0.14, 1.20),
+		("qwen.qwen3-next-80b-a3b-instruct", 0.15, 1.20),
 		("openai.gpt-oss-120b-1:0", 0.15, 0.60),
 		("openai.gpt-oss-20b-1:0", 0.07, 0.30),
 		("deepseek.v3.2", 0.62, 1.85),
@@ -110,6 +110,9 @@ fn bedrock_rates_override_maker_reference_rates() {
 		("global.moonshotai.kimi-k3", 3.00, 15.00),
 		("xai.grok-4.7", 2.20, 6.60),
 		("global.xai.grok-4.7", 2.00, 6.00),
+		("zai.glm-5.3", 1.848, 5.808),
+		("us.zai.glm-5.3", 1.848, 5.808),
+		("global.zai.glm-5.3", 1.68, 5.28),
 	] {
 		let pricing = provider
 			.get_model_pricing(model)

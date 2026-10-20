@@ -77,8 +77,10 @@ const PRICING: &[PricingTuple] = &[
 	// The DeepSeek V4 rows cover both the `-260425` preview IDs and the GA
 	// snapshots (`-ga-260731`, `-ga-260813`), which share one rate card.
 	// V4.1 Flash bills peak/off-peak (off-peak is half); peak is the baseline,
-	// matching the price the console displays.
-	("deepseek-v4-1-flash-260910", 0.30, 1.20, 0.30, 0.006),
+	// matching the price the console displays. The `-260910` and `-261017`
+	// snapshots share one rate card; Economy must precede the base row.
+	("deepseek-v4-1-flash-economy", 0.24, 0.96, 0.24, 0.0048),
+	("deepseek-v4-1-flash", 0.30, 1.20, 0.30, 0.006),
 	("deepseek-v4-pro", 1.32, 3.96, 1.32, 0.044),
 	("deepseek-v4-flash", 0.44, 1.32, 0.44, 0.014),
 	("glm-5-3-flash-260828", 0.15, 0.50, 0.15, 0.03),

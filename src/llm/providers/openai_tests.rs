@@ -775,6 +775,7 @@ fn test_specialized_model_pricing() {
 	let cases = [
 		("chat-latest", 5.00, 30.00, 5.00, 0.50),
 		("gpt-rosalind-research", 5.00, 25.00, 5.00, 0.50),
+		("gpt-rosalind-discovery", 5.00, 25.00, 5.00, 0.50),
 		("gpt-5-search-api", 1.25, 10.00, 1.25, 0.125),
 		// Daybreak aliases follow gpt-5.6-sol and gpt-5.6-cyber.
 		("gpt-daybreak-blue-latest", 4.00, 20.00, 5.00, 0.40),

@@ -102,6 +102,12 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		pricing: pricing(0.15, 0.50, 0.15, 0.02),
 	},
 	ReferenceModelEntry {
+		// Liquid LFM 2.5 2.6B (Oct 2026): free routes only, so no baseline price.
+		pattern: "lfm-2.5-2.6b",
+		capabilities: caps(false, false, true, 65_536),
+		pricing: None,
+	},
+	ReferenceModelEntry {
 		pattern: "lfm-2.5-24b-a2b",
 		capabilities: caps(false, false, true, 128_000),
 		pricing: pricing(0.05, 0.70, 0.05, 0.025),
@@ -607,10 +613,17 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		pricing: pricing(0.195, 1.56, 0.195, 0.195),
 	},
 	ReferenceModelEntry {
+		// Inception Mercury 3 (Oct 2026): diffusion LLM, 1M context. Official
+		// 50% launch rate; regular is $0.20 / $0.70 / $0.02.
+		pattern: "mercury-3",
+		capabilities: caps(false, false, true, 1_000_000),
+		pricing: pricing(0.10, 0.35, 0.10, 0.01),
+	},
+	ReferenceModelEntry {
 		// Inception Mercury 2.5 (Sep 2026): diffusion LLM, 260K context.
 		pattern: "mercury-2.5",
 		capabilities: caps(false, false, true, 260_000),
-		pricing: pricing(0.04, 0.15, 0.04, 0.004),
+		pricing: pricing(0.20, 0.75, 0.20, 0.02),
 	},
 	ReferenceModelEntry {
 		// Inception Mercury 2 (Mar 2026): diffusion LLM, 128K context.
@@ -629,6 +642,38 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		pattern: "granite-4.2",
 		capabilities: caps(false, false, true, 131_072),
 		pricing: pricing(0.06, 0.25, 0.06, 0.015),
+	},
+	ReferenceModelEntry {
+		// InclusionAI Ling 3.1 Flash (Oct 2026): 262K-context text model.
+		// Baseline from OpenRouter.
+		pattern: "ling-3.1-flash",
+		capabilities: caps(false, false, true, 262_144),
+		pricing: pricing(0.075, 0.225, 0.075, 0.015),
+	},
+	ReferenceModelEntry {
+		// Reflection Beam 1.0 (Oct 2026): 501B/23B-active open-weight MoE,
+		// 1M context. Baseline from OpenRouter.
+		pattern: "beam-1.0-501b-a23b",
+		capabilities: caps(false, false, true, 1_048_576),
+		pricing: pricing(0.30, 1.00, 0.30, 0.04),
+	},
+	ReferenceModelEntry {
+		// Elorian Glimpse (Oct 2026): image + video input. Baseline from OpenRouter.
+		pattern: "glimpse",
+		capabilities: caps(true, true, true, 262_144),
+		pricing: pricing(0.60, 3.00, 0.60, 0.06),
+	},
+	ReferenceModelEntry {
+		// dots.studio Dots 3 Note preview (Oct 2026): free routes only.
+		pattern: "dots-3-note-preview",
+		capabilities: caps(true, false, true, 512_000),
+		pricing: None,
+	},
+	ReferenceModelEntry {
+		// Xingchen Xing 4.0 29B-A4B (Oct 2026): free routes only.
+		pattern: "xing4.0-29b-a4b",
+		capabilities: caps(false, false, true, 262_144),
+		pricing: None,
 	},
 	ReferenceModelEntry {
 		// InclusionAI Ling 3.0 Flash finance variant — priced above the base
@@ -867,6 +912,13 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		pattern: "minimax-m3.1-flash-preview",
 		capabilities: caps(true, true, false, 1_000_000),
 		pricing: pricing(0.0, 0.0, 0.0, 0.0),
+	},
+	ReferenceModelEntry {
+		// MiniMax M3.1 Flash (GA Oct 19, 2026): official single-tier rate.
+		// Must precede minimax-m3 (and follow the -preview row).
+		pattern: "minimax-m3.1-flash",
+		capabilities: caps(true, true, false, 1_000_000),
+		pricing: pricing(0.15, 0.60, 0.0, 0.015),
 	},
 	ReferenceModelEntry {
 		pattern: "minimax-m3-highspeed",

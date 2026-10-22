@@ -1,4 +1,4 @@
-// Copyright 2025 Muvon Un Limited
+// Copyright 2026 Muvon Un Limited
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -46,3 +46,7 @@ pub fn get_fastembed_cache_dir() -> anyhow::Result<PathBuf> {
 pub fn get_huggingface_cache_dir() -> anyhow::Result<PathBuf> {
 	get_model_cache_dir()
 }
+
+#[cfg(test)]
+#[path = "storage_tests.rs"]
+mod tests;

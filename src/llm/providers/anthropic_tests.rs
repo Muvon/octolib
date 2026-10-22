@@ -604,3 +604,108 @@ fn test_effective_max_tokens() {
 	assert_eq!(effective_max_tokens("claude-opus-4-1", 0), 32_000);
 	assert_eq!(effective_max_tokens("claude-3-haiku", 0), 4_096);
 }
+
+#[test]
+fn test_calculate_cost_with_cache_full_breakdown() {
+	// claude-opus-4-7: 5.00 input / 25.00 output / 6.25 cache write / 0.50 cache read per 1M
+	let cost = calculate_cost_with_cache(
+		"claude-opus-4-7",
+		CacheTokenUsage {
+			regular_input_tokens: 1_000_000,
+			cache_creation_tokens: 1_000_000,
+			cache_creation_tokens_1h: 1_000_000,
+			cache_read_tokens: 1_000_000,
+			output_tokens: 1_000_000,
+		},
+	)
+	.unwrap();
+	// 5.00 + 6.25 + 10.00 (2x base) + 0.50 + 25.00 = 46.75
+	assert!((cost - 46.75).abs() < 1e-9, "got {cost}");
+}
+
+#[test]
+fn test_calculate_cost_with_cache_zero_usage() {
+	let cost = calculate_cost_with_cache(
+		"claude-sonnet-4-6",
+		CacheTokenUsage {
+			regular_input_tokens: 0,
+			cache_creation_tokens: 0,
+			cache_creation_tokens_1h: 0,
+			cache_read_tokens: 0,
+			output_tokens: 0,
+		},
+	)
+	.unwrap();
+	assert_eq!(cost, 0.0);
+}
+
+#[test]
+fn test_calculate_cost_with_cache_unknown_model_is_none() {
+	let usage = CacheTokenUsage {
+		regular_input_tokens: 100,
+		cache_creation_tokens: 0,
+		cache_creation_tokens_1h: 0,
+		cache_read_tokens: 0,
+		output_tokens: 10,
+	};
+	assert!(calculate_cost_with_cache("not-a-claude", usage).is_none());
+}
+
+#[test]
+fn test_calculate_cost_haiku_5_5_long_context_multiplier() {
+	// Identical token mix, straddling the 100k prompt-token threshold:
+	// prompt tokens = regular input + cache reads.
+	let just_below = calculate_anthropic_cost("claude-haiku-5-5", 99_999, 1_000, 0, 0, 0).unwrap();
+	let just_above = calculate_anthropic_cost("claude-haiku-5-5", 100_001, 1_000, 0, 0, 0).unwrap();
+	// The 5x long-context multiplier dominates the 2-token difference.
+	assert!(
+		(just_above - just_below * 5.0).abs() < 1e-4,
+		"below {just_below} above {just_above}"
+	);
+}
+
+#[test]
+fn test_effort_value_xhigh_and_max_ceiling() {
+	// XHigh passes through on models that list it...
+	assert_eq!(effort_value("claude-opus-5", ReasoningEffort::XHigh, false), "xhigh");
+	// ...and collapses to high on models that do not.
+	assert_eq!(effort_value("claude-3-haiku", ReasoningEffort::XHigh, false), "high");
+	// Max needs adaptive support; otherwise it floors to high.
+	assert_eq!(effort_value("claude-opus-5", ReasoningEffort::Max, true), "max");
+	assert_eq!(effort_value("claude-opus-5", ReasoningEffort::Max, false), "high");
+	assert_eq!(effort_value("claude-sonnet-4-6", ReasoningEffort::Low, false), "low");
+	assert_eq!(
+		effort_value("claude-sonnet-4-6", ReasoningEffort::Medium, false),
+		"medium"
+	);
+	assert_eq!(effort_value("claude-sonnet-4-6", ReasoningEffort::High, false), "high");
+}
+
+#[test]
+fn test_apply_thinking_off_per_model_family() {
+	let mut body = serde_json::json!({});
+	apply_thinking_off("claude-opus-5-5", &mut body);
+	assert_eq!(body["output_config"]["effort"], "low");
+	assert!(body.get("thinking").is_none());
+
+	let mut body = serde_json::json!({});
+	apply_thinking_off("claude-fable-5", &mut body);
+	assert_eq!(body["output_config"]["effort"], "low");
+
+	let mut body = serde_json::json!({});
+	apply_thinking_off("claude-sonnet-5-5", &mut body);
+	assert_eq!(body["thinking"]["type"], "between_tools");
+
+	let mut body = serde_json::json!({});
+	apply_thinking_off("claude-opus-5", &mut body);
+	assert_eq!(body["thinking"]["type"], "disabled");
+
+	let mut body = serde_json::json!({});
+	apply_thinking_off("claude-sonnet-5", &mut body);
+	assert_eq!(body["thinking"]["type"], "disabled");
+
+	// Models that default to thinking-off get nothing.
+	let mut body = serde_json::json!({});
+	apply_thinking_off("claude-opus-4-5", &mut body);
+	assert!(body.as_object().unwrap().is_empty());
+}

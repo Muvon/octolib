@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.45.0] - 2026-10-22
+
+### 📋 Release Summary
+
+LLM retry handling and observability have been enhanced.
+
+### ✨ New Features & Enhancements
+
+- **llm**: enhance retry handling and observability `345199c8`
+
 ## [0.44.0] - 2026-10-22
 
 ### 📋 Release Summary

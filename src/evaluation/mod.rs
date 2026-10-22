@@ -55,3 +55,7 @@ pub async fn evaluate(provider_model: &str, mut request: EvaluationRequest) -> E
 	request.model = model;
 	provider.evaluate(request).await
 }
+
+#[cfg(test)]
+#[path = "mod_tests.rs"]
+mod tests;

@@ -709,3 +709,59 @@ fn test_apply_thinking_off_per_model_family() {
 	apply_thinking_off("claude-opus-4-5", &mut body);
 	assert!(body.as_object().unwrap().is_empty());
 }
+
+#[tokio::test]
+#[serial_test::serial]
+async fn chat_completion_via_mock_http_splits_blocks_and_cache_usage() {
+	let body = r#"{"id":"mock-anthropic","content":[{"type":"text","text":"final answer"},{"type":"thinking","thinking":"step by step"},{"type":"tool_use","id":"toolu_1","name":"get_weather","input":{"city":"Oslo"}}],"usage":{"input_tokens":10,"output_tokens":30,"cache_creation_input_tokens":2,"cache_read_input_tokens":4},"stop_reason":"tool_use"}"#;
+	let mock = crate::llm::providers::mock_http::MockHttp::start(vec![(200, body.to_string())]);
+	std::env::set_var("ANTHROPIC_API_URL", mock.url.clone());
+
+	let provider = AnthropicProvider::new();
+	let params = ChatCompletionParams::new(&[], "claude-sonnet-4", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
+	let response = provider.chat_completion(params).await.expect("mock completion");
+
+	// Text blocks become content; thinking rides its own block; tool_use maps to calls.
+	assert_eq!(response.content, "final answer");
+	assert_eq!(
+		response.thinking.as_ref().expect("thinking present").content,
+		"step by step"
+	);
+	let calls = response.tool_calls.expect("tool calls present");
+	assert_eq!(calls.len(), 1);
+	assert_eq!(calls[0].name, "get_weather");
+	assert_eq!(calls[0].arguments["city"], "Oslo");
+
+	let usage = response.exchange.usage.expect("usage present");
+	assert_eq!(usage.input_tokens, 10);
+	assert_eq!(usage.cache_write_tokens, 2);
+	assert_eq!(usage.cache_read_tokens, 4);
+	assert!(usage.cost.unwrap_or(0.0) > 0.0, "cost computed from the pricing table");
+	assert_eq!(response.finish_reason.as_deref(), Some("tool_use"));
+
+	let requests = mock.requests();
+	let req_body: serde_json::Value = serde_json::from_str(&requests[0].body).expect("request json");
+	assert_eq!(req_body["model"], "claude-sonnet-4");
+
+	std::env::remove_var("ANTHROPIC_API_URL");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn chat_completion_via_mock_http_surfaces_http_error() {
+	let mock = crate::llm::providers::mock_http::MockHttp::start(vec![(
+		400,
+		r#"{"type":"error","error":{"type":"invalid_request_error","message":"bad request"}}"#.to_string(),
+	)]);
+	std::env::set_var("ANTHROPIC_API_URL", mock.url.clone());
+
+	let provider = AnthropicProvider::new();
+	let params = ChatCompletionParams::new(&[], "claude-sonnet-4", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
+	let err = provider.chat_completion(params).await.expect_err("http error surfaces");
+	assert!(
+		err.to_string().contains("Anthropic API error"),
+		"unexpected error: {err}"
+	);
+
+	std::env::remove_var("ANTHROPIC_API_URL");
+}

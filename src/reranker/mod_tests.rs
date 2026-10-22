@@ -111,3 +111,18 @@ async fn test_invalid_models() {
 		assert!(result.is_err());
 	}
 }
+
+#[tokio::test]
+async fn test_rerank_rejects_invalid_provider_model() {
+	// parse_provider_model fails before any provider construction or network.
+	assert!(rerank("query", vec!["doc".to_string()], "", "", None).await.is_err());
+}
+
+#[tokio::test]
+async fn test_rerank_with_truncation_rejects_invalid_provider_model() {
+	assert!(
+		rerank_with_truncation("query", vec!["doc".to_string()], "", "", None, true)
+			.await
+			.is_err()
+	);
+}

@@ -150,3 +150,7 @@ impl GoogleProvider {
 		Ok((all_embeddings, EmbeddingUsage::from_tokens(model, est_tokens)))
 	}
 }
+
+#[cfg(test)]
+#[path = "google_tests.rs"]
+mod tests;

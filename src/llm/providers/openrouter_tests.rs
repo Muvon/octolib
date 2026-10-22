@@ -297,3 +297,84 @@ fn tool_images_follow_tool_results_without_losing_call_association() {
 		"data:image/png;base64,aW1hZ2U="
 	);
 }
+
+#[tokio::test]
+#[serial_test::serial]
+async fn chat_completion_via_mock_http_parses_text_and_usage() {
+	let mock = crate::llm::providers::mock_http::MockHttp::start(vec![(
+		200,
+		crate::llm::providers::mock_http::chat_completion_body("mocked openrouter answer"),
+	)]);
+	std::env::set_var("OPENROUTER_API_URL", mock.url.clone());
+
+	let provider = OpenRouterProvider::new();
+	let params = ChatCompletionParams::new(&[], "openai/gpt-4o", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
+	let response = provider.chat_completion(params).await.expect("mock completion");
+
+	assert_eq!(response.content, "mocked openrouter answer");
+	let usage = response.exchange.usage.expect("usage present");
+	assert_eq!(usage.input_tokens, 12);
+	assert_eq!(usage.output_tokens, 7);
+	assert!(usage.total_tokens >= 19);
+
+	// The last request is the chat call (an earlier one may be the catalog fetch).
+	let requests = mock.requests();
+	let chat_request = requests.last().expect("chat request recorded");
+	let body: serde_json::Value = serde_json::from_str(&chat_request.body).expect("request json");
+	assert_eq!(body["model"], "openai/gpt-4o");
+
+	std::env::remove_var("OPENROUTER_API_URL");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn chat_completion_via_mock_http_handles_tools_thinking_and_cache() {
+	let body = r#"{"id":"mock-or","choices":[{"index":0,"message":{"role":"assistant","content":null,"reasoning_details":[{"type":"text","text":"step one"},{"type":"text","text":"step two"}],"tool_calls":[{"id":"call_1","type":"function","function":{"name":"get_weather","arguments":"{\"city\":\"Oslo\"}"}},{"id":"call_2","type":"custom","function":{"name":"dropped","arguments":"{}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":100,"completion_tokens":40,"total_tokens":140,"prompt_tokens_details":{"cached_tokens":30},"completion_tokens_details":{"reasoning_tokens":10},"cost":0.0125}}"#;
+	let mock = crate::llm::providers::mock_http::MockHttp::start(vec![(200, body.to_string())]);
+	std::env::set_var("OPENROUTER_API_URL", mock.url.clone());
+
+	let provider = OpenRouterProvider::new();
+	let params = ChatCompletionParams::new(&[], "openai/gpt-4o", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
+	let response = provider.chat_completion(params).await.expect("mock completion");
+
+	// Only "function" tool calls survive; other types are dropped.
+	let calls = response.tool_calls.expect("tool calls present");
+	assert_eq!(calls.len(), 1);
+	assert_eq!(calls[0].id, "call_1");
+	assert_eq!(calls[0].name, "get_weather");
+	assert_eq!(calls[0].arguments["city"], "Oslo");
+
+	// reasoning_details texts are joined into the thinking block.
+	let thinking = response.thinking.expect("thinking present");
+	assert_eq!(thinking.content, "step one\n\nstep two");
+
+	// input excludes cache reads; output excludes reasoning; cost comes from the API.
+	let usage = response.exchange.usage.expect("usage present");
+	assert_eq!(usage.input_tokens, 70);
+	assert_eq!(usage.cache_read_tokens, 30);
+	assert_eq!(usage.output_tokens, 30);
+	assert_eq!(usage.reasoning_tokens, 10);
+	assert_eq!(usage.cost, Some(0.0125));
+
+	std::env::remove_var("OPENROUTER_API_URL");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn chat_completion_via_mock_http_surfaces_http_error() {
+	let mock = crate::llm::providers::mock_http::MockHttp::start(vec![(
+		400,
+		r#"{"error":{"message":"bad request"}}"#.to_string(),
+	)]);
+	std::env::set_var("OPENROUTER_API_URL", mock.url.clone());
+
+	let provider = OpenRouterProvider::new();
+	let params = ChatCompletionParams::new(&[], "openai/gpt-4o", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
+	let err = provider.chat_completion(params).await.expect_err("http error surfaces");
+	assert!(
+		err.to_string().contains("OpenRouter API error"),
+		"unexpected error: {err}"
+	);
+
+	std::env::remove_var("OPENROUTER_API_URL");
+}

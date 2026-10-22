@@ -358,3 +358,47 @@ fn tool_images_follow_tool_results_without_losing_call_association() {
 		"data:image/png;base64,aW1hZ2U="
 	);
 }
+
+#[tokio::test]
+#[serial_test::serial]
+async fn chat_completion_via_mock_http_separates_cached_input_and_prices_from_table() {
+	let body = r#"{"id":"z-1","object":"chat.completion","created":1,"model":"glm-5.3-flash","choices":[{"index":0,"message":{"role":"assistant","content":"zai answer"},"finish_reason":"stop"}],"usage":{"prompt_tokens":100,"completion_tokens":50,"total_tokens":150,"prompt_tokens_details":{"cached_tokens":20}}}"#;
+	let mock = crate::llm::providers::mock_http::MockHttp::start(vec![(200, body.to_string())]);
+	std::env::set_var("ZAI_API_URL", mock.url.clone());
+
+	let provider = ZaiProvider::new();
+	let params = ChatCompletionParams::new(&[], "glm-5.3-flash", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
+	let response = provider.chat_completion(params).await.expect("mock completion");
+
+	assert_eq!(response.content, "zai answer");
+	let usage = response.exchange.usage.expect("usage present");
+	// prompt_tokens is raw: cached reads are split out of clean input.
+	assert_eq!(usage.input_tokens, 80);
+	assert_eq!(usage.cache_read_tokens, 20);
+	assert_eq!(usage.output_tokens, 50);
+	assert_eq!(usage.total_tokens, 150);
+	assert!(usage.cost.unwrap_or(0.0) > 0.0, "cost computed from the pricing table");
+
+	let requests = mock.requests();
+	let req_body: serde_json::Value = serde_json::from_str(&requests[0].body).expect("request json");
+	assert_eq!(req_body["model"], "glm-5.3-flash");
+
+	std::env::remove_var("ZAI_API_URL");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn chat_completion_via_mock_http_surfaces_http_error() {
+	let mock = crate::llm::providers::mock_http::MockHttp::start(vec![(
+		400,
+		r#"{"error":{"message":"bad request"}}"#.to_string(),
+	)]);
+	std::env::set_var("ZAI_API_URL", mock.url.clone());
+
+	let provider = ZaiProvider::new();
+	let params = ChatCompletionParams::new(&[], "glm-5.3-flash", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
+	let err = provider.chat_completion(params).await.expect_err("http error surfaces");
+	assert!(err.to_string().contains("Z.ai API error"), "unexpected error: {err}");
+
+	std::env::remove_var("ZAI_API_URL");
+}

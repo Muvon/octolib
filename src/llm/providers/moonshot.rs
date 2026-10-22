@@ -113,6 +113,8 @@ impl MoonshotProvider {
 }
 
 const MOONSHOT_API_KEY_ENV: &str = "MOONSHOT_API_KEY";
+const MOONSHOT_API_URL_ENV: &str = "MOONSHOT_API_URL";
+const MOONSHOT_API_URL: &str = "https://api.moonshot.ai/v1/chat/completions";
 
 // Moonshot API request/response structures (OpenAI-compatible)
 #[derive(Serialize, Debug, Clone)]
@@ -712,9 +714,11 @@ impl AiProvider for MoonshotProvider {
 				let api_key = api_key.clone();
 				let request = request.clone();
 				let extra_headers = extra_headers.clone();
-				Box::pin(async move {
+Box::pin(async move {
+					let api_url =
+						env::var(MOONSHOT_API_URL_ENV).unwrap_or_else(|_| MOONSHOT_API_URL.to_string());
 					let req = client
-						.post("https://api.moonshot.ai/v1/chat/completions")
+						.post(&api_url)
 						.bearer_auth(&api_key)
 						.header("Content-Type", "application/json")
 						.json(&request);

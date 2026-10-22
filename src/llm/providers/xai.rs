@@ -536,7 +536,7 @@ async fn execute_request(
 	params: &ChatCompletionParams,
 ) -> Result<ProviderResponse> {
 	let started = std::time::Instant::now();
-	let response = retry::retry_with_exponential_backoff(
+	let response = retry::retry_provider_request(
 		|| {
 			let client = shared::http_client();
 			let api_key = api_key.clone();
@@ -564,9 +564,7 @@ async fn execute_request(
 		params.max_retries,
 		params.retry_timeout,
 		params.cancellation_token.as_ref(),
-		|| ProviderError::Cancelled.into(),
-		|error| matches!(error.downcast_ref::<ProviderError>(), Some(ProviderError::Cancelled)),
-		shared::is_connection_error,
+		params.api_key.as_ref(),
 	)
 	.await?;
 
@@ -574,13 +572,14 @@ async fn execute_request(
 		return Err(anyhow::anyhow!("xAI API error {}: {}", response.status, response.body));
 	}
 
-	let mut response_json: Value = serde_json::from_str(&response.body)?;
+	let mut response_json: Value = shared::parse_response(&response.body, params.api_key.as_ref())?;
 	let output = response_json
 		.get("output")
 		.and_then(Value::as_array)
 		.cloned()
 		.unwrap_or_default();
-	let usage: XaiUsage = serde_json::from_value(response_json.get("usage").cloned().unwrap_or_else(|| json!({})))?;
+	let usage: XaiUsage = serde_json::from_value(response_json.get("usage").cloned().unwrap_or_else(|| json!({})))
+		.map_err(|error| shared::redact_error(error.into(), params.api_key.as_ref()))?;
 	let normalized_usage = normalize_usage(&model, usage, started.elapsed().as_millis() as u64);
 
 	let content = text_from_output(&output);
@@ -687,7 +686,7 @@ impl AiProvider for XaiProvider {
 			}
 			.into());
 		}
-		let api_key = self.get_api_key()?;
+		let api_key = super::shared::resolve_api_key(self, &params)?;
 		let previous = resolve_previous_response_id(&params.messages, params.previous_id.clone());
 		let mut request = build_request(&params, previous.as_deref());
 		let sampling = self.effective_sampling_params(&params);

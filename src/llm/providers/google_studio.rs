@@ -122,15 +122,16 @@ impl AiProvider for GoogleStudioProvider {
 	}
 
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-		let api_key = self.get_api_key()?;
+		let api_key = super::shared::resolve_api_key(self, &params)?;
 		let api_url = get_api_url(GOOGLE_STUDIO_API_URL_ENV, GOOGLE_STUDIO_API_URL);
 		let model = params.model.clone();
 
 		// Lazy-load available models on first call (errors silently ignored; retries next call)
 		let key = api_key.clone();
+		let per_call_api_key = params.api_key.clone();
 		let url = api_url.clone();
 		let _ = MODELS_CACHE
-			.get_or_try_init(|| async move { fetch_available_models(&key, &url).await })
+			.get_or_try_init(|| async move { fetch_available_models(&key, &url, per_call_api_key.as_ref()).await })
 			.await;
 
 		let mut response = chat_completion_with_sampling(

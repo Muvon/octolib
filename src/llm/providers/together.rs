@@ -17,7 +17,6 @@
 //! Together.ai provides access to open-source models via OpenAI-compatible API.
 
 use super::shared;
-use crate::errors::ProviderError;
 use crate::errors::ToolCallError;
 use crate::llm::reference_models::proxy_route_enforces_response_schema;
 use crate::llm::retry;
@@ -230,7 +229,7 @@ impl AiProvider for TogetherProvider {
 	}
 
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-		let api_key = self.get_api_key()?;
+		let api_key = super::shared::resolve_api_key(self, &params)?;
 		let messages = convert_messages(&params.messages)?;
 
 		// Apply sampling parameters based on model support
@@ -310,16 +309,7 @@ impl AiProvider for TogetherProvider {
 			}
 		}
 
-		execute_together_request(
-			api_key,
-			request_body,
-			params.max_retries,
-			params.retry_timeout,
-			params.request_timeout,
-			params.cancellation_token.as_ref(),
-			params.extra_headers.clone(),
-		)
-		.await
+		execute_together_request(api_key, request_body, &params).await
 	}
 }
 
@@ -606,18 +596,15 @@ fn convert_messages(messages: &[Message]) -> Result<Vec<TogetherMessage>, ToolCa
 async fn execute_together_request(
 	api_key: String,
 	request_body: serde_json::Value,
-	max_retries: u32,
-	base_timeout: std::time::Duration,
-	request_timeout: Option<std::time::Duration>,
-	cancellation_token: Option<&tokio::sync::watch::Receiver<bool>>,
-	extra_headers: Option<std::collections::HashMap<String, String>>,
+	params: &ChatCompletionParams,
 ) -> Result<ProviderResponse> {
 	let start_time = std::time::Instant::now();
+	let request_timeout = params.request_timeout;
 
-	let response = retry::retry_with_exponential_backoff(
+	let response = retry::retry_provider_request(
 		|| {
 			let client = shared::http_client();
-			let extra_headers = extra_headers.clone();
+			let extra_headers = params.extra_headers.clone();
 			let api_key = api_key.clone();
 			let request_body = request_body.clone();
 
@@ -625,7 +612,7 @@ async fn execute_together_request(
 				let req = client
 					.post(TOGETHER_API_URL)
 					.header("Content-Type", "application/json")
-					.header("Authorization", format!("Bearer {}", api_key))
+					.bearer_auth(&api_key)
 					.json(&request_body);
 
 				let captured = shared::send_and_read(req, request_timeout, extra_headers.as_ref()).await?;
@@ -641,12 +628,10 @@ async fn execute_together_request(
 				Ok(captured)
 			})
 		},
-		max_retries,
-		base_timeout,
-		cancellation_token,
-		|| ProviderError::Cancelled.into(),
-		|e| matches!(e.downcast_ref::<ProviderError>(), Some(ProviderError::Cancelled)),
-		|e: &anyhow::Error| shared::is_connection_error(e),
+		params.max_retries,
+		params.retry_timeout,
+		params.cancellation_token.as_ref(),
+		params.api_key.as_ref(),
 	)
 	.await?;
 
@@ -664,7 +649,7 @@ async fn execute_together_request(
 	if !merged.parsed_any {
 		return Err(anyhow::anyhow!(
 			"Together.ai: could not parse streaming response: {}",
-			response.body
+			shared::redact_text(&response.body, params.api_key.as_ref())
 		));
 	}
 

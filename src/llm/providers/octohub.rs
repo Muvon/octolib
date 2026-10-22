@@ -254,12 +254,12 @@ impl AiProvider for OctoHubProvider {
 		}
 
 		// Execute request with retry
-		let api_key = Self::api_key();
+		let api_key = shared::resolve_api_key(self, &params)?;
 		let start_time = std::time::Instant::now();
 		let request_timeout = params.request_timeout;
 		let extra_headers = params.extra_headers.clone();
 
-		let response = retry::retry_with_exponential_backoff(
+		let response = retry::retry_provider_request(
 			|| {
 				let client = shared::http_client();
 				let api_key = api_key.clone();
@@ -269,10 +269,8 @@ impl AiProvider for OctoHubProvider {
 				Box::pin(async move {
 					let mut req = client.post(&api_url).header("Content-Type", "application/json");
 
-					if let Some(ref key) = api_key {
-						if !key.is_empty() {
-							req = req.header("Authorization", format!("Bearer {}", key));
-						}
+					if !api_key.is_empty() {
+						req = req.bearer_auth(&api_key);
 					}
 
 					// App attribution rides through the proxy: octohub forwards
@@ -306,14 +304,7 @@ impl AiProvider for OctoHubProvider {
 			params.max_retries,
 			params.retry_timeout,
 			params.cancellation_token.as_ref(),
-			|| crate::errors::ProviderError::Cancelled.into(),
-			|e| {
-				matches!(
-					e.downcast_ref::<crate::errors::ProviderError>(),
-					Some(crate::errors::ProviderError::Cancelled)
-				)
-			},
-			|e: &anyhow::Error| shared::is_connection_error(e),
+			params.api_key.as_ref(),
 		)
 		.await?;
 
@@ -323,9 +314,7 @@ impl AiProvider for OctoHubProvider {
 			return Err(auth_aware_error(response.status.as_u16(), &response.body));
 		}
 
-		let response_text = response.body;
-
-		let api_response: OctoHubResponse = serde_json::from_str(&response_text)?;
+		let api_response: OctoHubResponse = shared::parse_response(&response.body, params.api_key.as_ref())?;
 
 		// Parse output items
 		let mut content = String::new();
@@ -420,7 +409,7 @@ impl AiProvider for OctoHubProvider {
 		};
 
 		// Build response JSON and store tool_calls in unified format
-		let mut response_json: serde_json::Value = serde_json::from_str(&response_text)?;
+		let mut response_json: serde_json::Value = shared::parse_response(&response.body, params.api_key.as_ref())?;
 		if let Some(ref tc) = tool_calls {
 			shared::set_response_tool_calls(&mut response_json, tc, None);
 		}

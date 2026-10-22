@@ -108,6 +108,20 @@ fn params_with_schema(model: &str) -> ChatCompletionParams {
 }
 
 #[tokio::test]
+async fn test_schema_errors_redact_echoed_per_call_key() {
+	for native_schema in [true, false] {
+		let provider = ScriptedProvider::new(
+			vec![response_with_content(r#"{"answer":"private-request-key"}"#)],
+			native_schema,
+		);
+		let params = params_with_schema("model").with_api_key("private-request-key".to_owned());
+		let error = chat_completion_enforced(&provider, params).await.unwrap_err();
+		assert!(error.to_string().contains("[redacted]"));
+		assert!(!format!("{error:#?}").contains("private-request-key"));
+	}
+}
+
+#[tokio::test]
 async fn accepts_valid_native_schema_response() {
 	let provider = ScriptedProvider::new(vec![response_with_content(r#"{"answer":4}"#)], true);
 	let params = params_with_schema("model");
@@ -209,7 +223,7 @@ async fn client_tools_invalid_final_fails_without_a_second_call() {
 fn response_validation_defers_real_tool_call_turns() {
 	let response = response_with_tool_call("client_tool", serde_json::json!({}));
 	assert!(response.content.is_empty());
-	let validated = validate_response(response, &schema(), "scripted").unwrap();
+	let validated = validate_response(response, &schema(), "scripted", None).unwrap();
 	let call = &validated.tool_calls.unwrap()[0];
 	assert_eq!(call.name, "client_tool");
 	assert_eq!(call.arguments, serde_json::json!({}));

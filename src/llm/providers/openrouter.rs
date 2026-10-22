@@ -15,7 +15,6 @@
 //! OpenRouter provider implementation
 
 use super::shared;
-use crate::errors::ProviderError;
 use crate::errors::ToolCallError;
 use crate::llm::reference_models::proxy_route_enforces_response_schema;
 use crate::llm::retry;
@@ -90,28 +89,36 @@ where
 
 static CATALOG: OnceCell<Vec<CatalogModel>> = OnceCell::const_new();
 
-async fn fetch_catalog(api_key: &str, api_url: &str) -> Result<Vec<CatalogModel>> {
+async fn fetch_catalog(
+	api_key: &str,
+	api_url: &str,
+	per_call_api_key: Option<&crate::llm::types::PerCallApiKey>,
+) -> Result<Vec<CatalogModel>> {
 	let api_base = api_url
 		.trim_end_matches('/')
 		.strip_suffix("/chat/completions")
 		.ok_or_else(|| anyhow::anyhow!("OpenRouter API URL must end in /chat/completions"))?;
 	let response = shared::http_client()
 		.get(format!("{api_base}/models"))
-		.header("Authorization", format!("Bearer {api_key}"))
+		.bearer_auth(api_key)
 		.send()
 		.await
+		.map_err(|error| shared::redact_error(error.into(), per_call_api_key))
 		.context("Failed to fetch OpenRouter model catalog")?;
 	if !response.status().is_success() {
 		let status = response.status();
 		let text = response
 			.text()
 			.await
+			.map_err(|error| shared::redact_error(error.into(), per_call_api_key))
 			.context("Failed to read OpenRouter model catalog error")?;
+		let text = shared::redact_text(&text, per_call_api_key);
 		return Err(anyhow::anyhow!("OpenRouter models API error {status}: {text}"));
 	}
 	let catalog: CatalogResponse = response
 		.json()
 		.await
+		.map_err(|error| shared::redact_error(error.into(), per_call_api_key))
 		.context("Failed to parse OpenRouter model catalog")?;
 	Ok(catalog.data)
 }
@@ -364,13 +371,16 @@ impl AiProvider for OpenRouterProvider {
 	}
 
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-		let api_key = self.get_api_key()?;
+		let api_key = super::shared::resolve_api_key(self, &params)?;
 		let api_url = env::var(OPENROUTER_API_URL_ENV).unwrap_or_else(|_| OPENROUTER_API_URL.to_string());
 		let catalog_key = api_key.clone();
+		let per_call_api_key = params.api_key.clone();
 		let catalog_url = api_url.clone();
 		// Catalog failures leave the legacy mapping in charge and retry next call.
 		let _ = CATALOG
-			.get_or_try_init(|| async move { fetch_catalog(&catalog_key, &catalog_url).await })
+			.get_or_try_init(
+				|| async move { fetch_catalog(&catalog_key, &catalog_url, per_call_api_key.as_ref()).await },
+			)
 			.await;
 		let requested_schema = params.response_format.as_ref().and_then(|format| format.schema.clone());
 
@@ -497,11 +507,12 @@ impl AiProvider for OpenRouterProvider {
 			params.request_timeout,
 			params.cancellation_token.as_ref(),
 			params.extra_headers.clone(),
+			params.api_key.as_ref(),
 		)
 		.await?;
 
 		if let Some(schema) = requested_schema {
-			crate::llm::schema_enforcement::validate_response(response, &schema, "openrouter")
+			crate::llm::schema_enforcement::validate_response(response, &schema, "openrouter", params.api_key.as_ref())
 		} else {
 			Ok(response)
 		}
@@ -775,10 +786,11 @@ async fn execute_openrouter_request(
 	request_timeout: Option<std::time::Duration>,
 	cancellation_token: Option<&tokio::sync::watch::Receiver<bool>>,
 	extra_headers: Option<std::collections::HashMap<String, String>>,
+	per_call_api_key: Option<&crate::llm::types::PerCallApiKey>,
 ) -> Result<ProviderResponse> {
 	let start_time = std::time::Instant::now();
 
-	let response = retry::retry_with_exponential_backoff(
+	let response = retry::retry_provider_request(
 		|| {
 			let client = shared::http_client();
 			let extra_headers = extra_headers.clone();
@@ -795,7 +807,7 @@ async fn execute_openrouter_request(
 				let mut req = client
 					.post(&api_url)
 					.header("Content-Type", "application/json")
-					.header("Authorization", format!("Bearer {}", api_key))
+					.bearer_auth(&api_key)
 					.header("HTTP-Referer", openrouter_http_referer)
 					.header("X-Title", openrouter_app_title)
 					.json(&request_body);
@@ -820,9 +832,7 @@ async fn execute_openrouter_request(
 		max_retries,
 		base_timeout,
 		cancellation_token,
-		|| ProviderError::Cancelled.into(),
-		|e| matches!(e.downcast_ref::<ProviderError>(), Some(ProviderError::Cancelled)),
-		|e: &anyhow::Error| shared::is_connection_error(e),
+		per_call_api_key,
 	)
 	.await?;
 
@@ -836,8 +846,7 @@ async fn execute_openrouter_request(
 		));
 	}
 
-	let response_text = response.body;
-	let openrouter_response: OpenRouterResponse = serde_json::from_str(&response_text)?;
+	let openrouter_response: OpenRouterResponse = shared::parse_response(&response.body, per_call_api_key)?;
 
 	let choice = openrouter_response
 		.choices
@@ -888,7 +897,10 @@ async fn execute_openrouter_request(
 			.filter_map(|call| {
 				// Validate tool type - OpenRouter should only have "function" type
 				if call.tool_type != "function" {
-					tracing::warn!("Unexpected tool type '{}' from OpenRouter API", call.tool_type);
+					tracing::warn!(
+						"Unexpected tool type '{}' from OpenRouter API",
+						shared::redact_text(&call.tool_type, per_call_api_key)
+					);
 					return None;
 				}
 
@@ -949,7 +961,7 @@ async fn execute_openrouter_request(
 	};
 
 	// Create response JSON and store tool_calls in unified format
-	let mut response_json: serde_json::Value = serde_json::from_str(&response_text)?;
+	let mut response_json: serde_json::Value = shared::parse_response(&response.body, per_call_api_key)?;
 
 	// Store tool_calls in unified GenericToolCall format for conversation history
 	// Extract reasoning_details from response for Gemini thought signatures

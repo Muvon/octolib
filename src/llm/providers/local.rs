@@ -78,7 +78,7 @@ impl AiProvider for LocalProvider {
 	}
 
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-		let api_key = self.get_api_key()?;
+		let api_key = super::shared::resolve_api_key(self, &params)?;
 		let api_url = get_api_url(LOCAL_API_URL_ENV, LOCAL_API_URL);
 		let model = params.model.clone();
 

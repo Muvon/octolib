@@ -31,7 +31,7 @@
 //! billing every discarded attempt.
 
 use crate::errors::StructuredOutputError;
-use crate::llm::providers::shared::parse_structured_output_from_text;
+use crate::llm::providers::shared::{parse_structured_output_from_text, redact_text};
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
 	ChatCompletionParams, FunctionDefinition, Message, OutputFormat, ProviderResponse, ToolChoice,
@@ -62,8 +62,9 @@ pub async fn chat_completion_enforced(
 
 	let has_client_tools = params.tools.as_ref().is_some_and(|tools| !tools.is_empty());
 	if has_client_tools || provider.enforces_response_schema(&params.model) {
+		let api_key = params.api_key.clone();
 		let response = provider.chat_completion(params).await?;
-		return validate_response(response, &schema, provider.name());
+		return validate_response(response, &schema, provider.name(), api_key.as_ref());
 	}
 
 	force_schema(provider, params, &schema).await
@@ -73,13 +74,14 @@ pub(crate) fn validate_response(
 	response: ProviderResponse,
 	schema: &serde_json::Value,
 	provider: &str,
+	api_key: Option<&crate::llm::types::PerCallApiKey>,
 ) -> Result<ProviderResponse> {
 	// A tool call is an intermediate agent turn, not the schema-constrained
 	// final answer. Its text content is normally empty and must pass through.
 	if response.tool_calls.as_ref().is_some_and(|calls| !calls.is_empty()) {
 		return Ok(response);
 	}
-	checked(response, schema, provider)
+	checked(response, schema, provider, api_key)
 }
 
 async fn force_schema(
@@ -98,6 +100,7 @@ async fn force_schema(
         "Call the `{SYNTHETIC_TOOL_NAME}` function with your final answer — never respond in plain text. Its arguments must conform exactly to this JSON schema:\n{schema}"
     )));
 
+	let api_key = params.api_key.clone();
 	let response = if provider.supports_required_tool_choice(&params.model) {
 		provider
 			.chat_completion_with_tool_choice(params, ToolChoice::Required)
@@ -105,40 +108,55 @@ async fn force_schema(
 	} else {
 		provider.chat_completion(params).await?
 	};
-	checked(response, schema, provider.name())
+	checked(response, schema, provider.name(), api_key.as_ref())
 }
 
 /// Hold one response to the schema: extract the answer, validate it, and fail
 /// closed with the reason. Never asks the model again.
-fn checked(response: ProviderResponse, schema: &serde_json::Value, provider: &str) -> Result<ProviderResponse> {
+fn checked(
+	response: ProviderResponse,
+	schema: &serde_json::Value,
+	provider: &str,
+	api_key: Option<&crate::llm::types::PerCallApiKey>,
+) -> Result<ProviderResponse> {
 	let Some(value) = extract_candidate(&response) else {
 		tracing::warn!(
 			provider = provider,
-			finish_reason = ?response.finish_reason,
+			finish_reason = %redact_text(&format!("{:?}", response.finish_reason), api_key),
 			thinking_len = response.thinking.as_ref().map(|t| t.content.len()).unwrap_or(0),
 			content_len = response.content.len(),
-			content_head = %response.content.chars().take(400).collect::<String>(),
+			content_head = %redact_text(&response.content, api_key).chars().take(400).collect::<String>(),
 			"RAW-FAIL: no parseable structured output, final output captured"
 		);
 		return Err(StructuredOutputError::ParsingFailed {
-			reason: format!(
-				"provider '{provider}' returned no parseable structured output (finish_reason={:?})",
-				response.finish_reason
+			reason: redact_text(
+				&format!(
+					"provider '{provider}' returned no parseable structured output (finish_reason={:?})",
+					response.finish_reason
+				),
+				api_key,
 			),
 		}
 		.into());
 	};
 
-	let validator = jsonschema::validator_for(schema)
-		.map_err(|e| anyhow::anyhow!("invalid JSON schema in response_format: {e}"))?;
+	let validator = jsonschema::validator_for(schema).map_err(|e| {
+		anyhow::anyhow!(redact_text(
+			&format!("invalid JSON schema in response_format: {e}"),
+			api_key
+		))
+	})?;
 	if let Err(err) = validator.validate(&value) {
 		tracing::warn!(
 			provider = provider,
-			error = %err,
+			error = %redact_text(&err.to_string(), api_key),
 			"structured output did not match requested JSON schema"
 		);
 		return Err(StructuredOutputError::ValidationFailed {
-			reason: format!("provider '{provider}' returned structured output that does not match the schema: {err}"),
+			reason: redact_text(
+				&format!("provider '{provider}' returned structured output that does not match the schema: {err}"),
+				api_key,
+			),
 		}
 		.into());
 	}

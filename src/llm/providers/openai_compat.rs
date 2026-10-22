@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use super::shared;
-use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::ReasoningEffort as Effort;
@@ -864,6 +863,22 @@ fn extract_thinking(message: &OpenAiCompatResponseMessage) -> Option<ThinkingBlo
 	})
 }
 
+pub(super) fn build_http_request(
+	api_key: &str,
+	api_url: &str,
+	request_body: &serde_json::Value,
+) -> reqwest::RequestBuilder {
+	let request = shared::http_client()
+		.post(api_url)
+		.header("Content-Type", "application/json")
+		.json(request_body);
+	if api_key.is_empty() {
+		request
+	} else {
+		request.bearer_auth(api_key)
+	}
+}
+
 async fn execute_request(
 	config: OpenAiCompatConfig,
 	api_key: String,
@@ -874,9 +889,8 @@ async fn execute_request(
 	let start_time = std::time::Instant::now();
 	let request_timeout = params.request_timeout;
 
-	let response = retry::retry_with_exponential_backoff(
+	let response = retry::retry_provider_request(
 		|| {
-			let client = shared::http_client();
 			let api_key = api_key.clone();
 			let api_url = api_url.clone();
 			let request_body = request_body.clone();
@@ -884,14 +898,7 @@ async fn execute_request(
 			let extra_headers = params.extra_headers.clone();
 
 			Box::pin(async move {
-				let mut request = client
-					.post(&api_url)
-					.header("Content-Type", "application/json")
-					.json(&request_body);
-
-				if !api_key.is_empty() {
-					request = request.header("Authorization", format!("Bearer {}", api_key));
-				}
+				let request = build_http_request(&api_key, &api_url, &request_body);
 
 				let captured = shared::send_and_read(request, request_timeout, extra_headers.as_ref()).await?;
 
@@ -911,9 +918,7 @@ async fn execute_request(
 		params.max_retries,
 		params.retry_timeout,
 		params.cancellation_token.as_ref(),
-		|| ProviderError::Cancelled.into(),
-		|e| matches!(e.downcast_ref::<ProviderError>(), Some(ProviderError::Cancelled)),
-		|e: &anyhow::Error| shared::is_connection_error(e),
+		params.api_key.as_ref(),
 	)
 	.await?;
 
@@ -928,8 +933,7 @@ async fn execute_request(
 		));
 	}
 
-	let response_text = response.body;
-	let api_response: OpenAiCompatResponse = serde_json::from_str(&response_text)?;
+	let api_response: OpenAiCompatResponse = shared::parse_response(&response.body, params.api_key.as_ref())?;
 
 	let (message, finish_reason) = if let Some(choice) = api_response.choices.into_iter().next() {
 		(choice.message, choice.finish_reason)
@@ -963,7 +967,10 @@ async fn execute_request(
 			.into_iter()
 			.filter_map(|call| {
 				if call.tool_type != "function" {
-					tracing::warn!("Unexpected tool type: {}", call.tool_type);
+					tracing::warn!(
+						"Unexpected tool type: {}",
+						shared::redact_text(&call.tool_type, params.api_key.as_ref())
+					);
 					return None;
 				}
 
@@ -1048,7 +1055,7 @@ async fn execute_request(
 		None
 	};
 
-	let mut response_json: serde_json::Value = serde_json::from_str(&response_text)?;
+	let mut response_json: serde_json::Value = shared::parse_response(&response.body, params.api_key.as_ref())?;
 	if let Some(ref tc) = tool_calls {
 		let reasoning_meta = if config.provider_name.eq_ignore_ascii_case("local") {
 			reasoning_details.as_ref().map(|rd| {

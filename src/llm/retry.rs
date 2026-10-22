@@ -98,6 +98,43 @@ where
 	.await
 }
 
+pub(crate) async fn retry_provider_request<F>(
+	mut operation: F,
+	max_retries: u32,
+	base_timeout: Duration,
+	cancellation_token: Option<&watch::Receiver<bool>>,
+	api_key: Option<&crate::llm::types::PerCallApiKey>,
+) -> Result<crate::llm::providers::shared::CapturedResponse>
+where
+	F: FnMut() -> Pin<Box<dyn Future<Output = Result<crate::llm::providers::shared::CapturedResponse>> + Send>>,
+{
+	use crate::errors::ProviderError;
+	use crate::llm::providers::shared;
+	let api_key = api_key.cloned();
+	retry_with_exponential_backoff(
+		|| {
+			let response = operation();
+			let api_key = api_key.clone();
+			Box::pin(async move {
+				let mut response = response
+					.await
+					.map_err(|error| shared::redact_error(error, api_key.as_ref()))?;
+				if !response.status.is_success() {
+					response.body = shared::redact_text(&response.body, api_key.as_ref());
+				}
+				Ok(response)
+			})
+		},
+		max_retries,
+		base_timeout,
+		cancellation_token,
+		|| ProviderError::Cancelled.into(),
+		|error| matches!(error.downcast_ref::<ProviderError>(), Some(ProviderError::Cancelled)),
+		shared::is_connection_error,
+	)
+	.await
+}
+
 /// Generic retry logic with exponential backoff for providers that don't have smart retry
 ///
 /// This function implements exponential backoff with a configurable base timeout.

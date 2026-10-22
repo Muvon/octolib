@@ -16,6 +16,43 @@ use super::*;
 use serial_test::serial;
 
 #[test]
+#[serial_test::serial]
+fn test_per_call_key_auth_headers_override_api_key_and_oauth() {
+	let provider = OpenAiProvider::new();
+	let params =
+		ChatCompletionParams::new(&[], "gpt-4o", 1.0, 1.0, 0, 10).with_api_key("private-request-key".to_owned());
+	let original = [
+		OPENAI_API_KEY_ENV,
+		OPENAI_OAUTH_ACCESS_TOKEN_ENV,
+		OPENAI_OAUTH_ACCOUNT_ID_ENV,
+	]
+	.map(|name| (name, env::var_os(name)));
+	for platform_auth in [false, true] {
+		for (name, _) in &original {
+			if platform_auth {
+				env::set_var(name, "platform-credential");
+			} else {
+				env::remove_var(name);
+			}
+		}
+		let request = shared::http_client()
+			.post(OPENAI_API_URL)
+			.headers(provider.auth_headers(&params).unwrap())
+			.build()
+			.unwrap();
+		assert_eq!(request.headers()["Authorization"], "Bearer private-request-key");
+		assert!(!request.headers().contains_key("ChatGPT-Account-ID"));
+		assert!(!format!("{request:?}").contains("private-request-key"));
+	}
+	for (name, value) in original {
+		match value {
+			Some(value) => env::set_var(name, value),
+			None => env::remove_var(name),
+		}
+	}
+}
+
+#[test]
 fn test_supported_sampling_params() {
 	let provider = OpenAiProvider::new();
 

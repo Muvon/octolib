@@ -17,6 +17,42 @@ use serial_test::serial;
 
 #[test]
 #[serial]
+fn test_per_call_key_auth_headers_override_api_key_and_oauth() {
+	let provider = AnthropicProvider::new();
+	let params = ChatCompletionParams::new(&[], "claude-sonnet-4-6", 1.0, 1.0, 0, 10)
+		.with_api_key("private-request-key".to_owned());
+	let original_key = env::var_os(ANTHROPIC_API_KEY_ENV);
+	let original_oauth = env::var_os(ANTHROPIC_OAUTH_TOKEN_ENV);
+	for platform_auth in [false, true] {
+		if platform_auth {
+			env::set_var(ANTHROPIC_API_KEY_ENV, "platform-key");
+			env::set_var(ANTHROPIC_OAUTH_TOKEN_ENV, "platform-oauth");
+		} else {
+			env::remove_var(ANTHROPIC_API_KEY_ENV);
+			env::remove_var(ANTHROPIC_OAUTH_TOKEN_ENV);
+		}
+		let request = shared::http_client()
+			.post(ANTHROPIC_API_URL)
+			.headers(provider.auth_headers(&params).unwrap())
+			.build()
+			.unwrap();
+		assert_eq!(request.headers()["x-api-key"], "private-request-key");
+		assert!(!request.headers().contains_key("Authorization"));
+		assert!(!format!("{request:?}").contains("private-request-key"));
+	}
+	for (name, original) in [
+		(ANTHROPIC_API_KEY_ENV, original_key),
+		(ANTHROPIC_OAUTH_TOKEN_ENV, original_oauth),
+	] {
+		match original {
+			Some(value) => env::set_var(name, value),
+			None => env::remove_var(name),
+		}
+	}
+}
+
+#[test]
+#[serial]
 fn test_oauth_token_priority() {
 	let provider = AnthropicProvider::new();
 

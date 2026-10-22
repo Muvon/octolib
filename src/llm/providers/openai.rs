@@ -15,7 +15,6 @@
 //! OpenAI provider implementation
 
 use super::shared;
-use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
@@ -529,6 +528,23 @@ impl OpenAiProvider {
 	pub fn new() -> Self {
 		Self
 	}
+
+	fn auth_headers(&self, params: &ChatCompletionParams) -> Result<reqwest::header::HeaderMap> {
+		let mut headers = reqwest::header::HeaderMap::new();
+		let token = if params.api_key.is_some() {
+			shared::resolve_api_key(self, params)?
+		} else if let (Ok(token), Ok(account_id)) = (
+			env::var(OPENAI_OAUTH_ACCESS_TOKEN_ENV),
+			env::var(OPENAI_OAUTH_ACCOUNT_ID_ENV),
+		) {
+			headers.insert("ChatGPT-Account-ID", account_id.parse()?);
+			token
+		} else {
+			shared::resolve_api_key(self, params)?
+		};
+		headers.insert("Authorization", shared::sensitive_header(&format!("Bearer {token}"))?);
+		Ok(headers)
+	}
 }
 
 const OPENAI_API_KEY_ENV: &str = "OPENAI_API_KEY";
@@ -726,21 +742,7 @@ impl AiProvider for OpenAiProvider {
 	}
 
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-		// Check for OAuth tokens first (priority), otherwise use API key
-		let (use_oauth, oauth_account_id) = if let (Ok(access_token), Ok(account_id)) = (
-			env::var(OPENAI_OAUTH_ACCESS_TOKEN_ENV),
-			env::var(OPENAI_OAUTH_ACCOUNT_ID_ENV),
-		) {
-			(true, Some((access_token, account_id)))
-		} else {
-			(false, None)
-		};
-
-		let auth_token = if use_oauth {
-			oauth_account_id.as_ref().unwrap().0.clone()
-		} else {
-			self.get_api_key()?
-		};
+		let auth_headers = self.auth_headers(&params)?;
 
 		// Only a Responses API id from the current local tail can continue an
 		// OpenAI server-side chain. Other provider ids force a transcript rebase.
@@ -808,12 +810,10 @@ impl AiProvider for OpenAiProvider {
 		}
 
 		// Execute the request with retry logic
-		let account_id_header = oauth_account_id.as_ref().map(|(_, id)| id.clone());
 		let api_url = env::var(OPENAI_API_URL_ENV).unwrap_or_else(|_| OPENAI_API_URL.to_string());
 
 		let response = execute_openai_request(
-			auth_token,
-			account_id_header,
+			auth_headers,
 			api_url,
 			request_body,
 			params.max_retries,
@@ -821,6 +821,7 @@ impl AiProvider for OpenAiProvider {
 			params.request_timeout,
 			params.cancellation_token.as_ref(),
 			params.extra_headers.clone(),
+			params.api_key.as_ref(),
 		)
 		.await?;
 
@@ -891,8 +892,7 @@ struct OutputTokensDetails {
 // Execute OpenAI HTTP request
 #[allow(clippy::too_many_arguments)]
 async fn execute_openai_request(
-	auth_token: String,
-	account_id: Option<String>,
+	auth_headers: reqwest::header::HeaderMap,
 	api_url: String,
 	request_body: serde_json::Value,
 	max_retries: u32,
@@ -900,27 +900,22 @@ async fn execute_openai_request(
 	request_timeout: Option<std::time::Duration>,
 	cancellation_token: Option<&tokio::sync::watch::Receiver<bool>>,
 	extra_headers: Option<std::collections::HashMap<String, String>>,
+	per_call_api_key: Option<&crate::llm::types::PerCallApiKey>,
 ) -> Result<ProviderResponse> {
 	let start_time = std::time::Instant::now();
 
-	let response = retry::retry_with_exponential_backoff(
+	let response = retry::retry_provider_request(
 		|| {
 			let client = shared::http_client();
 			let extra_headers = extra_headers.clone();
-			let auth_token = auth_token.clone();
-			let account_id = account_id.clone();
+			let auth_headers = auth_headers.clone();
 			let api_url = api_url.clone();
 			let request_body = request_body.clone();
 			Box::pin(async move {
-				let mut req = client
+				let req = client
 					.post(&api_url)
 					.header("Content-Type", "application/json")
-					.header("Authorization", format!("Bearer {}", auth_token));
-
-				// Add ChatGPT-Account-ID header if using OAuth
-				if let Some(id) = account_id {
-					req = req.header("ChatGPT-Account-ID", id);
-				}
+					.headers(auth_headers);
 
 				let captured =
 					shared::send_and_read(req.json(&request_body), request_timeout, extra_headers.as_ref()).await?;
@@ -940,9 +935,7 @@ async fn execute_openai_request(
 		max_retries,
 		base_timeout,
 		cancellation_token,
-		|| ProviderError::Cancelled.into(),
-		|e| matches!(e.downcast_ref::<ProviderError>(), Some(ProviderError::Cancelled)),
-		|e: &anyhow::Error| shared::is_connection_error(e),
+		per_call_api_key,
 	)
 	.await?;
 
@@ -996,7 +989,7 @@ async fn execute_openai_request(
 		));
 	}
 
-	let response_json: serde_json::Value = serde_json::from_str(&response.body)?;
+	let response_json: serde_json::Value = shared::parse_response(&response.body, per_call_api_key)?;
 	parse_responses_api_response(
 		request_body,
 		response_json,
@@ -1004,6 +997,7 @@ async fn execute_openai_request(
 		request_time_ms,
 		rate_limit_headers,
 	)
+	.map_err(|error| shared::redact_error(error, per_call_api_key))
 }
 
 /// Tool-call metadata key holding a response's encrypted reasoning items.

@@ -102,9 +102,8 @@ async fn main() -> anyhow::Result<()> {
 	println!("📝 Sending test message to GPT-4o...\n");
 
 	// Create a simple test message
-	let params = ChatCompletionParams {
-		model: model.clone(),
-		messages: vec![Message {
+	let params = ChatCompletionParams::new(
+		&[Message {
 			role: "user".to_string(),
 			content: "Say 'Hello from ChatGPT OAuth!' in a creative way.".to_string(),
 			name: None,
@@ -118,22 +117,13 @@ async fn main() -> anyhow::Result<()> {
 			thinking: None,
 			id: None,
 		}],
-		temperature: 0.7,
-		max_tokens: 100,
-		top_p: 1.0,
-		top_k: 0,
-		tools: None,
-		response_format: None,
-		max_retries: 3,
-		retry_timeout: std::time::Duration::from_secs(10),
-		cancellation_token: None,
-		previous_id: None,
-		use_long_cache: false,
-		prompt_cache_key: None,
-		extra_headers: None,
-		reasoning_effort: None,
-		request_timeout: None,
-	};
+		&model,
+		0.7,
+		1.0,
+		0,
+		100,
+	)
+	.with_retry_timeout(std::time::Duration::from_secs(10));
 
 	// Make the API call
 	match provider.chat_completion(params).await {

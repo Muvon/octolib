@@ -149,6 +149,7 @@ impl AiProvider for ChatGptProvider {
 	}
 
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
+		crate::llm::providers::shared::reject_api_key(self.name(), &params)?;
 		let request_body = build_request(&params);
 		let extra_headers = request_headers(&params)?;
 		let start_time = std::time::Instant::now();

@@ -268,7 +268,7 @@ impl AiProvider for OpenCodeZenProvider {
 	}
 
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-		let api_key = self.get_api_key()?;
+		let api_key = super::shared::resolve_api_key(self, &params)?;
 		let api_url = get_api_url(OPENCODE_ZEN_API_URL_ENV, OPENCODE_ZEN_API_URL);
 		opencode_chat_completion("opencode-zen", api_key, api_url, params).await
 	}
@@ -314,7 +314,7 @@ impl AiProvider for OpenCodeGoProvider {
 	}
 
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-		let api_key = self.get_api_key()?;
+		let api_key = super::shared::resolve_api_key(self, &params)?;
 		let api_url = get_api_url(OPENCODE_GO_API_URL_ENV, OPENCODE_GO_API_URL);
 		opencode_chat_completion("opencode-go", api_key, api_url, params).await
 	}

@@ -22,6 +22,71 @@ use std::time::Duration;
 pub use crate::http::set_user_agent;
 pub(crate) use crate::http::{http_client, refresh_http_client};
 
+/// Resolve request credentials before accessing any process-wide credentials.
+pub(super) fn resolve_api_key(
+	provider: &dyn crate::llm::traits::AiProvider,
+	params: &crate::llm::types::ChatCompletionParams,
+) -> anyhow::Result<String> {
+	match &params.api_key {
+		Some(key) => Ok(key.as_str().to_owned()),
+		None => provider.get_api_key(),
+	}
+}
+
+pub(super) fn reject_api_key(provider: &str, params: &crate::llm::types::ChatCompletionParams) -> anyhow::Result<()> {
+	if params.api_key.is_some() {
+		return Err(crate::errors::ProviderError::UnsupportedOperation {
+			provider: provider.to_owned(),
+			operation: "per-call API key authentication".to_owned(),
+		}
+		.into());
+	}
+	Ok(())
+}
+
+pub(super) fn sensitive_header(value: &str) -> anyhow::Result<reqwest::header::HeaderValue> {
+	let mut header = reqwest::header::HeaderValue::from_str(value)?;
+	header.set_sensitive(true);
+	Ok(header)
+}
+
+pub(crate) fn redact_text(text: &str, api_key: Option<&crate::llm::types::PerCallApiKey>) -> String {
+	match api_key.filter(|key| !key.as_str().is_empty()) {
+		Some(key) => text.replace(key.as_str(), "[redacted]"),
+		None => text.to_owned(),
+	}
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("{message}")]
+struct RedactedError {
+	message: String,
+	connection_error: bool,
+}
+
+pub(crate) fn redact_error(error: anyhow::Error, api_key: Option<&crate::llm::types::PerCallApiKey>) -> anyhow::Error {
+	let Some(key) = api_key.filter(|key| !key.as_str().is_empty()) else {
+		return error;
+	};
+	let message = format!("{error:#}");
+	if !message.contains(key.as_str()) {
+		return error;
+	}
+	// Retaining the original source would expose the credential through error chains.
+	RedactedError {
+		message: redact_text(&message, Some(key)),
+		connection_error: is_connection_error(&error),
+	}
+	.into()
+}
+
+pub(super) fn parse_response<T: serde::de::DeserializeOwned>(
+	body: &str,
+	api_key: Option<&crate::llm::types::PerCallApiKey>,
+) -> anyhow::Result<T> {
+	serde_json::from_str(body).map_err(|error| redact_error(error.into(), api_key))
+}
+
 /// Chat Completions tool content is text-only. Deliver images as attributed user
 /// turns after the entire tool-result batch, never between a call and its results.
 pub(super) fn chat_completion_messages(
@@ -99,8 +164,11 @@ pub(super) fn anthropic_tool_content(message: &crate::llm::types::Message) -> se
 ///
 /// Callers should call `refresh_http_client()` before retrying.
 pub(crate) fn is_connection_error(err: &anyhow::Error) -> bool {
-	err.downcast_ref::<reqwest::Error>()
-		.is_some_and(|e| e.is_connect() || e.is_request() || e.is_body())
+	err.downcast_ref::<RedactedError>()
+		.is_some_and(|error| error.connection_error)
+		|| err
+			.downcast_ref::<reqwest::Error>()
+			.is_some_and(|e| e.is_connect() || e.is_request() || e.is_body())
 }
 
 /// A fully-buffered HTTP response: status, headers, and body read to completion.
@@ -109,7 +177,7 @@ pub(crate) fn is_connection_error(err: &anyhow::Error) -> bool {
 /// so that a mid-stream connection reset surfaces as a retryable error instead
 /// of escaping the retry loop. Callers inspect `status`/`headers` and parse
 /// `body` without any further `.await` on the (already consumed) connection.
-pub(super) struct CapturedResponse {
+pub(crate) struct CapturedResponse {
 	pub status: reqwest::StatusCode,
 	pub headers: reqwest::header::HeaderMap,
 	pub body: String,

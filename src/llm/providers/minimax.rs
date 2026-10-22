@@ -15,7 +15,6 @@
 //! MiniMax provider implementation (Anthropic-compatible API)
 
 use super::shared;
-use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
@@ -235,7 +234,7 @@ impl AiProvider for MinimaxProvider {
 	}
 
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-		let api_key = self.get_api_key()?;
+		let api_key = super::shared::resolve_api_key(self, &params)?;
 
 		// Convert messages to Anthropic format (MiniMax uses same format)
 		let minimax_messages = convert_messages(&params.messages);
@@ -378,6 +377,7 @@ impl AiProvider for MinimaxProvider {
 			params.request_timeout,
 			params.cancellation_token.as_ref(),
 			params.extra_headers.clone(),
+			params.api_key.as_ref(),
 		)
 		.await?;
 
@@ -598,10 +598,11 @@ async fn execute_minimax_request(
 	request_timeout: Option<std::time::Duration>,
 	cancellation_token: Option<&tokio::sync::watch::Receiver<bool>>,
 	extra_headers: Option<std::collections::HashMap<String, String>>,
+	per_call_api_key: Option<&crate::llm::types::PerCallApiKey>,
 ) -> Result<ProviderResponse> {
 	let start_time = std::time::Instant::now();
 
-	let response = retry::retry_with_exponential_backoff(
+	let response = retry::retry_provider_request(
 		|| {
 			let client = shared::http_client();
 			let extra_headers = extra_headers.clone();
@@ -612,7 +613,7 @@ async fn execute_minimax_request(
 				let req = client
 					.post(&api_url)
 					.header("Content-Type", "application/json")
-					.header("Authorization", format!("Bearer {}", api_key))
+					.bearer_auth(&api_key)
 					.header("anthropic-version", "2023-06-01")
 					.json(&request_body);
 
@@ -633,9 +634,7 @@ async fn execute_minimax_request(
 		max_retries,
 		base_timeout,
 		cancellation_token,
-		|| ProviderError::Cancelled.into(),
-		|e| matches!(e.downcast_ref::<ProviderError>(), Some(ProviderError::Cancelled)),
-		|e: &anyhow::Error| shared::is_connection_error(e),
+		per_call_api_key,
 	)
 	.await?;
 
@@ -649,8 +648,7 @@ async fn execute_minimax_request(
 		));
 	}
 
-	let response_text = response.body;
-	let minimax_response: MinimaxResponse = serde_json::from_str(&response_text)?;
+	let minimax_response: MinimaxResponse = shared::parse_response(&response.body, per_call_api_key)?;
 
 	// Extract content, thinking blocks, and tool calls
 	let mut content_parts = Vec::new();
@@ -737,7 +735,7 @@ async fn execute_minimax_request(
 	};
 
 	// Create response JSON that stores tool_calls in unified GenericToolCall format
-	let mut response_json: serde_json::Value = serde_json::from_str(&response_text)?;
+	let mut response_json: serde_json::Value = shared::parse_response(&response.body, per_call_api_key)?;
 
 	// Store tool_calls in unified GenericToolCall format for conversation history
 	shared::set_response_tool_calls(&mut response_json, &tool_calls, None);

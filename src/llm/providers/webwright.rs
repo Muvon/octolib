@@ -127,7 +127,7 @@ impl AiProvider for WebWrightProvider {
 	}
 
 	async fn chat_completion(&self, mut params: ChatCompletionParams) -> Result<ProviderResponse> {
-		let api_key = self.get_api_key()?;
+		let api_key = super::shared::resolve_api_key(self, &params)?;
 		let api_url = get_api_url(WEBWRIGHT_API_URL_ENV, WEBWRIGHT_API_URL);
 
 		if let Some((canonical, _)) = find_model(&params.model) {

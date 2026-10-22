@@ -42,7 +42,6 @@
 //! the top-level `reasoning_effort` field: "low" | "high" | "max"
 //! (<https://api-docs.deepseek.com/guides/thinking_mode>).
 
-use crate::errors::ProviderError;
 use crate::llm::providers::shared;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
@@ -511,13 +510,13 @@ impl AiProvider for DeepSeekProvider {
 	}
 
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-		let api_key = self.get_api_key()?;
+		let api_key = super::shared::resolve_api_key(self, &params)?;
 		let request = build_request(&params);
 
 		let start_time = std::time::Instant::now();
 		let request_timeout = params.request_timeout;
 		let extra_headers = params.extra_headers.clone();
-		let response = retry::retry_with_exponential_backoff(
+		let response = retry::retry_provider_request(
 			|| {
 				let client = shared::http_client();
 				let api_key = api_key.clone();
@@ -526,7 +525,7 @@ impl AiProvider for DeepSeekProvider {
 				Box::pin(async move {
 					let req = client
 						.post("https://api.deepseek.com/chat/completions")
-						.header("Authorization", format!("Bearer {}", api_key))
+						.bearer_auth(&api_key)
 						.header("Content-Type", "application/json")
 						.json(&request);
 
@@ -547,9 +546,7 @@ impl AiProvider for DeepSeekProvider {
 			params.max_retries,
 			params.retry_timeout,
 			params.cancellation_token.as_ref(),
-			|| ProviderError::Cancelled.into(),
-			|e| matches!(e.downcast_ref::<ProviderError>(), Some(ProviderError::Cancelled)),
-			|e: &anyhow::Error| shared::is_connection_error(e),
+			params.api_key.as_ref(),
 		)
 		.await?;
 		let request_time_ms = start_time.elapsed().as_millis() as u64;
@@ -564,13 +561,19 @@ impl AiProvider for DeepSeekProvider {
 
 		// Parse response as JSON Value first — gives us both the raw value for exchange logging
 		// and a source for typed deserialization without parsing the body twice.
-		let response_json: serde_json::Value = serde_json::from_str(&response.body)?;
+		let response_json: serde_json::Value = shared::parse_response(&response.body, params.api_key.as_ref())?;
 
 		let deepseek_response: DeepSeekResponse = serde_json::from_value(response_json.clone()).map_err(|e| {
-			anyhow::anyhow!(
-				"DeepSeek API response deserialization error: {} — response: {}",
-				e,
-				response_json.to_string().chars().take(500).collect::<String>()
+			shared::redact_error(
+				anyhow::anyhow!(
+					"DeepSeek API response deserialization error: {} — response: {}",
+					e,
+					shared::redact_text(&response_json.to_string(), params.api_key.as_ref())
+						.chars()
+						.take(500)
+						.collect::<String>()
+				),
+				params.api_key.as_ref(),
 			)
 		})?;
 
@@ -596,7 +599,10 @@ impl AiProvider for DeepSeekProvider {
 				.into_iter()
 				.filter_map(|call| {
 					if call.tool_type != "function" {
-						tracing::warn!("Unexpected tool type: {}", call.tool_type);
+						tracing::warn!(
+							"Unexpected tool type: {}",
+							shared::redact_text(&call.tool_type, params.api_key.as_ref())
+						);
 						return None;
 					}
 

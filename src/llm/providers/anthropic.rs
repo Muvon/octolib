@@ -15,7 +15,6 @@
 //! Anthropic provider implementation
 
 use super::shared;
-use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::traits::{AiProvider, KeepalivePolicy};
 use crate::llm::types::{
@@ -351,6 +350,21 @@ impl AnthropicProvider {
 	pub fn new() -> Self {
 		Self
 	}
+
+	fn auth_headers(&self, params: &ChatCompletionParams) -> Result<reqwest::header::HeaderMap> {
+		let mut headers = reqwest::header::HeaderMap::new();
+		if params.api_key.is_none() {
+			if let Ok(token) = env::var(ANTHROPIC_OAUTH_TOKEN_ENV) {
+				headers.insert("Authorization", shared::sensitive_header(&format!("Bearer {token}"))?);
+				return Ok(headers);
+			}
+		}
+		headers.insert(
+			"x-api-key",
+			shared::sensitive_header(&shared::resolve_api_key(self, params)?)?,
+		);
+		Ok(headers)
+	}
 }
 
 // Constants
@@ -490,13 +504,7 @@ impl AiProvider for AnthropicProvider {
 	}
 
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-		// Check for OAuth token first (priority), otherwise use API key
-		let (auth_header_name, auth_header_value) = if let Ok(oauth_token) = env::var(ANTHROPIC_OAUTH_TOKEN_ENV) {
-			("Authorization".to_string(), format!("Bearer {}", oauth_token))
-		} else {
-			let api_key = self.get_api_key()?;
-			("x-api-key".to_string(), api_key)
-		};
+		let auth_headers = self.auth_headers(&params)?;
 
 		// Convert messages to Anthropic format
 		let anthropic_messages = convert_messages(&params.messages);
@@ -662,8 +670,7 @@ impl AiProvider for AnthropicProvider {
 		let api_url = env::var(ANTHROPIC_API_URL_ENV).unwrap_or_else(|_| ANTHROPIC_API_URL.to_string());
 
 		let response = execute_anthropic_request(
-			auth_header_name,
-			auth_header_value,
+			auth_headers,
 			api_url,
 			request_body,
 			params.max_retries,
@@ -672,6 +679,7 @@ impl AiProvider for AnthropicProvider {
 			params.cancellation_token.as_ref(),
 			needs_extended_cache,
 			params.extra_headers.clone(),
+			params.api_key.as_ref(),
 		)
 		.await?;
 
@@ -901,8 +909,7 @@ fn append_regular_content(message: &Message, content: &mut Vec<AnthropicContent>
 // Execute a single Anthropic HTTP request with smart retry delay calculation
 #[allow(clippy::too_many_arguments)]
 async fn execute_anthropic_request(
-	auth_header_name: String,
-	auth_header_value: String,
+	auth_headers: reqwest::header::HeaderMap,
 	api_url: String,
 	request_body: serde_json::Value,
 	max_retries: u32,
@@ -911,6 +918,7 @@ async fn execute_anthropic_request(
 	cancellation_token: Option<&tokio::sync::watch::Receiver<bool>>,
 	extended_cache_ttl: bool,
 	extra_headers: Option<std::collections::HashMap<String, String>>,
+	per_call_api_key: Option<&crate::llm::types::PerCallApiKey>,
 ) -> Result<ProviderResponse> {
 	let start_time = std::time::Instant::now();
 
@@ -921,12 +929,11 @@ async fn execute_anthropic_request(
 		"prompt-caching-2024-07-31"
 	};
 
-	let response = retry::retry_with_exponential_backoff(
+	let response = retry::retry_provider_request(
 		|| {
 			let client = shared::http_client();
 			let extra_headers = extra_headers.clone();
-			let auth_header_name = auth_header_name.clone();
-			let auth_header_value = auth_header_value.clone();
+			let auth_headers = auth_headers.clone();
 			let api_url = api_url.clone();
 			let request_body = request_body.clone();
 			let beta_header = beta_header.to_string();
@@ -934,7 +941,7 @@ async fn execute_anthropic_request(
 				let req = client
 					.post(&api_url)
 					.header("Content-Type", "application/json")
-					.header(&auth_header_name, &auth_header_value)
+					.headers(auth_headers)
 					.header("anthropic-version", "2023-06-01")
 					.header("anthropic-beta", &beta_header)
 					.json(&request_body);
@@ -956,9 +963,7 @@ async fn execute_anthropic_request(
 		max_retries,
 		base_timeout,
 		cancellation_token,
-		|| ProviderError::Cancelled.into(),
-		|e| matches!(e.downcast_ref::<ProviderError>(), Some(ProviderError::Cancelled)),
-		|e: &anyhow::Error| shared::is_connection_error(e),
+		per_call_api_key,
 	)
 	.await?;
 
@@ -1017,8 +1022,7 @@ async fn execute_anthropic_request(
 		));
 	}
 
-	let response_text = response.body;
-	let anthropic_response: AnthropicResponse = serde_json::from_str(&response_text)?;
+	let anthropic_response: AnthropicResponse = shared::parse_response(&response.body, per_call_api_key)?;
 
 	// Extract content, thinking blocks, and tool calls
 	let mut content_parts = Vec::new();
@@ -1117,7 +1121,7 @@ async fn execute_anthropic_request(
 	};
 
 	// Create response JSON that stores tool_calls in unified GenericToolCall format
-	let mut response_json: serde_json::Value = serde_json::from_str(&response_text)?;
+	let mut response_json: serde_json::Value = shared::parse_response(&response.body, per_call_api_key)?;
 
 	// Store tool_calls in unified GenericToolCall format for conversation history
 	shared::set_response_tool_calls(&mut response_json, &tool_calls, None);

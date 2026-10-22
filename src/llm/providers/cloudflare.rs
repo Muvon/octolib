@@ -565,6 +565,7 @@ impl AiProvider for CloudflareWorkersAiProvider {
 	}
 
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
+		crate::llm::providers::shared::reject_api_key(self.name(), &params)?;
 		let api_key = self.get_api_key()?;
 		let account_id = self.get_account_id()?;
 		let api_url = get_api_url(CLOUDFLARE_API_URL_ENV, &default_cloudflare_api_url(&account_id));

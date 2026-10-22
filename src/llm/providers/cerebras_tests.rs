@@ -15,6 +15,35 @@
 use super::*;
 
 #[test]
+#[serial_test::serial]
+fn test_per_call_key_authenticates_without_environment_key() {
+	let provider = CerebrasProvider::new();
+	let params =
+		ChatCompletionParams::new(&[], "gpt-oss-120b", 1.0, 1.0, 0, 10).with_api_key("private-request-key".to_owned());
+	let original = env::var_os(CEREBRAS_API_KEY_ENV);
+	env::remove_var(CEREBRAS_API_KEY_ENV);
+	assert!(provider.get_api_key().is_err());
+	let api_key = super::super::shared::resolve_api_key(&provider, &params).unwrap();
+	let request = super::super::openai_compat::build_http_request(
+		&api_key,
+		CEREBRAS_API_URL,
+		&serde_json::json!({"model": params.model}),
+	)
+	.build()
+	.unwrap();
+	assert_eq!(request.headers()["Authorization"], "Bearer private-request-key");
+	assert_eq!(request.url().as_str(), CEREBRAS_API_URL);
+	assert!(!format!("{request:?}").contains("private-request-key"));
+	assert!(!std::str::from_utf8(request.body().unwrap().as_bytes().unwrap())
+		.unwrap()
+		.contains("private-request-key"));
+	match original {
+		Some(value) => env::set_var(CEREBRAS_API_KEY_ENV, value),
+		None => env::remove_var(CEREBRAS_API_KEY_ENV),
+	}
+}
+
+#[test]
 fn test_supports_model() {
 	let provider = CerebrasProvider::new();
 	assert!(provider.supports_model("gpt-oss-120b"));

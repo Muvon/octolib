@@ -14,6 +14,98 @@
 
 use super::*;
 
+#[derive(Clone)]
+struct LogBuffer(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+impl std::io::Write for LogBuffer {
+	fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+		self.0.lock().unwrap().extend_from_slice(bytes);
+		Ok(bytes.len())
+	}
+
+	fn flush(&mut self) -> std::io::Result<()> {
+		Ok(())
+	}
+}
+
+#[tokio::test]
+async fn test_upstream_key_is_redacted_in_returned_error_and_retry_logs() {
+	use crate::llm::providers::shared;
+	use crate::llm::types::ChatCompletionParams;
+	use tracing::instrument::WithSubscriber;
+
+	let params =
+		ChatCompletionParams::new(&[], "model", 1.0, 1.0, 0, 10).with_api_key("private-request-key".to_owned());
+	let buffer = LogBuffer(std::sync::Arc::new(std::sync::Mutex::new(Vec::new())));
+	let writer = buffer.clone();
+	let subscriber = tracing_subscriber::fmt()
+		.with_max_level(tracing::Level::DEBUG)
+		.with_ansi(false)
+		.without_time()
+		.with_writer(move || writer.clone())
+		.finish();
+	let body = r#"{"error":"rejected private-request-key; private-request-key is invalid"}"#;
+	let result = retry_provider_request(
+		|| Box::pin(async move { Err(anyhow::anyhow!("upstream API error 503: {body}")) }),
+		1,
+		Duration::ZERO,
+		None,
+		params.api_key.as_ref(),
+	)
+	.with_subscriber(subscriber)
+	.await;
+	let error = match result {
+		Ok(_) => panic!("upstream failure must be returned"),
+		Err(error) => error,
+	};
+	for text in [error.to_string(), format!("{error:#}"), format!("{error:#?}")] {
+		assert_eq!(text.matches("[redacted]").count(), 2);
+		assert!(!text.contains("private-request-key"));
+	}
+	let log = String::from_utf8(buffer.0.lock().unwrap().clone()).unwrap();
+	assert!(log.contains("API request attempt 1 failed"));
+	assert!(log.contains("API request attempt 2 failed"));
+	assert_eq!(log.matches("[redacted]").count(), 4);
+	assert!(!log.contains("private-request-key"));
+	assert!(!shared::is_connection_error(&error));
+}
+
+#[tokio::test]
+async fn test_non_retryable_error_body_is_redacted_and_success_body_is_preserved() {
+	use crate::llm::providers::shared::CapturedResponse;
+	use crate::llm::types::ChatCompletionParams;
+	let params =
+		ChatCompletionParams::new(&[], "model", 1.0, 1.0, 0, 10).with_api_key("private-request-key".to_owned());
+	for status in [reqwest::StatusCode::UNAUTHORIZED, reqwest::StatusCode::OK] {
+		let result = retry_provider_request(
+			|| {
+				Box::pin(async move {
+					Ok(CapturedResponse {
+						status,
+						headers: reqwest::header::HeaderMap::new(),
+						body: "private-request-key / private-request-key".to_owned(),
+					})
+				})
+			},
+			0,
+			Duration::ZERO,
+			None,
+			params.api_key.as_ref(),
+		)
+		.await
+		.unwrap();
+		if status.is_success() {
+			assert_eq!(result.body, "private-request-key / private-request-key");
+		} else {
+			let error = anyhow::anyhow!("upstream API error {}: {}", result.status, result.body);
+			assert_eq!(
+				error.to_string(),
+				"upstream API error 401 Unauthorized: [redacted] / [redacted]"
+			);
+		}
+	}
+}
+
 #[test]
 fn test_is_retryable_status_429_rate_limit() {
 	// 429 (rate limit) should be retryable

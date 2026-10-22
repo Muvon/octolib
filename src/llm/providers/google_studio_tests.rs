@@ -15,6 +15,36 @@
 use super::*;
 
 #[test]
+#[serial_test::serial]
+fn test_per_call_key_authenticates_without_environment_key() {
+	let provider = GoogleStudioProvider::new();
+	let params = ChatCompletionParams::new(&[], "gemini-2.5-flash", 1.0, 1.0, 0, 10)
+		.with_api_key("private-request-key".to_owned());
+	let original = env::var_os(GOOGLE_STUDIO_API_KEY_ENV);
+	env::remove_var(GOOGLE_STUDIO_API_KEY_ENV);
+	assert!(provider.get_api_key().is_err());
+	let api_key = super::super::shared::resolve_api_key(&provider, &params).unwrap();
+	let request = super::super::openai_compat::build_http_request(
+		&api_key,
+		GOOGLE_STUDIO_API_URL,
+		&serde_json::json!({"model": params.model}),
+	)
+	.build()
+	.unwrap();
+	assert_eq!(request.headers()["Authorization"], "Bearer private-request-key");
+	assert_eq!(request.url().as_str(), GOOGLE_STUDIO_API_URL);
+	assert!(request.url().query().is_none());
+	assert!(!format!("{request:?}").contains("private-request-key"));
+	assert!(!std::str::from_utf8(request.body().unwrap().as_bytes().unwrap())
+		.unwrap()
+		.contains("private-request-key"));
+	match original {
+		Some(value) => env::set_var(GOOGLE_STUDIO_API_KEY_ENV, value),
+		None => env::remove_var(GOOGLE_STUDIO_API_KEY_ENV),
+	}
+}
+
+#[test]
 fn test_supports_model_before_cache() {
 	let provider = GoogleStudioProvider::new();
 

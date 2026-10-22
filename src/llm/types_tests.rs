@@ -15,6 +15,25 @@
 use super::*;
 
 #[test]
+fn test_per_call_api_key_is_cloned_and_debug_redacted() {
+	let params =
+		ChatCompletionParams::new(&[], "model", 1.0, 1.0, 0, 10).with_api_key("private-request-key".to_owned());
+	let cloned = params.clone();
+	assert_eq!(cloned.api_key.as_ref().unwrap().as_str(), "private-request-key");
+	for debug in [
+		format!("{params:?}"),
+		format!("{cloned:#?}"),
+		format!("{:?}", params.api_key),
+	] {
+		assert!(debug.contains("[REDACTED]"));
+		assert!(!debug.contains("private-request-key"));
+	}
+	assert!(ChatCompletionParams::new(&[], "model", 1.0, 1.0, 0, 10)
+		.api_key
+		.is_none());
+}
+
+#[test]
 fn test_message_constructors() {
 	let user_msg = Message::user("Hello");
 	assert_eq!(user_msg.role, "user");

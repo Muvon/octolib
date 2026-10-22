@@ -15,6 +15,92 @@
 use super::*;
 
 #[test]
+fn test_redaction_removes_error_sources_and_preserves_connection_classification() {
+	let params = crate::llm::types::ChatCompletionParams::new(&[], "model", 1.0, 1.0, 0, 10)
+		.with_api_key("private-request-key".to_owned());
+	let error = anyhow::Error::new(RedactedError {
+		message: "connection failed: private-request-key".to_owned(),
+		connection_error: true,
+	})
+	.context("outer context contains private-request-key");
+	let error = redact_error(error, params.api_key.as_ref());
+	assert!(is_connection_error(&error));
+	assert_eq!(error.chain().count(), 1);
+	assert_eq!(error.to_string().matches("[redacted]").count(), 2);
+	assert!(!format!("{error:#?}").contains("private-request-key"));
+}
+
+#[test]
+fn test_response_parse_errors_redact_echoed_credentials() {
+	let params = crate::llm::types::ChatCompletionParams::new(&[], "model", 1.0, 1.0, 0, 10)
+		.with_api_key("private-request-key".to_owned());
+	let error = parse_response::<Vec<String>>(r#""private-request-key""#, params.api_key.as_ref()).unwrap_err();
+	assert!(error.to_string().contains("[redacted]"));
+	assert!(!format!("{error:#?}").contains("private-request-key"));
+	let plain = parse_response::<Vec<String>>(r#""private-request-key""#, None).unwrap_err();
+	assert!(plain.to_string().contains("private-request-key"));
+}
+
+#[test]
+#[serial_test::serial]
+fn test_byok_key_resolution_without_or_with_environment_keys() {
+	use crate::llm::factory::ProviderFactory;
+	use crate::llm::types::ChatCompletionParams;
+	for (provider_name, env_var) in [
+		("openai", "OPENAI_API_KEY"),
+		("anthropic", "ANTHROPIC_API_KEY"),
+		("google-studio", "GOOGLE_STUDIO_API_KEY"),
+		("openrouter", "OPENROUTER_API_KEY"),
+		("ollama", "OLLAMA_API_KEY"),
+		("together", "TOGETHER_API_KEY"),
+		("deepseek", "DEEPSEEK_API_KEY"),
+		("zai", "ZAI_API_KEY"),
+		("moonshot", "MOONSHOT_API_KEY"),
+		("alibaba", "ALIBABA_API_KEY"),
+		("cerebras", "CEREBRAS_API_KEY"),
+	] {
+		let original = std::env::var_os(env_var);
+		let provider = ProviderFactory::create_provider(provider_name).unwrap();
+		let params = ChatCompletionParams::new(&[], "model", 1.0, 1.0, 0, 10).with_api_key("request-key".to_owned());
+		std::env::remove_var(env_var);
+		assert_eq!(
+			resolve_api_key(provider.as_ref(), &params).unwrap(),
+			"request-key",
+			"{provider_name}"
+		);
+		std::env::set_var(env_var, "platform-key");
+		assert_eq!(
+			resolve_api_key(provider.as_ref(), &params).unwrap(),
+			"request-key",
+			"{provider_name}"
+		);
+		match original {
+			Some(value) => std::env::set_var(env_var, value),
+			None => std::env::remove_var(env_var),
+		}
+	}
+}
+
+#[tokio::test]
+async fn test_multi_credential_and_managed_providers_reject_per_call_keys() {
+	use crate::errors::ProviderError;
+	use crate::llm::factory::ProviderFactory;
+	use crate::llm::types::ChatCompletionParams;
+	for provider_name in ["cloudflare", "google-vertex", "chatgpt"] {
+		let provider = ProviderFactory::create_provider(provider_name).unwrap();
+		let params =
+			ChatCompletionParams::new(&[], "model", 1.0, 1.0, 0, 10).with_api_key("private-request-key".to_owned());
+		let error = provider.chat_completion(params).await.unwrap_err();
+		assert!(matches!(
+			error.downcast_ref::<ProviderError>(),
+			Some(ProviderError::UnsupportedOperation { provider, operation })
+				if provider == provider_name && operation == "per-call API key authentication"
+		));
+		assert!(!format!("{error:?}").contains("private-request-key"));
+	}
+}
+
+#[test]
 fn test_maybe_ephemeral_cache_control() {
 	assert!(maybe_ephemeral_cache_control(false).is_none());
 	assert_eq!(

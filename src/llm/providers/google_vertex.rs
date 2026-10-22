@@ -166,23 +166,36 @@ struct ApiModelEntry {
 
 /// Fetch available models from the OpenAI-compat /models endpoint.
 /// Derives the URL from the chat completions URL by replacing the path suffix.
-pub(super) async fn fetch_available_models(access_token: &str, chat_url: &str) -> Result<Vec<CachedModel>> {
+pub(super) async fn fetch_available_models(
+	access_token: &str,
+	chat_url: &str,
+	per_call_api_key: Option<&crate::llm::types::PerCallApiKey>,
+) -> Result<Vec<CachedModel>> {
 	let models_url = chat_url.replace("/chat/completions", "/models");
 
 	let response = super::shared::http_client()
 		.get(&models_url)
-		.header("Authorization", format!("Bearer {}", access_token))
+		.bearer_auth(access_token)
 		.send()
 		.await
+		.map_err(|error| super::shared::redact_error(error.into(), per_call_api_key))
 		.context("Failed to fetch models list from Google API")?;
 
 	if !response.status().is_success() {
 		let status = response.status();
-		let text = response.text().await.unwrap_or_default();
+		let text = response
+			.text()
+			.await
+			.map_err(|error| super::shared::redact_error(error.into(), per_call_api_key))?;
+		let text = super::shared::redact_text(&text, per_call_api_key);
 		return Err(anyhow::anyhow!("Google models API error {}: {}", status, text));
 	}
 
-	let list: ModelsListResponse = response.json().await.context("Failed to parse models list response")?;
+	let list: ModelsListResponse = response
+		.json()
+		.await
+		.map_err(|error| super::shared::redact_error(error.into(), per_call_api_key))
+		.context("Failed to parse models list response")?;
 
 	Ok(list
 		.data
@@ -434,6 +447,7 @@ impl AiProvider for GoogleVertexProvider {
 	}
 
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
+		crate::llm::providers::shared::reject_api_key(self.name(), &params)?;
 		// Generate access token from service account
 		let credentials_file = resolve_credentials_file()?;
 		let api_key = generate_access_token(&credentials_file).await?;
@@ -453,7 +467,7 @@ impl AiProvider for GoogleVertexProvider {
 		let token = api_key.clone();
 		let url = api_url.clone();
 		let _ = MODELS_CACHE
-			.get_or_try_init(|| async move { fetch_available_models(&token, &url).await })
+			.get_or_try_init(|| async move { fetch_available_models(&token, &url, None).await })
 			.await;
 
 		chat_completion_with_sampling(

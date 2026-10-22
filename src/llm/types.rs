@@ -859,6 +859,21 @@ pub enum ReasoningEffort {
 }
 
 #[derive(Clone)]
+pub(crate) struct PerCallApiKey(String);
+
+impl PerCallApiKey {
+	pub(crate) fn as_str(&self) -> &str {
+		&self.0
+	}
+}
+
+impl std::fmt::Debug for PerCallApiKey {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.write_str("[REDACTED]")
+	}
+}
+
+#[derive(Debug, Clone)]
 pub struct ChatCompletionParams {
 	/// Array of conversation messages
 	pub messages: Vec<Message>,
@@ -903,6 +918,8 @@ pub struct ChatCompletionParams {
 	/// to them — callers use this to talk to proxies (e.g. octohub's
 	/// `X-Model-Purpose`). `None`/empty = no change to the request.
 	pub extra_headers: Option<std::collections::HashMap<String, String>>,
+	/// Request-scoped credential; deliberately has no serialization implementation.
+	pub(crate) api_key: Option<PerCallApiKey>,
 }
 
 impl ChatCompletionParams {
@@ -926,7 +943,24 @@ impl ChatCompletionParams {
 			prompt_cache_key: None,
 			reasoning_effort: None,
 			extra_headers: None,
+			api_key: None,
 		}
+	}
+
+	/// Use this API key instead of environment or OAuth credentials for this call.
+	/// Providers requiring multiple credentials or managed sign-in reject it.
+	/// The key is not serializable and is redacted in `Debug` output.
+	///
+	/// ```
+	/// use octolib::ChatCompletionParams;
+	///
+	/// let params = ChatCompletionParams::new(&[], "gpt-4o", 1.0, 1.0, 0, 100)
+	///     .with_max_retries(0)
+	///     .with_api_key("request-key".to_owned());
+	/// ```
+	pub fn with_api_key(mut self, api_key: String) -> Self {
+		self.api_key = Some(PerCallApiKey(api_key));
+		self
 	}
 
 	/// Enable long-lived cache for this request

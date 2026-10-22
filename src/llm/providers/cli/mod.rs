@@ -165,6 +165,7 @@ impl AiProvider for CliProvider {
 	}
 
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
+		crate::llm::providers::shared::reject_api_key(self.name(), &params)?;
 		let (backend_name, backend_model) = split_cli_model(&params.model)?;
 		if backend_name != self.backend.name {
 			return Err(anyhow::anyhow!(

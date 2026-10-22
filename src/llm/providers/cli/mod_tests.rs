@@ -14,6 +14,27 @@
 
 use super::*;
 
+#[tokio::test]
+async fn test_cli_rejects_per_call_api_key_before_starting_process() {
+	let provider = CliProvider {
+		backend: CliBackend::from_name("codex"),
+		command: PathBuf::from("/nonexistent/byok-test-cli"),
+		extra_args: Vec::new(),
+		model_flag: "-m".to_owned(),
+		prompt_flag: "-p".to_owned(),
+		reasoning_effort: "high".to_owned(),
+		skip_git_check: false,
+	};
+	let params = ChatCompletionParams::new(&[], "codex/gpt-5.2-codex", 1.0, 1.0, 0, 10)
+		.with_api_key("private-request-key".to_owned());
+	let error = provider.chat_completion(params).await.unwrap_err();
+	assert!(matches!(
+		error.downcast_ref::<ProviderError>(),
+		Some(ProviderError::UnsupportedOperation { provider, .. }) if provider == "cli"
+	));
+	assert!(!format!("{error:?}").contains("private-request-key"));
+}
+
 #[test]
 fn test_split_cli_model() {
 	let (backend, model) = split_cli_model("codex/gpt-5.2-codex").unwrap();

@@ -84,9 +84,8 @@ async fn main() -> anyhow::Result<()> {
 	// Example 1: Simple chat
 	println!("=== Example 1: Simple Chat ===\n");
 
-	let params = ChatCompletionParams {
-		model: model.clone(),
-		messages: vec![Message {
+	let params = ChatCompletionParams::new(
+		&[Message {
 			role: "user".to_string(),
 			content: "Explain what makes MiniMax unique in 2-3 sentences.".to_string(),
 			name: None,
@@ -100,22 +99,13 @@ async fn main() -> anyhow::Result<()> {
 			thinking: None,
 			id: None,
 		}],
-		temperature: 0.7,
-		max_tokens: 200,
-		top_p: 1.0,
-		top_k: 0,
-		tools: None,
-		response_format: None,
-		max_retries: 3,
-		retry_timeout: std::time::Duration::from_secs(10),
-		cancellation_token: None,
-		previous_id: None,
-		use_long_cache: false,
-		prompt_cache_key: None,
-		extra_headers: None,
-		reasoning_effort: None,
-		request_timeout: None,
-	};
+		&model,
+		0.7,
+		1.0,
+		0,
+		200,
+	)
+	.with_retry_timeout(std::time::Duration::from_secs(10));
 
 	match provider.chat_completion(params).await {
 		Ok(response) => {
@@ -151,9 +141,8 @@ async fn main() -> anyhow::Result<()> {
 	// Example 2: With thinking blocks
 	println!("\n\n=== Example 2: Problem Solving (with thinking) ===\n");
 
-	let params = ChatCompletionParams {
-		model: model.clone(),
-		messages: vec![Message {
+	let params = ChatCompletionParams::new(
+		&[Message {
 			role: "user".to_string(),
 			content: "If I have 3 apples and buy 2 more, then give away 1, how many do I have? Show your reasoning."
 				.to_string(),
@@ -168,22 +157,13 @@ async fn main() -> anyhow::Result<()> {
 			thinking: None,
 			id: None,
 		}],
-		temperature: 0.5,
-		max_tokens: 300,
-		top_p: 1.0,
-		top_k: 0,
-		tools: None,
-		response_format: None,
-		max_retries: 3,
-		retry_timeout: std::time::Duration::from_secs(10),
-		cancellation_token: None,
-		previous_id: None,
-		use_long_cache: false,
-		prompt_cache_key: None,
-		extra_headers: None,
-		reasoning_effort: None,
-		request_timeout: None,
-	};
+		&model,
+		0.5,
+		1.0,
+		0,
+		300,
+	)
+	.with_retry_timeout(std::time::Duration::from_secs(10));
 
 	match provider.chat_completion(params).await {
 		Ok(response) => {

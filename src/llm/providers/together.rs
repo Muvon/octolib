@@ -31,6 +31,7 @@ use serde::{Deserialize, Serialize};
 use std::env;
 
 const TOGETHER_API_KEY_ENV: &str = "TOGETHER_API_KEY";
+const TOGETHER_API_URL_ENV: &str = "TOGETHER_API_URL";
 const TOGETHER_API_URL: &str = "https://api.together.xyz/v1/chat/completions";
 
 /// Together serverless prices per 1M tokens from https://www.together.ai/pricing,
@@ -608,10 +609,10 @@ async fn execute_together_request(
 			let api_key = api_key.clone();
 			let request_body = request_body.clone();
 
-			Box::pin(async move {
+Box::pin(async move {
+				let api_url = env::var(TOGETHER_API_URL_ENV).unwrap_or_else(|_| TOGETHER_API_URL.to_string());
 				let req = client
-					.post(TOGETHER_API_URL)
-					.header("Content-Type", "application/json")
+					.post(&api_url)
 					.bearer_auth(&api_key)
 					.json(&request_body);
 

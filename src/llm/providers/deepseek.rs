@@ -212,6 +212,8 @@ impl DeepSeekProvider {
 }
 
 const DEEPSEEK_API_KEY_ENV: &str = "DEEPSEEK_API_KEY";
+const DEEPSEEK_API_URL_ENV: &str = "DEEPSEEK_API_URL";
+const DEEPSEEK_API_URL: &str = "https://api.deepseek.com/chat/completions";
 
 // DeepSeek API request/response structures
 #[derive(Serialize, Debug, Clone)]
@@ -522,9 +524,11 @@ impl AiProvider for DeepSeekProvider {
 				let api_key = api_key.clone();
 				let request = request.clone();
 				let extra_headers = extra_headers.clone();
-				Box::pin(async move {
+Box::pin(async move {
+					let api_url =
+						env::var(DEEPSEEK_API_URL_ENV).unwrap_or_else(|_| DEEPSEEK_API_URL.to_string());
 					let req = client
-						.post("https://api.deepseek.com/chat/completions")
+						.post(&api_url)
 						.bearer_auth(&api_key)
 						.header("Content-Type", "application/json")
 						.json(&request);

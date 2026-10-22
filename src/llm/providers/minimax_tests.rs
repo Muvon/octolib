@@ -271,3 +271,60 @@ fn tool_images_stay_inside_the_matching_tool_result() {
 		);
 	}
 }
+
+#[tokio::test]
+#[serial_test::serial]
+async fn chat_completion_via_mock_http_splits_text_thinking_tools_and_cache() {
+	let body = r#"{"id":"mm-1","content":[{"type":"text","text":"final answer"},{"type":"thinking","thinking":"pondering deeply"},{"type":"tool_use","id":"t1","name":"get_weather","input":{"city":"Oslo"}}],"usage":{"input_tokens":10,"output_tokens":30,"cache_read_input_tokens":4,"cache_creation_input_tokens":2},"stop_reason":"tool_use"}"#;
+	let mock = crate::llm::providers::mock_http::MockHttp::start(vec![(200, body.to_string())]);
+	std::env::set_var("MINIMAX_API_URL", mock.url.clone());
+
+	let provider = MinimaxProvider::new();
+	let params = ChatCompletionParams::new(&[], "MiniMax-M2.7", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
+	let response = provider.chat_completion(params).await.expect("mock completion");
+
+	// Only text parts become content; thinking rides its own block.
+	assert_eq!(response.content, "final answer");
+	assert_eq!(
+		response.thinking.as_ref().expect("thinking present").content,
+		"pondering deeply"
+	);
+
+	let calls = response.tool_calls.expect("tool calls present");
+	assert_eq!(calls.len(), 1);
+	assert_eq!(calls[0].name, "get_weather");
+	assert_eq!(calls[0].arguments["city"], "Oslo");
+
+	// input stays clean; cache read/write are separate; thinking is carved out of output.
+	let usage = response.exchange.usage.expect("usage present");
+	assert_eq!(usage.input_tokens, 10);
+	assert_eq!(usage.cache_read_tokens, 4);
+	assert_eq!(usage.cache_write_tokens, 2);
+	assert_eq!(usage.output_tokens + usage.reasoning_tokens, 30);
+	assert!(usage.cost.unwrap_or(0.0) > 0.0, "cost computed from the pricing table");
+	assert_eq!(response.finish_reason.as_deref(), Some("tool_use"));
+
+	// Request targeted the mock with the priced model.
+	let requests = mock.requests();
+	let req_body: serde_json::Value = serde_json::from_str(&requests[0].body).expect("request json");
+	assert_eq!(req_body["model"], "MiniMax-M2.7");
+
+	std::env::remove_var("MINIMAX_API_URL");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn chat_completion_via_mock_http_surfaces_http_error() {
+	let mock = crate::llm::providers::mock_http::MockHttp::start(vec![(
+		400,
+		r#"{"error":{"message":"bad request"}}"#.to_string(),
+	)]);
+	std::env::set_var("MINIMAX_API_URL", mock.url.clone());
+
+	let provider = MinimaxProvider::new();
+	let params = ChatCompletionParams::new(&[], "MiniMax-M2.7", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
+	let err = provider.chat_completion(params).await.expect_err("http error surfaces");
+	assert!(err.to_string().contains("MiniMax API error"), "unexpected error: {err}");
+
+	std::env::remove_var("MINIMAX_API_URL");
+}

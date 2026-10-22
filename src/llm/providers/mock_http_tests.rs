@@ -33,15 +33,17 @@ async fn test_mock_http_serves_canned_response_and_records_request() {
 	let requests = mock.requests();
 	assert_eq!(requests.len(), 1);
 	assert_eq!(requests[0].method, "POST");
+	assert!(
+		requests[0].path.contains("/v1/chat/completions"),
+		"path: {}",
+		requests[0].path
+	);
 	assert_eq!(requests[0].body, r#"{"model":"test"}"#);
 }
 
 #[tokio::test]
 async fn test_mock_http_serves_replies_in_order_then_repeats_last() {
-	let mock = MockHttp::start(vec![
-		(500, "{}".to_string()),
-		(200, chat_completion_body("second")),
-	]);
+	let mock = MockHttp::start(vec![(500, "{}".to_string()), (200, chat_completion_body("second"))]);
 
 	let client = reqwest::Client::new();
 	let first = client.post(&mock.url).send().await.expect("first");

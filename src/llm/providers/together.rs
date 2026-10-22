@@ -609,12 +609,9 @@ async fn execute_together_request(
 			let api_key = api_key.clone();
 			let request_body = request_body.clone();
 
-Box::pin(async move {
+			Box::pin(async move {
 				let api_url = env::var(TOGETHER_API_URL_ENV).unwrap_or_else(|_| TOGETHER_API_URL.to_string());
-				let req = client
-					.post(&api_url)
-					.bearer_auth(&api_key)
-					.json(&request_body);
+				let req = client.post(&api_url).bearer_auth(&api_key).json(&request_body);
 
 				let captured = shared::send_and_read(req, request_timeout, extra_headers.as_ref()).await?;
 

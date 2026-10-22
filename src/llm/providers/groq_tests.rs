@@ -108,3 +108,50 @@ fn test_cost_calculation_cached_input() {
 	assert!((cost_cached - expected_cached).abs() < 0.001);
 	assert!(cost_cached < cost);
 }
+
+#[tokio::test]
+#[serial_test::serial]
+async fn chat_completion_via_mock_http_returns_content_and_usage() {
+	let mock = crate::llm::providers::mock_http::MockHttp::start(vec![(
+		200,
+		crate::llm::providers::mock_http::chat_completion_body("groq mocked answer"),
+	)]);
+	std::env::set_var("GROQ_API_URL", mock.url.clone());
+
+	let provider = GroqProvider::new();
+	let params =
+		ChatCompletionParams::new(&[], "llama-3.3-70b-versatile", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
+	let response = provider.chat_completion(params).await.expect("mock completion");
+
+	assert_eq!(response.content, "groq mocked answer");
+	let usage = response.exchange.usage.expect("usage present");
+	assert_eq!(usage.input_tokens, 12);
+	assert_eq!(usage.output_tokens, 7);
+
+	let requests = mock.requests();
+	let req_body: serde_json::Value = serde_json::from_str(&requests[0].body).expect("request json");
+	assert_eq!(req_body["model"], "llama-3.3-70b-versatile");
+
+	std::env::remove_var("GROQ_API_URL");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn chat_completion_via_mock_http_surfaces_http_error() {
+	let mock = crate::llm::providers::mock_http::MockHttp::start(vec![(
+		400,
+		r#"{"error":{"message":"bad request"}}"#.to_string(),
+	)]);
+	std::env::set_var("GROQ_API_URL", mock.url.clone());
+
+	let provider = GroqProvider::new();
+	let params =
+		ChatCompletionParams::new(&[], "llama-3.3-70b-versatile", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
+	let err = provider.chat_completion(params).await.expect_err("http error surfaces");
+	assert!(
+		err.to_string().to_lowercase().contains("groq"),
+		"unexpected error: {err}"
+	);
+
+	std::env::remove_var("GROQ_API_URL");
+}

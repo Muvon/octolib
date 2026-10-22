@@ -61,7 +61,10 @@ impl MockHttp {
 			}
 		});
 
-		Self { url: format!("http://127.0.0.1:{port}/v1/chat/completions"), requests }
+		Self {
+			url: format!("http://127.0.0.1:{port}/v1/chat/completions"),
+			requests,
+		}
 	}
 
 	/// Requests received so far.

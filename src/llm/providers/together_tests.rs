@@ -351,3 +351,34 @@ fn test_together_apply_reasoning_effort_families() {
 	apply_reasoning_effort(&mut body, "moonshotai/kimi-k3", None);
 	assert!(body.as_object().unwrap().is_empty());
 }
+
+#[tokio::test]
+#[serial_test::serial]
+async fn chat_completion_via_mock_http_merges_sse_stream_and_prices_from_table() {
+	// Together answers as an SSE stream; the provider folds `data:` chunks.
+	let body = concat!(
+		"data: {\"id\":\"t-1\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"together \"},\"finish_reason\":null}]}\n\n",
+		"data: {\"id\":\"t-1\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"mocked answer\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":7,\"total_tokens\":19}}\n\n",
+		"data: [DONE]\n\n"
+	);
+	let mock = crate::llm::providers::mock_http::MockHttp::start(vec![(200, body.to_string())]);
+	std::env::set_var("TOGETHER_API_URL", mock.url.clone());
+
+	let provider = TogetherProvider::new();
+	let params =
+		ChatCompletionParams::new(&[], "Qwen/Qwen3.8-Flash", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
+	let response = provider.chat_completion(params).await.expect("mock completion");
+
+	// Deltas from both chunks are concatenated.
+	assert_eq!(response.content, "together mocked answer");
+	let usage = response.exchange.usage.expect("usage present");
+	assert_eq!(usage.input_tokens, 12);
+	assert_eq!(usage.output_tokens, 7);
+	assert!(usage.cost.unwrap_or(0.0) > 0.0, "cost computed from the pricing table");
+
+	let requests = mock.requests();
+	let req_body: serde_json::Value = serde_json::from_str(&requests[0].body).expect("request json");
+	assert_eq!(req_body["model"], "Qwen/Qwen3.8-Flash");
+
+	std::env::remove_var("TOGETHER_API_URL");
+}

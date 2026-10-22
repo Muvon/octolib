@@ -524,9 +524,8 @@ impl AiProvider for DeepSeekProvider {
 				let api_key = api_key.clone();
 				let request = request.clone();
 				let extra_headers = extra_headers.clone();
-Box::pin(async move {
-					let api_url =
-						env::var(DEEPSEEK_API_URL_ENV).unwrap_or_else(|_| DEEPSEEK_API_URL.to_string());
+				Box::pin(async move {
+					let api_url = env::var(DEEPSEEK_API_URL_ENV).unwrap_or_else(|_| DEEPSEEK_API_URL.to_string());
 					let req = client
 						.post(&api_url)
 						.bearer_auth(&api_key)

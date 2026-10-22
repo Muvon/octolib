@@ -293,3 +293,11 @@ fn tool_images_use_typed_output_and_keep_cache_control() {
 		assert_eq!(input[0]["cache_control"]["type"], "ephemeral");
 	}
 }
+
+#[test]
+fn rejected_per_call_key_does_not_blame_stored_login() {
+	let error = auth_aware_error(401, r#"{"error":{"message":"invalid key"}}"#, true).to_string();
+	assert!(error.contains("passed for this request"));
+	assert!(!error.contains("octomind login"));
+	assert!(error.contains("invalid key"));
+}

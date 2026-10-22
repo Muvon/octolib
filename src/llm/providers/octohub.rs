@@ -64,7 +64,7 @@ impl OctoHubProvider {
 /// Only 401 gets the login hint: 403 is a plan/key restriction (e.g. "model
 /// 'X' is not permitted for this API key") where the server message is
 /// precise and logging in again would not help — pass it through.
-fn auth_aware_error(status: u16, body: &str) -> anyhow::Error {
+fn auth_aware_error(status: u16, body: &str, per_call_key: bool) -> anyhow::Error {
 	// Server bodies are JSON like {"error":{"message":"..."}} — surface the
 	// message text, not the raw blob.
 	let msg = serde_json::from_str::<serde_json::Value>(body)
@@ -72,8 +72,9 @@ fn auth_aware_error(status: u16, body: &str) -> anyhow::Error {
 		.and_then(|v| v["error"]["message"].as_str().map(str::to_string))
 		.unwrap_or_else(|| body.to_string());
 	if status == 401 {
-		let has_key = OctoHubProvider::api_key().is_some_and(|k| !k.trim().is_empty());
-		let hint = if has_key {
+		let hint = if per_call_key {
+			"the OctoHub key passed for this request was rejected"
+		} else if OctoHubProvider::api_key().is_some_and(|k| !k.trim().is_empty()) {
 			"the stored OctoHub key was rejected (revoked, or replaced by a newer login) — run `octomind login` to sign in again"
 		} else {
 			"no OctoHub key is set — run `octomind login` to sign in"
@@ -311,7 +312,11 @@ impl AiProvider for OctoHubProvider {
 		let request_time_ms = start_time.elapsed().as_millis() as u64;
 
 		if !response.status.is_success() {
-			return Err(auth_aware_error(response.status.as_u16(), &response.body));
+			return Err(auth_aware_error(
+				response.status.as_u16(),
+				&response.body,
+				params.api_key.is_some(),
+			));
 		}
 
 		let api_response: OctoHubResponse = shared::parse_response(&response.body, params.api_key.as_ref())?;

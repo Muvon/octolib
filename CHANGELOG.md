@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.44.0] - 2026-10-22
+
+### 📋 Release Summary
+
+LLM calls now support per-call API keys. Authentication errors for per-call keys in OctoHub have been fixed.
+
+### ✨ New Features & Enhancements
+
+- **llm**: support per-call API keys `b9ceab34`
+
+### 🐛 Bug Fixes & Stability
+
+- **octohub**: fix per-call key authentication errors `cee3d675`
+
 ## [0.43.2] - 2026-10-20
 
 ### 📋 Release Summary

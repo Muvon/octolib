@@ -29,7 +29,6 @@ pub use auth::{current_account, list_models, start_login, Account, ChatGptModel,
 
 use super::openai::{self, OpenAiProvider};
 use super::shared;
-use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, Message, ModelPricing, ProviderResponse, SamplingSupport};
@@ -156,7 +155,7 @@ impl AiProvider for ChatGptProvider {
 
 		// Errors are retried; `Ok` holds the outcome of a delivered response,
 		// which a retry would not change.
-		let response_json = retry::retry_with_exponential_backoff(
+		let response_json = retry::retry_chat_operation(
 			|| {
 				let client = shared::http_client();
 				let request_body = request_body.clone();
@@ -177,10 +176,9 @@ impl AiProvider for ChatGptProvider {
 					if retry::is_retryable_status(captured.status.as_u16())
 						&& !captured.body.contains(USAGE_LIMIT_ERROR_PREFIX)
 					{
-						return Err(anyhow::anyhow!(
-							"ChatGPT API error {}: {}",
-							captured.status,
-							captured.body
+						return Err(retry::retryable_status_error(
+							&captured,
+							format!("ChatGPT API error {}: {}", captured.status, captured.body),
 						));
 					}
 
@@ -212,12 +210,8 @@ impl AiProvider for ChatGptProvider {
 					}
 				})
 			},
-			params.max_retries,
-			params.retry_timeout,
-			params.cancellation_token.as_ref(),
-			|| ProviderError::Cancelled.into(),
-			|e| matches!(e.downcast_ref::<ProviderError>(), Some(ProviderError::Cancelled)),
-			|e: &anyhow::Error| shared::is_connection_error(e),
+			&params,
+			shared::is_connection_error,
 		)
 		.await??;
 

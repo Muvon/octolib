@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::*;
+use crate::errors::ProviderError;
 
 #[tokio::test]
 async fn test_cli_rejects_per_call_api_key_before_starting_process() {

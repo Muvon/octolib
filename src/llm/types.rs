@@ -896,6 +896,9 @@ pub struct ChatCompletionParams {
 	pub request_timeout: Option<std::time::Duration>,
 	/// Cancellation token for request abortion
 	pub cancellation_token: Option<tokio::sync::watch::Receiver<bool>>,
+	/// Told before every backoff sleep so the caller can show that the call is
+	/// waiting on a failing provider. `None` = retries stay silent.
+	pub retry_observer: Option<crate::llm::retry::RetryObserver>,
 	/// Available tools for function calling
 	pub tools: Option<Vec<FunctionDefinition>>,
 	/// Structured output configuration
@@ -936,6 +939,7 @@ impl ChatCompletionParams {
 			retry_timeout: std::time::Duration::from_secs(1), // Default 1 second base timeout
 			request_timeout: None,                            // No per-request timeout by default
 			cancellation_token: None,
+			retry_observer: None,
 			tools: None,
 			response_format: None,
 			previous_id: None,
@@ -1004,6 +1008,12 @@ impl ChatCompletionParams {
 	/// Set cancellation token
 	pub fn with_cancellation_token(mut self, token: tokio::sync::watch::Receiver<bool>) -> Self {
 		self.cancellation_token = Some(token);
+		self
+	}
+
+	/// Observe retries of this call (see [`crate::llm::retry::RetryObserver`]).
+	pub fn with_retry_observer(mut self, observer: crate::llm::retry::RetryObserver) -> Self {
+		self.retry_observer = Some(observer);
 		self
 	}
 

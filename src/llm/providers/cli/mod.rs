@@ -20,7 +20,6 @@ mod cursor;
 mod gemini;
 mod generic;
 
-use crate::errors::ProviderError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, Message, ProviderExchange, ProviderResponse};
@@ -183,18 +182,14 @@ impl AiProvider for CliProvider {
 				let args = codex::build_args(self, &backend_model, params.reasoning_effort);
 				let command = self.command.clone();
 
-				let (lines, stderr) = retry::retry_with_exponential_backoff(
+				let (lines, stderr) = retry::retry_chat_operation(
 					|| {
 						let args = args.clone();
 						let prompt = prompt.clone();
 						let command = command.clone();
 						Box::pin(async move { execute_command(command, args, Some(prompt)).await })
 					},
-					params.max_retries,
-					params.retry_timeout,
-					params.cancellation_token.as_ref(),
-					|| ProviderError::Cancelled.into(),
-					|e| matches!(e.downcast_ref::<ProviderError>(), Some(ProviderError::Cancelled)),
+					&params,
 					|_: &anyhow::Error| false,
 				)
 				.await?;
@@ -215,17 +210,13 @@ impl AiProvider for CliProvider {
 				let args = claude::build_args(self, &backend_model, &system_text, &messages_json);
 				let command = self.command.clone();
 
-				let (lines, stderr) = retry::retry_with_exponential_backoff(
+				let (lines, stderr) = retry::retry_chat_operation(
 					|| {
 						let args = args.clone();
 						let command = command.clone();
 						Box::pin(async move { execute_command(command, args, None).await })
 					},
-					params.max_retries,
-					params.retry_timeout,
-					params.cancellation_token.as_ref(),
-					|| ProviderError::Cancelled.into(),
-					|e| matches!(e.downcast_ref::<ProviderError>(), Some(ProviderError::Cancelled)),
+					&params,
 					|_: &anyhow::Error| false,
 				)
 				.await?;
@@ -238,17 +229,13 @@ impl AiProvider for CliProvider {
 				let args = gemini::build_args(self, &backend_model, &prompt);
 				let command = self.command.clone();
 
-				let (lines, stderr) = retry::retry_with_exponential_backoff(
+				let (lines, stderr) = retry::retry_chat_operation(
 					|| {
 						let args = args.clone();
 						let command = command.clone();
 						Box::pin(async move { execute_command(command, args, None).await })
 					},
-					params.max_retries,
-					params.retry_timeout,
-					params.cancellation_token.as_ref(),
-					|| ProviderError::Cancelled.into(),
-					|e| matches!(e.downcast_ref::<ProviderError>(), Some(ProviderError::Cancelled)),
+					&params,
 					|_: &anyhow::Error| false,
 				)
 				.await?;
@@ -261,17 +248,13 @@ impl AiProvider for CliProvider {
 				let args = cursor::build_args(self, &backend_model, &prompt);
 				let command = self.command.clone();
 
-				let (lines, stderr) = retry::retry_with_exponential_backoff(
+				let (lines, stderr) = retry::retry_chat_operation(
 					|| {
 						let args = args.clone();
 						let command = command.clone();
 						Box::pin(async move { execute_command(command, args, None).await })
 					},
-					params.max_retries,
-					params.retry_timeout,
-					params.cancellation_token.as_ref(),
-					|| ProviderError::Cancelled.into(),
-					|e| matches!(e.downcast_ref::<ProviderError>(), Some(ProviderError::Cancelled)),
+					&params,
 					|_: &anyhow::Error| false,
 				)
 				.await?;
@@ -284,17 +267,13 @@ impl AiProvider for CliProvider {
 				let args = generic::build_args(self, &backend_model, &prompt);
 				let command = self.command.clone();
 
-				let (lines, stderr) = retry::retry_with_exponential_backoff(
+				let (lines, stderr) = retry::retry_chat_operation(
 					|| {
 						let args = args.clone();
 						let command = command.clone();
 						Box::pin(async move { execute_command(command, args, None).await })
 					},
-					params.max_retries,
-					params.retry_timeout,
-					params.cancellation_token.as_ref(),
-					|| ProviderError::Cancelled.into(),
-					|e| matches!(e.downcast_ref::<ProviderError>(), Some(ProviderError::Cancelled)),
+					&params,
 					|_: &anyhow::Error| false,
 				)
 				.await?;

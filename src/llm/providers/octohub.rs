@@ -292,10 +292,9 @@ impl AiProvider for OctoHubProvider {
 						shared::send_and_read(req.json(&request_body), request_timeout, extra_headers.as_ref()).await?;
 
 					if retry::is_retryable_status(captured.status.as_u16()) {
-						return Err(anyhow::anyhow!(
-							"OctoHub API error {}: {}",
-							captured.status,
-							captured.body
+						return Err(retry::retryable_status_error(
+							&captured,
+							format!("OctoHub API error {}: {}", captured.status, captured.body),
 						));
 					}
 
@@ -306,6 +305,7 @@ impl AiProvider for OctoHubProvider {
 			params.retry_timeout,
 			params.cancellation_token.as_ref(),
 			params.api_key.as_ref(),
+			params.retry_observer.as_ref(),
 		)
 		.await?;
 

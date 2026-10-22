@@ -30,8 +30,17 @@
 //!
 //! Exponential backoff with configurable base timeout:
 //! - Delay grows as: `base_timeout * 2^attempt`
+//! - A `Retry-After: <seconds>` header on a 429/503 response stretches the
+//!   delay to at least that long (the HTTP-date form is ignored)
 //! - Maximum delay capped at 5 minutes
 //! - Example: base 1s → 1s, 2s, 4s, 8s, 16s...
+//!
+//! # Observing retries
+//!
+//! A [`RetryObserver`] on [`ChatCompletionParams`](crate::llm::types::ChatCompletionParams)
+//! is told about every retry before its backoff sleep starts, so a caller can show
+//! the wait instead of going silent for minutes. The event carries only a short
+//! cause (`HTTP 503`, `connection error`) — never a response body or credential.
 //!
 //! # Cancellation
 //!
@@ -42,9 +51,139 @@
 use anyhow::Result;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::watch;
 use tokio::time::sleep;
+
+/// Longest single backoff sleep, whatever the exponent or `Retry-After` says.
+const MAX_RETRY_DELAY: Duration = Duration::from_secs(300);
+
+/// One retry about to happen, as told to a [`RetryObserver`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RetryEvent {
+	/// The retry about to run, 1-based (`1..=max_retries`).
+	pub attempt: u32,
+	/// Retries allowed for this call.
+	pub max_retries: u32,
+	/// How long the call sleeps before that retry.
+	pub delay: Duration,
+	/// Short, secret-free cause of the failed attempt: `HTTP 503`,
+	/// `connection error`, or `request failed`.
+	pub reason: String,
+}
+
+/// Callback told before every backoff sleep of a provider call.
+///
+/// It runs on the request's task, so it must return quickly — hand the event
+/// to a channel or a print, never block on it.
+#[derive(Clone)]
+pub struct RetryObserver(Arc<dyn Fn(&RetryEvent) + Send + Sync>);
+
+impl RetryObserver {
+	pub fn new(observer: impl Fn(&RetryEvent) + Send + Sync + 'static) -> Self {
+		Self(Arc::new(observer))
+	}
+
+	pub fn notify(&self, event: &RetryEvent) {
+		(self.0)(event)
+	}
+}
+
+impl std::fmt::Debug for RetryObserver {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.write_str("RetryObserver")
+	}
+}
+
+/// A delivered HTTP response whose status is worth retrying (429 or 5xx).
+///
+/// Displays exactly as the provider's message, so callers see the same error
+/// text as before; the typed fields feed the retry loop's [`RetryEvent`] and
+/// its `Retry-After` handling.
+#[derive(Debug, thiserror::Error)]
+#[error("{message}")]
+pub struct RetryableStatusError {
+	pub status: u16,
+	/// The response's `Retry-After`, in seconds form only, on 429/503.
+	pub retry_after: Option<Duration>,
+	message: String,
+}
+
+impl RetryableStatusError {
+	pub(crate) fn with_message(&self, message: String) -> Self {
+		Self {
+			status: self.status,
+			retry_after: self.retry_after,
+			message,
+		}
+	}
+}
+
+/// Build the error a provider returns for a retryable status, keeping the
+/// status and `Retry-After` the retry loop needs.
+pub(crate) fn retryable_status_error(
+	response: &crate::llm::providers::shared::CapturedResponse,
+	message: String,
+) -> anyhow::Error {
+	let status = response.status.as_u16();
+	RetryableStatusError {
+		status,
+		retry_after: parse_retry_after(status, &response.headers),
+		message,
+	}
+	.into()
+}
+
+/// `Retry-After` in delay-seconds form, honored on 429 and 503 only. The
+/// HTTP-date form is ignored: it needs a trusted clock and no provider we
+/// call sends it.
+fn parse_retry_after(status: u16, headers: &reqwest::header::HeaderMap) -> Option<Duration> {
+	if status != 429 && status != 503 {
+		return None;
+	}
+	headers
+		.get(reqwest::header::RETRY_AFTER)?
+		.to_str()
+		.ok()?
+		.trim()
+		.parse::<u64>()
+		.ok()
+		.map(Duration::from_secs)
+}
+
+/// What the retry loop knows about a failed attempt.
+struct RetryCause {
+	reason: String,
+	retry_after: Option<Duration>,
+}
+
+fn describe_error(error: &anyhow::Error) -> RetryCause {
+	if let Some(status) = error.downcast_ref::<RetryableStatusError>() {
+		return RetryCause {
+			reason: format!("HTTP {}", status.status),
+			retry_after: status.retry_after,
+		};
+	}
+	let reason = if crate::llm::providers::shared::is_connection_error(error) {
+		"connection error"
+	} else {
+		"request failed"
+	};
+	RetryCause {
+		reason: reason.to_owned(),
+		retry_after: None,
+	}
+}
+
+/// Backoff before the retry that follows failed attempt `attempt` (0-based):
+/// `base_timeout * 2^attempt`, stretched to `retry_after` when the server
+/// asked for longer, capped at [`MAX_RETRY_DELAY`].
+fn backoff_delay(base_timeout: Duration, attempt: u32, retry_after: Option<Duration>) -> Duration {
+	let delay = base_timeout.saturating_mul(2_u32.saturating_pow(attempt));
+	let delay = retry_after.map_or(delay, |server| delay.max(server));
+	delay.min(MAX_RETRY_DELAY)
+}
 
 /// Await a future while honoring an optional cancellation token.
 pub async fn cancellable<F, T, E, C>(
@@ -104,6 +243,7 @@ pub(crate) async fn retry_provider_request<F>(
 	base_timeout: Duration,
 	cancellation_token: Option<&watch::Receiver<bool>>,
 	api_key: Option<&crate::llm::types::PerCallApiKey>,
+	retry_observer: Option<&RetryObserver>,
 ) -> Result<crate::llm::providers::shared::CapturedResponse>
 where
 	F: FnMut() -> Pin<Box<dyn Future<Output = Result<crate::llm::providers::shared::CapturedResponse>> + Send>>,
@@ -111,7 +251,7 @@ where
 	use crate::errors::ProviderError;
 	use crate::llm::providers::shared;
 	let api_key = api_key.cloned();
-	retry_with_exponential_backoff(
+	retry_with_backoff(
 		|| {
 			let response = operation();
 			let api_key = api_key.clone();
@@ -131,6 +271,34 @@ where
 		|| ProviderError::Cancelled.into(),
 		|error| matches!(error.downcast_ref::<ProviderError>(), Some(ProviderError::Cancelled)),
 		shared::is_connection_error,
+		describe_error,
+		retry_observer,
+	)
+	.await
+}
+
+/// Retry a provider call that is not a single HTTP request (a streamed
+/// response, a CLI subprocess) with the retry settings, cancellation token
+/// and observer carried on `params`.
+pub(crate) async fn retry_chat_operation<F, T>(
+	operation: F,
+	params: &crate::llm::types::ChatCompletionParams,
+	on_connection_error: impl Fn(&anyhow::Error) -> bool + Copy,
+) -> Result<T>
+where
+	F: FnMut() -> Pin<Box<dyn Future<Output = Result<T>> + Send>>,
+{
+	use crate::errors::ProviderError;
+	retry_with_backoff(
+		operation,
+		params.max_retries,
+		params.retry_timeout,
+		params.cancellation_token.as_ref(),
+		|| ProviderError::Cancelled.into(),
+		|error| matches!(error.downcast_ref::<ProviderError>(), Some(ProviderError::Cancelled)),
+		on_connection_error,
+		describe_error,
+		params.retry_observer.as_ref(),
 	)
 	.await
 }
@@ -157,6 +325,37 @@ where
 /// * `Ok(T)` - Success result from the operation
 /// * `Err(E)` - The last error encountered after all retries exhausted
 pub async fn retry_with_exponential_backoff<F, T, E>(
+	operation: F,
+	max_retries: u32,
+	base_timeout: Duration,
+	cancellation_token: Option<&watch::Receiver<bool>>,
+	on_cancel: impl Fn() -> E + Copy,
+	is_cancelled: impl Fn(&E) -> bool + Copy,
+	on_connection_error: impl Fn(&E) -> bool + Copy,
+) -> Result<T, E>
+where
+	F: FnMut() -> Pin<Box<dyn Future<Output = Result<T, E>> + Send>>,
+	E: std::fmt::Display,
+{
+	retry_with_backoff(
+		operation,
+		max_retries,
+		base_timeout,
+		cancellation_token,
+		on_cancel,
+		is_cancelled,
+		on_connection_error,
+		|_| RetryCause {
+			reason: "request failed".to_owned(),
+			retry_after: None,
+		},
+		None,
+	)
+	.await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn retry_with_backoff<F, T, E>(
 	mut operation: F,
 	max_retries: u32,
 	base_timeout: Duration,
@@ -164,6 +363,8 @@ pub async fn retry_with_exponential_backoff<F, T, E>(
 	on_cancel: impl Fn() -> E + Copy,
 	is_cancelled: impl Fn(&E) -> bool + Copy,
 	on_connection_error: impl Fn(&E) -> bool + Copy,
+	describe: impl Fn(&E) -> RetryCause,
+	retry_observer: Option<&RetryObserver>,
 ) -> Result<T, E>
 where
 	F: FnMut() -> Pin<Box<dyn Future<Output = Result<T, E>> + Send>>,
@@ -197,18 +398,26 @@ where
 					crate::llm::providers::shared::refresh_http_client();
 				}
 
-				last_error = Some(e);
-
 				// Don't sleep after the last attempt
 				if attempt < max_retries {
-					// Exponential backoff: base_timeout * 2^attempt
-					let delay = base_timeout * 2_u32.pow(attempt);
-					// Cap at 5 minutes for safety
-					let delay = std::cmp::min(delay, Duration::from_secs(300));
+					let cause = describe(&e);
+					let delay = backoff_delay(base_timeout, attempt, cause.retry_after);
 
 					tracing::debug!("Waiting {:?} before retry attempt {}", delay, attempt + 2);
 
+					if let Some(observer) = retry_observer {
+						observer.notify(&RetryEvent {
+							attempt: attempt + 1,
+							max_retries,
+							delay,
+							reason: cause.reason,
+						});
+					}
+
+					last_error = Some(e);
 					sleep_cancellable(delay, cancellation_token, on_cancel).await?;
+				} else {
+					last_error = Some(e);
 				}
 			}
 		}

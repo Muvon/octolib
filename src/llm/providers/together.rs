@@ -618,10 +618,9 @@ async fn execute_together_request(
 				let captured = shared::send_and_read(req, request_timeout, extra_headers.as_ref()).await?;
 
 				if retry::is_retryable_status(captured.status.as_u16()) {
-					return Err(anyhow::anyhow!(
-						"Together.ai API error {}: {}",
-						captured.status,
-						captured.body
+					return Err(retry::retryable_status_error(
+						&captured,
+						format!("Together.ai API error {}: {}", captured.status, captured.body),
 					));
 				}
 
@@ -632,6 +631,7 @@ async fn execute_together_request(
 		params.retry_timeout,
 		params.cancellation_token.as_ref(),
 		params.api_key.as_ref(),
+		params.retry_observer.as_ref(),
 	)
 	.await?;
 

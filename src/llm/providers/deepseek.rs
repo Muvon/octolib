@@ -533,10 +533,9 @@ impl AiProvider for DeepSeekProvider {
 
 					// Return Err for retryable HTTP errors so the retry loop catches them
 					if retry::is_retryable_status(captured.status.as_u16()) {
-						return Err(anyhow::anyhow!(
-							"DeepSeek API error {}: {}",
-							captured.status,
-							captured.body
+						return Err(retry::retryable_status_error(
+							&captured,
+							format!("DeepSeek API error {}: {}", captured.status, captured.body),
 						));
 					}
 
@@ -547,6 +546,7 @@ impl AiProvider for DeepSeekProvider {
 			params.retry_timeout,
 			params.cancellation_token.as_ref(),
 			params.api_key.as_ref(),
+			params.retry_observer.as_ref(),
 		)
 		.await?;
 		let request_time_ms = start_time.elapsed().as_millis() as u64;

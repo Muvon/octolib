@@ -680,6 +680,7 @@ impl AiProvider for AnthropicProvider {
 			needs_extended_cache,
 			params.extra_headers.clone(),
 			params.api_key.as_ref(),
+			params.retry_observer.as_ref(),
 		)
 		.await?;
 
@@ -919,6 +920,7 @@ async fn execute_anthropic_request(
 	extended_cache_ttl: bool,
 	extra_headers: Option<std::collections::HashMap<String, String>>,
 	per_call_api_key: Option<&crate::llm::types::PerCallApiKey>,
+	retry_observer: Option<&crate::llm::retry::RetryObserver>,
 ) -> Result<ProviderResponse> {
 	let start_time = std::time::Instant::now();
 
@@ -950,10 +952,9 @@ async fn execute_anthropic_request(
 
 				// Return Err for retryable HTTP errors so the retry loop catches them
 				if retry::is_retryable_status(captured.status.as_u16()) {
-					return Err(anyhow::anyhow!(
-						"Anthropic API error {}: {}",
-						captured.status,
-						captured.body
+					return Err(retry::retryable_status_error(
+						&captured,
+						format!("Anthropic API error {}: {}", captured.status, captured.body),
 					));
 				}
 
@@ -964,6 +965,7 @@ async fn execute_anthropic_request(
 		base_timeout,
 		cancellation_token,
 		per_call_api_key,
+		retry_observer,
 	)
 	.await?;
 

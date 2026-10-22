@@ -72,6 +72,11 @@ pub(crate) fn redact_error(error: anyhow::Error, api_key: Option<&crate::llm::ty
 	if !message.contains(key.as_str()) {
 		return error;
 	}
+	// A retryable status keeps its type: the retry loop reads its status and
+	// `Retry-After`, and it has no source chain to leak through.
+	if let Some(status) = error.downcast_ref::<crate::llm::retry::RetryableStatusError>() {
+		return status.with_message(redact_text(&message, Some(key))).into();
+	}
 	// Retaining the original source would expose the credential through error chains.
 	RedactedError {
 		message: redact_text(&message, Some(key)),

@@ -904,11 +904,9 @@ async fn execute_request(
 
 				// Return Err for retryable HTTP errors so the retry loop catches them
 				if retry::is_retryable_status(captured.status.as_u16()) {
-					return Err(anyhow::anyhow!(
-						"{} API error {}: {}",
-						provider_name,
-						captured.status,
-						captured.body
+					return Err(retry::retryable_status_error(
+						&captured,
+						format!("{} API error {}: {}", provider_name, captured.status, captured.body),
 					));
 				}
 
@@ -919,6 +917,7 @@ async fn execute_request(
 		params.retry_timeout,
 		params.cancellation_token.as_ref(),
 		params.api_key.as_ref(),
+		params.retry_observer.as_ref(),
 	)
 	.await?;
 

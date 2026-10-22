@@ -35,6 +35,7 @@ pub mod utils;
 pub use config::{CacheConfig, CacheTTL, CacheType};
 pub use factory::ProviderFactory;
 pub use reference_models::{ModelCapabilities, ModelProperties};
+pub use retry::{RetryEvent, RetryObserver};
 pub use schema_enforcement::chat_completion_enforced;
 pub use strategies::{ModelLimits, ProviderStrategy, StrategyFactory, ToolResult};
 pub use tool_calls::{GenericToolCall, ProviderToolCalls};

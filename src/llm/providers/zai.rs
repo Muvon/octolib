@@ -436,6 +436,7 @@ impl AiProvider for ZaiProvider {
 			params.cancellation_token.as_ref(),
 			params.extra_headers.clone(),
 			params.api_key.as_ref(),
+			params.retry_observer.as_ref(),
 		)
 		.await?;
 
@@ -541,6 +542,7 @@ async fn execute_zai_request(
 	cancellation_token: Option<&tokio::sync::watch::Receiver<bool>>,
 	extra_headers: Option<std::collections::HashMap<String, String>>,
 	per_call_api_key: Option<&crate::llm::types::PerCallApiKey>,
+	retry_observer: Option<&crate::llm::retry::RetryObserver>,
 ) -> Result<ProviderResponse> {
 	let start_time = std::time::Instant::now();
 
@@ -563,7 +565,10 @@ async fn execute_zai_request(
 
 				// Return Err for retryable HTTP errors so the retry loop catches them
 				if retry::is_retryable_status(captured.status.as_u16()) {
-					return Err(anyhow::anyhow!("Z.ai API error {}: {}", captured.status, captured.body));
+					return Err(retry::retryable_status_error(
+						&captured,
+						format!("Z.ai API error {}: {}", captured.status, captured.body),
+					));
 				}
 
 				Ok(captured)
@@ -573,6 +578,7 @@ async fn execute_zai_request(
 		base_timeout,
 		cancellation_token,
 		per_call_api_key,
+		retry_observer,
 	)
 	.await?;
 

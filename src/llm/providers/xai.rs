@@ -556,7 +556,10 @@ async fn execute_request(
 				)
 				.await?;
 				if retry::is_retryable_status(captured.status.as_u16()) {
-					return Err(anyhow::anyhow!("xAI API error {}: {}", captured.status, captured.body));
+					return Err(retry::retryable_status_error(
+						&captured,
+						format!("xAI API error {}: {}", captured.status, captured.body),
+					));
 				}
 				Ok(captured)
 			})
@@ -565,6 +568,7 @@ async fn execute_request(
 		params.retry_timeout,
 		params.cancellation_token.as_ref(),
 		params.api_key.as_ref(),
+		params.retry_observer.as_ref(),
 	)
 	.await?;
 

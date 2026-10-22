@@ -281,3 +281,73 @@ fn effort_levels_follow_each_model_ladder() {
 	assert!(body.get("reasoning_effort").is_none());
 	assert!(body.get("reasoning").is_none());
 }
+
+#[test]
+fn test_together_model_pricing_known_and_unknown() {
+	let priced = together_model_pricing("Qwen/Qwen3.8-2.4T-A95B").unwrap();
+	assert!((priced.input_price_per_1m - 2.00).abs() < 1e-9);
+	assert!((priced.output_price_per_1m - 6.00).abs() < 1e-9);
+	assert!((priced.cache_read_price_per_1m - 0.25).abs() < 1e-9);
+	// Free model prices at zero.
+	let free = together_model_pricing("Prism-ML/Ternary-Bonsai-27B").unwrap();
+	assert_eq!(free.input_price_per_1m, 0.0);
+	assert_eq!(free.output_price_per_1m, 0.0);
+	assert!(together_model_pricing("unknown/model").is_none());
+}
+
+#[test]
+fn test_together_model_context_families() {
+	assert_eq!(together_model_context("ThinkingMachines/Inkling-Base"), Some(524_288));
+	assert_eq!(together_model_context("MiniMaxAI/MiniMax-M3"), Some(524_288));
+	assert_eq!(together_model_context("moonshotai/kimi-k3"), Some(1_048_576));
+	assert_eq!(together_model_context("zai-org/glm-5.3"), Some(1_048_575));
+	assert_eq!(together_model_context("google/gemma-4-31b-it"), Some(262_144));
+	assert_eq!(together_model_context("qwen/qwen3.8-flash"), Some(1_000_000));
+	assert_eq!(together_model_context("openai/gpt-oss-120b"), Some(131_072));
+	assert_eq!(together_model_context("totally/unknown"), None);
+}
+
+#[test]
+fn test_together_apply_reasoning_effort_families() {
+	let mut body = serde_json::json!({});
+	apply_reasoning_effort(&mut body, "moonshotai/kimi-k3", Some(ReasoningEffort::None));
+	assert_eq!(body["reasoning"]["enabled"], false);
+
+	// GLM-5.3 cannot stop thinking: None floors to low.
+	let mut body = serde_json::json!({});
+	apply_reasoning_effort(&mut body, "zai-org/glm-5.3", Some(ReasoningEffort::None));
+	assert_eq!(body["reasoning_effort"], "low");
+
+	// GPT-OSS has no off switch: nothing is sent.
+	let mut body = serde_json::json!({});
+	apply_reasoning_effort(&mut body, "openai/gpt-oss-120b", Some(ReasoningEffort::None));
+	assert!(body.as_object().unwrap().is_empty());
+
+	// Max passes through on Kimi K3 and GLM-5.3.
+	let mut body = serde_json::json!({});
+	apply_reasoning_effort(&mut body, "moonshotai/kimi-k3", Some(ReasoningEffort::Max));
+	assert_eq!(body["reasoning_effort"], "max");
+
+	// DeepSeek V4 Pro: only high and max; lower levels floor to high.
+	let mut body = serde_json::json!({});
+	apply_reasoning_effort(&mut body, "deepseek-ai/deepseek-v4-pro", Some(ReasoningEffort::Low));
+	assert_eq!(body["reasoning_effort"], "high");
+	let mut body = serde_json::json!({});
+	apply_reasoning_effort(&mut body, "deepseek-ai/deepseek-v4-pro", Some(ReasoningEffort::XHigh));
+	assert_eq!(body["reasoning_effort"], "max");
+
+	// Hybrid models turn thinking off with the reasoning switch.
+	let mut body = serde_json::json!({});
+	apply_reasoning_effort(&mut body, "minimaxai/minimax-m3", Some(ReasoningEffort::None));
+	assert_eq!(body["reasoning"]["enabled"], false);
+
+	// Other models use the generic ladder; XHigh collapses to high.
+	let mut body = serde_json::json!({});
+	apply_reasoning_effort(&mut body, "some/other-model", Some(ReasoningEffort::XHigh));
+	assert_eq!(body["reasoning_effort"], "high");
+
+	// No effort requested: nothing is sent.
+	let mut body = serde_json::json!({});
+	apply_reasoning_effort(&mut body, "moonshotai/kimi-k3", None);
+	assert!(body.as_object().unwrap().is_empty());
+}

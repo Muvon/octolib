@@ -238,3 +238,7 @@ fn build_fallback_text(lines: &[String]) -> Option<String> {
 		Some(response_text)
 	}
 }
+
+#[cfg(test)]
+#[path = "codex_tests.rs"]
+mod tests;

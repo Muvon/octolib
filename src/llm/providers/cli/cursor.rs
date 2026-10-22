@@ -63,3 +63,7 @@ pub(crate) fn parse_response(lines: &[String]) -> Result<String> {
 
 	Ok(response_text)
 }
+
+#[cfg(test)]
+#[path = "cursor_tests.rs"]
+mod tests;

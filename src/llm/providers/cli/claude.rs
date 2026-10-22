@@ -153,3 +153,7 @@ pub(crate) fn parse_response(lines: &[String]) -> Result<(String, Option<TokenUs
 
 	Ok((combined_text, usage))
 }
+
+#[cfg(test)]
+#[path = "claude_tests.rs"]
+mod tests;

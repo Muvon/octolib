@@ -1379,6 +1379,10 @@ fn unknown_parameters() -> ParameterCapabilities {
 }
 
 #[cfg(test)]
+#[path = "openrouter_http_tests.rs"]
+mod http_tests;
+
+#[cfg(test)]
 mod tests {
 	use super::*;
 

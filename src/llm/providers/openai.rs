@@ -1215,3 +1215,7 @@ pub(super) fn parse_responses_api_response(
 #[cfg(test)]
 #[path = "openai_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "openai_responses_parser_tests.rs"]
+mod responses_parser_tests;

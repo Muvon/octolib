@@ -708,3 +708,7 @@ impl AiProvider for XaiProvider {
 #[cfg(test)]
 #[path = "xai_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "xai_http_tests.rs"]
+mod http_tests;

@@ -44,3 +44,29 @@ fn unknown_or_local_model_is_unpriced() {
 	assert_eq!(calculate_embedding_cost("jina-clip-v2", 1_000_000), None);
 	assert_eq!(calculate_embedding_cost("voyage-multimodal-3.5", 1_000_000), None);
 }
+#[test]
+fn usage_from_tokens_prices_and_estimates() {
+	// from_tokens: provider-reported count + reference-table cost
+	let usage = EmbeddingUsage::from_tokens("voyage-3.5", 2_000_000);
+	assert_eq!(usage.input_tokens, 2_000_000);
+	assert!(approx(usage.cost, 0.12));
+
+	// estimate: tiktoken count of the texts; unpriced model → cost None
+	let texts = vec!["hello world".to_string(), "second text".to_string()];
+	let estimated = EmbeddingUsage::estimate("nomic-embed-text", &texts);
+	assert!(estimated.input_tokens > 0, "tiktoken estimate must count something");
+	assert_eq!(estimated.cost, None);
+
+	// estimate for a priced model still resolves the reference rate
+	let priced = EmbeddingUsage::estimate("text-embedding-3-small", &["a".to_string()]);
+	assert!(priced.cost.is_some());
+}
+
+#[test]
+fn usage_serializes_with_cost_field() {
+	let usage = EmbeddingUsage::from_tokens("voyage-4", 1_000_000);
+	let json = serde_json::to_string(&usage).expect("serialize usage");
+	assert!(json.contains("\"cost\":0.06"), "unexpected json: {json}");
+	let round: EmbeddingUsage = serde_json::from_str(&json).expect("deserialize usage");
+	assert_eq!(round, usage);
+}

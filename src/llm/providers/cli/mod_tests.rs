@@ -202,9 +202,37 @@ fn test_resolve_cli_command_accepts_executable_path() {
 
 #[test]
 fn test_resolve_cli_command_bare_name_searches_path() {
-	// A bare name that is definitely on PATH in test environments.
-	let found = resolve_cli_command("sh").unwrap();
-	assert!(found.is_absolute() || found.file_name().is_some());
+	// Create a temp executable and prepend its directory to PATH so the
+	// bare-name PATH search is exercised deterministically on every platform.
+	let dir = env::temp_dir().join("octolib-cli-path-search");
+	std::fs::create_dir_all(&dir).unwrap();
+	let exe_name = if cfg!(windows) {
+		"octolib-pathsearch.exe"
+	} else {
+		"octolib-pathsearch"
+	};
+	let path = dir.join(exe_name);
+	std::fs::write(&path, b"#!/bin/sh\nexit 0\n").unwrap();
+	#[cfg(unix)]
+	{
+		use std::os::unix::fs::PermissionsExt;
+		std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+	}
+	let old_path = env::var_os("PATH");
+	let mut new_path = dir.clone().into_os_string();
+	if let Some(prev) = &old_path {
+		new_path.push(if cfg!(windows) { ";" } else { ":" });
+		new_path.push(prev);
+	}
+	env::set_var("PATH", new_path);
+	let found = resolve_cli_command("octolib-pathsearch").unwrap();
+	assert_eq!(found, path);
+	match old_path {
+		Some(prev) => env::set_var("PATH", prev),
+		None => env::remove_var("PATH"),
+	}
+	let _ = std::fs::remove_file(&path);
+	let _ = std::fs::remove_dir(&dir);
 }
 
 #[test]

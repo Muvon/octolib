@@ -1,5 +1,44 @@
 # Changelog
 
+## [0.45.1] - 2026-10-23
+
+### 📋 Release Summary
+
+ONNX Runtime now reuses the shared runtime environment. Test support was centralized and coverage expanded across provider HTTP paths, media operations, embeddings, pricing, model behavior, CLI backends, evaluation routing, and caching.
+
+### 🔧 Improvements & Optimizations
+
+- **test-support**: centralize test HTTP mocks and env cleanup `d3ddaa5a`
+- **llm,embedding**: cover local/nvidia/ollama proxy HTTP paths and embedding usage pricing `58788861`
+- **llm**: cover xAI and OctoHub HTTP paths via MockHttp seam `ab62f9b9`
+- **llm**: cover OpenAI Responses API parser branches `4fd68685`
+- **media**: cover cloudflare image HTTP path via MockHttp seam `9684f7fa`
+- **media**: cover elevenlabs speech/transcription HTTP paths via MockHttp seam `908bf7b7`
+- **media**: cover openrouter image/speech HTTP paths via MockHttp seam `aa50f3bb`
+- **media**: cover higgsfield submit/poll/cancel HTTP paths via MockHttp seam `43947a13`
+- **media**: cover runway task submit/poll/cancel HTTP paths via MockHttp seam `3ec93fa5`
+- **media**: cover fal queue submit/poll/cancel HTTP paths via MockHttp seam `ef5fe356`
+- **media**: cover replicate submit/poll/cancel HTTP paths via MockHttp seam `f19010e4`
+- **cli**: drop .exe suffix from PATH-search fixture `fcb097c3`
+- **cli**: make PATH-search test platform-agnostic via temp executable `d9292a18`
+- **evaluation**: cover evaluate() routing via MockHttp seam `8e955769`
+- **together**: cover pricing, context windows, reasoning families `78ce3c3d`
+- **anthropic**: cover cache-aware cost calc, effort mapping, thinking-off `c8bcfd13`
+- **embedding**: add google provider unit tests `2072e96a`
+- **llm**: expand strategies and tool_calls coverage `57150250`
+- **cli**: add unit tests for codex, claude, cursor, gemini backends `63dcf879`
+- **dependencies**: update Tokio to 1.54.1 `9fbe5acb`
+
+### 🐛 Bug Fixes & Stability
+
+- **media**: silence unused `mock` variable in higgsfield poll test `4053eb3a`
+- bump rustls-webpki to 0.103.16 and webpki-roots to 1.0.10 (RUSTSEC-2026-0382) `04a585f9`
+- **onnx**: reuse the shared ONNX Runtime environment `230edab1`
+
+### 🔄 Other Changes
+
+4 maintenance, dependency, and tooling updates not listed individually.
+
 ## [0.45.0] - 2026-10-22
 
 ### 📋 Release Summary

@@ -122,5 +122,8 @@ impl AiProvider for NvidiaProvider {
 }
 
 #[cfg(test)]
+#[path = "nvidia_http_tests.rs"]
+mod http_tests2;
+#[cfg(test)]
 #[path = "nvidia_tests.rs"]
 mod tests;

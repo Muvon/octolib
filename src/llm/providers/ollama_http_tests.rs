@@ -16,17 +16,18 @@
 //! MockHttp loopback seam, reference-cost fill, and error surfacing.
 
 use super::*;
-use crate::llm::providers::mock_http::MockHttp;
 use crate::llm::types::Message;
+use crate::test_support::env::EnvGuard;
+use crate::test_support::mock_http::MockHttp;
 
 #[tokio::test]
 #[serial_test::serial]
 async fn chat_completion_via_mock_http_fills_reference_cost() {
 	let mock = MockHttp::start(vec![(
 		200,
-		crate::llm::providers::mock_http::chat_completion_body("ollama answer"),
+		crate::test_support::mock_http::chat_completion_body("ollama answer"),
 	)]);
-	std::env::set_var("OLLAMA_API_URL", mock.url.clone());
+	let _env = EnvGuard::new().set("OLLAMA_API_URL", mock.url.clone());
 
 	let provider = OllamaProvider::new();
 	let params = ChatCompletionParams::new(&[Message::user("hello")], "llama-3.1-8b", 0.2, 0.9, 0, 100)
@@ -47,21 +48,21 @@ async fn chat_completion_via_mock_http_fills_reference_cost() {
 	let requests = mock.requests();
 	let request: serde_json::Value = serde_json::from_str(&requests[0].body).expect("request json");
 	assert_eq!(request["model"], "llama-3.1-8b");
-
-	std::env::remove_var("OLLAMA_API_URL");
 }
 
 #[tokio::test]
 #[serial_test::serial]
-async fn chat_completion_via_mock_http_surfaces_http_error() {
+async fn chat_completion_via_mock_http_retries_server_errors_then_surfaces_them() {
 	let mock = MockHttp::start(vec![(503, r#"{"error":{"message":"overloaded"}}"#.to_string())]);
-	std::env::set_var("OLLAMA_API_URL", mock.url.clone());
+	let _env = EnvGuard::new().set("OLLAMA_API_URL", mock.url.clone());
 
 	let provider = OllamaProvider::new();
+	// 5xx is retryable; a 1ms backoff keeps the retry from sleeping for seconds.
 	let params = ChatCompletionParams::new(&[Message::user("hello")], "llama-3.1-8b", 0.2, 0.9, 0, 100)
-		.with_api_key("mock-key".to_owned());
+		.with_api_key("mock-key".to_owned())
+		.with_max_retries(1)
+		.with_retry_timeout(std::time::Duration::from_millis(1));
 	let err = provider.chat_completion(params).await.expect_err("http error surfaces");
 	assert!(err.to_string().contains("ollama API error"), "unexpected error: {err}");
-
-	std::env::remove_var("OLLAMA_API_URL");
+	assert_eq!(mock.requests().len(), 2, "one attempt plus one retry");
 }

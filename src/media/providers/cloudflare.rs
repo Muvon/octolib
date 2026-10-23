@@ -1568,6 +1568,7 @@ mod tests {
 	}
 
 	#[test]
+	#[serial_test::serial]
 	fn run_url_honours_override_and_validates_account() {
 		let provider = CloudflareMediaProvider::new();
 		std::env::set_var(API_BASE_ENV, "https://gateway.example/ai/run/");

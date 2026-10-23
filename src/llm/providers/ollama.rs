@@ -129,7 +129,7 @@ impl AiProvider for OllamaProvider {
 
 #[cfg(test)]
 #[path = "ollama_http_tests.rs"]
-mod http_tests2;
+mod http_tests;
 #[cfg(test)]
 #[path = "ollama_tests.rs"]
 mod tests;

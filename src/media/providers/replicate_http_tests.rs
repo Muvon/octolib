@@ -14,9 +14,10 @@
 
 //! MockHTTP-driven coverage for the Replicate adapter's submit/poll/cancel
 //! HTTP paths, complementing the pure-parser tests in `replicate.rs`.
-#![cfg(feature = "llm")]
 
 use super::*;
+use crate::test_support::env::EnvGuard;
+use crate::test_support::mock_http::MockHttp;
 
 fn schema_reply() -> String {
 	r#"{"latest_version":{"openapi_schema":{"components":{}}}}"#.to_string()
@@ -26,22 +27,20 @@ fn prediction_succeeded(output: &str) -> String {
 	format!(r#"{{"id":"pred-42","status":"succeeded","output":[{output}]}}"#)
 }
 
-fn start_mock(replies: Vec<(u16, String)>) -> crate::llm::providers::mock_http::MockHttp {
-	let mock = crate::llm::providers::mock_http::MockHttp::start(replies);
-	std::env::set_var(API_BASE_ENV, mock.base_url());
-	std::env::set_var(API_KEY_ENV, "mock-key");
-	mock
-}
-
-fn finish_mock() {
-	std::env::remove_var(API_BASE_ENV);
-	std::env::remove_var(API_KEY_ENV);
+/// Start the mock and point the adapter at it. The guard restores the
+/// environment when the test ends, pass or fail.
+fn start_mock(replies: Vec<(u16, String)>) -> (MockHttp, EnvGuard) {
+	let mock = MockHttp::start(replies);
+	let env = EnvGuard::new()
+		.set(API_BASE_ENV, mock.base_url())
+		.set(API_KEY_ENV, "mock-key");
+	(mock, env)
 }
 
 #[tokio::test]
 #[serial_test::serial]
 async fn submit_image_posts_prediction_after_schema_discovery() {
-	let mock = start_mock(vec![
+	let (mock, _env) = start_mock(vec![
 		(200, schema_reply()),
 		(200, prediction_succeeded(r#""https://cdn.example.test/a.png""#)),
 	]);
@@ -66,14 +65,12 @@ async fn submit_image_posts_prediction_after_schema_discovery() {
 	assert_eq!(requests[1].path, "/models/owner/model/predictions");
 	let body: Value = serde_json::from_str(&requests[1].body).expect("request json");
 	assert_eq!(body["input"]["prompt"], "a castle");
-
-	finish_mock();
 }
 
 #[tokio::test]
 #[serial_test::serial]
 async fn poll_image_resumes_a_succeeded_prediction_from_the_handle() {
-	let _submit_mock = start_mock(vec![
+	let (_submit_mock, _env) = start_mock(vec![
 		(200, schema_reply()),
 		(200, r#"{"id":"pred-42","status":"processing"}"#.to_string()),
 	]);
@@ -83,9 +80,8 @@ async fn poll_image_resumes_a_succeeded_prediction_from_the_handle() {
 	let operation = provider.submit_image(request).await.expect("prediction submitted");
 	assert_eq!(operation.status, OperationStatus::Running);
 	let handle = operation.handle.expect("handle present");
-	finish_mock();
 
-	let poll_mock = start_mock(vec![(200, prediction_succeeded(r#""https://cdn.example.test/a.png""#))]);
+	let (poll_mock, _env) = start_mock(vec![(200, prediction_succeeded(r#""https://cdn.example.test/a.png""#))]);
 	let operation = provider.poll_image(&handle).await.expect("prediction polled");
 	assert_eq!(operation.status, OperationStatus::Succeeded);
 	assert_eq!(operation.result.expect("result present").artifacts.len(), 1);
@@ -93,14 +89,12 @@ async fn poll_image_resumes_a_succeeded_prediction_from_the_handle() {
 	let requests = poll_mock.requests();
 	assert_eq!(requests[0].method, "GET");
 	assert_eq!(requests[0].path, "/predictions/pred-42");
-
-	finish_mock();
 }
 
 #[tokio::test]
 #[serial_test::serial]
 async fn cancel_image_posts_the_cancel_route() {
-	let mock = start_mock(vec![(200, "{}".to_string())]);
+	let (mock, _env) = start_mock(vec![(200, "{}".to_string())]);
 
 	let provider = ReplicateMediaProvider::new();
 	let handle = JobHandle {
@@ -117,14 +111,12 @@ async fn cancel_image_posts_the_cancel_route() {
 	let requests = mock.requests();
 	assert_eq!(requests[0].method, "POST");
 	assert_eq!(requests[0].path, "/predictions/pred-42/cancel");
-
-	finish_mock();
 }
 
 #[tokio::test]
 #[serial_test::serial]
 async fn submit_image_surfaces_authentication_errors() {
-	let _mock = start_mock(vec![
+	let (_mock, _env) = start_mock(vec![
 		(200, schema_reply()),
 		(401, r#"{"detail":"invalid token"}"#.to_string()),
 	]);
@@ -136,14 +128,12 @@ async fn submit_image_surfaces_authentication_errors() {
 		matches!(error, MediaError::Authentication { .. }),
 		"unexpected error: {error}"
 	);
-
-	finish_mock();
 }
 
 #[tokio::test]
 #[serial_test::serial]
 async fn submit_transcription_normalizes_inline_text_output() {
-	let mock = start_mock(vec![
+	let (mock, _env) = start_mock(vec![
 		(200, schema_reply()),
 		(
 			200,
@@ -171,14 +161,12 @@ async fn submit_transcription_normalizes_inline_text_output() {
 	let body: Value = serde_json::from_str(&requests[1].body).expect("request json");
 	assert_eq!(body["input"]["audio"], "https://cdn.example.test/audio.mp3");
 	assert_eq!(body["input"]["language"], "en");
-
-	finish_mock();
 }
 
 #[tokio::test]
 #[serial_test::serial]
 async fn submit_speech_selects_the_first_audio_artifact() {
-	let _mock = start_mock(vec![
+	let (_mock, _env) = start_mock(vec![
 		(200, schema_reply()),
 		(200, prediction_succeeded(r#""https://cdn.example.test/line.mp3""#)),
 	]);
@@ -189,14 +177,12 @@ async fn submit_speech_selects_the_first_audio_artifact() {
 
 	let result = operation.result.expect("result present");
 	assert_eq!(result.artifact.media_type, "audio/mpeg");
-
-	finish_mock();
 }
 
 #[tokio::test]
 #[serial_test::serial]
 async fn webhooks_must_be_https_and_are_validated_before_submission() {
-	let _mock = start_mock(vec![(200, schema_reply())]);
+	let (_mock, _env) = start_mock(vec![(200, schema_reply())]);
 
 	let provider = ReplicateMediaProvider::new();
 	// Build provider options directly: `into_provider_options` would reject the
@@ -217,8 +203,6 @@ async fn webhooks_must_be_https_and_are_validated_before_submission() {
 
 	// The webhook is rejected while parsing options, before any HTTP traffic.
 	assert_eq!(_mock.requests().len(), 0);
-
-	finish_mock();
 }
 
 #[tokio::test]
@@ -226,7 +210,7 @@ async fn webhooks_must_be_https_and_are_validated_before_submission() {
 async fn schema_discovery_failure_defers_validation_with_a_warning() {
 	// Schema discovery is sent with max_retries: 0, so exactly one failed GET
 	// defers validation with a warning before the prediction POST.
-	let _mock = start_mock(vec![
+	let (_mock, _env) = start_mock(vec![
 		(500, r#"{"detail":"boom"}"#.to_string()),
 		(200, prediction_succeeded(r#""https://cdn.example.test/a.png""#)),
 	]);
@@ -241,6 +225,4 @@ async fn schema_discovery_failure_defers_validation_with_a_warning() {
 		.warnings
 		.iter()
 		.any(|warning| warning.code == WarningCode::SchemaUnavailable));
-
-	finish_mock();
 }

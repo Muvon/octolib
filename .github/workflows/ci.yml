@@ -21,7 +21,7 @@ jobs:
       feature-flags: '--features fastembed,huggingface'
       test-script: |
         cargo test --verbose --lib --no-default-features
-        for module in llm embeddings reranker media; do
+        for module in llm embeddings reranker media evaluation; do
           cargo test --verbose --lib --no-default-features --features "$module"
         done
         if [ "$RUNNER_OS" != "Windows" ]; then

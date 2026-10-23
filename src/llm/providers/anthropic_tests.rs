@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::*;
+use crate::test_support::env::EnvGuard;
 use serial_test::serial;
 
 #[test]
@@ -714,8 +715,8 @@ fn test_apply_thinking_off_per_model_family() {
 #[serial_test::serial]
 async fn chat_completion_via_mock_http_splits_blocks_and_cache_usage() {
 	let body = r#"{"id":"mock-anthropic","content":[{"type":"text","text":"final answer"},{"type":"thinking","thinking":"step by step"},{"type":"tool_use","id":"toolu_1","name":"get_weather","input":{"city":"Oslo"}}],"usage":{"input_tokens":10,"output_tokens":30,"cache_creation_input_tokens":2,"cache_read_input_tokens":4},"stop_reason":"tool_use"}"#;
-	let mock = crate::llm::providers::mock_http::MockHttp::start(vec![(200, body.to_string())]);
-	std::env::set_var("ANTHROPIC_API_URL", mock.url.clone());
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, body.to_string())]);
+	let _env = EnvGuard::new().set("ANTHROPIC_API_URL", mock.url.clone());
 
 	let provider = AnthropicProvider::new();
 	let params = ChatCompletionParams::new(&[], "claude-sonnet-4", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
@@ -742,18 +743,16 @@ async fn chat_completion_via_mock_http_splits_blocks_and_cache_usage() {
 	let requests = mock.requests();
 	let req_body: serde_json::Value = serde_json::from_str(&requests[0].body).expect("request json");
 	assert_eq!(req_body["model"], "claude-sonnet-4");
-
-	std::env::remove_var("ANTHROPIC_API_URL");
 }
 
 #[tokio::test]
 #[serial_test::serial]
 async fn chat_completion_via_mock_http_surfaces_http_error() {
-	let mock = crate::llm::providers::mock_http::MockHttp::start(vec![(
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(
 		400,
 		r#"{"type":"error","error":{"type":"invalid_request_error","message":"bad request"}}"#.to_string(),
 	)]);
-	std::env::set_var("ANTHROPIC_API_URL", mock.url.clone());
+	let _env = EnvGuard::new().set("ANTHROPIC_API_URL", mock.url.clone());
 
 	let provider = AnthropicProvider::new();
 	let params = ChatCompletionParams::new(&[], "claude-sonnet-4", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
@@ -762,6 +761,4 @@ async fn chat_completion_via_mock_http_surfaces_http_error() {
 		err.to_string().contains("Anthropic API error"),
 		"unexpected error: {err}"
 	);
-
-	std::env::remove_var("ANTHROPIC_API_URL");
 }

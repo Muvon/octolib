@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::*;
+use crate::test_support::env::EnvGuard;
 
 fn catalog_fixture() -> Vec<CatalogModel> {
 	serde_json::from_value::<CatalogResponse>(serde_json::json!({
@@ -301,11 +302,11 @@ fn tool_images_follow_tool_results_without_losing_call_association() {
 #[tokio::test]
 #[serial_test::serial]
 async fn chat_completion_via_mock_http_parses_text_and_usage() {
-	let mock = crate::llm::providers::mock_http::MockHttp::start(vec![(
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(
 		200,
-		crate::llm::providers::mock_http::chat_completion_body("mocked openrouter answer"),
+		crate::test_support::mock_http::chat_completion_body("mocked openrouter answer"),
 	)]);
-	std::env::set_var("OPENROUTER_API_URL", mock.url.clone());
+	let _env = EnvGuard::new().set("OPENROUTER_API_URL", mock.url.clone());
 
 	let provider = OpenRouterProvider::new();
 	let params = ChatCompletionParams::new(&[], "openai/gpt-4o", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
@@ -322,16 +323,14 @@ async fn chat_completion_via_mock_http_parses_text_and_usage() {
 	let chat_request = requests.last().expect("chat request recorded");
 	let body: serde_json::Value = serde_json::from_str(&chat_request.body).expect("request json");
 	assert_eq!(body["model"], "openai/gpt-4o");
-
-	std::env::remove_var("OPENROUTER_API_URL");
 }
 
 #[tokio::test]
 #[serial_test::serial]
 async fn chat_completion_via_mock_http_handles_tools_thinking_and_cache() {
 	let body = r#"{"id":"mock-or","choices":[{"index":0,"message":{"role":"assistant","content":null,"reasoning_details":[{"type":"text","text":"step one"},{"type":"text","text":"step two"}],"tool_calls":[{"id":"call_1","type":"function","function":{"name":"get_weather","arguments":"{\"city\":\"Oslo\"}"}},{"id":"call_2","type":"custom","function":{"name":"dropped","arguments":"{}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":100,"completion_tokens":40,"total_tokens":140,"prompt_tokens_details":{"cached_tokens":30},"completion_tokens_details":{"reasoning_tokens":10},"cost":0.0125}}"#;
-	let mock = crate::llm::providers::mock_http::MockHttp::start(vec![(200, body.to_string())]);
-	std::env::set_var("OPENROUTER_API_URL", mock.url.clone());
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, body.to_string())]);
+	let _env = EnvGuard::new().set("OPENROUTER_API_URL", mock.url.clone());
 
 	let provider = OpenRouterProvider::new();
 	let params = ChatCompletionParams::new(&[], "openai/gpt-4o", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
@@ -355,18 +354,16 @@ async fn chat_completion_via_mock_http_handles_tools_thinking_and_cache() {
 	assert_eq!(usage.output_tokens, 30);
 	assert_eq!(usage.reasoning_tokens, 10);
 	assert_eq!(usage.cost, Some(0.0125));
-
-	std::env::remove_var("OPENROUTER_API_URL");
 }
 
 #[tokio::test]
 #[serial_test::serial]
 async fn chat_completion_via_mock_http_surfaces_http_error() {
-	let mock = crate::llm::providers::mock_http::MockHttp::start(vec![(
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(
 		400,
 		r#"{"error":{"message":"bad request"}}"#.to_string(),
 	)]);
-	std::env::set_var("OPENROUTER_API_URL", mock.url.clone());
+	let _env = EnvGuard::new().set("OPENROUTER_API_URL", mock.url.clone());
 
 	let provider = OpenRouterProvider::new();
 	let params = ChatCompletionParams::new(&[], "openai/gpt-4o", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
@@ -375,6 +372,4 @@ async fn chat_completion_via_mock_http_surfaces_http_error() {
 		err.to_string().contains("OpenRouter API error"),
 		"unexpected error: {err}"
 	);
-
-	std::env::remove_var("OPENROUTER_API_URL");
 }

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::*;
+use crate::test_support::env::EnvGuard;
 
 #[test]
 fn test_supports_model() {
@@ -517,8 +518,8 @@ fn tool_images_follow_tool_results_without_losing_call_association() {
 #[serial_test::serial]
 async fn chat_completion_via_mock_http_returns_content_and_usage() {
 	let body = r#"{"id":"ms-1","object":"chat.completion","created":1,"model":"kimi-k3","choices":[{"index":0,"message":{"role":"assistant","content":"moonshot mocked answer"},"finish_reason":"stop","logprobs":null}],"usage":{"prompt_tokens":12,"completion_tokens":7,"total_tokens":19}}"#;
-	let mock = crate::llm::providers::mock_http::MockHttp::start(vec![(200, body.to_string())]);
-	std::env::set_var("MOONSHOT_API_URL", mock.url.clone());
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, body.to_string())]);
+	let _env = EnvGuard::new().set("MOONSHOT_API_URL", mock.url.clone());
 
 	let provider = MoonshotProvider::new();
 	let params = ChatCompletionParams::new(&[], "kimi-k3", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
@@ -533,6 +534,4 @@ async fn chat_completion_via_mock_http_returns_content_and_usage() {
 	let requests = mock.requests();
 	let req_body: serde_json::Value = serde_json::from_str(&requests[0].body).expect("request json");
 	assert_eq!(req_body["model"], "kimi-k3");
-
-	std::env::remove_var("MOONSHOT_API_URL");
 }

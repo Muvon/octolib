@@ -739,3 +739,7 @@ struct OctoHubUsage {
 #[cfg(test)]
 #[path = "octohub_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "octohub_http_tests.rs"]
+mod http_tests;

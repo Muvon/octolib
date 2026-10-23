@@ -14,20 +14,19 @@
 
 //! MockHTTP-driven coverage for the Cloudflare Workers AI adapter's immediate
 //! image and speech endpoints, complementing `cloudflare.rs` parser tests.
-#![cfg(feature = "llm")]
 
 use super::*;
+use crate::test_support::env::EnvGuard;
+use crate::test_support::mock_http::MockHttp;
 
-fn start_mock(replies: Vec<(u16, String)>) -> crate::llm::providers::mock_http::MockHttp {
-	let mock = crate::llm::providers::mock_http::MockHttp::start(replies);
-	std::env::set_var(API_BASE_ENV, mock.base_url());
-	std::env::set_var(API_KEY_ENV, "mock-key");
-	mock
-}
-
-fn finish_mock() {
-	std::env::remove_var(API_BASE_ENV);
-	std::env::remove_var(API_KEY_ENV);
+/// Start the mock and point the adapter at it. The guard restores the
+/// environment when the test ends, pass or fail.
+fn start_mock(replies: Vec<(u16, String)>) -> (MockHttp, EnvGuard) {
+	let mock = MockHttp::start(replies);
+	let env = EnvGuard::new()
+		.set(API_BASE_ENV, mock.base_url())
+		.set(API_KEY_ENV, "mock-key");
+	(mock, env)
 }
 
 #[tokio::test]
@@ -35,7 +34,7 @@ fn finish_mock() {
 async fn submit_image_decodes_base64_result_artifacts() {
 	let encoded = base64::engine::general_purpose::STANDARD.encode(b"\x89PNG\r\n\x1a\n....");
 	let body = format!(r#"{{"result":{{"image":"{encoded}"}}}}"#);
-	let mock = start_mock(vec![(200, body)]);
+	let (mock, _env) = start_mock(vec![(200, body)]);
 
 	let provider = CloudflareMediaProvider::new();
 	let request = ImageGenerationRequest::new("a castle").with_model("@cf/black-forest-labs/flux-1-schnell");
@@ -52,14 +51,12 @@ async fn submit_image_decodes_base64_result_artifacts() {
 	assert_eq!(requests[0].path, "/@cf/black-forest-labs/flux-1-schnell");
 	let body: Value = serde_json::from_str(&requests[0].body).expect("request json");
 	assert_eq!(body["prompt"], "a castle");
-
-	finish_mock();
 }
 
 #[tokio::test]
 #[serial_test::serial]
 async fn submit_image_rejects_unknown_models() {
-	let _mock = start_mock(vec![(200, "{}".to_string())]);
+	let (_mock, _env) = start_mock(vec![(200, "{}".to_string())]);
 
 	let provider = CloudflareMediaProvider::new();
 	let request = ImageGenerationRequest::new("a castle").with_model("@cf/mystery/model");
@@ -71,14 +68,12 @@ async fn submit_image_rejects_unknown_models() {
 		matches!(error, MediaError::UnsupportedTask { .. }),
 		"unexpected error: {error}"
 	);
-
-	finish_mock();
 }
 
 #[tokio::test]
 #[serial_test::serial]
 async fn submit_image_surfaces_authentication_errors() {
-	let _mock = start_mock(vec![(401, r#"{"errors":[{"message":"bad token"}]}"#.to_string())]);
+	let (_mock, _env) = start_mock(vec![(401, r#"{"errors":[{"message":"bad token"}]}"#.to_string())]);
 
 	let provider = CloudflareMediaProvider::new();
 	let request = ImageGenerationRequest::new("a castle").with_model("@cf/black-forest-labs/flux-1-schnell");
@@ -87,6 +82,4 @@ async fn submit_image_surfaces_authentication_errors() {
 		matches!(error, MediaError::Authentication { .. }),
 		"unexpected error: {error}"
 	);
-
-	finish_mock();
 }

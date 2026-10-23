@@ -14,7 +14,10 @@
 
 use super::*;
 
+// Serial: media tests set a fake OPENROUTER_API_KEY, which would turn these
+// live probes on with a key the API rejects.
 #[tokio::test]
+#[serial_test::serial]
 async fn test_openrouter_provider_dimension_probe() {
 	if std::env::var("OPENROUTER_API_KEY").is_err() {
 		return;
@@ -26,6 +29,7 @@ async fn test_openrouter_provider_dimension_probe() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn test_openrouter_invalid_model_rejected() {
 	if std::env::var("OPENROUTER_API_KEY").is_err() {
 		return;

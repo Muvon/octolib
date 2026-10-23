@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::*;
+use crate::test_support::env::EnvGuard;
 
 #[test]
 fn test_supports_model() {
@@ -361,8 +362,8 @@ async fn chat_completion_via_mock_http_merges_sse_stream_and_prices_from_table()
 		"data: {\"id\":\"t-1\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"mocked answer\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":7,\"total_tokens\":19}}\n\n",
 		"data: [DONE]\n\n"
 	);
-	let mock = crate::llm::providers::mock_http::MockHttp::start(vec![(200, body.to_string())]);
-	std::env::set_var("TOGETHER_API_URL", mock.url.clone());
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, body.to_string())]);
+	let _env = EnvGuard::new().set("TOGETHER_API_URL", mock.url.clone());
 
 	let provider = TogetherProvider::new();
 	let params =
@@ -379,6 +380,4 @@ async fn chat_completion_via_mock_http_merges_sse_stream_and_prices_from_table()
 	let requests = mock.requests();
 	let req_body: serde_json::Value = serde_json::from_str(&requests[0].body).expect("request json");
 	assert_eq!(req_body["model"], "Qwen/Qwen3.8-Flash");
-
-	std::env::remove_var("TOGETHER_API_URL");
 }

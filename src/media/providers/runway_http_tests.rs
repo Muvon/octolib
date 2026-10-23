@@ -14,20 +14,19 @@
 
 //! MockHTTP-driven coverage for the Runway task adapter's submit/poll/cancel
 //! HTTP paths, complementing the pure-parser tests in `runway.rs`.
-#![cfg(feature = "llm")]
 
 use super::*;
+use crate::test_support::env::EnvGuard;
+use crate::test_support::mock_http::MockHttp;
 
-fn start_mock(replies: Vec<(u16, String)>) -> crate::llm::providers::mock_http::MockHttp {
-	let mock = crate::llm::providers::mock_http::MockHttp::start(replies);
-	std::env::set_var(API_BASE_ENV, mock.base_url());
-	std::env::set_var(API_KEY_ENV, "mock-key");
-	mock
-}
-
-fn finish_mock() {
-	std::env::remove_var(API_BASE_ENV);
-	std::env::remove_var(API_KEY_ENV);
+/// Start the mock and point the adapter at it. The guard restores the
+/// environment when the test ends, pass or fail.
+fn start_mock(replies: Vec<(u16, String)>) -> (MockHttp, EnvGuard) {
+	let mock = MockHttp::start(replies);
+	let env = EnvGuard::new()
+		.set(API_BASE_ENV, mock.base_url())
+		.set(API_KEY_ENV, "mock-key");
+	(mock, env)
 }
 
 fn image_request() -> ImageGenerationRequest {
@@ -42,7 +41,7 @@ fn image_request() -> ImageGenerationRequest {
 #[tokio::test]
 #[serial_test::serial]
 async fn submit_image_posts_the_dated_contract_body() {
-	let mock = start_mock(vec![(200, r#"{"id":"task-1"}"#.to_string())]);
+	let (mock, _env) = start_mock(vec![(200, r#"{"id":"task-1"}"#.to_string())]);
 
 	let provider = RunwayMediaProvider::new();
 	let operation = provider.submit_image(image_request()).await.expect("task submitted");
@@ -58,14 +57,12 @@ async fn submit_image_posts_the_dated_contract_body() {
 	assert_eq!(body["model"], "gen4_turbo");
 	assert_eq!(body["promptText"], "a castle");
 	assert_eq!(body["ratio"], "1280:720");
-
-	finish_mock();
 }
 
 #[tokio::test]
 #[serial_test::serial]
 async fn submit_image_requires_a_ratio() {
-	let _mock = start_mock(vec![(200, r#"{"id":"task-1"}"#.to_string())]);
+	let (_mock, _env) = start_mock(vec![(200, r#"{"id":"task-1"}"#.to_string())]);
 
 	let provider = RunwayMediaProvider::new();
 	let error = provider
@@ -76,14 +73,12 @@ async fn submit_image_requires_a_ratio() {
 		matches!(error, MediaError::InvalidRequest(_)),
 		"unexpected error: {error}"
 	);
-
-	finish_mock();
 }
 
 #[tokio::test]
 #[serial_test::serial]
 async fn poll_image_returns_succeeded_artifacts() {
-	let mock = start_mock(vec![
+	let (mock, _env) = start_mock(vec![
 		(200, r#"{"id":"task-1"}"#.to_string()),
 		(
 			200,
@@ -108,14 +103,12 @@ async fn poll_image_returns_succeeded_artifacts() {
 	let requests = mock.requests();
 	assert_eq!(requests[1].method, "GET");
 	assert_eq!(requests[1].path, "/tasks/task-1");
-
-	finish_mock();
 }
 
 #[tokio::test]
 #[serial_test::serial]
 async fn cancel_image_deletes_the_task() {
-	let mock = start_mock(vec![(200, r#"{"id":"task-1"}"#.to_string()), (200, "{}".to_string())]);
+	let (mock, _env) = start_mock(vec![(200, r#"{"id":"task-1"}"#.to_string()), (200, "{}".to_string())]);
 
 	let provider = RunwayMediaProvider::new();
 	let handle = provider
@@ -130,14 +123,12 @@ async fn cancel_image_deletes_the_task() {
 	let requests = mock.requests();
 	assert_eq!(requests[1].method, "DELETE");
 	assert_eq!(requests[1].path, "/tasks/task-1");
-
-	finish_mock();
 }
 
 #[tokio::test]
 #[serial_test::serial]
 async fn submit_image_surfaces_authentication_errors() {
-	let _mock = start_mock(vec![(401, r#"{"detail":"invalid key"}"#.to_string())]);
+	let (_mock, _env) = start_mock(vec![(401, r#"{"detail":"invalid key"}"#.to_string())]);
 
 	let provider = RunwayMediaProvider::new();
 	let error = provider.submit_image(image_request()).await.expect_err("401 surfaces");
@@ -145,6 +136,4 @@ async fn submit_image_surfaces_authentication_errors() {
 		matches!(error, MediaError::Authentication { .. }),
 		"unexpected error: {error}"
 	);
-
-	finish_mock();
 }

@@ -34,6 +34,7 @@ async fn test_probed_dimension_is_reported_and_reused() {
 }
 
 #[test]
+#[serial_test::serial]
 fn test_api_url_default() {
 	// Clear env to test default
 	std::env::remove_var(OCTOHUB_API_URL_ENV);

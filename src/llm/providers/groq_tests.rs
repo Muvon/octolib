@@ -14,6 +14,7 @@
 
 use super::*;
 use crate::llm::utils::is_model_in_pricing_table;
+use crate::test_support::env::EnvGuard;
 
 #[test]
 fn test_supports_model() {
@@ -112,11 +113,11 @@ fn test_cost_calculation_cached_input() {
 #[tokio::test]
 #[serial_test::serial]
 async fn chat_completion_via_mock_http_returns_content_and_usage() {
-	let mock = crate::llm::providers::mock_http::MockHttp::start(vec![(
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(
 		200,
-		crate::llm::providers::mock_http::chat_completion_body("groq mocked answer"),
+		crate::test_support::mock_http::chat_completion_body("groq mocked answer"),
 	)]);
-	std::env::set_var("GROQ_API_URL", mock.url.clone());
+	let _env = EnvGuard::new().set("GROQ_API_URL", mock.url.clone());
 
 	let provider = GroqProvider::new();
 	let params =
@@ -131,18 +132,16 @@ async fn chat_completion_via_mock_http_returns_content_and_usage() {
 	let requests = mock.requests();
 	let req_body: serde_json::Value = serde_json::from_str(&requests[0].body).expect("request json");
 	assert_eq!(req_body["model"], "llama-3.3-70b-versatile");
-
-	std::env::remove_var("GROQ_API_URL");
 }
 
 #[tokio::test]
 #[serial_test::serial]
 async fn chat_completion_via_mock_http_surfaces_http_error() {
-	let mock = crate::llm::providers::mock_http::MockHttp::start(vec![(
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(
 		400,
 		r#"{"error":{"message":"bad request"}}"#.to_string(),
 	)]);
-	std::env::set_var("GROQ_API_URL", mock.url.clone());
+	let _env = EnvGuard::new().set("GROQ_API_URL", mock.url.clone());
 
 	let provider = GroqProvider::new();
 	let params =
@@ -152,6 +151,4 @@ async fn chat_completion_via_mock_http_surfaces_http_error() {
 		err.to_string().to_lowercase().contains("groq"),
 		"unexpected error: {err}"
 	);
-
-	std::env::remove_var("GROQ_API_URL");
 }

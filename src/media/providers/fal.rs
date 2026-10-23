@@ -1276,7 +1276,7 @@ fn no_artifacts(kind: &str) -> MediaError {
 }
 
 #[cfg(test)]
-#[path = "fal_tests.rs"]
+#[path = "fal_http_tests.rs"]
 mod http_tests;
 
 #[cfg(test)]

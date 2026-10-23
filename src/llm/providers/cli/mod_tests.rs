@@ -14,6 +14,7 @@
 
 use super::*;
 use crate::errors::ProviderError;
+use crate::test_support::env::EnvGuard;
 
 #[tokio::test]
 async fn test_cli_rejects_per_call_api_key_before_starting_process() {
@@ -148,17 +149,21 @@ fn test_parse_bool_env_values_and_default() {
 }
 
 #[test]
+#[serial_test::serial]
 fn test_parse_reasoning_effort_accepts_known_levels_and_defaults() {
-	env::set_var(CLI_CODEX_REASONING_EFFORT_ENV, " Low ");
+	let env = EnvGuard::new()
+		.remove(CODEX_REASONING_EFFORT_ENV)
+		.set(CLI_CODEX_REASONING_EFFORT_ENV, " Low ");
 	assert_eq!(parse_reasoning_effort(), "low");
-	env::remove_var(CLI_CODEX_REASONING_EFFORT_ENV);
 
-	env::set_var(CODEX_REASONING_EFFORT_ENV, "ultra");
+	let env = env
+		.remove(CLI_CODEX_REASONING_EFFORT_ENV)
+		.set(CODEX_REASONING_EFFORT_ENV, "ultra");
 	assert_eq!(parse_reasoning_effort(), "high");
-	env::set_var(CODEX_REASONING_EFFORT_ENV, "medium");
+	let env = env.set(CODEX_REASONING_EFFORT_ENV, "medium");
 	assert_eq!(parse_reasoning_effort(), "medium");
-	env::remove_var(CODEX_REASONING_EFFORT_ENV);
 
+	let _env = env.remove(CODEX_REASONING_EFFORT_ENV);
 	assert_eq!(parse_reasoning_effort(), "high");
 }
 
@@ -201,6 +206,7 @@ fn test_resolve_cli_command_accepts_executable_path() {
 }
 
 #[test]
+#[serial_test::serial]
 fn test_resolve_cli_command_bare_name_searches_path() {
 	// Create a temp executable and prepend its directory to PATH so the
 	// bare-name PATH search is exercised deterministically on every platform.
@@ -214,19 +220,15 @@ fn test_resolve_cli_command_bare_name_searches_path() {
 		use std::os::unix::fs::PermissionsExt;
 		std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
 	}
-	let old_path = env::var_os("PATH");
 	let mut new_path = dir.clone().into_os_string();
-	if let Some(prev) = &old_path {
+	if let Some(prev) = env::var_os("PATH") {
 		new_path.push(if cfg!(windows) { ";" } else { ":" });
 		new_path.push(prev);
 	}
-	env::set_var("PATH", new_path);
+	let env = EnvGuard::new().set("PATH", new_path);
 	let found = resolve_cli_command("octolib-pathsearch").unwrap();
+	drop(env);
 	assert_eq!(found, path);
-	match old_path {
-		Some(prev) => env::set_var("PATH", prev),
-		None => env::remove_var("PATH"),
-	}
 	let _ = std::fs::remove_file(&path);
 	let _ = std::fs::remove_dir(&dir);
 }

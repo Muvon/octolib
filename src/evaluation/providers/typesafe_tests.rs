@@ -45,6 +45,7 @@ fn only_the_jev_family_is_served_and_priced() {
 }
 
 #[test]
+#[serial_test::serial]
 fn endpoint_honours_the_base_url_override() {
 	let provider = TypeSafeEvaluationProvider::new();
 	std::env::set_var(API_BASE_ENV, "https://proxy.example/typesafe/");

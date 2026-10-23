@@ -48,9 +48,6 @@ pub mod webwright;
 pub mod xai;
 pub mod zai;
 
-#[cfg(test)]
-#[path = "mock_http.rs"]
-pub(crate) mod mock_http;
 // Re-export provider implementations
 pub use shared::set_user_agent;
 

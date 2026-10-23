@@ -13,7 +13,16 @@
 // limitations under the License.
 
 use super::*;
+use crate::test_support::env::EnvGuard;
+use crate::test_support::mock_http::MockHttp;
 
+/// Point the typesafe provider at `mock`. It posts to
+/// `{TYPESAFE_BASE_URL}/v1/systemone`, and the mock answers any path.
+fn route_typesafe_to(mock: &MockHttp) -> EnvGuard {
+	EnvGuard::new()
+		.set("TYPESAFE_BASE_URL", mock.base_url())
+		.set("TYPESAFE_API_KEY", "mock-key")
+}
 #[tokio::test]
 #[serial_test::serial]
 async fn evaluate_rejects_a_request_model_that_conflicts_with_the_route() {
@@ -34,12 +43,8 @@ async fn evaluate_rejects_a_request_model_that_conflicts_with_the_route() {
 #[serial_test::serial]
 async fn evaluate_routes_fills_the_model_and_returns_parsed_answers() {
 	let body = r#"{"model":"jev-1.13.0","answers":{"is_urgent":{"type":"noul","noul":0.92}},"usage":{"input_tokens":312,"output_tokens":48}}"#;
-	let mock = crate::llm::providers::mock_http::MockHttp::start(vec![(200, body.to_string())]);
-	// The typesafe provider posts to {TYPESAFE_BASE_URL}/v1/systemone; any path
-	// on the mock listener is answered with the canned body.
-	let base = mock.url.trim_end_matches("/v1/chat/completions").to_string();
-	std::env::set_var("TYPESAFE_BASE_URL", base);
-	std::env::set_var("TYPESAFE_API_KEY", "mock-key");
+	let mock = MockHttp::start(vec![(200, body.to_string())]);
+	let _env = route_typesafe_to(&mock);
 
 	let request = EvaluationRequest::new("Payouts failing for 3 days.")
 		.with_question("is_urgent", Question::noul("Does this convey urgency?"));
@@ -57,26 +62,18 @@ async fn evaluate_routes_fills_the_model_and_returns_parsed_answers() {
 	let requests = mock.requests();
 	let sent: serde_json::Value = serde_json::from_str(&requests[0].body).expect("request json");
 	assert_eq!(sent["model"], "jev-latest");
-
-	std::env::remove_var("TYPESAFE_BASE_URL");
-	std::env::remove_var("TYPESAFE_API_KEY");
 }
 
 #[tokio::test]
 #[serial_test::serial]
 async fn evaluate_keeps_an_explicit_matching_request_model() {
 	let body = r#"{"model":"jev-1.13.0","answers":{"is_urgent":{"type":"noul","noul":0.5}},"usage":{"input_tokens":10,"output_tokens":1}}"#;
-	let mock = crate::llm::providers::mock_http::MockHttp::start(vec![(200, body.to_string())]);
-	let base = mock.url.trim_end_matches("/v1/chat/completions").to_string();
-	std::env::set_var("TYPESAFE_BASE_URL", base);
-	std::env::set_var("TYPESAFE_API_KEY", "mock-key");
+	let mock = MockHttp::start(vec![(200, body.to_string())]);
+	let _env = route_typesafe_to(&mock);
 
 	let request = EvaluationRequest::new("state")
 		.with_model("jev-latest")
 		.with_question("is_urgent", Question::noul("urgent?"));
 	let response = evaluate("typesafe:jev-latest", request).await.expect("mock evaluation");
 	assert_eq!(response.answers.get("is_urgent"), Some(&Answer::Noul { noul: 0.5 }));
-
-	std::env::remove_var("TYPESAFE_BASE_URL");
-	std::env::remove_var("TYPESAFE_API_KEY");
 }

@@ -14,9 +14,10 @@
 
 //! Minimal local HTTP mock used by provider unit tests.
 //!
-//! Serves canned responses on a loopback listener so `chat_completion()`
-//! HTTP paths can be exercised without touching the network. Providers point
-//! at the mock through their `<PROVIDER>_API_URL` environment overrides.
+//! Serves canned responses on a loopback listener so provider HTTP paths can
+//! be exercised without touching the network. Providers point at the mock
+//! through their `<PROVIDER>_API_URL` (or base-URL) environment overrides;
+//! set those with [`EnvGuard`](super::env::EnvGuard) so they never leak.
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -141,12 +142,35 @@ pub fn chat_completion_body(content: &str) -> String {
 	)
 }
 
-/// Chat completion body that includes tool calls and reasoning token details.
-#[allow(dead_code)]
-pub fn tool_call_body(call_id: &str, name: &str, arguments: &str, reasoning: u64) -> String {
-	format!(
-		r#"{{"id":"mock-2","object":"chat.completion","choices":[{{"index":0,"message":{{"role":"assistant","content":null,"reasoning_content":"pondering","tool_calls":[{{"id":"{call_id}","type":"function","function":{{"name":"{name}","arguments":{arguments}}}}}]}},"finish_reason":"tool_calls"}}],"usage":{{"prompt_tokens":5,"completion_tokens":20,"total_tokens":25,"completion_tokens_details":{{"reasoning_tokens":{reasoning}}}}}}}"#
-	)
+/// Chat completion body with one tool call and reasoning: 5 prompt tokens and
+/// 20 completion tokens, of which `reasoning` are thinking.
+#[cfg(feature = "llm")]
+pub fn tool_call_body(call_id: &str, name: &str, arguments: &serde_json::Value, reasoning: u64) -> String {
+	serde_json::json!({
+		"id": "mock-2",
+		"object": "chat.completion",
+		"choices": [{
+			"index": 0,
+			"message": {
+				"role": "assistant",
+				"content": null,
+				"reasoning_content": "pondering",
+				"tool_calls": [{
+					"id": call_id,
+					"type": "function",
+					"function": {"name": name, "arguments": arguments.to_string()}
+				}]
+			},
+			"finish_reason": "tool_calls"
+		}],
+		"usage": {
+			"prompt_tokens": 5,
+			"completion_tokens": 20,
+			"total_tokens": 25,
+			"completion_tokens_details": {"reasoning_tokens": reasoning}
+		}
+	})
+	.to_string()
 }
 
 #[cfg(test)]

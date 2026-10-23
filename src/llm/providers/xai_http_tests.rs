@@ -17,7 +17,8 @@
 //! error surfacing, all through the MockHttp loopback seam.
 
 use super::*;
-use crate::llm::providers::mock_http::MockHttp;
+use crate::test_support::env::EnvGuard;
+use crate::test_support::mock_http::MockHttp;
 
 fn responses_body(output: serde_json::Value, usage: serde_json::Value) -> String {
 	serde_json::json!({
@@ -47,7 +48,7 @@ async fn chat_completion_via_mock_http_parses_text_reasoning_and_usage() {
 		}),
 	);
 	let mock = MockHttp::start(vec![(200, body)]);
-	std::env::set_var("XAI_API_URL", mock.url.clone());
+	let _env = EnvGuard::new().set("XAI_API_URL", mock.url.clone());
 
 	let provider = XaiProvider::new();
 	let params = ChatCompletionParams::new(&[Message::user("hello")], "grok-4.5", 0.2, 0.9, 40, 100)
@@ -74,8 +75,6 @@ async fn chat_completion_via_mock_http_parses_text_reasoning_and_usage() {
 	assert_eq!(request["include"][0], "reasoning.encrypted_content");
 	assert_eq!(request["input"][0]["role"], "user");
 	assert_eq!(request["max_output_tokens"], 100);
-
-	std::env::remove_var("XAI_API_URL");
 }
 
 #[tokio::test]
@@ -89,7 +88,7 @@ async fn chat_completion_via_mock_http_parses_tool_calls_and_structured_output()
 		json!({"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}),
 	);
 	let mock = MockHttp::start(vec![(200, body)]);
-	std::env::set_var("XAI_API_URL", mock.url.clone());
+	let _env = EnvGuard::new().set("XAI_API_URL", mock.url.clone());
 
 	let provider = XaiProvider::new();
 	let params = ChatCompletionParams::new(&[Message::user("find it")], "grok-4.5", 0.2, 0.9, 0, 10)
@@ -102,23 +101,19 @@ async fn chat_completion_via_mock_http_parses_tool_calls_and_structured_output()
 	assert_eq!(calls[0].name, "lookup");
 	assert_eq!(calls[0].arguments, json!({"q": "rust"}));
 	assert_eq!(response.structured_output, Some(json!({"answer": 42})));
-
-	std::env::remove_var("XAI_API_URL");
 }
 
 #[tokio::test]
 #[serial_test::serial]
 async fn chat_completion_via_mock_http_surfaces_http_error() {
 	let mock = MockHttp::start(vec![(400, r#"{"error":{"message":"bad request"}}"#.to_string())]);
-	std::env::set_var("XAI_API_URL", mock.url.clone());
+	let _env = EnvGuard::new().set("XAI_API_URL", mock.url.clone());
 
 	let provider = XaiProvider::new();
 	let params = ChatCompletionParams::new(&[Message::user("hello")], "grok-4.5", 0.2, 0.9, 0, 10)
 		.with_api_key("mock-key".to_owned());
 	let err = provider.chat_completion(params).await.expect_err("http error surfaces");
 	assert!(err.to_string().contains("xAI API error"), "unexpected error: {err}");
-
-	std::env::remove_var("XAI_API_URL");
 }
 
 #[tokio::test]

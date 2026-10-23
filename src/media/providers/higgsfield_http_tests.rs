@@ -14,28 +14,27 @@
 
 //! MockHTTP-driven coverage for the Higgsfield adapter's submit/poll/cancel
 //! HTTP paths, complementing the pure-parser tests in `higgsfield_tests.rs`.
-#![cfg(feature = "llm")]
 
 use super::*;
+use crate::test_support::env::EnvGuard;
+use crate::test_support::mock_http::MockHttp;
 
 const MODEL: &str = "higgsfield-ai/soul";
 
-fn start_mock(replies: Vec<(u16, String)>) -> crate::llm::providers::mock_http::MockHttp {
-	let mock = crate::llm::providers::mock_http::MockHttp::start(replies);
-	std::env::set_var(API_BASE_ENV, mock.base_url());
-	std::env::set_var(API_KEY_ENV, "key-id:key-secret");
-	mock
-}
-
-fn finish_mock() {
-	std::env::remove_var(API_BASE_ENV);
-	std::env::remove_var(API_KEY_ENV);
+/// Start the mock and point the adapter at it. The guard restores the
+/// environment when the test ends, pass or fail.
+fn start_mock(replies: Vec<(u16, String)>) -> (MockHttp, EnvGuard) {
+	let mock = MockHttp::start(replies);
+	let env = EnvGuard::new()
+		.set(API_BASE_ENV, mock.base_url())
+		.set(API_KEY_ENV, "key-id:key-secret");
+	(mock, env)
 }
 
 #[tokio::test]
 #[serial_test::serial]
 async fn submit_image_posts_the_endpoint_and_polls_status() {
-	let mock = start_mock(vec![
+	let (mock, _env) = start_mock(vec![
 		(200, r#"{"request_id":"req-9","status":"queued"}"#.to_string()),
 		(200, r#"{"status":"in_progress"}"#.to_string()),
 	]);
@@ -57,14 +56,12 @@ async fn submit_image_posts_the_endpoint_and_polls_status() {
 	let operation = provider.poll_image(&handle).await.expect("status polled");
 	assert_eq!(operation.status, OperationStatus::Running);
 	assert_eq!(mock.requests()[1].path, "/requests/req-9/status");
-
-	finish_mock();
 }
 
 #[tokio::test]
 #[serial_test::serial]
 async fn poll_image_returns_completed_artifacts() {
-	let _mock = start_mock(vec![
+	let (_mock, _env) = start_mock(vec![
 		(200, r#"{"request_id":"req-9"}"#.to_string()),
 		(
 			200,
@@ -86,14 +83,12 @@ async fn poll_image_returns_completed_artifacts() {
 	let result = operation.result.expect("result present");
 	assert_eq!(result.artifacts.len(), 1);
 	assert_eq!(result.artifacts[0].media_type, "image/jpeg");
-
-	finish_mock();
 }
 
 #[tokio::test]
 #[serial_test::serial]
 async fn cancel_image_posts_the_cancel_route() {
-	let mock = start_mock(vec![
+	let (mock, _env) = start_mock(vec![
 		(200, r#"{"request_id":"req-9"}"#.to_string()),
 		(200, "{}".to_string()),
 	]);
@@ -112,14 +107,12 @@ async fn cancel_image_posts_the_cancel_route() {
 	let requests = mock.requests();
 	assert_eq!(requests[1].method, "POST");
 	assert_eq!(requests[1].path, "/requests/req-9/cancel");
-
-	finish_mock();
 }
 
 #[tokio::test]
 #[serial_test::serial]
 async fn submit_image_surfaces_authentication_errors() {
-	let _mock = start_mock(vec![(401, r#"{"error":{"message":"invalid key"}}"#.to_string())]);
+	let (_mock, _env) = start_mock(vec![(401, r#"{"error":{"message":"invalid key"}}"#.to_string())]);
 
 	let provider = HiggsfieldMediaProvider::new();
 	let request = ImageGenerationRequest::new("a castle").with_model(MODEL);
@@ -128,15 +121,13 @@ async fn submit_image_surfaces_authentication_errors() {
 		matches!(error, MediaError::Authentication { .. }),
 		"unexpected error: {error}"
 	);
-
-	finish_mock();
 }
 
 #[tokio::test]
 #[serial_test::serial]
 async fn submit_image_rejects_malformed_credentials_before_any_http_traffic() {
-	let mock = start_mock(vec![(200, r#"{"request_id":"req-9"}"#.to_string())]);
-	std::env::set_var(API_KEY_ENV, "not-a-pair");
+	let (mock, env) = start_mock(vec![(200, r#"{"request_id":"req-9"}"#.to_string())]);
+	let _env = env.set(API_KEY_ENV, "not-a-pair");
 
 	let provider = HiggsfieldMediaProvider::new();
 	let request = ImageGenerationRequest::new("a castle").with_model(MODEL);
@@ -146,6 +137,4 @@ async fn submit_image_rejects_malformed_credentials_before_any_http_traffic() {
 		"unexpected error: {error}"
 	);
 	assert_eq!(mock.requests().len(), 0);
-
-	finish_mock();
 }

@@ -17,17 +17,18 @@
 //! and error surfacing.
 
 use super::*;
-use crate::llm::providers::mock_http::MockHttp;
 use crate::llm::types::Message;
+use crate::test_support::env::EnvGuard;
+use crate::test_support::mock_http::MockHttp;
 
 #[tokio::test]
 #[serial_test::serial]
 async fn chat_completion_via_mock_http_fills_reference_cost_for_cloud_equivalent_model() {
 	let mock = MockHttp::start(vec![(
 		200,
-		crate::llm::providers::mock_http::chat_completion_body("local answer"),
+		crate::test_support::mock_http::chat_completion_body("local answer"),
 	)]);
-	std::env::set_var("LOCAL_API_URL", mock.url.clone());
+	let _env = EnvGuard::new().set("LOCAL_API_URL", mock.url.clone());
 
 	let provider = LocalProvider::new();
 	let params = ChatCompletionParams::new(&[Message::user("hello")], "llama-3.1-8b", 0.2, 0.9, 0, 100)
@@ -51,8 +52,6 @@ async fn chat_completion_via_mock_http_fills_reference_cost_for_cloud_equivalent
 	let request: serde_json::Value = serde_json::from_str(&requests[0].body).expect("request json");
 	assert_eq!(request["model"], "llama-3.1-8b");
 	assert_eq!(request["messages"][0]["role"], "user");
-
-	std::env::remove_var("LOCAL_API_URL");
 }
 
 #[tokio::test]
@@ -60,9 +59,9 @@ async fn chat_completion_via_mock_http_fills_reference_cost_for_cloud_equivalent
 async fn chat_completion_via_mock_http_leaves_unpriced_local_models_costless() {
 	let mock = MockHttp::start(vec![(
 		200,
-		crate::llm::providers::mock_http::chat_completion_body("free"),
+		crate::test_support::mock_http::chat_completion_body("free"),
 	)]);
-	std::env::set_var("LOCAL_API_URL", mock.url.clone());
+	let _env = EnvGuard::new().set("LOCAL_API_URL", mock.url.clone());
 
 	let provider = LocalProvider::new();
 	let params = ChatCompletionParams::new(&[Message::user("hello")], "some-unknown-local-model", 0.2, 0.9, 0, 100)
@@ -71,21 +70,21 @@ async fn chat_completion_via_mock_http_leaves_unpriced_local_models_costless() {
 
 	let usage = response.exchange.usage.expect("usage present");
 	assert_eq!(usage.cost, None, "unpriced model must stay costless");
-
-	std::env::remove_var("LOCAL_API_URL");
 }
 
 #[tokio::test]
 #[serial_test::serial]
-async fn chat_completion_via_mock_http_surfaces_http_error() {
+async fn chat_completion_via_mock_http_retries_server_errors_then_surfaces_them() {
 	let mock = MockHttp::start(vec![(500, r#"{"error":{"message":"boom"}}"#.to_string())]);
-	std::env::set_var("LOCAL_API_URL", mock.url.clone());
+	let _env = EnvGuard::new().set("LOCAL_API_URL", mock.url.clone());
 
 	let provider = LocalProvider::new();
+	// 5xx is retryable; a 1ms backoff keeps the retry from sleeping for seconds.
 	let params = ChatCompletionParams::new(&[Message::user("hello")], "llama-3.1-8b", 0.2, 0.9, 0, 100)
-		.with_api_key("mock-key".to_owned());
+		.with_api_key("mock-key".to_owned())
+		.with_max_retries(1)
+		.with_retry_timeout(std::time::Duration::from_millis(1));
 	let err = provider.chat_completion(params).await.expect_err("http error surfaces");
 	assert!(err.to_string().contains("local API error"), "unexpected error: {err}");
-
-	std::env::remove_var("LOCAL_API_URL");
+	assert_eq!(mock.requests().len(), 2, "one attempt plus one retry");
 }

@@ -42,6 +42,7 @@ fn any_alias_is_accepted_and_pricing_is_left_to_the_hub() {
 }
 
 #[test]
+#[serial_test::serial]
 fn endpoint_honours_the_base_url_override() {
 	let provider = OctoHubEvaluationProvider::new();
 	std::env::set_var(API_URL_ENV, "http://127.0.0.1:8080/");

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::*;
+use crate::test_support::env::EnvGuard;
 
 #[test]
 fn test_model_support() {
@@ -276,8 +277,8 @@ fn tool_images_stay_inside_the_matching_tool_result() {
 #[serial_test::serial]
 async fn chat_completion_via_mock_http_splits_text_thinking_tools_and_cache() {
 	let body = r#"{"id":"mm-1","content":[{"type":"text","text":"final answer"},{"type":"thinking","thinking":"pondering deeply"},{"type":"tool_use","id":"t1","name":"get_weather","input":{"city":"Oslo"}}],"usage":{"input_tokens":10,"output_tokens":30,"cache_read_input_tokens":4,"cache_creation_input_tokens":2},"stop_reason":"tool_use"}"#;
-	let mock = crate::llm::providers::mock_http::MockHttp::start(vec![(200, body.to_string())]);
-	std::env::set_var("MINIMAX_API_URL", mock.url.clone());
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, body.to_string())]);
+	let _env = EnvGuard::new().set("MINIMAX_API_URL", mock.url.clone());
 
 	let provider = MinimaxProvider::new();
 	let params = ChatCompletionParams::new(&[], "MiniMax-M2.7", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
@@ -300,31 +301,36 @@ async fn chat_completion_via_mock_http_splits_text_thinking_tools_and_cache() {
 	assert_eq!(usage.input_tokens, 10);
 	assert_eq!(usage.cache_read_tokens, 4);
 	assert_eq!(usage.cache_write_tokens, 2);
-	assert_eq!(usage.output_tokens + usage.reasoning_tokens, 30);
-	assert!(usage.cost.unwrap_or(0.0) > 0.0, "cost computed from the pricing table");
+	// "pondering deeply" is 16 chars, estimated at 4 tokens and carved out of the 30.
+	assert_eq!(usage.output_tokens, 26);
+	assert_eq!(usage.reasoning_tokens, 4);
+	// MiniMax-M2.7 per 1M: 0.30 input, 0.375 cache write, 0.06 cache read, 1.20
+	// output. Thinking bills as output, so all 30 completion tokens are priced.
+	let expected = (10.0 * 0.30 + 2.0 * 0.375 + 4.0 * 0.06 + 30.0 * 1.20) / 1_000_000.0;
+	assert!(
+		(usage.cost.expect("cost computed from the pricing table") - expected).abs() < 1e-12,
+		"unexpected cost: {:?}",
+		usage.cost
+	);
 	assert_eq!(response.finish_reason.as_deref(), Some("tool_use"));
 
 	// Request targeted the mock with the priced model.
 	let requests = mock.requests();
 	let req_body: serde_json::Value = serde_json::from_str(&requests[0].body).expect("request json");
 	assert_eq!(req_body["model"], "MiniMax-M2.7");
-
-	std::env::remove_var("MINIMAX_API_URL");
 }
 
 #[tokio::test]
 #[serial_test::serial]
 async fn chat_completion_via_mock_http_surfaces_http_error() {
-	let mock = crate::llm::providers::mock_http::MockHttp::start(vec![(
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(
 		400,
 		r#"{"error":{"message":"bad request"}}"#.to_string(),
 	)]);
-	std::env::set_var("MINIMAX_API_URL", mock.url.clone());
+	let _env = EnvGuard::new().set("MINIMAX_API_URL", mock.url.clone());
 
 	let provider = MinimaxProvider::new();
 	let params = ChatCompletionParams::new(&[], "MiniMax-M2.7", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
 	let err = provider.chat_completion(params).await.expect_err("http error surfaces");
 	assert!(err.to_string().contains("MiniMax API error"), "unexpected error: {err}");
-
-	std::env::remove_var("MINIMAX_API_URL");
 }

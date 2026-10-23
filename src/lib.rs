@@ -154,6 +154,8 @@ pub mod media;
 #[cfg(feature = "reranker")]
 pub mod reranker;
 pub mod storage;
+#[cfg(all(test, any(feature = "llm", feature = "media", feature = "evaluation")))]
+mod test_support;
 pub mod utils;
 
 pub use http::set_user_agent;

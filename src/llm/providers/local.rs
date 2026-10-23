@@ -115,7 +115,7 @@ impl AiProvider for LocalProvider {
 
 #[cfg(test)]
 #[path = "local_http_tests.rs"]
-mod http_tests2;
+mod http_tests;
 #[cfg(test)]
 #[path = "local_tests.rs"]
 mod tests;

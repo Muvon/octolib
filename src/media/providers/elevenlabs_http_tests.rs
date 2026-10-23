@@ -14,26 +14,25 @@
 
 //! MockHTTP-driven coverage for the ElevenLabs speech and transcription
 //! endpoints, complementing the pure-parser tests in `elevenlabs.rs`.
-#![cfg(feature = "llm")]
 
 use super::*;
+use crate::test_support::env::EnvGuard;
+use crate::test_support::mock_http::MockHttp;
 
-fn start_mock(replies: Vec<(u16, String)>) -> crate::llm::providers::mock_http::MockHttp {
-	let mock = crate::llm::providers::mock_http::MockHttp::start(replies);
-	std::env::set_var(API_BASE_ENV, mock.base_url());
-	std::env::set_var(API_KEY_ENV, "mock-key");
-	mock
-}
-
-fn finish_mock() {
-	std::env::remove_var(API_BASE_ENV);
-	std::env::remove_var(API_KEY_ENV);
+/// Start the mock and point the adapter at it. The guard restores the
+/// environment when the test ends, pass or fail.
+fn start_mock(replies: Vec<(u16, String)>) -> (MockHttp, EnvGuard) {
+	let mock = MockHttp::start(replies);
+	let env = EnvGuard::new()
+		.set(API_BASE_ENV, mock.base_url())
+		.set(API_KEY_ENV, "mock-key");
+	(mock, env)
 }
 
 #[tokio::test]
 #[serial_test::serial]
 async fn submit_speech_returns_inline_audio_bytes() {
-	let mock = start_mock(vec![(200, "raw-audio-bytes".to_string())]);
+	let (mock, _env) = start_mock(vec![(200, "raw-audio-bytes".to_string())]);
 
 	let provider = ElevenLabsMediaProvider::new();
 	let request =
@@ -54,14 +53,12 @@ async fn submit_speech_returns_inline_audio_bytes() {
 	let body: Value = serde_json::from_str(&requests[0].body).expect("request json");
 	assert_eq!(body["text"], "hello there");
 	assert_eq!(body["model_id"], "eleven_multilingual_v2");
-
-	finish_mock();
 }
 
 #[tokio::test]
 #[serial_test::serial]
 async fn submit_speech_rejects_unsafe_voice_ids() {
-	let _mock = start_mock(vec![(200, "raw-audio-bytes".to_string())]);
+	let (_mock, _env) = start_mock(vec![(200, "raw-audio-bytes".to_string())]);
 
 	let provider = ElevenLabsMediaProvider::new();
 	let request = SpeechSynthesisRequest::new("hello there", "../admin").with_model("eleven_multilingual_v2");
@@ -70,14 +67,12 @@ async fn submit_speech_rejects_unsafe_voice_ids() {
 		matches!(error, MediaError::InvalidRequest(_)),
 		"unexpected error: {error}"
 	);
-
-	finish_mock();
 }
 
 #[tokio::test]
 #[serial_test::serial]
 async fn submit_speech_surfaces_authentication_errors() {
-	let _mock = start_mock(vec![(401, r#"{"detail":{"message":"bad key"}}"#.to_string())]);
+	let (_mock, _env) = start_mock(vec![(401, r#"{"detail":{"message":"bad key"}}"#.to_string())]);
 
 	let provider = ElevenLabsMediaProvider::new();
 	let request =
@@ -87,14 +82,12 @@ async fn submit_speech_surfaces_authentication_errors() {
 		matches!(error, MediaError::Authentication { .. }),
 		"unexpected error: {error}"
 	);
-
-	finish_mock();
 }
 
 #[tokio::test]
 #[serial_test::serial]
 async fn submit_transcription_parses_the_scribe_response() {
-	let mock = start_mock(vec![(
+	let (mock, _env) = start_mock(vec![(
 		200,
 		r#"{"language_code":"en","text":"hello world"}"#.to_string(),
 	)]);
@@ -118,6 +111,4 @@ async fn submit_transcription_parses_the_scribe_response() {
 	assert_eq!(requests[0].path, "/speech-to-text");
 	// multipart body carries the model id field
 	assert!(requests[0].body.contains("scribe_v1"), "body: {}", requests[0].body);
-
-	finish_mock();
 }

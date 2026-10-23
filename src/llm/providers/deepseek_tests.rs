@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::*;
+use crate::test_support::env::EnvGuard;
 
 fn calculate_cost(pricing: &[PricingTuple], model: &str, input_tokens: u64, completion_tokens: u64) -> Option<f64> {
 	calculate_cost_with_cache(pricing, model, input_tokens, 0, completion_tokens)
@@ -492,8 +493,8 @@ fn tool_images_follow_tool_results_without_losing_call_association() {
 #[serial_test::serial]
 async fn chat_completion_via_mock_http_returns_content_and_usage() {
 	let body = r#"{"id":"ds-1","object":"chat.completion","created":1,"model":"deepseek-flash","choices":[{"index":0,"message":{"role":"assistant","content":"deepseek mocked answer"},"finish_reason":"stop"}],"usage":{"prompt_tokens":12,"completion_tokens":7,"total_tokens":19}}"#;
-	let mock = crate::llm::providers::mock_http::MockHttp::start(vec![(200, body.to_string())]);
-	std::env::set_var("DEEPSEEK_API_URL", mock.url.clone());
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, body.to_string())]);
+	let _env = EnvGuard::new().set("DEEPSEEK_API_URL", mock.url.clone());
 
 	let provider = DeepSeekProvider::new();
 	let params = ChatCompletionParams::new(&[], "deepseek-flash", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
@@ -508,6 +509,4 @@ async fn chat_completion_via_mock_http_returns_content_and_usage() {
 	let requests = mock.requests();
 	let req_body: serde_json::Value = serde_json::from_str(&requests[0].body).expect("request json");
 	assert_eq!(req_body["model"], "deepseek-flash");
-
-	std::env::remove_var("DEEPSEEK_API_URL");
 }

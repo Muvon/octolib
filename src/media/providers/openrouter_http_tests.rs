@@ -14,20 +14,19 @@
 
 //! MockHTTP-driven coverage for the OpenRouter media adapter's immediate
 //! image and speech endpoints, complementing `openrouter.rs` parser tests.
-#![cfg(feature = "llm")]
 
 use super::*;
+use crate::test_support::env::EnvGuard;
+use crate::test_support::mock_http::MockHttp;
 
-fn start_mock(replies: Vec<(u16, String)>) -> crate::llm::providers::mock_http::MockHttp {
-	let mock = crate::llm::providers::mock_http::MockHttp::start(replies);
-	std::env::set_var(API_BASE_ENV, mock.base_url());
-	std::env::set_var(API_KEY_ENV, "mock-key");
-	mock
-}
-
-fn finish_mock() {
-	std::env::remove_var(API_BASE_ENV);
-	std::env::remove_var(API_KEY_ENV);
+/// Start the mock and point the adapter at it. The guard restores the
+/// environment when the test ends, pass or fail.
+fn start_mock(replies: Vec<(u16, String)>) -> (MockHttp, EnvGuard) {
+	let mock = MockHttp::start(replies);
+	let env = EnvGuard::new()
+		.set(API_BASE_ENV, mock.base_url())
+		.set(API_KEY_ENV, "mock-key");
+	(mock, env)
 }
 
 #[tokio::test]
@@ -35,7 +34,7 @@ fn finish_mock() {
 async fn submit_image_decodes_inline_b64_artifacts() {
 	let encoded = base64::engine::general_purpose::STANDARD.encode(b"image-bytes");
 	let body = format!(r#"{{"data":[{{"b64_json":"{encoded}"}}]}}"#);
-	let mock = start_mock(vec![(200, body)]);
+	let (mock, _env) = start_mock(vec![(200, body)]);
 
 	let provider = OpenRouterMediaProvider::new();
 	let request = ImageGenerationRequest::new("a castle").with_model("openai/gpt-image-1");
@@ -53,14 +52,12 @@ async fn submit_image_decodes_inline_b64_artifacts() {
 	let body: Value = serde_json::from_str(&requests[0].body).expect("request json");
 	assert_eq!(body["model"], "openai/gpt-image-1");
 	assert_eq!(body["prompt"], "a castle");
-
-	finish_mock();
 }
 
 #[tokio::test]
 #[serial_test::serial]
 async fn submit_image_rejects_out_of_range_counts() {
-	let _mock = start_mock(vec![(200, "{}".to_string())]);
+	let (_mock, _env) = start_mock(vec![(200, "{}".to_string())]);
 
 	let provider = OpenRouterMediaProvider::new();
 	let mut request = ImageGenerationRequest::new("a castle").with_model("openai/gpt-image-1");
@@ -70,14 +67,12 @@ async fn submit_image_rejects_out_of_range_counts() {
 		matches!(error, MediaError::InvalidRequest(_)),
 		"unexpected error: {error}"
 	);
-
-	finish_mock();
 }
 
 #[tokio::test]
 #[serial_test::serial]
 async fn submit_image_surfaces_authentication_errors() {
-	let _mock = start_mock(vec![(401, r#"{"error":{"message":"bad key"}}"#.to_string())]);
+	let (_mock, _env) = start_mock(vec![(401, r#"{"error":{"message":"bad key"}}"#.to_string())]);
 
 	let provider = OpenRouterMediaProvider::new();
 	let request = ImageGenerationRequest::new("a castle").with_model("openai/gpt-image-1");
@@ -86,8 +81,6 @@ async fn submit_image_surfaces_authentication_errors() {
 		matches!(error, MediaError::Authentication { .. }),
 		"unexpected error: {error}"
 	);
-
-	finish_mock();
 }
 
 #[tokio::test]
@@ -95,7 +88,7 @@ async fn submit_image_surfaces_authentication_errors() {
 async fn submit_speech_posts_text_and_voice() {
 	let encoded = base64::engine::general_purpose::STANDARD.encode(b"audio-bytes");
 	let body = format!(r#"{{"data":[{{"b64_json":"{encoded}","media_type":"audio/mpeg"}}]}}"#);
-	let mock = start_mock(vec![(200, body)]);
+	let (mock, _env) = start_mock(vec![(200, body)]);
 
 	let provider = OpenRouterMediaProvider::new();
 	let request = SpeechSynthesisRequest::new("hello there", "alloy").with_model("openai/tts-1");
@@ -110,6 +103,4 @@ async fn submit_speech_posts_text_and_voice() {
 	let body: Value = serde_json::from_str(&requests[0].body).expect("request json");
 	assert_eq!(body["input"], "hello there");
 	assert_eq!(body["voice"], "alloy");
-
-	finish_mock();
 }

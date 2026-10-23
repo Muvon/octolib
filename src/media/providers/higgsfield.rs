@@ -963,3 +963,7 @@ fn no_artifacts(kind: &str) -> MediaError {
 #[cfg(test)]
 #[path = "higgsfield_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "higgsfield_http_tests.rs"]
+mod http_tests;

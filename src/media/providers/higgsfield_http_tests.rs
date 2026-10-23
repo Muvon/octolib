@@ -64,7 +64,7 @@ async fn submit_image_posts_the_endpoint_and_polls_status() {
 #[tokio::test]
 #[serial_test::serial]
 async fn poll_image_returns_completed_artifacts() {
-	let mock = start_mock(vec![
+	let _mock = start_mock(vec![
 		(200, r#"{"request_id":"req-9"}"#.to_string()),
 		(
 			200,

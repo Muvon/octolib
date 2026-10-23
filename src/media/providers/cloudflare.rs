@@ -1179,6 +1179,10 @@ fn options_schema() -> Value {
 }
 
 #[cfg(test)]
+#[path = "cloudflare_http_tests.rs"]
+mod http_tests;
+
+#[cfg(test)]
 mod tests {
 	use super::*;
 

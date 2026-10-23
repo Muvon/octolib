@@ -67,6 +67,14 @@ impl MockHttp {
 		}
 	}
 
+	/// Origin (scheme + host + port) without the canned chat-completions path,
+	/// for providers that build their own paths from a base URL.
+	pub fn base_url(&self) -> String {
+		self.url
+			.split_once("/v1/chat/completions")
+			.map_or_else(|| self.url.clone(), |(base, _)| base.to_string())
+	}
+
 	/// Requests received so far.
 	pub fn requests(&self) -> Vec<RecordedRequest> {
 		self.requests.lock().map(|r| r.clone()).unwrap_or_default()

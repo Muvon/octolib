@@ -1418,6 +1418,10 @@ fn no_artifacts(kind: &str) -> MediaError {
 }
 
 #[cfg(test)]
+#[path = "replicate_tests.rs"]
+mod http_tests;
+
+#[cfg(test)]
 mod tests {
 	use super::*;
 

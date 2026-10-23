@@ -206,11 +206,7 @@ fn test_resolve_cli_command_bare_name_searches_path() {
 	// bare-name PATH search is exercised deterministically on every platform.
 	let dir = env::temp_dir().join("octolib-cli-path-search");
 	std::fs::create_dir_all(&dir).unwrap();
-	let exe_name = if cfg!(windows) {
-		"octolib-pathsearch.exe"
-	} else {
-		"octolib-pathsearch"
-	};
+	let exe_name = "octolib-pathsearch";
 	let path = dir.join(exe_name);
 	std::fs::write(&path, b"#!/bin/sh\nexit 0\n").unwrap();
 	#[cfg(unix)]

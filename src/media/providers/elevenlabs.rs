@@ -679,6 +679,10 @@ fn validate_voice(voice: &str) -> MediaResult<&str> {
 }
 
 #[cfg(test)]
+#[path = "elevenlabs_http_tests.rs"]
+mod http_tests;
+
+#[cfg(test)]
 mod tests {
 	use super::*;
 

@@ -231,8 +231,9 @@ impl Hindsight {
 			}))
 			.map_err(|e| anyhow!("Failed to configure hindsight tokenizer: {e}"))?;
 		tokenizer.with_padding(None);
+		let environment = crate::ort_env::environment()?;
 		let session = |name: &str| -> Result<OrtSession> {
-			OrtSession::builder()
+			OrtSession::builder(&environment)
 				.map_err(ort_error)?
 				.with_intra_threads(THREADS)
 				.map_err(ort_error)?

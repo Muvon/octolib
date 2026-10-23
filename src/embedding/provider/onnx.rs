@@ -197,7 +197,9 @@ impl OnnxProviderImpl {
 			user_model = user_model.with_external_initializer(name, buffer);
 		}
 
-		let options = InitOptionsUserDefined::new().with_max_length(MAX_SEQ_LEN);
+		let options = InitOptionsUserDefined::new()
+			.with_environment(crate::ort_env::environment()?)
+			.with_max_length(MAX_SEQ_LEN);
 		let embedding = TextEmbedding::try_new_from_user_defined(user_model, options)
 			.with_context(|| format!("Failed to initialize ONNX session for {}", repo_id))?;
 
@@ -329,7 +331,7 @@ impl EmbeddingProvider for OnnxProviderImpl {
 			let mut model = model
 				.lock()
 				.map_err(|e| anyhow::anyhow!("ONNX model mutex poisoned: {}", e))?;
-			model.embed(processed, None)
+			Ok(model.embed(processed, None)?)
 		})
 		.await??;
 

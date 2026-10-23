@@ -327,7 +327,9 @@ impl HuggingFaceModel {
 
 				// Add normalizer
 				let normalizer = normalizers::Sequence::new(vec![normalizers::Strip::new(true, true).into()]);
-				tokenizer.with_normalizer(Some(normalizer));
+				tokenizer
+					.with_normalizer(Some(normalizer))
+					.map_err(|e| anyhow::anyhow!("Failed to set tokenizer normalizer: {}", e))?;
 
 				tokenizer
 			} else {

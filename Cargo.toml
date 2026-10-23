@@ -32,15 +32,16 @@ huggingface = ["embeddings", "onnx", "dep:candle-core", "dep:candle-nn", "dep:ca
 
 # ONNX Runtime embedding provider: runs a HF-hosted `onnx/` export through ORT
 # instead of candle. Not selected directly — `fastembed` and `huggingface` both
-# turn it on. It borrows ort + the session builder from the fastembed crate,
-# which is why it pulls that dep even in a candle-only build.
-onnx = ["embeddings", "dep:fastembed", "dep:tokenizers", "dep:hf-hub"]
+# turn it on. It borrows the session builder from the fastembed crate, which is
+# why it pulls that dep even in a candle-only build, and names `ort` directly
+# because the one process-wide `Environment` (src/ort_env.rs) is built here.
+onnx = ["embeddings", "dep:fastembed", "dep:tokenizers", "dep:hf-hub", "dep:ort"]
 
 # hindsight: the calibrated next-turn-correction verifier for coding-agent
 # traces (`octolib::hindsight`), two ONNX graphs run through ort directly.
-# Needs `onnx` for the tokenizer, hf-hub download and the ort binary that
-# fastembed's feature set provides.
-hindsight = ["onnx", "dep:ort"]
+# Needs `onnx` for the tokenizer, hf-hub download, the shared ort environment
+# and the ort binary that fastembed's feature set provides.
+hindsight = ["onnx"]
 
 # FastEmbed uses ONNX; these acceleration features configure the HuggingFace backend.
 # macOS local backends compile Metal support through target-specific dependencies below.
@@ -83,14 +84,15 @@ uuid = { version = "1", features = ["v4"] }
 tiktoken-rs = { version = "0.9.1", optional = true }
 
 # Pinned to the exact version fastembed depends on so one ort links; the
-# runtime binary comes through fastembed's download feature.
-ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "api-24"], optional = true }
+# runtime binary comes through fastembed's download feature. rc.15 allows one
+# `Environment` per process, built once in src/ort_env.rs.
+ort = { version = "=2.0.0-rc.15", default-features = false, features = ["std", "api-24"], optional = true }
 # ZIP 9 fix pending a Candle release: https://github.com/huggingface/candle/pull/4041.
 candle-transformers = { version = "0.11.0", git = "https://github.com/huggingface/candle.git", rev = "70f72e9cfdbfc570846ca363ead2135394af3e9a", optional = true }
-tokenizers = { version = "0.22.2", optional = true }
+tokenizers = { version = "0.23.2", optional = true }
 # HuggingFace Hub - use rustls-tls to avoid native-tls dependency
-# Pinned to 0.4.x to share single version with fastembed (which uses hf-hub 0.4.1)
-hf-hub = { version = "0.4.3", default-features = false, features = ["tokio", "rustls-tls"], optional = true }
+# Pinned to 0.5.x to share single version with fastembed (which uses hf-hub 0.5.0)
+hf-hub = { version = "0.5.0", default-features = false, features = ["tokio", "rustls-tls"], optional = true }
 
 # Examples only build when the module they exercise is enabled.
 
@@ -210,11 +212,11 @@ codegen-units = 1      # max optimization, slower compile
 strip = "symbols"
 # Keep Apple dependencies off other platforms without a separate helper crate.
 [target.'cfg(target_os = "macos")'.dependencies]
-fastembed = { version = "5.17.4", default-features = false, features = ["hf-hub-rustls-tls", "ort-download-binaries-rustls-tls"], optional = true }
+fastembed = { version = "7.3.0", default-features = false, features = ["hf-hub-rustls-tls", "ort-download-binaries-rustls-tls"], optional = true }
 candle-core = { version = "0.11.0", git = "https://github.com/huggingface/candle.git", rev = "70f72e9cfdbfc570846ca363ead2135394af3e9a", features = ["metal"], optional = true }
 candle-nn = { version = "0.11.0", git = "https://github.com/huggingface/candle.git", rev = "70f72e9cfdbfc570846ca363ead2135394af3e9a", features = ["metal"], optional = true }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
-fastembed = { version = "5.17.4", default-features = false, features = ["hf-hub-rustls-tls", "ort-download-binaries-rustls-tls"], optional = true }
+fastembed = { version = "7.3.0", default-features = false, features = ["hf-hub-rustls-tls", "ort-download-binaries-rustls-tls"], optional = true }
 candle-core = { version = "0.11.0", git = "https://github.com/huggingface/candle.git", rev = "70f72e9cfdbfc570846ca363ead2135394af3e9a", optional = true }
 candle-nn = { version = "0.11.0", git = "https://github.com/huggingface/candle.git", rev = "70f72e9cfdbfc570846ca363ead2135394af3e9a", optional = true }

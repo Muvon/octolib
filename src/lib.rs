@@ -151,6 +151,8 @@ pub mod http;
 pub mod llm;
 #[cfg(feature = "media")]
 pub mod media;
+#[cfg(feature = "onnx")]
+pub(crate) mod ort_env;
 #[cfg(feature = "reranker")]
 pub mod reranker;
 pub mod storage;

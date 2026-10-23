@@ -42,6 +42,7 @@ impl FastEmbedProvider {
 
 		let model = TextRerank::try_new(
 			RerankInitOptions::new(model_enum)
+				.with_environment(crate::ort_env::environment()?)
 				.with_show_download_progress(false)
 				.with_cache_dir(cache_dir),
 		)
@@ -64,7 +65,7 @@ impl FastEmbedProvider {
                 Ok(RerankerModel::JINARerankerV1TurboEn)
             }
             "jina-reranker-v2-base-multilingual" | "jinaai/jina-reranker-v2-base-multilingual" => {
-                Ok(RerankerModel::JINARerankerV2BaseMultiligual)
+                Ok(RerankerModel::JINARerankerV2BaseMultilingual)
             }
             _ => Err(anyhow::anyhow!(
                 "Unsupported FastEmbed reranker model: '{}'. Supported: bge-reranker-base, bge-reranker-v2-m3, jina-reranker-v1-turbo-en, jina-reranker-v2-base-multilingual",

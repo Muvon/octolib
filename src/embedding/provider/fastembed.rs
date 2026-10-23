@@ -36,7 +36,7 @@
 #[cfg(feature = "fastembed")]
 use anyhow::{Context, Result};
 #[cfg(feature = "fastembed")]
-use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
+use fastembed::{EmbeddingModel, TextEmbedding, TextInitOptions};
 #[cfg(feature = "fastembed")]
 use std::sync::{Arc, Mutex};
 
@@ -62,7 +62,8 @@ impl FastEmbedProviderImpl {
 		let cache_dir = crate::storage::get_model_cache_dir().context("Failed to get FastEmbed cache directory")?;
 
 		let model = TextEmbedding::try_new(
-			InitOptions::new(model_enum)
+			TextInitOptions::new(model_enum)
+				.with_environment(crate::ort_env::environment()?)
 				.with_show_download_progress(false)
 				.with_cache_dir(cache_dir),
 		)

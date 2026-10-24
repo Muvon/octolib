@@ -830,8 +830,14 @@ async fn endpoint_category(model: &str) -> MediaResult<Option<String>> {
 		return Ok(cached);
 	}
 	let url = std::env::var(MODELS_URL_ENV).unwrap_or_else(|_| MODELS_URL.to_string());
+	// Anonymous catalog reads are rate limited after a handful of calls; the
+	// account key lifts that limit.
+	let key = shared::api_key(API_KEY_ENV)?;
 	let response = shared::send_idempotent(PROVIDER, &RequestOptions::default(), || {
-		crate::http::http_client().get(&url).query(&[("endpoint_id", model)])
+		crate::http::http_client()
+			.get(&url)
+			.header("Authorization", format!("Key {key}"))
+			.query(&[("endpoint_id", model)])
 	})
 	.await?;
 	let category = if response.status.as_u16() == 404 {

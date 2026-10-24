@@ -21,11 +21,26 @@ use crate::media::traits::*;
 use crate::media::types::*;
 use serde_json::{json, Map, Value};
 use std::collections::{HashMap, HashSet};
+use std::sync::{Mutex, OnceLock};
 
 const PROVIDER: &str = "fal";
 const API_KEY_ENV: &str = "FAL_API_KEY";
 const API_BASE_ENV: &str = "FAL_API_URL";
 const API_BASE: &str = "https://queue.fal.run";
+const OPENAPI_URL_ENV: &str = "FAL_OPENAPI_URL";
+const OPENAPI_URL: &str = "https://fal.ai/api/openapi/queue/openapi.json";
+const SCHEMA_REF_PREFIX: &str = "#/components/schemas/";
+const MODELS_URL_ENV: &str = "FAL_MODELS_URL";
+const MODELS_URL: &str = "https://api.fal.ai/v1/models";
+
+/// Input-field schemas per `(model, field)`, so each endpoint's OpenAPI is read
+/// once per process rather than on every submit. Absent fields are cached as
+/// `Value::Null`; failed fetches are never cached.
+static FIELD_SCHEMAS: OnceLock<Mutex<HashMap<(String, String), Value>>> = OnceLock::new();
+
+/// fal's catalog category per endpoint (`None`: fal does not list it), read once
+/// per process. Failed lookups are never cached.
+static CATEGORIES: OnceLock<Mutex<HashMap<String, Option<String>>>> = OnceLock::new();
 
 #[derive(Debug, Clone, Default)]
 pub struct FalMediaProvider;
@@ -284,6 +299,7 @@ impl ImageGenerationProvider for FalMediaProvider {
 			));
 		}
 		let task = task_for_image_mode(request.mode);
+		ensure_endpoint_produces(&request.model, task).await?;
 		let value = self
 			.submit_queue(
 				&request.model,
@@ -320,16 +336,17 @@ impl ImageGenerationProvider for FalMediaProvider {
 		}
 		let mut warnings = handle.warnings.clone();
 		match self.fetch_result(handle).await? {
-			Ok(payload) => {
-				let result = parse_image_result(
+			Ok(payload) => completed_operation(
+				handle,
+				&payload,
+				parse_image_result(
 					&payload,
 					&status_value,
 					handle.cost_estimate.as_ref(),
 					handle.expected_outputs,
 					&mut warnings,
-				)?;
-				Ok(succeeded_operation(handle, result, &payload))
-			}
+				),
+			),
 			Err(failure) => Ok(failed_operation(handle, failure)),
 		}
 	}
@@ -364,7 +381,7 @@ impl VideoGenerationProvider for FalMediaProvider {
 	async fn submit_video(&self, request: VideoGenerationRequest) -> MediaResult<Operation<VideoGenerationResult>> {
 		validate_nonempty(&request.model, &request.prompt)?;
 		let mut options = parse_options(&request.provider_options)?;
-		let warnings = request_warnings(&request.request_options);
+		let mut warnings = request_warnings(&request.request_options);
 		insert_semantic(&mut options, "prompt", "prompt", json!(request.prompt))?;
 		if let Some(source) = request.first_frame.as_ref() {
 			let source = shared::source_to_data_or_uri(source, request.request_options.max_source_bytes)?;
@@ -398,7 +415,24 @@ impl VideoGenerationProvider for FalMediaProvider {
 					"video duration must be positive".to_string(),
 				));
 			}
-			insert_semantic(&mut options, "duration", "duration", json!(duration))?;
+			let field = options
+				.field_map
+				.get("duration")
+				.map_or("duration", String::as_str)
+				.to_string();
+			let schema = fetch_field_schema(&request.model, &field).await?;
+			match duration_for_schema(&request.model, &schema, duration)? {
+				Some(value) => insert_semantic(&mut options, "duration", "duration", value)?,
+				None => unsupported(
+					&request.request_options,
+					&mut warnings,
+					"duration_secs",
+					&format!(
+						"fal endpoint {} does not declare a usable '{field}' field",
+						request.model
+					),
+				)?,
+			}
 		}
 		if let Some(negative) = request.negative_prompt.as_ref() {
 			insert_semantic(&mut options, "negative_prompt", "negative_prompt", json!(negative))?;
@@ -411,6 +445,7 @@ impl VideoGenerationProvider for FalMediaProvider {
 		}
 		let task = task_for_video_mode(request.mode);
 		validate_video_mode(&request)?;
+		ensure_endpoint_produces(&request.model, task).await?;
 		let value = self
 			.submit_queue(
 				&request.model,
@@ -455,16 +490,17 @@ impl VideoGenerationProvider for FalMediaProvider {
 		}
 		let mut warnings = handle.warnings.clone();
 		match self.fetch_result(handle).await? {
-			Ok(payload) => {
-				let result = parse_video_result(
+			Ok(payload) => completed_operation(
+				handle,
+				&payload,
+				parse_video_result(
 					&payload,
 					&status_value,
 					handle.cost_estimate.as_ref(),
 					handle.expected_outputs,
 					&mut warnings,
-				)?;
-				Ok(succeeded_operation(handle, result, &payload))
-			}
+				),
+			),
 			Err(failure) => Ok(failed_operation(handle, failure)),
 		}
 	}
@@ -538,6 +574,7 @@ impl SpeechSynthesisProvider for FalMediaProvider {
 		if let Some(fal_format) = fal_audio_output_format(request.output.format) {
 			insert_semantic(&mut options, "output_format", "output_format", json!(fal_format))?;
 		}
+		ensure_endpoint_produces(&request.model, MediaTask::TextToSpeech).await?;
 		let value = self
 			.submit_queue(
 				&request.model,
@@ -570,11 +607,11 @@ impl SpeechSynthesisProvider for FalMediaProvider {
 		}
 		let mut warnings = handle.warnings.clone();
 		match self.fetch_result(handle).await? {
-			Ok(payload) => {
-				let result =
-					parse_speech_result(&payload, &status_value, handle.cost_estimate.as_ref(), &mut warnings)?;
-				Ok(succeeded_operation(handle, result, &payload))
-			}
+			Ok(payload) => completed_operation(
+				handle,
+				&payload,
+				parse_speech_result(&payload, &status_value, handle.cost_estimate.as_ref(), &mut warnings),
+			),
 			Err(failure) => Ok(failed_operation(handle, failure)),
 		}
 	}
@@ -617,6 +654,7 @@ impl TranscriptionProvider for FalMediaProvider {
 				json!(request.timestamp_granularities),
 			)?;
 		}
+		ensure_endpoint_produces(&request.model, MediaTask::SpeechToText).await?;
 		let value = self
 			.submit_queue(
 				&request.model,
@@ -644,11 +682,11 @@ impl TranscriptionProvider for FalMediaProvider {
 		}
 		let mut warnings = handle.warnings.clone();
 		match self.fetch_result(handle).await? {
-			Ok(payload) => {
-				let result =
-					parse_transcription_result(&payload, &status_value, handle.cost_estimate.as_ref(), &mut warnings)?;
-				Ok(succeeded_operation(handle, result, &payload))
-			}
+			Ok(payload) => completed_operation(
+				handle,
+				&payload,
+				parse_transcription_result(&payload, &status_value, handle.cost_estimate.as_ref(), &mut warnings),
+			),
 			Err(failure) => Ok(failed_operation(handle, failure)),
 		}
 	}
@@ -712,6 +750,196 @@ fn insert_semantic(
 	}
 	options.input.insert(field, value);
 	Ok(())
+}
+
+/// Convert the portable `duration_secs` into the type the endpoint's own schema
+/// declares for its duration field. fal endpoints disagree: some take enum
+/// strings (`"5"`, `"8s"`), some integers, some numbers, and a float such as
+/// `5.0` is rejected by the string and integer ones. `None` means the schema
+/// has no usable duration field (caller applies the unsupported-parameter policy).
+fn duration_for_schema(model: &str, schema: &Value, duration: f64) -> MediaResult<Option<Value>> {
+	let schema = match schema.get("anyOf").and_then(Value::as_array) {
+		Some(branches) => match branches
+			.iter()
+			.find(|branch| branch.get("type").and_then(Value::as_str) != Some("null"))
+		{
+			Some(branch) => branch,
+			None => return Ok(None),
+		},
+		None => schema,
+	};
+	let whole = (duration.fract() == 0.0).then_some(duration as i64);
+	if let Some(allowed) = schema.get("enum").and_then(Value::as_array) {
+		let allowed: Vec<&str> = allowed.iter().filter_map(Value::as_str).collect();
+		if allowed.is_empty() {
+			return Ok(None);
+		}
+		let matched = whole.and_then(|n| {
+			[format!("{n}"), format!("{n}s")]
+				.into_iter()
+				.find(|candidate| allowed.contains(&candidate.as_str()))
+		});
+		return match matched {
+			Some(value) => Ok(Some(json!(value))),
+			None => Err(MediaError::InvalidRequest(format!(
+				"fal model {model} does not accept a {duration}s duration; allowed values: {}",
+				allowed.join(", ")
+			))),
+		};
+	}
+	match schema.get("type").and_then(Value::as_str) {
+		Some("integer") => match whole {
+			Some(n) => Ok(Some(json!(n))),
+			None => Err(MediaError::InvalidRequest(format!(
+				"fal model {model} takes a whole number of seconds, got {duration}"
+			))),
+		},
+		Some("number") => Ok(Some(json!(duration))),
+		Some("string") => Ok(Some(json!(
+			whole.map_or_else(|| duration.to_string(), |n| n.to_string())
+		))),
+		_ => Ok(None),
+	}
+}
+
+/// fal runs any endpoint on any queue route, so the route alone cannot tell a
+/// music model from an image one: the pair is generated, billed, and finishes
+/// with nothing the route can return. fal's own catalog says what each endpoint
+/// makes, so a route it does not make is refused before anything is queued. An
+/// endpoint the catalog does not list (a private app) cannot be checked.
+async fn ensure_endpoint_produces(model: &str, task: MediaTask) -> MediaResult<()> {
+	let Some(category) = endpoint_category(model).await? else {
+		return Ok(());
+	};
+	if category_output(&category) == Some(task_output(task)) {
+		return Ok(());
+	}
+	Err(MediaError::UnsupportedTask {
+		provider: PROVIDER.to_string(),
+		model: model.to_string(),
+		task,
+	})
+}
+
+/// The endpoint's catalog category (`text-to-audio`, `image-to-video`, …), or
+/// `None` when fal's catalog does not list it.
+async fn endpoint_category(model: &str) -> MediaResult<Option<String>> {
+	validate_model(model)?;
+	let cache = CATEGORIES.get_or_init(Default::default);
+	if let Some(cached) = cache.lock().ok().and_then(|categories| categories.get(model).cloned()) {
+		return Ok(cached);
+	}
+	let url = std::env::var(MODELS_URL_ENV).unwrap_or_else(|_| MODELS_URL.to_string());
+	let response = shared::send_idempotent(PROVIDER, &RequestOptions::default(), || {
+		crate::http::http_client().get(&url).query(&[("endpoint_id", model)])
+	})
+	.await?;
+	let category = if response.status.as_u16() == 404 {
+		None
+	} else {
+		let listing = shared::parse_json(PROVIDER, &response)?;
+		listing["models"]
+			.as_array()
+			.and_then(|models| models.iter().find(|entry| entry["endpoint_id"] == model))
+			.and_then(|entry| entry["metadata"]["category"].as_str())
+			.map(str::to_string)
+	};
+	if let Ok(mut categories) = cache.lock() {
+		categories.insert(model.to_string(), category.clone());
+	}
+	Ok(category)
+}
+
+/// The output half of a fal category: `text-to-audio` makes audio.
+fn category_output(category: &str) -> Option<Modality> {
+	match category.rsplit_once("-to-")?.1 {
+		"image" => Some(Modality::Image),
+		"video" => Some(Modality::Video),
+		"audio" | "speech" => Some(Modality::Audio),
+		"text" => Some(Modality::Text),
+		_ => None,
+	}
+}
+
+fn task_output(task: MediaTask) -> Modality {
+	match task {
+		MediaTask::TextToImage | MediaTask::ImageEdit | MediaTask::Inpainting | MediaTask::ImageVariation => {
+			Modality::Image
+		}
+		MediaTask::TextToVideo
+		| MediaTask::ImageToVideo
+		| MediaTask::ReferenceToVideo
+		| MediaTask::VideoExtend
+		| MediaTask::VideoEdit => Modality::Video,
+		MediaTask::TextToSpeech => Modality::Audio,
+		MediaTask::SpeechToText | MediaTask::SpeechTranslation => Modality::Text,
+	}
+}
+
+/// Read one input field's schema from the endpoint's public OpenAPI document.
+/// `Value::Null` means the endpoint does not declare the field.
+async fn fetch_field_schema(model: &str, field: &str) -> MediaResult<Value> {
+	validate_model(model)?;
+	let cache_key = (model.to_string(), field.to_string());
+	let cache = FIELD_SCHEMAS.get_or_init(Default::default);
+	if let Some(cached) = cache.lock().ok().and_then(|schemas| schemas.get(&cache_key).cloned()) {
+		return Ok(cached);
+	}
+	let url = std::env::var(OPENAPI_URL_ENV).unwrap_or_else(|_| OPENAPI_URL.to_string());
+	let options = RequestOptions::default();
+	let response = shared::send_idempotent(PROVIDER, &options, || {
+		crate::http::http_client().get(&url).query(&[("endpoint_id", model)])
+	})
+	.await?;
+	let document = shared::parse_json(PROVIDER, &response)?;
+	let invalid = |message: String| MediaError::InvalidResponse {
+		provider: PROVIDER.to_string(),
+		message,
+	};
+	// JSON-pointer escaping: the path key is "/<model>", whose slashes become "~1".
+	let path_key = format!("/{model}").replace('~', "~0").replace('/', "~1");
+	let reference = document
+		.pointer(&format!(
+			"/paths/{path_key}/post/requestBody/content/application~1json/schema/$ref"
+		))
+		.and_then(Value::as_str)
+		.and_then(|reference| reference.strip_prefix(SCHEMA_REF_PREFIX))
+		.ok_or_else(|| invalid(format!("OpenAPI for {model} has no request schema reference")))?;
+	let input = document
+		.pointer(&format!("/components/schemas/{reference}"))
+		.ok_or_else(|| invalid(format!("OpenAPI for {model} is missing schema {reference}")))?;
+	let schema = input
+		.pointer(&format!("/properties/{field}"))
+		.cloned()
+		.unwrap_or(Value::Null);
+	if let Ok(mut schemas) = cache.lock() {
+		schemas.insert(cache_key, schema.clone());
+	}
+	Ok(schema)
+}
+
+fn unsupported(
+	options: &RequestOptions,
+	warnings: &mut Vec<ProviderWarning>,
+	parameter: &str,
+	reason: &str,
+) -> MediaResult<()> {
+	match options.unsupported_parameter_policy {
+		UnsupportedParameterPolicy::Error => Err(MediaError::UnsupportedParameter {
+			provider: PROVIDER.to_string(),
+			parameter: parameter.to_string(),
+			reason: reason.to_string(),
+		}),
+		UnsupportedParameterPolicy::WarnAndDrop => {
+			warnings.push(ProviderWarning {
+				code: WarningCode::UnsupportedParameterDropped,
+				message: reason.to_string(),
+				parameter: Some(parameter.to_string()),
+				provider_metadata: Value::Null,
+			});
+			Ok(())
+		}
+	}
 }
 
 fn insert_geometry(options: &mut FalMediaOptions, geometry: OutputGeometry) -> MediaResult<()> {
@@ -855,6 +1083,28 @@ fn failed_operation<T>(handle: &JobHandle, failure: GenerationFailure) -> Operat
 		started_at: None,
 		completed_at: None,
 		provider_metadata: Value::Null,
+	}
+}
+
+/// Finish a COMPLETED request: its parsed result, or a failed generation when the
+/// output holds no readable media of the requested kind (a music model asked for an
+/// image, say). That is the job's final outcome, not an adapter error: returned as
+/// an error it kept the job live, and every later poll re-read the same output.
+fn completed_operation<T>(handle: &JobHandle, payload: &Value, parsed: MediaResult<T>) -> MediaResult<Operation<T>> {
+	match parsed {
+		Ok(result) => Ok(succeeded_operation(handle, result, payload)),
+		Err(MediaError::InvalidResponse { message, .. }) => Ok(failed_operation(
+			handle,
+			GenerationFailure {
+				category: FailureCategory::InvalidResponse,
+				message,
+				provider_code: None,
+				http_status: None,
+				request_id: Some(handle.remote_id.clone()),
+				provider_metadata: json!({"raw_output": sanitize_media_value(payload)}),
+			},
+		)),
+		Err(other) => Err(other),
 	}
 }
 

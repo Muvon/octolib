@@ -146,6 +146,40 @@ fn test_calculate_cost_k3() {
 }
 
 #[test]
+fn test_calculate_cost_k3_1_pro() {
+	// kimi-k3.1-pro: Input (cache miss) $2.00/1M, Output $10.00/1M,
+	// Cache hit $0.20/1M
+	let cost = calculate_cost("kimi-k3.1-pro", 1_000_000, 500_000);
+	assert!(cost.is_some());
+	let expected = 2.00 + (0.5 * 10.00);
+	assert!((cost.unwrap() - expected).abs() < 0.01);
+
+	// highspeed must resolve to its own pricing ($4.00/$20.00), NOT the base
+	// kimi-k3.1-pro entry (substring-ordering regression guard)
+	let cost_hs = calculate_cost("kimi-k3.1-pro-highspeed", 1_000_000, 500_000);
+	assert!(cost_hs.is_some());
+	let expected_hs = 4.00 + (0.5 * 20.00);
+	assert!((cost_hs.unwrap() - expected_hs).abs() < 0.01);
+
+	// The base K3.1 Pro rate must not leak into the previous generation.
+	let cost_k3 = calculate_cost("kimi-k3", 1_000_000, 500_000);
+	assert!((cost_k3.unwrap() - (3.00 + 0.5 * 15.00)).abs() < 0.01);
+}
+
+#[test]
+fn test_k3_1_pro_capabilities() {
+	let provider = MoonshotProvider::new();
+	assert!(provider.supports_model("kimi-k3.1-pro"));
+	assert!(provider.supports_model("kimi-k3.1-pro-highspeed"));
+	assert!(provider.supports_vision("kimi-k3.1-pro"));
+	assert!(provider.supports_caching("kimi-k3.1-pro"));
+	assert!(provider.replays_thinking("kimi-k3.1-pro"));
+	// K3 series models share the 1M context window.
+	assert_eq!(provider.get_max_input_tokens("kimi-k3.1-pro"), 1_048_576);
+	assert_eq!(provider.get_max_input_tokens("kimi-k3.1-pro-highspeed"), 1_048_576);
+}
+
+#[test]
 fn test_k3_reasoning_effort() {
 	// Only kimi-k3 gets the reasoning_effort field
 	assert_eq!(k3_reasoning_effort("kimi-k3", Some(ReasoningEffort::Low)), Some("low"));

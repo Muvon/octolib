@@ -412,6 +412,31 @@ fn september_2026_additions_resolve() {
 	}
 }
 
+/// The reference table matches by ordered substring, so a model whose name
+/// extends another model's name must resolve to its own row instead of the
+/// broader one that shadows it.
+#[test]
+fn specific_patterns_win_over_the_broader_rows_they_extend() {
+	for (model, pattern, input, output) in [
+		("kimi-k3.1-pro", "kimi-k3.1-pro", 2.00, 10.00),
+		("kimi-k3.1-pro-highspeed", "kimi-k3.1-pro-highspeed", 4.00, 20.00),
+		("kimi-k3", "kimi-k3", 3.00, 15.00),
+		("glm-5.3-flashx-legal", "glm-5.3-flashx-legal", 0.37, 1.25),
+		("glm-5.3-flashx", "glm-5.3-flashx", 0.37, 1.25),
+		("qwen3.8-max-0902", "qwen-3.8-max-0902", 2.00, 6.00),
+		("qwen3.8-max", "qwen-3.8-max", 2.00, 6.00),
+		("qwen3.5-omni-flash", "qwen-3.5-omni-flash", 0.40, 2.20),
+	] {
+		let props = get_reference_model_properties(model)
+			.unwrap_or_else(|| panic!("{model} must resolve to a reference entry"));
+		assert_eq!(props.pricing_pattern, Some(pattern), "{model}");
+		assert_eq!(props.capability_pattern, Some(pattern), "{model}");
+		let pricing = props.pricing.expect("reference pricing");
+		assert_eq!(pricing.input_price_per_1m, input, "{model}");
+		assert_eq!(pricing.output_price_per_1m, output, "{model}");
+	}
+}
+
 /// Dotted and dashed version spellings sanitize identically, so both must land
 /// on the versioned row rather than the family fallback.
 #[test]

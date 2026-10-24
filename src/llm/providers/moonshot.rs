@@ -19,6 +19,8 @@
 //!         <https://platform.kimi.ai/docs/models>
 //!
 //! Per 1M tokens (USD): (cache_hit, cache_miss_input, output)
+//! - kimi-k3.1-pro:              $0.20 / $2.00 / $10.00
+//! - kimi-k3.1-pro-highspeed:    $0.20 / $4.00 / $20.00
 //! - kimi-k3:                    $0.30 / $3.00 / $15.00
 //! - kimi-k2.7-code:             $0.19 / $0.95 / $4.00
 //! - kimi-k2.7-code-highspeed:   $0.38 / $1.90 / $8.00
@@ -33,9 +35,11 @@
 //! Response usage carries `cached_tokens` (top-level) and/or
 //! `prompt_tokens_details.cached_tokens`. `prompt_tokens` is the TOTAL prompt
 //! including cached portion, so clean input = prompt_tokens - cached_tokens.
-//! K2.x bill no separate cache write. K3 lists cache write at $3.00 (5-minute
-//! TTL, the default) and $6.00 (1-hour TTL); the API exposes no TTL knob and
-//! no cache-write token count, so writes are billed at the input rate here.
+//! K2.x bill no separate cache write. K3 bills cache write at $3.00 (5-minute
+//! TTL, the default) and $6.00 (1-hour TTL); K3.1 Pro bills it at $2.00 and
+//! $4.00, and K3.1 Pro Highspeed at $4.00 and $8.00. The API exposes no TTL
+//! knob and no cache-write token count, so writes are billed at the input
+//! rate here.
 //!
 //! Kimi K3 specifics (<https://platform.kimi.ai/docs/api/chat>):
 //! - K3 always reasons; effort is set via top-level `reasoning_effort`
@@ -64,6 +68,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 ///   default 5-minute tier equals its input price (1-hour tier not modeled).
 /// - Order matters: more specific patterns first (substring matching).
 const PRICING: &[PricingTuple] = &[
+	// Kimi K3.1 Pro HighSpeed (high-throughput variant; must precede the
+	// general kimi-k3.1-pro entry since that pattern is a substring of this name)
+	("kimi-k3.1-pro-highspeed", 4.00, 20.00, 4.00, 0.20),
+	// Kimi K3.1 Pro (1M-context multimodal reasoning flagship)
+	("kimi-k3.1-pro", 2.00, 10.00, 2.00, 0.20),
 	// Kimi K3 (1M-context multimodal reasoning flagship)
 	("kimi-k3", 3.00, 15.00, 3.00, 0.30),
 	// Kimi K2.7 Code HighSpeed (high-throughput variant; must precede the

@@ -75,6 +75,10 @@ use std::env;
 /// Source: https://docs.z.ai/guides/overview/pricing (verified Sep 22, 2026)
 /// Format: (model, input, output, cache_write, cache_read)
 const PRICING: &[PricingTuple] = &[
+	// GLM-5.3-FlashX-Legal — the legal-tuned FlashX variant, listed at the
+	// same rates; must precede glm-5.3-flashx since that pattern is a
+	// substring of this name
+	("glm-5.3-flashx-legal", 0.37, 1.25, 0.00, 0.075),
 	// GLM-5.3-FlashX — faster GLM-5.3-Flash variant; must precede glm-5.3-flash
 	// since that pattern is a substring of this name
 	("glm-5.3-flashx", 0.37, 1.25, 0.00, 0.075),

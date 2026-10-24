@@ -71,6 +71,8 @@ const ALIBABA_API_URL: &str = "https://dashscope-intl.aliyuncs.com/compatible-mo
 // Busy/idle models are priced at the busy rate (idle is half). Hybrid-thinking
 // open-weight models are priced at the non-thinking output rate.
 const PRICING: &[PricingTuple] = &[
+	// The 0902 snapshot is listed at the moving alias's rates.
+	("qwen3.8-max-0902", 2.00, 6.00, 2.00, 0.25),
 	("qwen3.8-max", 2.00, 6.00, 2.00, 0.25),
 	("qwen3.8-flash", 0.15, 0.47, 0.15, 0.016),
 	("qwen3.8-omni-flash", 0.15, 0.47, 0.15, 0.016),
@@ -82,6 +84,12 @@ const PRICING: &[PricingTuple] = &[
 	("qwen3.6-plus", 0.50, 3.00, 0.50, 0.05),
 	("qwen3.6-flash", 0.25, 1.50, 0.25, 0.025),
 	("qwen3.5-plus", 0.40, 2.40, 0.40, 0.04),
+	// Qwen3.5-Omni-Flash: text/image/video input at $0.40 and text output at
+	// $2.20 (international list price). Audio input ($3.00) and text-and-audio
+	// output ($11.90) are not representable in a single-rate row, so the text
+	// rates are used. Context caching is unsupported, so cache hits bill at
+	// the input rate.
+	("qwen3.5-omni-flash", 0.40, 2.20, 0.40, 0.40),
 	("qwen3.5-flash", 0.10, 0.40, 0.10, 0.01),
 	("qwen3-coder-plus", 1.00, 5.00, 1.00, 0.20),
 	("qwen3-coder-flash", 0.30, 1.50, 0.30, 0.06),

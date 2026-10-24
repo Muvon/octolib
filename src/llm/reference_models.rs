@@ -1444,6 +1444,15 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		pricing: pricing(0.60, 3.00, 0.60, 0.60),
 	},
 	ReferenceModelEntry {
+		// Qwen3.5-Omni-Flash (Mar 2026): text/image/video/audio input, 262K
+		// context window and a 196,608-token input cap. Model Studio
+		// international list price; context caching and structured output are
+		// unsupported, so cache hits bill at the input rate.
+		pattern: "qwen-3.5-omni-flash",
+		capabilities: caps(true, true, false, 196_608),
+		pricing: pricing(0.40, 2.20, 0.40, 0.40),
+	},
+	ReferenceModelEntry {
 		pattern: "qwen-3.5-flash",
 		capabilities: caps(true, true, true, 1_000_000),
 		pricing: pricing(0.10, 0.40, 0.10, 0.01),
@@ -1697,6 +1706,13 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		pattern: "qwen-3.8-max-prime",
 		capabilities: caps(true, true, true, 1_000_000),
 		pricing: pricing(4.00, 12.00, 4.00, 0.50),
+	},
+	ReferenceModelEntry {
+		// Qwen3.8-Max-0902 (Sep 2026 snapshot): listed at the moving alias's
+		// rates. Must precede qwen-3.8-max.
+		pattern: "qwen-3.8-max-0902",
+		capabilities: caps(true, true, true, 1_000_000),
+		pricing: pricing(2.00, 6.00, 2.50, 0.25),
 	},
 	ReferenceModelEntry {
 		pattern: "qwen-3.8-max",
@@ -2131,6 +2147,13 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		pricing: pricing(2.80, 8.80, 0.00, 0.56),
 	},
 	ReferenceModelEntry {
+		// GLM-5.3-FlashX-Legal: the legal-tuned FlashX variant, listed at the
+		// same rates. Must precede glm-5.3-flashx.
+		pattern: "glm-5.3-flashx-legal",
+		capabilities: caps(true, true, false, 1_000_000),
+		pricing: pricing(0.37, 1.25, 0.00, 0.075),
+	},
+	ReferenceModelEntry {
 		// GLM-5.3-FlashX: faster Flash variant with image/video input.
 		// Must precede glm-5.3.
 		pattern: "glm-5.3-flashx",
@@ -2193,6 +2216,20 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		pattern: "inkling",
 		capabilities: caps(true, false, true, 524_288),
 		pricing: pricing(1.00, 4.05, 0.00, 0.17),
+	},
+	ReferenceModelEntry {
+		// Kimi K3.1 Pro HighSpeed: 2-3x faster variant of K3.1 Pro, listed at
+		// twice the rate. Must precede kimi-k3.1-pro.
+		pattern: "kimi-k3.1-pro-highspeed",
+		capabilities: caps(true, true, true, 1_048_576),
+		pricing: pricing(4.00, 20.00, 4.00, 0.20),
+	},
+	ReferenceModelEntry {
+		// Kimi K3.1 Pro: 3T-class multimodal reasoning flagship with a 1M
+		// context window. Must precede kimi-k3.
+		pattern: "kimi-k3.1-pro",
+		capabilities: caps(true, true, true, 1_048_576),
+		pricing: pricing(2.00, 10.00, 2.00, 0.20),
 	},
 	ReferenceModelEntry {
 		pattern: "kimi-k3",

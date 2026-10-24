@@ -16,6 +16,21 @@ use super::*;
 use crate::test_support::env::EnvGuard;
 
 #[test]
+fn test_glm_5_3_flashx_legal_pricing() {
+	let provider = ZaiProvider::new();
+	assert!(provider.supports_model("glm-5.3-flashx-legal"));
+
+	// GLM-5.3-FlashX-Legal: $0.37 input, $1.25 output — must resolve to its
+	// own entry, not the glm-5.3-flashx substring match
+	let cost = calculate_cost("glm-5.3-flashx-legal", 1_000_000, 0, 1_000_000);
+	assert!((cost.unwrap() - 1.62).abs() < 0.01); // 0.37 + 1.25
+
+	// Cached input: $0.075
+	let cost = calculate_cost("glm-5.3-flashx-legal", 0, 1_000_000, 0);
+	assert!((cost.unwrap() - 0.075).abs() < 0.0001);
+}
+
+#[test]
 fn test_tool_call_and_result_round_trip() {
 	use crate::llm::tool_calls::GenericToolCall;
 	use crate::llm::types::Message;

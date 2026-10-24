@@ -278,6 +278,28 @@ fn test_qwen3_8_omni_flash_pricing() {
 }
 
 #[test]
+fn test_qwen3_5_omni_flash_pricing() {
+	let provider = AlibabaProvider::new();
+	// International list price: text/image/video input $0.40, text output
+	// $2.20. Context caching is unsupported, so hits bill at the input rate.
+	let p = provider.get_model_pricing("qwen3.5-omni-flash").unwrap();
+	assert_eq!(p.input_price_per_1m, 0.40);
+	assert_eq!(p.output_price_per_1m, 2.20);
+	assert_eq!(p.cache_write_price_per_1m, 0.40);
+	assert_eq!(p.cache_read_price_per_1m, 0.40);
+}
+
+#[test]
+fn test_qwen3_8_max_0902_snapshot_pricing() {
+	let provider = AlibabaProvider::new();
+	// The dated snapshot carries the moving alias's list rates.
+	let p = provider.get_model_pricing("qwen3.8-max-0902").unwrap();
+	assert_eq!(p.input_price_per_1m, 2.00);
+	assert_eq!(p.output_price_per_1m, 6.00);
+	assert_eq!(p.cache_read_price_per_1m, 0.25);
+}
+
+#[test]
 fn test_cost_calculation() {
 	let provider = AlibabaProvider::new();
 	let pricing = provider.get_model_pricing("qwen3.8-max").unwrap();

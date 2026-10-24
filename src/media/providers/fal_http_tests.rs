@@ -412,6 +412,45 @@ async fn video_duration_integer_schema_rejects_fractional_seconds() {
 
 #[tokio::test]
 #[serial_test::serial]
+async fn video_duration_matches_an_integer_enum() {
+	let body = submitted_duration_body(
+		"fal-ai/test-int-enum/text-to-video",
+		json!({"type": "integer", "enum": [5, 10]}),
+		10.0,
+	)
+	.await;
+	assert_eq!(body["duration"], json!(10));
+}
+
+/// FastAPI writes an Enum field as a `$ref` to its own schema; pydantic v1
+/// wraps that reference in `allOf`.
+#[tokio::test]
+#[serial_test::serial]
+async fn video_duration_follows_schema_references() {
+	let model = "fal-ai/test-ref/text-to-video";
+	let document = json!({
+		"paths": {format!("/{model}"): {"post": {"requestBody": {"content": {
+			"application/json": {"schema": {"$ref": "#/components/schemas/VideoInput"}}
+		}}}}},
+		"components": {"schemas": {
+			"VideoInput": {"properties": {"duration": {
+				"allOf": [{"$ref": "#/components/schemas/Duration"}],
+				"default": "5"
+			}}},
+			"Duration": {"type": "string", "enum": ["5", "10"]}
+		}}
+	});
+	let (mock, _scope) = start_video_mock(model, vec![(200, document.to_string()), (200, QUEUED.to_string())]);
+	FalMediaProvider::new()
+		.submit_video(video_request(model, 10.0))
+		.await
+		.expect("queue submitted");
+	let body: Value = serde_json::from_str(&mock.requests()[1].body).expect("request json");
+	assert_eq!(body["duration"], "10");
+}
+
+#[tokio::test]
+#[serial_test::serial]
 async fn video_duration_number_schema_keeps_fraction() {
 	let body = submitted_duration_body(
 		"minimax/test-number/text-to-video",

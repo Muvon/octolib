@@ -21,7 +21,8 @@ use crate::media::traits::*;
 use crate::media::types::*;
 use serde_json::{json, Map, Value};
 use std::collections::{HashMap, HashSet};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{LazyLock, RwLock};
+use std::time::{Duration, Instant};
 
 const PROVIDER: &str = "fal";
 const API_KEY_ENV: &str = "FAL_API_KEY";
@@ -30,17 +31,26 @@ const API_BASE: &str = "https://queue.fal.run";
 const OPENAPI_URL_ENV: &str = "FAL_OPENAPI_URL";
 const OPENAPI_URL: &str = "https://fal.ai/api/openapi/queue/openapi.json";
 const SCHEMA_REF_PREFIX: &str = "#/components/schemas/";
+/// How many `$ref` hops a schema may take before it is read as unresolvable.
+const SCHEMA_REF_DEPTH: u8 = 8;
 const MODELS_URL_ENV: &str = "FAL_MODELS_URL";
 const MODELS_URL: &str = "https://api.fal.ai/v1/models";
 
-/// Input-field schemas per `(model, field)`, so each endpoint's OpenAPI is read
-/// once per process rather than on every submit. Absent fields are cached as
-/// `Value::Null`; failed fetches are never cached.
-static FIELD_SCHEMAS: OnceLock<Mutex<HashMap<(String, String), Value>>> = OnceLock::new();
+/// What fal's discovery endpoints said about an endpoint — its catalog category
+/// and its OpenAPI field schemas — kept like Replicate's schema cache: bounded,
+/// and re-read after the TTL so a catalog change reaches a long-running process.
+/// Failed reads are never cached.
+const DISCOVERY_CACHE_TTL: Duration = Duration::from_secs(600);
+const DISCOVERY_CACHE_CAPACITY: usize = 256;
 
-/// fal's catalog category per endpoint (`None`: fal does not list it), read once
-/// per process. Failed lookups are never cached.
-static CATEGORIES: OnceLock<Mutex<HashMap<String, Option<String>>>> = OnceLock::new();
+#[derive(Debug, Clone)]
+struct CachedDiscovery {
+	stored_at: Instant,
+	value: Value,
+}
+
+static DISCOVERY_CACHE: LazyLock<RwLock<HashMap<String, CachedDiscovery>>> =
+	LazyLock::new(|| RwLock::new(HashMap::new()));
 
 #[derive(Debug, Clone, Default)]
 pub struct FalMediaProvider;
@@ -758,32 +768,39 @@ fn insert_semantic(
 /// `5.0` is rejected by the string and integer ones. `None` means the schema
 /// has no usable duration field (caller applies the unsupported-parameter policy).
 fn duration_for_schema(model: &str, schema: &Value, duration: f64) -> MediaResult<Option<Value>> {
-	let schema = match schema.get("anyOf").and_then(Value::as_array) {
-		Some(branches) => match branches
+	// Optional fields arrive as `anyOf [T, null]`; pydantic v1 wraps an Enum
+	// reference in `allOf`. The duration shape is the first non-null branch.
+	let mut schema = schema;
+	while let Some(branches) = schema
+		.get("anyOf")
+		.or_else(|| schema.get("allOf"))
+		.and_then(Value::as_array)
+	{
+		match branches
 			.iter()
 			.find(|branch| branch.get("type").and_then(Value::as_str) != Some("null"))
 		{
-			Some(branch) => branch,
+			Some(branch) => schema = branch,
 			None => return Ok(None),
-		},
-		None => schema,
-	};
+		}
+	}
 	let whole = (duration.fract() == 0.0).then_some(duration as i64);
 	if let Some(allowed) = schema.get("enum").and_then(Value::as_array) {
-		let allowed: Vec<&str> = allowed.iter().filter_map(Value::as_str).collect();
-		if allowed.is_empty() {
-			return Ok(None);
-		}
+		// Enums hold strings (`"5"`, `"8s"`) or plain integers.
 		let matched = whole.and_then(|n| {
-			[format!("{n}"), format!("{n}s")]
+			[json!(n.to_string()), json!(format!("{n}s")), json!(n)]
 				.into_iter()
-				.find(|candidate| allowed.contains(&candidate.as_str()))
+				.find(|candidate| allowed.contains(candidate))
 		});
 		return match matched {
-			Some(value) => Ok(Some(json!(value))),
+			Some(value) => Ok(Some(value)),
 			None => Err(MediaError::InvalidRequest(format!(
 				"fal model {model} does not accept a {duration}s duration; allowed values: {}",
-				allowed.join(", ")
+				allowed
+					.iter()
+					.map(|value| value.as_str().map_or_else(|| value.to_string(), str::to_string))
+					.collect::<Vec<_>>()
+					.join(", ")
 			))),
 		};
 	}
@@ -805,8 +822,10 @@ fn duration_for_schema(model: &str, schema: &Value, duration: f64) -> MediaResul
 /// fal runs any endpoint on any queue route, so the route alone cannot tell a
 /// music model from an image one: the pair is generated, billed, and finishes
 /// with nothing the route can return. fal's own catalog says what each endpoint
-/// makes, so a route it does not make is refused before anything is queued. An
-/// endpoint the catalog does not list (a private app) cannot be checked.
+/// makes, so a route it does not make is refused before anything is queued —
+/// including every route for a category that makes no media a route returns
+/// (`image-to-3d`, `training`). An endpoint the catalog does not list (a private
+/// app) or lists without a category cannot be checked.
 async fn ensure_endpoint_produces(model: &str, task: MediaTask) -> MediaResult<()> {
 	let Some(category) = endpoint_category(model).await? else {
 		return Ok(());
@@ -825,35 +844,66 @@ async fn ensure_endpoint_produces(model: &str, task: MediaTask) -> MediaResult<(
 /// `None` when fal's catalog does not list it.
 async fn endpoint_category(model: &str) -> MediaResult<Option<String>> {
 	validate_model(model)?;
-	let cache = CATEGORIES.get_or_init(Default::default);
-	if let Some(cached) = cache.lock().ok().and_then(|categories| categories.get(model).cloned()) {
-		return Ok(cached);
+	let cache_key = format!("category:{model}");
+	if let Some(cached) = cached_discovery(&cache_key) {
+		return Ok(cached.as_str().map(str::to_string));
 	}
-	let url = std::env::var(MODELS_URL_ENV).unwrap_or_else(|_| MODELS_URL.to_string());
-	// Anonymous catalog reads are rate limited after a handful of calls; the
-	// account key lifts that limit.
-	let key = shared::api_key(API_KEY_ENV)?;
-	let response = shared::send_idempotent(PROVIDER, &RequestOptions::default(), || {
-		crate::http::http_client()
-			.get(&url)
-			.header("Authorization", format!("Key {key}"))
-			.query(&[("endpoint_id", model)])
-	})
-	.await?;
+	let response = discovery_get(MODELS_URL_ENV, MODELS_URL, model).await?;
 	let category = if response.status.as_u16() == 404 {
-		None
+		Value::Null
 	} else {
 		let listing = shared::parse_json(PROVIDER, &response)?;
 		listing["models"]
 			.as_array()
 			.and_then(|models| models.iter().find(|entry| entry["endpoint_id"] == model))
-			.and_then(|entry| entry["metadata"]["category"].as_str())
-			.map(str::to_string)
+			.map_or(Value::Null, |entry| entry["metadata"]["category"].clone())
 	};
-	if let Ok(mut categories) = cache.lock() {
-		categories.insert(model.to_string(), category.clone());
+	cache_discovery(cache_key, category.clone());
+	Ok(category.as_str().map(str::to_string))
+}
+
+/// GET one of fal's discovery endpoints for an endpoint id. Anonymous reads are
+/// rate limited after a handful of calls; the account key lifts that limit.
+async fn discovery_get(url_env: &str, default_url: &str, model: &str) -> MediaResult<shared::CapturedResponse> {
+	let url = std::env::var(url_env).unwrap_or_else(|_| default_url.to_string());
+	let key = shared::api_key(API_KEY_ENV)?;
+	shared::send_idempotent(PROVIDER, &RequestOptions::default(), || {
+		crate::http::http_client()
+			.get(&url)
+			.header("Authorization", format!("Key {key}"))
+			.query(&[("endpoint_id", model)])
+	})
+	.await
+}
+
+fn cached_discovery(key: &str) -> Option<Value> {
+	let cache = DISCOVERY_CACHE.read().ok()?;
+	let cached = cache.get(key)?;
+	(cached.stored_at.elapsed() <= DISCOVERY_CACHE_TTL).then(|| cached.value.clone())
+}
+
+fn cache_discovery(key: String, value: Value) {
+	let Some(mut cache) = DISCOVERY_CACHE.write().ok() else {
+		tracing::warn!("fal discovery cache lock is poisoned; skipping cache write");
+		return;
+	};
+	cache.retain(|_, entry| entry.stored_at.elapsed() <= DISCOVERY_CACHE_TTL);
+	if cache.len() >= DISCOVERY_CACHE_CAPACITY {
+		if let Some(oldest) = cache
+			.iter()
+			.min_by_key(|(_, entry)| entry.stored_at)
+			.map(|(key, _)| key.clone())
+		{
+			cache.remove(&oldest);
+		}
 	}
-	Ok(category)
+	cache.insert(
+		key,
+		CachedDiscovery {
+			stored_at: Instant::now(),
+			value,
+		},
+	);
 }
 
 /// The output half of a fal category: `text-to-audio` makes audio.
@@ -886,17 +936,11 @@ fn task_output(task: MediaTask) -> Modality {
 /// `Value::Null` means the endpoint does not declare the field.
 async fn fetch_field_schema(model: &str, field: &str) -> MediaResult<Value> {
 	validate_model(model)?;
-	let cache_key = (model.to_string(), field.to_string());
-	let cache = FIELD_SCHEMAS.get_or_init(Default::default);
-	if let Some(cached) = cache.lock().ok().and_then(|schemas| schemas.get(&cache_key).cloned()) {
+	let cache_key = format!("schema:{model}:{field}");
+	if let Some(cached) = cached_discovery(&cache_key) {
 		return Ok(cached);
 	}
-	let url = std::env::var(OPENAPI_URL_ENV).unwrap_or_else(|_| OPENAPI_URL.to_string());
-	let options = RequestOptions::default();
-	let response = shared::send_idempotent(PROVIDER, &options, || {
-		crate::http::http_client().get(&url).query(&[("endpoint_id", model)])
-	})
-	.await?;
+	let response = discovery_get(OPENAPI_URL_ENV, OPENAPI_URL, model).await?;
 	let document = shared::parse_json(PROVIDER, &response)?;
 	let invalid = |message: String| MediaError::InvalidResponse {
 		provider: PROVIDER.to_string(),
@@ -916,12 +960,37 @@ async fn fetch_field_schema(model: &str, field: &str) -> MediaResult<Value> {
 		.ok_or_else(|| invalid(format!("OpenAPI for {model} is missing schema {reference}")))?;
 	let schema = input
 		.pointer(&format!("/properties/{field}"))
-		.cloned()
-		.unwrap_or(Value::Null);
-	if let Ok(mut schemas) = cache.lock() {
-		schemas.insert(cache_key, schema.clone());
-	}
+		.map_or(Value::Null, |property| {
+			inline_refs(&document, property, SCHEMA_REF_DEPTH)
+		});
+	cache_discovery(cache_key, schema.clone());
 	Ok(schema)
+}
+
+/// The schema with every local `$ref` replaced by what it points at, so the
+/// caller reads one self-contained shape: FastAPI writes an Enum field as a
+/// reference to its own component schema. A reference past `depth` hops (a
+/// cycle) stays as it is, which reads as an unusable field.
+fn inline_refs(document: &Value, schema: &Value, depth: u8) -> Value {
+	match schema {
+		Value::Object(map) => {
+			let target = map
+				.get("$ref")
+				.and_then(Value::as_str)
+				.and_then(|reference| reference.strip_prefix(SCHEMA_REF_PREFIX))
+				.and_then(|name| document.pointer(&format!("/components/schemas/{name}")));
+			match target {
+				Some(target) if depth > 0 => inline_refs(document, target, depth - 1),
+				_ => Value::Object(
+					map.iter()
+						.map(|(key, value)| (key.clone(), inline_refs(document, value, depth)))
+						.collect(),
+				),
+			}
+		}
+		Value::Array(items) => Value::Array(items.iter().map(|item| inline_refs(document, item, depth)).collect()),
+		other => other.clone(),
+	}
 }
 
 fn unsupported(
@@ -1538,6 +1607,21 @@ mod http_tests;
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	/// Only categories that name media a route returns map to one; anything
+	/// else (`image-to-3d`, `training`) is refused on every route.
+	#[test]
+	fn categories_map_to_the_media_they_make() {
+		assert_eq!(category_output("text-to-image"), Some(Modality::Image));
+		assert_eq!(category_output("image-to-image"), Some(Modality::Image));
+		assert_eq!(category_output("image-to-video"), Some(Modality::Video));
+		assert_eq!(category_output("video-to-video"), Some(Modality::Video));
+		assert_eq!(category_output("text-to-audio"), Some(Modality::Audio));
+		assert_eq!(category_output("text-to-speech"), Some(Modality::Audio));
+		assert_eq!(category_output("speech-to-text"), Some(Modality::Text));
+		assert_eq!(category_output("image-to-3d"), None);
+		assert_eq!(category_output("training"), None);
+	}
 
 	#[test]
 	fn fal_audio_output_format_maps_common_codecs_and_omits_the_rest() {

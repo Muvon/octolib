@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.45.2] - 2026-10-24
+
+### 📋 Release Summary
+
+Pricing is now available for Kimi K3.1 Pro, GLM-5.3-FlashX-Legal, Qwen3.5-Omni-Flash, and Qwen3.8-Max-0902.
+
+### ✨ New Features & Enhancements
+
+- **llm**: price kimi-k3.1-pro, glm-5.3-flashx-legal, qwen3.5-omni-flash and qwen3.8-max-0902 `34c6a5a5`
+
+### 🔧 Improvements & Optimizations
+
+- **providers**: pin K3.1 Pro test expectations `08b469fd`
+
 ## [0.45.1] - 2026-10-23
 
 ### 📋 Release Summary

@@ -91,6 +91,37 @@ async fn poll_image_resumes_a_succeeded_prediction_from_the_handle() {
 	assert_eq!(requests[0].path, "/predictions/pred-42");
 }
 
+/// A prediction Replicate reports succeeded whose output is not the requested
+/// kind (audio for an image) is the job's outcome: Failed, never an error that
+/// leaves it live for re-polling.
+#[tokio::test]
+#[serial_test::serial]
+async fn poll_image_fails_a_succeeded_prediction_with_no_image_output() {
+	let (_submit_mock, _env) = start_mock(vec![
+		(200, schema_reply()),
+		(200, r#"{"id":"pred-42","status":"processing"}"#.to_string()),
+	]);
+
+	let provider = ReplicateMediaProvider::new();
+	let request = ImageGenerationRequest::new("a calm track").with_model("owner/model");
+	let handle = provider
+		.submit_image(request)
+		.await
+		.expect("prediction submitted")
+		.handle
+		.expect("handle present");
+
+	let (_poll_mock, _env) = start_mock(vec![(
+		200,
+		prediction_succeeded(r#""https://cdn.example.test/track.mp3""#),
+	)]);
+	let operation = provider.poll_image(&handle).await.expect("outcome, not an error");
+	assert_eq!(operation.status, OperationStatus::Failed);
+	let error = operation.error.expect("failure present");
+	assert_eq!(error.category, FailureCategory::InvalidResponse);
+	assert_eq!(error.request_id.as_deref(), Some("pred-42"));
+}
+
 #[tokio::test]
 #[serial_test::serial]
 async fn cancel_image_posts_the_cancel_route() {

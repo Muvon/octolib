@@ -1161,26 +1161,14 @@ fn failed_operation<T>(handle: &JobHandle, failure: GenerationFailure) -> Operat
 	}
 }
 
-/// Finish a COMPLETED request: its parsed result, or a failed generation when the
-/// output holds no readable media of the requested kind (a music model asked for an
-/// image, say). That is the job's final outcome, not an adapter error: returned as
-/// an error it kept the job live, and every later poll re-read the same output.
+/// Finish a COMPLETED request: its result, or a failed generation when the output
+/// cannot be read (see [`shared::readable_output`]).
 fn completed_operation<T>(handle: &JobHandle, payload: &Value, parsed: MediaResult<T>) -> MediaResult<Operation<T>> {
-	match parsed {
-		Ok(result) => Ok(succeeded_operation(handle, result, payload)),
-		Err(MediaError::InvalidResponse { message, .. }) => Ok(failed_operation(
-			handle,
-			GenerationFailure {
-				category: FailureCategory::InvalidResponse,
-				message,
-				provider_code: None,
-				http_status: None,
-				request_id: Some(handle.remote_id.clone()),
-				provider_metadata: json!({"raw_output": sanitize_media_value(payload)}),
-			},
-		)),
-		Err(other) => Err(other),
-	}
+	let output = json!({"raw_output": sanitize_media_value(payload)});
+	Ok(match shared::readable_output(parsed, &handle.remote_id, output)? {
+		Ok(result) => succeeded_operation(handle, result, payload),
+		Err(failure) => failed_operation(handle, failure),
+	})
 }
 
 fn parse_image_result(

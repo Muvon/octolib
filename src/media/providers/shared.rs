@@ -14,7 +14,8 @@
 
 use crate::media::errors::{MediaError, MediaResult};
 use crate::media::types::{
-	CostEstimate, JobHandle, MediaSource, MediaTask, ProviderOptions, RequestOptions, UsageUnit,
+	CostEstimate, FailureCategory, GenerationFailure, JobHandle, MediaSource, MediaTask, ProviderOptions,
+	RequestOptions, UsageUnit,
 };
 use base64::Engine;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
@@ -54,6 +55,32 @@ pub(crate) fn resolved_cost_estimate(
 	known_quantity: Option<(UsageUnit, f64)>,
 ) -> Option<CostEstimate> {
 	supplied.or_else(|| crate::media::reference_pricing::reference_cost_estimate(provider, model, known_quantity))
+}
+
+/// What a job the provider reports finished yielded: its parsed result, or a
+/// failed generation when the output holds no readable media of the requested
+/// kind (a music model asked for an image, an output with no usable URL). That
+/// is the job's final outcome, not an adapter error: returned as an error it
+/// kept the job live, and every later poll re-read the same output. Any other
+/// error passes through. `output` is the raw provider output, kept on the
+/// failure so the unread result can still be inspected.
+pub(crate) fn readable_output<T>(
+	parsed: MediaResult<T>,
+	request_id: &str,
+	output: Value,
+) -> MediaResult<Result<T, GenerationFailure>> {
+	match parsed {
+		Ok(result) => Ok(Ok(result)),
+		Err(MediaError::InvalidResponse { message, .. }) => Ok(Err(GenerationFailure {
+			category: FailureCategory::InvalidResponse,
+			message,
+			provider_code: None,
+			http_status: None,
+			request_id: Some(request_id.to_string()),
+			provider_metadata: output,
+		})),
+		Err(other) => Err(other),
+	}
 }
 
 pub(crate) fn artifact_http_client() -> reqwest::Client {
@@ -527,6 +554,31 @@ mod tests {
 	use super::*;
 	use std::sync::atomic::{AtomicUsize, Ordering};
 	use std::sync::Arc;
+
+	/// Only an unreadable finished output becomes the job's failure; every other
+	/// error (a rate limit, a transport drop) still reaches the caller to retry.
+	#[test]
+	fn readable_output_fails_unreadable_media_and_passes_other_errors() {
+		let unreadable = MediaError::InvalidResponse {
+			provider: "fal".to_string(),
+			message: "no image".to_string(),
+		};
+		let failure = readable_output::<()>(Err(unreadable), "req-1", Value::Null)
+			.expect("an outcome")
+			.expect_err("a failed job");
+		assert_eq!(failure.category, FailureCategory::InvalidResponse);
+		assert_eq!(failure.request_id.as_deref(), Some("req-1"));
+
+		let limited = MediaError::RateLimit {
+			provider: "fal".to_string(),
+			message: "slow down".to_string(),
+			retry_after_secs: None,
+		};
+		assert!(matches!(
+			readable_output::<()>(Err(limited), "req-1", Value::Null),
+			Err(MediaError::RateLimit { .. })
+		));
+	}
 
 	#[test]
 	fn rejects_cross_provider_options() {

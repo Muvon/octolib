@@ -85,6 +85,32 @@ async fn poll_image_returns_completed_artifacts() {
 	assert_eq!(result.artifacts[0].media_type, "image/jpeg");
 }
 
+/// A request Higgsfield reports completed whose output has no usable image is
+/// the job's outcome: Failed, never an error that leaves it live for re-polling.
+#[tokio::test]
+#[serial_test::serial]
+async fn poll_image_fails_a_completed_request_with_no_image_output() {
+	let (_mock, _env) = start_mock(vec![
+		(200, r#"{"request_id":"req-9"}"#.to_string()),
+		(200, r#"{"status":"completed","images":[]}"#.to_string()),
+	]);
+
+	let provider = HiggsfieldMediaProvider::new();
+	let request = ImageGenerationRequest::new("a castle").with_model(MODEL);
+	let handle = provider
+		.submit_image(request)
+		.await
+		.expect("request submitted")
+		.handle
+		.expect("handle present");
+
+	let operation = provider.poll_image(&handle).await.expect("outcome, not an error");
+	assert_eq!(operation.status, OperationStatus::Failed);
+	let error = operation.error.expect("failure present");
+	assert_eq!(error.category, FailureCategory::InvalidResponse);
+	assert_eq!(error.request_id.as_deref(), Some("req-9"));
+}
+
 #[tokio::test]
 #[serial_test::serial]
 async fn cancel_image_posts_the_cancel_route() {

@@ -119,6 +119,8 @@ async fn image_example() -> octolib::MediaResult<()> {
 - **Honest costs** — `provider_reported_cost` only when the upstream returns a dollar amount; otherwise a caller-supplied `CostEstimate` or the crate's reference rates, always stored as `estimated_cost`, with the rate frozen into the `JobHandle` at submit
 - **Safe downloads** — generated URLs are never fetched automatically; `download_artifact` takes an explicit byte limit, accepts HTTPS only, rejects embedded credentials and local/private addresses, and does not follow redirects
 - **No duplicate paid work** — only idempotent schema and polling queries are retried; generation POSTs are never replayed after an ambiguous transport failure unless the provider honours `request_options.idempotency_key` (Higgsfield)
+- **Finished means final** — a job the provider reports finished whose output holds no readable media of the requested kind comes back `Failed` with `FailureCategory::InvalidResponse` and the raw output on the failure, never as an error that leaves it live for another poll
+- **fal endpoints checked against fal's catalog** — before queueing, the fal adapter reads the endpoint's category from fal's model catalog and refuses a route the endpoint does not make (`MediaError::UnsupportedTask`); a portable `duration_secs` is sent in the type the endpoint's OpenAPI schema declares. Both lookups use `FAL_API_KEY`, are cached for 10 minutes, and fail the submit when fal cannot answer
 
 Provider-specific fields live under the provider's own namespace (`provider_options["replicate"].input`), with optional `field_map` mappings for portable fields. The `media_openrouter`, `media_replicate`, and `media_fal` examples show the full contract.
 

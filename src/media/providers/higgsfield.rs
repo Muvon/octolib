@@ -353,26 +353,15 @@ impl ImageGenerationProvider for HiggsfieldMediaProvider {
 		shared::validate_handle(handle, PROVIDER, IMAGE_TASKS)?;
 		let value = self.request_status(handle).await?;
 		let (status, error) = request_state(&value)?;
-		let result = if status == OperationStatus::Succeeded {
-			let artifacts = image_artifacts(&value)?;
-			let mut warnings = handle.warnings.clone();
-			warn_if_partial(handle.expected_outputs, artifacts.len(), &mut warnings);
-			let usage = request_usage(
-				handle.cost_estimate.as_ref(),
-				Some(artifacts.len() as f64),
-				&mut warnings,
-			);
-			Some(ImageGenerationResult {
-				artifacts,
-				usage: Some(usage),
-				warnings,
-				safety: SafetyReport::default(),
-				provider_metadata: value.clone(),
-			})
-		} else {
-			None
-		};
-		Ok(operation_from_request(handle, status, error, result, &value))
+		if status != OperationStatus::Succeeded {
+			return Ok(operation_from_request(handle, status, error, None, &value));
+		}
+		Ok(
+			match shared::readable_output(image_result(handle, &value), &handle.remote_id, value.clone())? {
+				Ok(result) => operation_from_request(handle, status, None, Some(result), &value),
+				Err(failure) => operation_from_request(handle, OperationStatus::Failed, Some(failure), None, &value),
+			},
+		)
 	}
 
 	async fn cancel_image(&self, handle: &JobHandle) -> MediaResult<()> {
@@ -475,21 +464,15 @@ impl VideoGenerationProvider for HiggsfieldMediaProvider {
 		shared::validate_handle(handle, PROVIDER, VIDEO_TASKS)?;
 		let value = self.request_status(handle).await?;
 		let (status, error) = request_state(&value)?;
-		let result = if status == OperationStatus::Succeeded {
-			let artifacts = video_artifacts(&value)?;
-			let mut warnings = handle.warnings.clone();
-			let usage = request_usage(handle.cost_estimate.as_ref(), None, &mut warnings);
-			Some(VideoGenerationResult {
-				artifacts,
-				usage: Some(usage),
-				warnings,
-				safety: SafetyReport::default(),
-				provider_metadata: value.clone(),
-			})
-		} else {
-			None
-		};
-		Ok(operation_from_request(handle, status, error, result, &value))
+		if status != OperationStatus::Succeeded {
+			return Ok(operation_from_request(handle, status, error, None, &value));
+		}
+		Ok(
+			match shared::readable_output(video_result(handle, &value), &handle.remote_id, value.clone())? {
+				Ok(result) => operation_from_request(handle, status, None, Some(result), &value),
+				Err(failure) => operation_from_request(handle, OperationStatus::Failed, Some(failure), None, &value),
+			},
+		)
 	}
 
 	async fn cancel_video(&self, handle: &JobHandle) -> MediaResult<()> {
@@ -729,6 +712,37 @@ fn operation_from_request<T>(
 			"error": value.get("error")
 		}),
 	}
+}
+
+fn image_result(handle: &JobHandle, value: &Value) -> MediaResult<ImageGenerationResult> {
+	let artifacts = image_artifacts(value)?;
+	let mut warnings = handle.warnings.clone();
+	warn_if_partial(handle.expected_outputs, artifacts.len(), &mut warnings);
+	let usage = request_usage(
+		handle.cost_estimate.as_ref(),
+		Some(artifacts.len() as f64),
+		&mut warnings,
+	);
+	Ok(ImageGenerationResult {
+		artifacts,
+		usage: Some(usage),
+		warnings,
+		safety: SafetyReport::default(),
+		provider_metadata: value.clone(),
+	})
+}
+
+fn video_result(handle: &JobHandle, value: &Value) -> MediaResult<VideoGenerationResult> {
+	let artifacts = video_artifacts(value)?;
+	let mut warnings = handle.warnings.clone();
+	let usage = request_usage(handle.cost_estimate.as_ref(), None, &mut warnings);
+	Ok(VideoGenerationResult {
+		artifacts,
+		usage: Some(usage),
+		warnings,
+		safety: SafetyReport::default(),
+		provider_metadata: value.clone(),
+	})
 }
 
 fn image_artifacts(value: &Value) -> MediaResult<Vec<MediaArtifact>> {

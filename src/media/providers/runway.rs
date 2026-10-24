@@ -251,29 +251,16 @@ impl ImageGenerationProvider for RunwayMediaProvider {
 			&[MediaTask::TextToImage, MediaTask::ImageEdit, MediaTask::ImageVariation],
 		)?;
 		let value = self.poll_task(handle).await?;
-		let mut warnings = handle.warnings.clone();
 		let (status, error) = task_state(&value)?;
-		let result = if status == OperationStatus::Succeeded {
-			let artifacts = collect_artifacts(&value, MediaKind::Image)?;
-			if artifacts.is_empty() {
-				return Err(no_artifacts("image"));
-			}
-			let usage = task_usage(
-				handle.cost_estimate.as_ref(),
-				Some(artifacts.len() as f64),
-				&mut warnings,
-			);
-			Some(ImageGenerationResult {
-				artifacts,
-				usage: Some(usage),
-				warnings: std::mem::take(&mut warnings),
-				safety: SafetyReport::default(),
-				provider_metadata: task_metadata(&value),
-			})
-		} else {
-			None
-		};
-		Ok(operation_from_task(handle, status, error, result, &value))
+		if status != OperationStatus::Succeeded {
+			return Ok(operation_from_task(handle, status, error, None, &value));
+		}
+		Ok(
+			match shared::readable_output(image_result(handle, &value), &handle.remote_id, task_metadata(&value))? {
+				Ok(result) => operation_from_task(handle, status, None, Some(result), &value),
+				Err(failure) => operation_from_task(handle, OperationStatus::Failed, Some(failure), None, &value),
+			},
+		)
 	}
 
 	async fn cancel_image(&self, handle: &JobHandle) -> MediaResult<()> {
@@ -389,25 +376,16 @@ impl VideoGenerationProvider for RunwayMediaProvider {
 	async fn poll_video(&self, handle: &JobHandle) -> MediaResult<Operation<VideoGenerationResult>> {
 		shared::validate_handle(handle, PROVIDER, &[MediaTask::TextToVideo, MediaTask::ImageToVideo])?;
 		let value = self.poll_task(handle).await?;
-		let mut warnings = handle.warnings.clone();
 		let (status, error) = task_state(&value)?;
-		let result = if status == OperationStatus::Succeeded {
-			let artifacts = collect_artifacts(&value, MediaKind::Video)?;
-			if artifacts.is_empty() {
-				return Err(no_artifacts("video"));
-			}
-			let usage = task_usage(handle.cost_estimate.as_ref(), None, &mut warnings);
-			Some(VideoGenerationResult {
-				artifacts,
-				usage: Some(usage),
-				warnings: std::mem::take(&mut warnings),
-				safety: SafetyReport::default(),
-				provider_metadata: task_metadata(&value),
-			})
-		} else {
-			None
-		};
-		Ok(operation_from_task(handle, status, error, result, &value))
+		if status != OperationStatus::Succeeded {
+			return Ok(operation_from_task(handle, status, error, None, &value));
+		}
+		Ok(
+			match shared::readable_output(video_result(handle, &value), &handle.remote_id, task_metadata(&value))? {
+				Ok(result) => operation_from_task(handle, status, None, Some(result), &value),
+				Err(failure) => operation_from_task(handle, OperationStatus::Failed, Some(failure), None, &value),
+			},
+		)
 	}
 
 	async fn cancel_video(&self, handle: &JobHandle) -> MediaResult<()> {
@@ -561,6 +539,42 @@ fn operation_from_task<T>(
 		completed_at: None,
 		provider_metadata: task_metadata(value),
 	}
+}
+
+fn image_result(handle: &JobHandle, value: &Value) -> MediaResult<ImageGenerationResult> {
+	let artifacts = collect_artifacts(value, MediaKind::Image)?;
+	if artifacts.is_empty() {
+		return Err(no_artifacts("image"));
+	}
+	let mut warnings = handle.warnings.clone();
+	let usage = task_usage(
+		handle.cost_estimate.as_ref(),
+		Some(artifacts.len() as f64),
+		&mut warnings,
+	);
+	Ok(ImageGenerationResult {
+		artifacts,
+		usage: Some(usage),
+		warnings,
+		safety: SafetyReport::default(),
+		provider_metadata: task_metadata(value),
+	})
+}
+
+fn video_result(handle: &JobHandle, value: &Value) -> MediaResult<VideoGenerationResult> {
+	let artifacts = collect_artifacts(value, MediaKind::Video)?;
+	if artifacts.is_empty() {
+		return Err(no_artifacts("video"));
+	}
+	let mut warnings = handle.warnings.clone();
+	let usage = task_usage(handle.cost_estimate.as_ref(), None, &mut warnings);
+	Ok(VideoGenerationResult {
+		artifacts,
+		usage: Some(usage),
+		warnings,
+		safety: SafetyReport::default(),
+		provider_metadata: task_metadata(value),
+	})
 }
 
 fn task_metadata(value: &Value) -> Value {

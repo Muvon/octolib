@@ -839,6 +839,18 @@ fn prediction_state(value: &Value) -> MediaResult<(OperationStatus, Option<Gener
 	Ok((status, failure))
 }
 
+fn prediction_id(value: &Value) -> MediaResult<&str> {
+	value
+		.get("id")
+		.and_then(Value::as_str)
+		.ok_or_else(|| MediaError::InvalidResponse {
+			provider: PROVIDER.to_string(),
+			message: "prediction is missing id".to_string(),
+		})
+}
+
+/// `outcome` is what a succeeded prediction yielded (see
+/// [`shared::readable_output`]); `None` for every other state.
 fn base_operation<T>(
 	value: &Value,
 	model: &str,
@@ -846,22 +858,23 @@ fn base_operation<T>(
 	estimate: Option<CostEstimate>,
 	handle_warnings: Vec<ProviderWarning>,
 	expected_outputs: Option<u32>,
-	result: Option<T>,
+	outcome: Option<Result<T, GenerationFailure>>,
 ) -> MediaResult<Operation<T>> {
-	let id = value
-		.get("id")
-		.and_then(Value::as_str)
-		.ok_or_else(|| MediaError::InvalidResponse {
-			provider: PROVIDER.to_string(),
-			message: "prediction is missing id".to_string(),
-		})?;
-	let (status, error) = prediction_state(value)?;
-	if status == OperationStatus::Succeeded && result.is_none() {
-		return Err(MediaError::InvalidResponse {
-			provider: PROVIDER.to_string(),
-			message: "succeeded prediction has no normalized result".to_string(),
-		});
-	}
+	let id = prediction_id(value)?;
+	let (status, error, result) = match outcome {
+		Some(Ok(result)) => (OperationStatus::Succeeded, None, Some(result)),
+		Some(Err(failure)) => (OperationStatus::Failed, Some(failure), None),
+		None => {
+			let (status, error) = prediction_state(value)?;
+			if status == OperationStatus::Succeeded {
+				return Err(MediaError::InvalidResponse {
+					provider: PROVIDER.to_string(),
+					message: "succeeded prediction has no normalized result".to_string(),
+				});
+			}
+			(status, error, None)
+		}
+	};
 	Ok(Operation {
 		handle: Some(JobHandle {
 			provider: PROVIDER.to_string(),
@@ -883,6 +896,18 @@ fn base_operation<T>(
 	})
 }
 
+/// What a succeeded prediction yielded: `parse`'s result, or the failure its
+/// unreadable output is. `None` for every other state, where nothing is parsed.
+fn succeeded_outcome<T>(
+	value: &Value,
+	parse: impl FnOnce() -> MediaResult<T>,
+) -> MediaResult<Option<Result<T, GenerationFailure>>> {
+	if prediction_state(value)?.0 != OperationStatus::Succeeded {
+		return Ok(None);
+	}
+	shared::readable_output(parse(), prediction_id(value)?, output_metadata(value)).map(Some)
+}
+
 fn parse_image_operation(
 	value: &Value,
 	model: &str,
@@ -892,25 +917,31 @@ fn parse_image_operation(
 	warnings: &mut Vec<ProviderWarning>,
 ) -> MediaResult<Operation<ImageGenerationResult>> {
 	let handle_warnings = warnings.clone();
-	let status = prediction_state(value)?.0;
-	let result = if status == OperationStatus::Succeeded {
-		let artifacts = collect_artifacts(value.get("output"), MediaKind::Image)?;
-		if artifacts.is_empty() {
-			return Err(no_artifacts("image"));
-		}
-		warn_if_partial(expected_outputs, artifacts.len(), warnings);
-		let usage = prediction_usage(value, estimate.as_ref(), Some(artifacts.len() as f64), warnings);
-		Some(ImageGenerationResult {
-			artifacts,
-			usage: Some(usage),
-			warnings: std::mem::take(warnings),
-			safety: SafetyReport::default(),
-			provider_metadata: output_metadata(value),
-		})
-	} else {
-		None
-	};
-	base_operation(value, model, task, estimate, handle_warnings, expected_outputs, result)
+	let outcome = succeeded_outcome(value, || {
+		image_result(value, estimate.as_ref(), expected_outputs, warnings)
+	})?;
+	base_operation(value, model, task, estimate, handle_warnings, expected_outputs, outcome)
+}
+
+fn image_result(
+	value: &Value,
+	estimate: Option<&CostEstimate>,
+	expected_outputs: Option<u32>,
+	warnings: &mut Vec<ProviderWarning>,
+) -> MediaResult<ImageGenerationResult> {
+	let artifacts = collect_artifacts(value.get("output"), MediaKind::Image)?;
+	if artifacts.is_empty() {
+		return Err(no_artifacts("image"));
+	}
+	warn_if_partial(expected_outputs, artifacts.len(), warnings);
+	let usage = prediction_usage(value, estimate, Some(artifacts.len() as f64), warnings);
+	Ok(ImageGenerationResult {
+		artifacts,
+		usage: Some(usage),
+		warnings: std::mem::take(warnings),
+		safety: SafetyReport::default(),
+		provider_metadata: output_metadata(value),
+	})
 }
 
 fn parse_video_operation(
@@ -922,25 +953,31 @@ fn parse_video_operation(
 	warnings: &mut Vec<ProviderWarning>,
 ) -> MediaResult<Operation<VideoGenerationResult>> {
 	let handle_warnings = warnings.clone();
-	let status = prediction_state(value)?.0;
-	let result = if status == OperationStatus::Succeeded {
-		let artifacts = collect_artifacts(value.get("output"), MediaKind::Video)?;
-		if artifacts.is_empty() {
-			return Err(no_artifacts("video"));
-		}
-		warn_if_partial(expected_outputs, artifacts.len(), warnings);
-		let usage = prediction_usage(value, estimate.as_ref(), None, warnings);
-		Some(VideoGenerationResult {
-			artifacts,
-			usage: Some(usage),
-			warnings: std::mem::take(warnings),
-			safety: SafetyReport::default(),
-			provider_metadata: output_metadata(value),
-		})
-	} else {
-		None
-	};
-	base_operation(value, model, task, estimate, handle_warnings, expected_outputs, result)
+	let outcome = succeeded_outcome(value, || {
+		video_result(value, estimate.as_ref(), expected_outputs, warnings)
+	})?;
+	base_operation(value, model, task, estimate, handle_warnings, expected_outputs, outcome)
+}
+
+fn video_result(
+	value: &Value,
+	estimate: Option<&CostEstimate>,
+	expected_outputs: Option<u32>,
+	warnings: &mut Vec<ProviderWarning>,
+) -> MediaResult<VideoGenerationResult> {
+	let artifacts = collect_artifacts(value.get("output"), MediaKind::Video)?;
+	if artifacts.is_empty() {
+		return Err(no_artifacts("video"));
+	}
+	warn_if_partial(expected_outputs, artifacts.len(), warnings);
+	let usage = prediction_usage(value, estimate, None, warnings);
+	Ok(VideoGenerationResult {
+		artifacts,
+		usage: Some(usage),
+		warnings: std::mem::take(warnings),
+		safety: SafetyReport::default(),
+		provider_metadata: output_metadata(value),
+	})
 }
 
 fn parse_speech_operation(
@@ -950,30 +987,7 @@ fn parse_speech_operation(
 	warnings: &mut Vec<ProviderWarning>,
 ) -> MediaResult<Operation<SpeechSynthesisResult>> {
 	let handle_warnings = warnings.clone();
-	let status = prediction_state(value)?.0;
-	let result = if status == OperationStatus::Succeeded {
-		let mut artifacts = collect_artifacts(value.get("output"), MediaKind::Audio)?;
-		if artifacts.is_empty() {
-			return Err(no_artifacts("audio"));
-		}
-		if artifacts.len() > 1 {
-			warnings.push(ProviderWarning {
-				code: WarningCode::PartialOutput,
-				message: "speech result contained multiple media outputs; the first artifact was selected".to_string(),
-				parameter: None,
-				provider_metadata: json!({"artifact_count":artifacts.len()}),
-			});
-		}
-		let usage = prediction_usage(value, estimate.as_ref(), None, warnings);
-		Some(SpeechSynthesisResult {
-			artifact: artifacts.remove(0),
-			usage: Some(usage),
-			warnings: std::mem::take(warnings),
-			provider_metadata: output_metadata(value),
-		})
-	} else {
-		None
-	};
+	let outcome = succeeded_outcome(value, || speech_result(value, estimate.as_ref(), warnings))?;
 	base_operation(
 		value,
 		model,
@@ -981,8 +995,34 @@ fn parse_speech_operation(
 		estimate,
 		handle_warnings,
 		None,
-		result,
+		outcome,
 	)
+}
+
+fn speech_result(
+	value: &Value,
+	estimate: Option<&CostEstimate>,
+	warnings: &mut Vec<ProviderWarning>,
+) -> MediaResult<SpeechSynthesisResult> {
+	let mut artifacts = collect_artifacts(value.get("output"), MediaKind::Audio)?;
+	if artifacts.is_empty() {
+		return Err(no_artifacts("audio"));
+	}
+	if artifacts.len() > 1 {
+		warnings.push(ProviderWarning {
+			code: WarningCode::PartialOutput,
+			message: "speech result contained multiple media outputs; the first artifact was selected".to_string(),
+			parameter: None,
+			provider_metadata: json!({"artifact_count":artifacts.len()}),
+		});
+	}
+	let usage = prediction_usage(value, estimate, None, warnings);
+	Ok(SpeechSynthesisResult {
+		artifact: artifacts.remove(0),
+		usage: Some(usage),
+		warnings: std::mem::take(warnings),
+		provider_metadata: output_metadata(value),
+	})
 }
 
 fn parse_transcription_operation(
@@ -992,30 +1032,7 @@ fn parse_transcription_operation(
 	warnings: &mut Vec<ProviderWarning>,
 ) -> MediaResult<Operation<TranscriptionResult>> {
 	let handle_warnings = warnings.clone();
-	let status = prediction_state(value)?.0;
-	let result = if status == OperationStatus::Succeeded {
-		let output = value.get("output").ok_or_else(|| MediaError::InvalidResponse {
-			provider: PROVIDER.to_string(),
-			message: "transcription prediction is missing output".to_string(),
-		})?;
-		let text = output.as_str().filter(|text| !text.starts_with("http://") && !text.starts_with("https://"))
-            .or_else(|| output.get("text").and_then(Value::as_str))
-            .or_else(|| output.get("transcription").and_then(Value::as_str))
-            .ok_or_else(|| MediaError::InvalidResponse { provider: PROVIDER.to_string(), message: "Replicate output does not contain transcription text; preserve the raw output from provider_metadata for model-specific handling".to_string() })?;
-		let usage = prediction_usage(value, estimate.as_ref(), None, warnings);
-		Some(TranscriptionResult {
-			text: text.to_string(),
-			language: output.get("language").and_then(Value::as_str).map(str::to_string),
-			duration_secs: output.get("duration").and_then(Value::as_f64),
-			segments: transcript_segments(output.get("segments")),
-			words: transcript_words(output.get("words")),
-			usage: Some(usage),
-			warnings: std::mem::take(warnings),
-			provider_metadata: output_metadata(value),
-		})
-	} else {
-		None
-	};
+	let outcome = succeeded_outcome(value, || transcription_result(value, estimate.as_ref(), warnings))?;
 	base_operation(
 		value,
 		model,
@@ -1023,8 +1040,34 @@ fn parse_transcription_operation(
 		estimate,
 		handle_warnings,
 		None,
-		result,
+		outcome,
 	)
+}
+
+fn transcription_result(
+	value: &Value,
+	estimate: Option<&CostEstimate>,
+	warnings: &mut Vec<ProviderWarning>,
+) -> MediaResult<TranscriptionResult> {
+	let output = value.get("output").ok_or_else(|| MediaError::InvalidResponse {
+		provider: PROVIDER.to_string(),
+		message: "transcription prediction is missing output".to_string(),
+	})?;
+	let text = output.as_str().filter(|text| !text.starts_with("http://") && !text.starts_with("https://"))
+        .or_else(|| output.get("text").and_then(Value::as_str))
+        .or_else(|| output.get("transcription").and_then(Value::as_str))
+        .ok_or_else(|| MediaError::InvalidResponse { provider: PROVIDER.to_string(), message: "Replicate output does not contain transcription text; preserve the raw output from provider_metadata for model-specific handling".to_string() })?;
+	let usage = prediction_usage(value, estimate, None, warnings);
+	Ok(TranscriptionResult {
+		text: text.to_string(),
+		language: output.get("language").and_then(Value::as_str).map(str::to_string),
+		duration_secs: output.get("duration").and_then(Value::as_f64),
+		segments: transcript_segments(output.get("segments")),
+		words: transcript_words(output.get("words")),
+		usage: Some(usage),
+		warnings: std::mem::take(warnings),
+		provider_metadata: output_metadata(value),
+	})
 }
 
 fn collect_artifacts(output: Option<&Value>, kind: MediaKind) -> MediaResult<Vec<MediaArtifact>> {

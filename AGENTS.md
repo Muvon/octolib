@@ -315,6 +315,7 @@ Files still showing `Copyright 2025` (`src/storage.rs`, `src/embedding/constants
 - **Shared HTTP client** in `providers/shared.rs` is process-wide and arc-swapped on connection errors — don't create per-request clients.
 - **`supports_model()` for native providers** should use `is_model_in_pricing_table()` — this enforces that only known/priced models are accepted.
 - **ReasoningEffort is a hint, not a guarantee** — models without thinking support silently ignore it. Anthropic clamps budget_tokens below max_tokens.
+- **A finished media job always resolves** — when a provider reports a job finished, pass the parsed output through `shared::readable_output`: output with no readable media of the requested kind is the job's `Failed` outcome, not an `Err`. An `Err` from a poll leaves a caller's stored job live forever, re-polled (and failing) on every read.
 
 ## Never
 

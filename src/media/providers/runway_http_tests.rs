@@ -105,6 +105,31 @@ async fn poll_image_returns_succeeded_artifacts() {
 	assert_eq!(requests[1].path, "/tasks/task-1");
 }
 
+/// A task Runway reports succeeded with no usable output is the job's outcome:
+/// Failed, never an error that leaves it live for re-polling.
+#[tokio::test]
+#[serial_test::serial]
+async fn poll_image_fails_a_succeeded_task_with_no_output() {
+	let (_mock, _env) = start_mock(vec![
+		(200, r#"{"id":"task-1"}"#.to_string()),
+		(200, r#"{"status":"SUCCEEDED","output":[]}"#.to_string()),
+	]);
+
+	let provider = RunwayMediaProvider::new();
+	let handle = provider
+		.submit_image(image_request())
+		.await
+		.expect("task submitted")
+		.handle
+		.expect("handle present");
+
+	let operation = provider.poll_image(&handle).await.expect("outcome, not an error");
+	assert_eq!(operation.status, OperationStatus::Failed);
+	let error = operation.error.expect("failure present");
+	assert_eq!(error.category, FailureCategory::InvalidResponse);
+	assert_eq!(error.request_id.as_deref(), Some("task-1"));
+}
+
 #[tokio::test]
 #[serial_test::serial]
 async fn cancel_image_deletes_the_task() {

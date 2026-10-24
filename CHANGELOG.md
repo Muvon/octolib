@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.45.3] - 2026-10-24
+
+### 📋 Release Summary
+
+Media operations now treat unreadable outputs as failures, and catalog requests are authorized. Fal integration handles nested schemas, caches schema discovery, validates tasks, and encodes video durations.
+
+### 🐛 Bug Fixes & Stability
+
+- **media**: treat unreadable outputs as failed operations `bbbf5807`
+- **fal**: handle nested schemas and cache discovery `1847dd93`
+- **media**: authorize catalog requests `3ab3845f`
+- **fal**: validate fal tasks and encode video durations `46569998`
+
 ## [0.45.2] - 2026-10-24
 
 ### 📋 Release Summary

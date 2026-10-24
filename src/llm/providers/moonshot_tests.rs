@@ -177,11 +177,21 @@ fn test_k3_1_pro_capabilities() {
 	// K3 series models share the 1M context window.
 	assert_eq!(provider.get_max_input_tokens("kimi-k3.1-pro"), 1_048_576);
 	assert_eq!(provider.get_max_input_tokens("kimi-k3.1-pro-highspeed"), 1_048_576);
+	// K3.1 Pro takes K3's low/high/max reasoning_effort and fixed sampling.
+	assert_eq!(
+		k3_reasoning_effort("kimi-k3.1-pro", Some(ReasoningEffort::Max)),
+		Some("max")
+	);
+	assert_eq!(
+		k3_reasoning_effort("kimi-k3.1-pro-highspeed", Some(ReasoningEffort::Medium)),
+		Some("low")
+	);
+	assert!(!provider.supported_sampling_params("kimi-k3.1-pro").temperature);
 }
 
 #[test]
 fn test_k3_reasoning_effort() {
-	// Only kimi-k3 gets the reasoning_effort field
+	// Only K3-series models get the reasoning_effort field
 	assert_eq!(k3_reasoning_effort("kimi-k3", Some(ReasoningEffort::Low)), Some("low"));
 	assert_eq!(
 		k3_reasoning_effort("kimi-k3", Some(ReasoningEffort::Medium)),

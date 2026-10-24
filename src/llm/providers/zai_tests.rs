@@ -20,8 +20,8 @@ fn test_glm_5_3_flashx_legal_pricing() {
 	let provider = ZaiProvider::new();
 	assert!(provider.supports_model("glm-5.3-flashx-legal"));
 
-	// GLM-5.3-FlashX-Legal: $0.37 input, $1.25 output — must resolve to its
-	// own entry, not the glm-5.3-flashx substring match
+	// GLM-5.3-FlashX-Legal: $0.37 input, $1.25 output (same list rates as
+	// glm-5.3-flashx, so this pins the price, not the row order)
 	let cost = calculate_cost("glm-5.3-flashx-legal", 1_000_000, 0, 1_000_000);
 	assert!((cost.unwrap() - 1.62).abs() < 0.01); // 0.37 + 1.25
 

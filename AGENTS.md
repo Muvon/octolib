@@ -278,6 +278,7 @@ Files still showing `Copyright 2025` (`src/storage.rs`, `src/embedding/constants
 6. Add to `ProviderFactory::supported_providers()` list in `factory.rs`
 7. Re-export from `src/lib.rs`
 8. Add example in `examples/`
+9. Do "Every new model or maker: routers must price it too" below for each model
 
 ### OpenAI-Compatible Proxy
 
@@ -287,6 +288,27 @@ Files still showing `Copyright 2025` (`src/storage.rs`, `src/embedding/constants
 4. In `chat_completion()`: call `openai_compat_chat_completion(OpenAiCompatConfig { provider_name: "newprovider", usage_fallback_cost: None, use_response_cost: true }, api_key, api_url, params).await?`, then if `response.exchange.usage.cost.is_none()` fill it via `calculate_reference_cost(&params.model, usage.input_tokens, usage.cache_read_tokens, usage.billable_output_tokens())` — see the `nvidia.rs` cost block
 5. Add missing model families to `reference_pricing.rs` and `reference_capabilities.rs` if needed
 6. Register in `providers/mod.rs`, `factory.rs`, `lib.rs`; add example
+
+### Every new model or maker: routers must price it too
+
+A model reaches users through more than its maker's provider: OpenRouter and the
+proxies (together, ollama, nvidia, cerebras, ...) serve it under their own ids, and
+each of them must return a price, or callers that estimate cost before a call get
+`None` (octomind logs `Fold economics: no pricing for openrouter:<id> — using
+default ratios` and its compression decisions run on guesses).
+
+1. Add a `ReferenceModelEntry` for the model in `src/llm/reference_models.rs` with
+   both `capabilities` and `pricing` — proxies and `OpenRouterProvider::get_model_pricing`
+   fall back to it. Specific patterns first (`mimo-v2.6-pro-ultraspeed` before
+   `mimo-v2.6-pro`).
+2. When the maker has a native provider, its `PRICING` row and the reference row must
+   agree, unless a comment says why they differ.
+3. If OpenRouter's catalog id needs a family-specific route in
+   `openrouter.rs::get_model_pricing` (a `-fast` variant, a delegated maker table),
+   add it there; otherwise the reference fallback covers it.
+4. Pin it with a test: `OpenRouterProvider::new().get_model_pricing("<org>/<model>")`
+   is `Some` with the expected rates (see `openrouter_tests.rs`), plus a
+   `reference_models_tests.rs` row.
 
 ### Embedding Provider
 
@@ -324,3 +346,4 @@ Files still showing `Copyright 2025` (`src/storage.rs`, `src/embedding/constants
 - Accept API keys as function parameters — always read from environment variables
 - Add a model to a native provider's `PRICING` table without verifying the price from the provider's official pricing page
 - Put a less-specific pattern before a more-specific one in `REFERENCE_PRICING` or `REFERENCE_CAPABILITIES`
+- Add a model or provider without a priced `reference_models.rs` row and a test that `OpenRouterProvider::get_model_pricing` returns it (see "Every new model or maker")

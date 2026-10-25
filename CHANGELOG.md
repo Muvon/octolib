@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.45.5] - 2026-10-25
+
+### 📋 Release Summary
+
+Unsupported OpenRouter model families are now priced using reference rates. Contributor documentation now documents router pricing requirements.
+
+### 🐛 Bug Fixes & Stability
+
+- **openrouter**: price unsupported model families from reference rates `39316e36`
+
+### 📚 Documentation & Examples
+
+- **contributing**: document router pricing requirements `8b1f52d4`
+
 ## [0.45.4] - 2026-10-25
 
 ### 📋 Release Summary

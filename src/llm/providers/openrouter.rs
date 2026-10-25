@@ -366,8 +366,11 @@ impl AiProvider for OpenRouterProvider {
 			return google.get_model_pricing(model);
 		}
 
-		// Unknown provider - no pricing available
-		None
+		// Every other family (xiaomi/, x-ai/, qwen/, meta/, inception/, ...): the
+		// reference table's baseline price, so cost estimates made before a call
+		// see a real rate instead of none. Billing still reads the response's
+		// own usage.cost.
+		crate::llm::reference_models::get_reference_pricing(model)
 	}
 
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {

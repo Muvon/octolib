@@ -277,6 +277,21 @@ fn test_anthropic_fast_route_doubles_pricing() {
 }
 
 #[test]
+fn test_models_without_a_maker_table_price_from_the_reference_table() {
+	let provider = OpenRouterProvider::new();
+	let flash = provider
+		.get_model_pricing("xiaomi/mimo-v2.6-flash")
+		.expect("MiMo is priced through the reference table");
+	assert_eq!(flash.input_price_per_1m, 0.14);
+	assert_eq!(flash.output_price_per_1m, 0.28);
+	assert_eq!(flash.cache_read_price_per_1m, 0.0028);
+	// Longest-match ordering: UltraSpeed is not priced as plain Pro.
+	let ultraspeed = provider.get_model_pricing("xiaomi/mimo-v2.6-pro-ultraspeed").unwrap();
+	assert_eq!(ultraspeed.input_price_per_1m, 4.35);
+	assert!(provider.get_model_pricing("nobody/unknown-model-x").is_none());
+}
+
+#[test]
 fn test_schema_enforcement_proxy_policy() {
 	let provider = OpenRouterProvider::new();
 	assert!(provider.enforces_response_schema("deepseek-v4-pro"));

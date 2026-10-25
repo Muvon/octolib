@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.45.4] - 2026-10-25
+
+### 📋 Release Summary
+
+Anthropic model support and sampling have been updated, with potential compatibility implications. Xiaomi MiMo chat completions are now supported.
+
+### 🚨 Breaking Changes
+
+- **anthropic**: update Anthropic model support and sampling `e1267089`
+
+### ✨ New Features & Enhancements
+
+- **llm**: support Xiaomi MiMo chat completions `160f5b36`
+
 ## [0.45.3] - 2026-10-24
 
 ### 📋 Release Summary

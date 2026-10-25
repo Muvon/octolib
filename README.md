@@ -8,7 +8,7 @@
 [![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmuvon%2Foctolib%2Fbadges%2Fcoverage.json&style=flat-square)](https://github.com/muvon/octolib/actions/workflows/ci.yml)
 ## Overview
 
-Octolib is a self-sufficient Rust library for AI providers. One `provider:model` string — `openai:gpt-4o`, `anthropic:claude-opus-4`, `ollama:llama3.2` — resolves through `ProviderFactory` to a provider behind the `AiProvider` trait. Switching models is a string change, not a rewrite: the same `chat_completion` call drives OpenAI's Responses API, Anthropic's Messages API, an OpenAI-compatible proxy, or a local Ollama server.
+Octolib is a self-sufficient Rust library for AI providers. One `provider:model` string — `openai:gpt-4o`, `anthropic:claude-opus-5-5`, `ollama:llama3.2` — resolves through `ProviderFactory` to a provider behind the `AiProvider` trait. Switching models is a string change, not a rewrite: the same `chat_completion` call drives OpenAI's Responses API, Anthropic's Messages API, an OpenAI-compatible proxy, or a local Ollama server.
 
 Pricing and capability tables ship inside the crate, so every response reports token usage and USD cost — input, output, cache reads/writes, and reasoning tokens — with zero configuration. The API is `Result`-based end to end with no panics or printing in library code, and API keys are read from environment variables only.
 
@@ -87,7 +87,7 @@ async fn example() -> anyhow::Result<()> {
 }
 ```
 
-Switching providers is the same call with a different string — `anthropic:claude-opus-4`, `ollama:llama3.2` — after exporting the matching `*_API_KEY` (see the [key table in the docs](doc/04-advanced-guide.md)).
+Switching providers is the same call with a different string — `anthropic:claude-opus-5-5`, `ollama:llama3.2` — after exporting the matching `*_API_KEY` (see the [key table in the docs](doc/04-advanced-guide.md)).
 
 ### Media generation
 
@@ -226,7 +226,7 @@ Use local CLIs as a lightweight proxy. This mode is prompt-only; tool calling/MC
 
 ```rust
 let (provider, model) = ProviderFactory::get_provider_for_model("cli:codex/gpt-5.2-codex")?;
-// or: "cli:claude/claude-sonnet-4-5"
+// or: "cli:claude/claude-sonnet-5-5"
 // or: "cli:gemini/gemini-2.5-pro"
 // or: "cli:cursor/auto"
 ```

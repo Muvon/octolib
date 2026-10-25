@@ -59,30 +59,14 @@ const PRICING: &[PricingTuple] = &[
 	// Longer prompts multiply every rate by 5 in calculate_cost_with_cache.
 	("claude-haiku-5-5", 0.10, 0.50, 0.125, 0.01),
 	// Claude 4.6
-	("claude-sonnet-4-6-20260217", 3.00, 15.00, 3.75, 0.30),
 	("claude-sonnet-4-6", 3.00, 15.00, 3.75, 0.30),
-	("claude-opus-4-6-20260217", 5.00, 25.00, 6.25, 0.50),
 	("claude-opus-4-6", 5.00, 25.00, 6.25, 0.50),
 	// Claude 4.5
 	("claude-opus-4-5-20251101", 5.00, 25.00, 6.25, 0.50),
 	("claude-haiku-4-5-20251001", 1.00, 5.00, 1.25, 0.10),
-	("claude-sonnet-4-5-20250929", 3.00, 15.00, 3.75, 0.30),
 	// Official API aliases (hyphenated)
 	("claude-opus-4-5", 5.00, 25.00, 6.25, 0.50),
 	("claude-haiku-4-5", 1.00, 5.00, 1.25, 0.10),
-	("claude-sonnet-4-5", 3.00, 15.00, 3.75, 0.30),
-	// Claude 4 / 4.1
-	("claude-opus-4-1-20250805", 15.00, 75.00, 18.75, 1.50),
-	("claude-opus-4-20250514", 15.00, 75.00, 18.75, 1.50),
-	("claude-sonnet-4-20250514", 3.00, 15.00, 3.75, 0.30),
-	("claude-opus-4-1", 15.00, 75.00, 18.75, 1.50),
-	("claude-opus-4", 15.00, 75.00, 18.75, 1.50),
-	("claude-sonnet-4", 3.00, 15.00, 3.75, 0.30),
-	// Claude 3.5 (hyphenated format)
-	("claude-3-5-haiku-20241022", 0.80, 4.00, 1.00, 0.08),
-	("claude-3-5-haiku", 0.80, 4.00, 1.00, 0.08),
-	// Claude 3.5 (dot notation alias - common user format)
-	("claude-3.5-haiku", 0.80, 4.00, 1.00, 0.08),
 ];
 
 /// Token usage breakdown for cache-aware pricing
@@ -94,17 +78,6 @@ struct CacheTokenUsage {
 	output_tokens: u64,
 }
 
-/// Models that reject ALL sampling parameters (temperature, top_p, top_k).
-const NO_SAMPLING_MODELS: &[&str] = &[
-	"fable-5",
-	"mythos-5",
-	"opus-5",
-	"opus-4-8",
-	"opus-4-7",
-	"sonnet-5",
-	"haiku-5-5",
-];
-
 /// Models that support extended thinking via the `thinking` block.
 /// Substring match against `params.model`. Order matters only for documentation.
 const THINKING_MODELS: &[&str] = &[
@@ -115,12 +88,8 @@ const THINKING_MODELS: &[&str] = &[
 	"opus-4-7",
 	"opus-4-6",
 	"opus-4-5",
-	"opus-4-1",
-	"opus-4",
 	"sonnet-5",
 	"sonnet-4-6",
-	"sonnet-4-5",
-	"sonnet-4",
 	"haiku-4-5",
 	"haiku-5-5",
 ];
@@ -170,21 +139,10 @@ const EFFORT_PARAM_MODELS: &[&str] = &[
 	"haiku-5-5",
 ];
 
-/// Models that reject top_p but accept temperature and top_k.
-const NO_TOP_P_MODELS: &[&str] = &[
-	"opus-4-1",
-	"opus-4-7",
-	"sonnet-4-5",
-	"haiku-4-5",
-	"sonnet-4-6",
-	"opus-4-5",
-	"opus-4-6",
-];
-
 /// Output ceiling per model family, used when the caller leaves `max_tokens`
 /// at 0 ("no limit"): the Messages API requires the field, so omitting it is a
 /// 400. Checked in order, so specific prefixes must precede the general ones
-/// they contain (`opus-4-6` before `opus-4`).
+/// they contain.
 const MAX_OUTPUT_TOKENS: &[(&str, u32)] = &[
 	("fable-5", 128_000),
 	("mythos-5", 128_000),
@@ -196,10 +154,7 @@ const MAX_OUTPUT_TOKENS: &[(&str, u32)] = &[
 	("sonnet-4-6", 128_000),
 	("haiku-5-5", 128_000),
 	("opus-4-5", 64_000),
-	("sonnet-4", 64_000),
 	("haiku-4-5", 64_000),
-	("sonnet-3-7", 64_000),
-	("opus-4", 32_000),
 ];
 
 /// Fallback for models missing from [`MAX_OUTPUT_TOKENS`]; the lowest ceiling
@@ -372,6 +327,7 @@ const ANTHROPIC_API_KEY_ENV: &str = "ANTHROPIC_API_KEY";
 const ANTHROPIC_OAUTH_TOKEN_ENV: &str = "ANTHROPIC_OAUTH_ACCESS_TOKEN";
 const ANTHROPIC_API_URL_ENV: &str = "ANTHROPIC_API_URL";
 const ANTHROPIC_API_URL: &str = "https://api.anthropic.com/v1/messages";
+const ANTHROPIC_API_VERSION: &str = "2026-10-21";
 
 #[async_trait::async_trait]
 impl AiProvider for AnthropicProvider {
@@ -425,9 +381,7 @@ impl AiProvider for AnthropicProvider {
 		// Capability checks intentionally accept family shorthand and common
 		// aliases even when they are not exact pricing-table model IDs.
 		let model_lower = normalize_model_name(model);
-		model_lower.contains("claude-3")
-			|| model_lower.contains("claude-4")
-			|| model_lower.contains("claude-opus-4")
+		model_lower.contains("claude-opus-4")
 			|| model_lower.contains("claude-sonnet-4")
 			|| model_lower.contains("claude-haiku-4")
 			|| model_lower.contains("claude-opus-5")
@@ -459,17 +413,8 @@ impl AiProvider for AnthropicProvider {
 		{
 			// Claude 4.6+ has 1M context; Haiku 5.5 has a long-prompt price tier.
 			1_000_000
-		} else if model_lower.contains("claude-opus-4")
-			|| model_lower.contains("claude-sonnet-4")
-			|| model_lower.contains("claude-haiku-4")
-		{
-			// Claude 4 and 4.5 models have 200k context
-			200_000
-		} else if model_lower.contains("claude-3-5") {
-			// Claude 3.5 models have 200k context
-			200_000
-		} else if model_lower.contains("claude-3") {
-			// Claude 3 models have 200k context
+		} else if model_lower.contains("claude-opus-4") || model_lower.contains("claude-haiku-4") {
+			// Claude 4.5 models have 200k context
 			200_000
 		} else {
 			// Default fallback for older models
@@ -489,18 +434,10 @@ impl AiProvider for AnthropicProvider {
 		))
 	}
 
-	fn supported_sampling_params(&self, model: &str) -> SamplingSupport {
-		let rejects_all = NO_SAMPLING_MODELS.iter().any(|p| model.contains(p));
-		if rejects_all {
-			return SamplingSupport::NONE;
-		}
-
-		let rejects_top_p = NO_TOP_P_MODELS.iter().any(|p| model.contains(p));
-		SamplingSupport {
-			temperature: true,
-			top_p: !rejects_top_p,
-			top_k: true,
-		}
+	/// API version 2026-10-21 rejects `temperature`, `top_p` and `top_k` on
+	/// every model, even at their defaults.
+	fn supported_sampling_params(&self, _model: &str) -> SamplingSupport {
+		SamplingSupport::NONE
 	}
 
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
@@ -525,28 +462,11 @@ impl AiProvider for AnthropicProvider {
 			"messages": anthropic_messages,
 		});
 
-		// Decide upfront whether extended thinking will be enabled. Anthropic
-		// rejects non-default `temperature`/`top_p`/`top_k` whenever thinking
-		// (manual or adaptive) is on — only `temperature=1` is accepted and
-		// top_p/top_k must be omitted. Skip them entirely in that case.
+		// Decide upfront whether extended thinking will be enabled.
 		let thinking_enabled = params
 			.reasoning_effort
 			.is_some_and(|effort| effort != ReasoningEffort::None)
 			&& THINKING_MODELS.iter().any(|p| params.model.contains(p));
-
-		if !thinking_enabled {
-			// Apply sampling parameters based on model support
-			let sampling = self.effective_sampling_params(&params);
-			if let Some(temp) = sampling.temperature {
-				request_body["temperature"] = serde_json::json!(temp);
-			}
-			if let Some(top_p) = sampling.top_p {
-				request_body["top_p"] = serde_json::json!(top_p);
-			}
-			if let Some(top_k) = sampling.top_k {
-				request_body["top_k"] = serde_json::json!(top_k);
-			}
-		}
 
 		// The Messages API requires max_tokens; 0 means "no limit", so send the
 		// model's output ceiling instead of omitting the field.
@@ -944,7 +864,7 @@ async fn execute_anthropic_request(
 					.post(&api_url)
 					.header("Content-Type", "application/json")
 					.headers(auth_headers)
-					.header("anthropic-version", "2023-06-01")
+					.header("anthropic-version", ANTHROPIC_API_VERSION)
 					.header("anthropic-beta", &beta_header)
 					.json(&request_body);
 

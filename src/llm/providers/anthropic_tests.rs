@@ -110,31 +110,43 @@ fn test_supports_model_case_insensitive() {
 	let provider = AnthropicProvider::new();
 
 	// Test lowercase (already working)
-	assert!(provider.supports_model("claude-3-5-haiku"));
 	assert!(provider.supports_model("claude-haiku-4-5"));
 	assert!(provider.supports_model("claude-sonnet-4-6"));
 	assert!(provider.supports_model("claude-opus-4-7"));
 
 	// Test uppercase
-	assert!(provider.supports_model("CLAUDE-3-5-HAIKU"));
 	assert!(provider.supports_model("CLAUDE-HAIKU-4-5"));
 	assert!(provider.supports_model("CLAUDE-SONNET-4-6"));
 	assert!(provider.supports_model("CLAUDE-OPUS-4-7"));
 	// Test mixed case
-	assert!(provider.supports_model("ClaUde-3-5-Haiku"));
-	assert!(provider.supports_model("CLAUDE-Sonnet-4-5"));
+	assert!(provider.supports_model("ClaUde-Haiku-4-5"));
+	assert!(provider.supports_model("CLAUDE-Sonnet-4-6"));
 }
 
 #[test]
 fn test_retired_models_unsupported() {
 	let provider = AnthropicProvider::new();
 
-	// Absent from the live pricing page: the strict table lookup rejects them
+	// Retired per the live deprecations page (Sonnet 4.5 is deprecated and
+	// dropped ahead of its retirement): the strict table lookup rejects them
 	for model in [
+		"claude-sonnet-4-5-20250929",
+		"claude-sonnet-4-5",
+		"claude-opus-4-1-20250805",
+		"claude-opus-4-1",
+		"claude-opus-4-20250514",
+		"claude-opus-4-0",
+		"claude-opus-4",
+		"claude-sonnet-4-20250514",
+		"claude-sonnet-4-0",
+		"claude-sonnet-4",
 		"claude-3-7-sonnet-20250219",
 		"claude-3-7-sonnet",
 		"claude-3-5-sonnet",
 		"claude-3.5-sonnet",
+		"claude-3-5-haiku-20241022",
+		"claude-3-5-haiku",
+		"claude-3.5-haiku",
 		"claude-3-opus",
 		"claude-3-sonnet",
 		"claude-3-haiku-20240307",
@@ -149,21 +161,6 @@ fn test_retired_models_unsupported() {
 	// No such model exists; thinking must not be enabled for it
 	assert!(!THINKING_MODELS.contains(&"sonnet-4-7"));
 	assert!(!THINKING_MODELS.contains(&"3-7-sonnet"));
-
-	// Retired on the first-party API but still priced (Bedrock / Google Cloud)
-	assert!(provider.supports_model("claude-opus-4-1"));
-	assert!(provider.supports_model("claude-opus-4"));
-	assert!(provider.supports_model("claude-sonnet-4"));
-	assert!(provider.supports_model("claude-3-5-haiku"));
-	assert!(provider.supports_model("claude-3.5-haiku"));
-
-	// The "-4-0" aliases resolve through the bare Claude 4 rows
-	let pricing = provider.get_model_pricing("claude-opus-4-0").unwrap();
-	assert_eq!(pricing.input_price_per_1m, 15.0);
-	assert_eq!(pricing.output_price_per_1m, 75.0);
-	let pricing = provider.get_model_pricing("claude-sonnet-4-0").unwrap();
-	assert_eq!(pricing.input_price_per_1m, 3.0);
-	assert_eq!(pricing.output_price_per_1m, 15.0);
 }
 
 #[test]
@@ -176,14 +173,13 @@ fn test_supports_vision_case_insensitive() {
 	assert!(provider.supports_vision("claude-haiku-4-5"));
 
 	// Test lowercase
-	assert!(provider.supports_vision("claude-3-5-haiku"));
 	assert!(provider.supports_vision("claude-opus-4-7"));
 
 	// Test uppercase
-	assert!(provider.supports_vision("CLAUDE-3-5-HAIKU"));
+	assert!(provider.supports_vision("CLAUDE-HAIKU-4-5"));
 	assert!(provider.supports_vision("CLAUDE-OPUS-4-7"));
 	// Test mixed case
-	assert!(provider.supports_vision("ClaUde-3-5-HaiKu"));
+	assert!(provider.supports_vision("ClaUde-HaiKu-4-5"));
 }
 
 #[test]
@@ -221,42 +217,40 @@ fn test_get_model_pricing() {
 	// Test Opus 4.7 context window
 	assert_eq!(provider.get_max_input_tokens("claude-opus-4-7"), 1_000_000);
 
-	// Test Opus 4.7 does not support any sampling parameters
-	let sp = provider.supported_sampling_params("claude-opus-4-7");
-	assert_eq!(sp, SamplingSupport::NONE);
-
-	// Test Opus 4.1 supports temperature+top_k but not top_p
-	let sp = provider.supported_sampling_params("claude-opus-4-1");
-	assert!(sp.temperature);
-	assert!(!sp.top_p);
-	assert!(sp.top_k);
-
-	// Test Haiku 3.5 supports all sampling params
-	let sp = provider.supported_sampling_params("claude-3-5-haiku");
-	assert!(sp.temperature);
-	assert!(sp.top_p);
-	assert!(sp.top_k);
-
-	// Test Sonnet 4 pricing (from the pricing table)
-	let pricing = provider.get_model_pricing("claude-sonnet-4").unwrap();
-	assert_eq!(pricing.input_price_per_1m, 3.0);
-	assert_eq!(pricing.output_price_per_1m, 15.0);
-	assert_eq!(pricing.cache_write_price_per_1m, 3.75); // from pricing table
-	assert_eq!(pricing.cache_read_price_per_1m, 0.30); // from pricing table
-
-	// Test Haiku 3.5 pricing
-	let pricing = provider.get_model_pricing("claude-3-5-haiku").unwrap();
-	assert_eq!(pricing.input_price_per_1m, 0.80);
-	assert_eq!(pricing.output_price_per_1m, 4.00);
-	assert_eq!(pricing.cache_write_price_per_1m, 1.00); // from pricing table
-	assert_eq!(pricing.cache_read_price_per_1m, 0.08); // from pricing table
+	// Test Haiku 4.5 pricing
+	let pricing = provider.get_model_pricing("claude-haiku-4-5").unwrap();
+	assert_eq!(pricing.input_price_per_1m, 1.00);
+	assert_eq!(pricing.output_price_per_1m, 5.00);
+	assert_eq!(pricing.cache_write_price_per_1m, 1.25);
+	assert_eq!(pricing.cache_read_price_per_1m, 0.10);
 
 	// Test case insensitive
-	let pricing = provider.get_model_pricing("CLAUDE-SONNET-4").unwrap();
+	let pricing = provider.get_model_pricing("CLAUDE-SONNET-4-6").unwrap();
 	assert_eq!(pricing.input_price_per_1m, 3.0);
 
 	// Test unknown model
 	assert!(provider.get_model_pricing("unknown-model").is_none());
+}
+
+#[test]
+fn sampling_params_are_never_sent() {
+	// API version 2026-10-21 rejects them on every model, including the ones
+	// that accepted non-default values on 2023-06-01.
+	let provider = AnthropicProvider::new();
+	for model in [
+		"claude-opus-5-5",
+		"claude-opus-4-7",
+		"claude-opus-4-6",
+		"claude-sonnet-4-6",
+		"claude-opus-4-5",
+		"claude-haiku-4-5",
+	] {
+		assert_eq!(
+			provider.supported_sampling_params(model),
+			SamplingSupport::NONE,
+			"{model}"
+		);
+	}
 }
 
 #[test]
@@ -321,7 +315,7 @@ fn test_fable_5() {
 	assert_eq!(pricing.cache_write_price_per_1m, 12.50);
 	assert_eq!(pricing.cache_read_price_per_1m, 1.00);
 
-	// 1M context window and vision (ID lacks claude-3/claude-4 substrings)
+	// 1M context window and vision
 	assert_eq!(provider.get_max_input_tokens(model), 1_000_000);
 	assert!(provider.supports_vision(model));
 
@@ -404,7 +398,7 @@ fn test_mythos_5() {
 	assert_eq!(pricing.cache_write_price_per_1m, 12.50);
 	assert_eq!(pricing.cache_read_price_per_1m, 1.00);
 
-	// 1M context window and vision (ID lacks claude-3/claude-4 substrings)
+	// 1M context window and vision
 	assert_eq!(provider.get_max_input_tokens(model), 1_000_000);
 	assert!(provider.supports_vision(model));
 
@@ -600,9 +594,7 @@ fn test_effective_max_tokens() {
 	assert_eq!(effective_max_tokens("claude-opus-5-5", 0), 128_000);
 	assert_eq!(effective_max_tokens("claude-sonnet-4-6", 0), 128_000);
 	assert_eq!(effective_max_tokens("claude-opus-4-5", 0), 64_000);
-	assert_eq!(effective_max_tokens("claude-sonnet-4-5", 0), 64_000);
 	assert_eq!(effective_max_tokens("claude-haiku-4-5", 0), 64_000);
-	assert_eq!(effective_max_tokens("claude-opus-4-1", 0), 32_000);
 	assert_eq!(effective_max_tokens("claude-3-haiku", 0), 4_096);
 }
 
@@ -670,7 +662,7 @@ fn test_effort_value_xhigh_and_max_ceiling() {
 	// XHigh passes through on models that list it...
 	assert_eq!(effort_value("claude-opus-5", ReasoningEffort::XHigh, false), "xhigh");
 	// ...and collapses to high on models that do not.
-	assert_eq!(effort_value("claude-3-haiku", ReasoningEffort::XHigh, false), "high");
+	assert_eq!(effort_value("claude-haiku-4-5", ReasoningEffort::XHigh, false), "high");
 	// Max needs adaptive support; otherwise it floors to high.
 	assert_eq!(effort_value("claude-opus-5", ReasoningEffort::Max, true), "max");
 	assert_eq!(effort_value("claude-opus-5", ReasoningEffort::Max, false), "high");
@@ -719,7 +711,10 @@ async fn chat_completion_via_mock_http_splits_blocks_and_cache_usage() {
 	let _env = EnvGuard::new().set("ANTHROPIC_API_URL", mock.url.clone());
 
 	let provider = AnthropicProvider::new();
-	let params = ChatCompletionParams::new(&[], "claude-sonnet-4", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
+	// Sonnet 4.6 accepted non-default sampling on 2023-06-01; none of it may
+	// reach the request now.
+	let params =
+		ChatCompletionParams::new(&[], "claude-sonnet-4-6", 0.2, 0.9, 40, 10).with_api_key("mock-key".to_owned());
 	let response = provider.chat_completion(params).await.expect("mock completion");
 
 	// Text blocks become content; thinking rides its own block; tool_use maps to calls.
@@ -742,7 +737,10 @@ async fn chat_completion_via_mock_http_splits_blocks_and_cache_usage() {
 
 	let requests = mock.requests();
 	let req_body: serde_json::Value = serde_json::from_str(&requests[0].body).expect("request json");
-	assert_eq!(req_body["model"], "claude-sonnet-4");
+	assert_eq!(req_body["model"], "claude-sonnet-4-6");
+	for field in ["temperature", "top_p", "top_k"] {
+		assert!(req_body.get(field).is_none(), "{field} must not be sent");
+	}
 }
 
 #[tokio::test]
@@ -755,7 +753,8 @@ async fn chat_completion_via_mock_http_surfaces_http_error() {
 	let _env = EnvGuard::new().set("ANTHROPIC_API_URL", mock.url.clone());
 
 	let provider = AnthropicProvider::new();
-	let params = ChatCompletionParams::new(&[], "claude-sonnet-4", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
+	let params =
+		ChatCompletionParams::new(&[], "claude-sonnet-4-6", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
 	let err = provider.chat_completion(params).await.expect_err("http error surfaces");
 	assert!(
 		err.to_string().contains("Anthropic API error"),

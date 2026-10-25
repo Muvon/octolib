@@ -40,11 +40,10 @@ fn test_sampling_support_mirrors_upstream_restrictions() {
 	assert!(!sampling_support("gpt-5.6-luna").temperature);
 	assert!(!sampling_support("gpt-5.5").top_p);
 
-	// Claude Fable/Opus 5 reject all sampling; Sonnet 4.5 rejects top_p only
+	// Claude mirrors the native provider: API version 2026-10-21 rejects every
+	// sampling parameter, so none is sent on any model
 	assert_eq!(sampling_support("claude-fable-5"), SamplingSupport::NONE);
-	assert!(!sampling_support("claude-opus-5").temperature);
-	assert!(sampling_support("claude-sonnet-4-5").temperature);
-	assert!(!sampling_support("claude-sonnet-4-5").top_p);
+	assert_eq!(sampling_support("claude-sonnet-4-6"), SamplingSupport::NONE);
 
 	// Other families pass through untouched
 	assert_eq!(sampling_support("glm-5.2"), SamplingSupport::ALL);

@@ -196,7 +196,7 @@ let function_def = FunctionDefinition {
 
 ```rust
 // Get provider based on model
-let (provider, model) = ProviderFactory::get_provider_for_model("anthropic:claude-3.5-sonnet")?;
+let (provider, model) = ProviderFactory::get_provider_for_model("anthropic:claude-sonnet-5-5")?;
 
 // Check provider capabilities
 if provider.supports_vision(&model) {

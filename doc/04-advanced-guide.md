@@ -153,7 +153,7 @@ See `examples/openai_oauth.rs` and `examples/anthropic_oauth.rs` for usage examp
 
 ```rust
 // Get provider dynamically
-let (provider, model) = ProviderFactory::get_provider_for_model("anthropic:claude-3.5-sonnet")?;
+let (provider, model) = ProviderFactory::get_provider_for_model("anthropic:claude-sonnet-5-5")?;
 ```
 
 ### Tool Calling

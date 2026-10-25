@@ -162,9 +162,9 @@ fn supported_sampling_params(&self, model: &str) -> SamplingSupport // default: 
 
 ### Model Format
 
-Always `provider:model` — e.g., `openai:gpt-4o`, `anthropic:claude-opus-4`, `ollama:llama3.2`.
+Always `provider:model` — e.g., `openai:gpt-4o`, `anthropic:claude-opus-5-5`, `ollama:llama3.2`.
 
-CLI provider uses `cli:backend/model` — e.g., `cli:codex/gpt-5.2-codex`, `cli:claude/claude-opus-4`.
+CLI provider uses `cli:backend/model` — e.g., `cli:codex/gpt-5.2-codex`, `cli:claude/claude-opus-5-5`.
 
 `ProviderFactory::get_provider_for_model("provider:model")` → `(Box<dyn AiProvider>, String)`.
 

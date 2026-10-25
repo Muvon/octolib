@@ -76,6 +76,7 @@ fn test_supported_providers() {
 	assert!(providers.contains(&"inception"));
 	assert!(providers.contains(&"meta"));
 	assert!(providers.contains(&"xai"));
+	assert!(providers.contains(&"xiaomi"));
 	assert!(providers.contains(&"tinker"));
 	assert!(providers.contains(&"webwright"));
 	assert!(providers.contains(&"cli"));
@@ -111,6 +112,7 @@ fn test_create_provider() {
 	assert!(ProviderFactory::create_provider("groq").is_ok());
 	assert!(ProviderFactory::create_provider("inception").is_ok());
 	assert!(ProviderFactory::create_provider("xai").is_ok());
+	assert!(ProviderFactory::create_provider("xiaomi").is_ok());
 	assert!(ProviderFactory::create_provider("meta").is_ok());
 	assert!(ProviderFactory::create_provider("tinker").is_ok());
 	assert!(ProviderFactory::create_provider("webwright").is_ok());
@@ -269,6 +271,15 @@ fn test_get_provider_for_model() {
 	assert!(provider.supports_model(&model));
 	assert!(provider.supports_structured_output(&model));
 	assert!(ProviderFactory::get_provider_for_model("inception:mercury-9").is_err());
+
+	// Test Xiaomi MiMo provider (closed catalog)
+	let result = ProviderFactory::get_provider_for_model("xiaomi:mimo-v2.6-pro");
+	assert!(result.is_ok());
+	let (provider, model) = result.unwrap();
+	assert_eq!(provider.name(), "xiaomi");
+	assert_eq!(model, "mimo-v2.6-pro");
+	assert!(provider.supports_model(&model));
+	assert!(ProviderFactory::get_provider_for_model("xiaomi:mimo-v2.5").is_err());
 
 	// Test Featherless provider
 	let result = ProviderFactory::get_provider_for_model("featherless:meta-llama/Meta-Llama-3.1-8B-Instruct");

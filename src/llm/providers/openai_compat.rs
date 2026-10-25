@@ -437,6 +437,19 @@ fn apply_reasoning_effort(
 ) {
 	use crate::llm::types::ReasoningEffort;
 
+	// Xiaomi MiMo has no effort ladder (deep-thinking page, Oct 2026):
+	// `thinking.type` is its only reasoning switch, on by default.
+	if provider_name.eq_ignore_ascii_case("xiaomi") {
+		if let Some(effort) = effort {
+			let thinking_type = if effort == ReasoningEffort::None {
+				"disabled"
+			} else {
+				"enabled"
+			};
+			request_body["thinking"] = serde_json::json!({ "type": thinking_type });
+		}
+		return;
+	}
 	match effort.map(|effort| shared::supported_reasoning_effort(provider_name, model, effort)) {
 		Some(ReasoningEffort::None) => {
 			// Thinking off. Model Studio's hybrid models (DeepSeek V4, GLM, Qwen3)
@@ -516,11 +529,11 @@ fn apply_response_format(
 				} else {
 					request_body["format"] = serde_json::json!("json");
 				}
-			} else if is_alibaba_deepseek_v4(provider_name, model) {
+			} else if is_alibaba_deepseek_v4(provider_name, model) || provider_name.eq_ignore_ascii_case("xiaomi") {
 				// Model Studio exposes JSON Object, not JSON Schema, for
-				// DeepSeek V4. Keep the requested schema in prompt guidance;
-				// schema_enforcement validates it locally and fails closed when
-				// guidance is ignored.
+				// DeepSeek V4, and Xiaomi MiMo only has JSON Object mode. Keep
+				// the requested schema in prompt guidance; schema_enforcement
+				// validates it locally and fails closed when guidance is ignored.
 				if let Some(schema) = &response_format.schema {
 					request_body["response_format"] = serde_json::json!({
 						"type": "json_object"
@@ -694,8 +707,11 @@ fn convert_messages(messages: &[Message], provider_name: &str, model: &str) -> V
 		provider_name.eq_ignore_ascii_case("ollama")
 			&& (Some(idx) == last_assistant || crate::llm::providers::moonshot::preserves_historical_thinking(model))
 	};
-	let replays_reasoning_content = provider_name.eq_ignore_ascii_case("alibaba")
-		&& crate::llm::providers::alibaba::preserves_historical_thinking(model);
+	// Xiaomi MiMo returns 400 when a thinking-mode tool-call turn comes back
+	// without its `reasoning_content`, and recommends replaying every turn's.
+	let replays_reasoning_content = (provider_name.eq_ignore_ascii_case("alibaba")
+		&& crate::llm::providers::alibaba::preserves_historical_thinking(model))
+		|| provider_name.eq_ignore_ascii_case("xiaomi");
 
 	for (msg_idx, message) in messages.iter().enumerate() {
 		match message.role.as_str() {

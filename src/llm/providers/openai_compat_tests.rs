@@ -825,3 +825,82 @@ fn test_webwright_reasoning_effort_standard_ceiling() {
 		assert_eq!(reasoning_effort_value("webwright", "wren-r1", effort), expected);
 	}
 }
+
+/// Xiaomi MiMo has no effort ladder: any level enables thinking, no reasoning
+/// disables it, and `reasoning_effort` is never sent.
+#[test]
+fn test_xiaomi_reasoning_effort_maps_to_thinking_switch() {
+	for effort in [Effort::Low, Effort::Medium, Effort::High, Effort::XHigh, Effort::Max] {
+		assert_eq!(
+			effort_body("xiaomi", "mimo-v2.6-pro", effort),
+			serde_json::json!({ "thinking": { "type": "enabled" } }),
+			"{effort:?}"
+		);
+	}
+	assert_eq!(
+		effort_body("xiaomi", "mimo-v2.6-pro", Effort::None),
+		serde_json::json!({ "thinking": { "type": "disabled" } })
+	);
+
+	let mut request_body = serde_json::json!({});
+	apply_reasoning_effort(&mut request_body, "xiaomi", "mimo-v2.6-pro", None);
+	assert_eq!(request_body, serde_json::json!({}));
+}
+
+/// Xiaomi MiMo returns 400 when a thinking-mode tool-call turn comes back
+/// without its `reasoning_content`, so every assistant turn replays it.
+#[test]
+fn test_xiaomi_replays_every_reasoning_turn_as_reasoning_content() {
+	let call = crate::llm::tool_calls::GenericToolCall {
+		id: "call_1".to_string(),
+		name: "view".to_string(),
+		arguments: serde_json::json!({"path": "src/lib.rs"}),
+		meta: None,
+	};
+	let thinking = |text: &str| ThinkingBlock {
+		content: text.to_string(),
+		tokens: 4,
+	};
+	let mut tool_turn = Message::assistant("").with_thinking(thinking("plan"));
+	tool_turn.tool_calls = Some(serde_json::to_value([call]).unwrap());
+	let messages = [
+		Message::user("fix the bug"),
+		tool_turn,
+		Message::tool("fn main() {}", "call_1", "view"),
+		Message::assistant("done").with_thinking(thinking("answer")),
+	];
+
+	let converted = convert_messages(&messages, "xiaomi", "mimo-v2.6-pro");
+	let replayed: Vec<Option<&str>> = converted
+		.iter()
+		.map(|message| message.reasoning_content.as_deref())
+		.collect();
+	assert_eq!(replayed, [None, Some("plan"), None, Some("answer")]);
+	assert!(converted.iter().all(|message| message.reasoning.is_none()));
+}
+
+#[test]
+fn test_xiaomi_uses_json_object_guidance_not_json_schema() {
+	let schema = serde_json::json!({
+		"type": "object",
+		"properties": {"answer": {"type": "integer"}},
+		"required": ["answer"]
+	});
+	let response_format = crate::llm::types::StructuredOutputRequest::json_schema(schema.clone());
+	let mut request_body = serde_json::json!({
+		"messages": [{"role": "user", "content": "answer"}]
+	});
+
+	apply_response_format(&mut request_body, "xiaomi", "mimo-v2.6-flash", &response_format);
+
+	assert_eq!(
+		request_body["response_format"],
+		serde_json::json!({"type": "json_object"})
+	);
+	let guidance = request_body["messages"]
+		.as_array()
+		.and_then(|messages| messages.last())
+		.and_then(|message| message["content"].as_str())
+		.expect("schema guidance message");
+	assert!(guidance.contains(&schema.to_string()));
+}

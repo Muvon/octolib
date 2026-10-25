@@ -125,6 +125,10 @@ name = "inception_chat"
 required-features = ["llm"]
 
 [[example]]
+name = "xiaomi_chat"
+required-features = ["llm"]
+
+[[example]]
 name = "local_chat"
 required-features = ["llm"]
 

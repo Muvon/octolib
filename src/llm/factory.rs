@@ -20,7 +20,7 @@ use crate::llm::providers::{
 	GoogleStudioProvider, GoogleVertexProvider, GroqProvider, HetznerProvider, InceptionProvider, LocalProvider,
 	MetaProvider, MinimaxProvider, MoonshotProvider, NvidiaProvider, OctoHubProvider, OllamaProvider, OpenAiProvider,
 	OpenCodeGoProvider, OpenCodeZenProvider, OpenRouterProvider, TinkerProvider, TogetherProvider, WebWrightProvider,
-	XaiProvider, ZaiProvider,
+	XaiProvider, XiaomiProvider, ZaiProvider,
 };
 use crate::llm::traits::AiProvider;
 use anyhow::Result;
@@ -85,11 +85,12 @@ impl ProviderFactory {
             "together" => Ok(Box::new(TogetherProvider::new())),
             "webwright" => Ok(Box::new(WebWrightProvider::new())),
             "xai" => Ok(Box::new(XaiProvider::new())),
+            "xiaomi" => Ok(Box::new(XiaomiProvider::new())),
             "zai" => Ok(Box::new(ZaiProvider::new())),
             "cli" => Err(anyhow::anyhow!(
                 "CLI provider requires a model string like 'cli:<backend>/<model>'. Use ProviderFactory::get_provider_for_model instead."
             )),
-            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported: openai, chatgpt, anthropic, openrouter, cerebras, local, ollama, google-vertex, google-studio, groq, alibaba, amazon, cloudflare, deepseek, featherless, fireworks, hetzner, inception, meta, minimax, moonshot, nvidia, octohub, opencode-zen, opencode-go, tinker, together, webwright, xai, zai, byteplus, cli", provider_name))
+            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported: openai, chatgpt, anthropic, openrouter, cerebras, local, ollama, google-vertex, google-studio, groq, alibaba, amazon, cloudflare, deepseek, featherless, fireworks, hetzner, inception, meta, minimax, moonshot, nvidia, octohub, opencode-zen, opencode-go, tinker, together, webwright, xai, xiaomi, zai, byteplus, cli", provider_name))
         }
 	}
 
@@ -146,6 +147,7 @@ impl ProviderFactory {
 			"together",
 			"webwright",
 			"xai",
+			"xiaomi",
 			"zai",
 			"byteplus",
 			"cli",

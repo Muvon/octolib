@@ -46,6 +46,7 @@ pub mod tinker;
 pub mod together;
 pub mod webwright;
 pub mod xai;
+pub mod xiaomi;
 pub mod zai;
 
 // Re-export provider implementations
@@ -81,4 +82,5 @@ pub use tinker::TinkerProvider;
 pub use together::TogetherProvider;
 pub use webwright::WebWrightProvider;
 pub use xai::XaiProvider;
+pub use xiaomi::XiaomiProvider;
 pub use zai::ZaiProvider;

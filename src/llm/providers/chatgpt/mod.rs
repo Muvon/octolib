@@ -326,7 +326,18 @@ fn build_input(messages: &[Message]) -> Vec<Value> {
 		.iter()
 		.flat_map(|message| {
 			let mut items = stored_reasoning_items(message);
-			items.extend(openai::messages_to_input(std::slice::from_ref(message), None, false));
+			let phase = assistant_phase(message);
+			items.extend(
+				openai::messages_to_input(std::slice::from_ref(message), None, false)
+					.into_iter()
+					.map(|item| {
+						if item["role"] == "assistant" {
+							with_phase(item, phase)
+						} else {
+							item
+						}
+					}),
+			);
 			items
 		})
 		.map(|mut item| {
@@ -339,6 +350,32 @@ fn build_input(messages: &[Message]) -> Vec<Value> {
 			item
 		})
 		.collect()
+}
+
+/// The `phase` the API gave an assistant message: text that came with tool
+/// calls is a preamble (`commentary`); text that ended the response is the
+/// `final_answer`. OpenAI asks callers that replay history themselves to
+/// preserve it — a dropped phase lets the model read its own preambles as final
+/// answers, which shows up as early stopping in long tool-heavy runs.
+fn assistant_phase(message: &Message) -> &'static str {
+	if shared::parse_generic_tool_calls_lossy(message.tool_calls.as_ref(), "chatgpt").is_empty() {
+		"final_answer"
+	} else {
+		"commentary"
+	}
+}
+
+/// An assistant message as the Responses API returns it (typed, with output
+/// text parts and its phase).
+fn with_phase(mut item: Value, phase: &str) -> Value {
+	let content = item["content"].take();
+	item["type"] = json!("message");
+	item["phase"] = json!(phase);
+	item["content"] = match content {
+		Value::String(text) => json!([{ "type": "output_text", "text": text }]),
+		other => other,
+	};
+	item
 }
 
 fn stored_reasoning_items(message: &Message) -> Vec<Value> {

@@ -202,6 +202,44 @@ fn replay_puts_encrypted_reasoning_before_namespaced_calls() {
 	assert_eq!(input[3]["type"], "function_call_output");
 }
 
+// OpenAI asks callers that replay history themselves to preserve each assistant
+// message's phase: a preamble that came with tool calls is `commentary`, the
+// text that ended a response is the `final_answer`.
+#[test]
+fn replayed_assistant_text_keeps_the_phase_it_was_given() {
+	let mut preamble = assistant_with_call(None);
+	preamble.content = "checking the registry".to_string();
+	let messages = vec![
+		Message::user("go"),
+		preamble,
+		Message::tool("ok", "call_1", "view"),
+		Message::assistant("all done"),
+		Message::user("and now?"),
+	];
+
+	let input = build_input(&messages);
+
+	assert_eq!(input.len(), 6);
+	assert_eq!(input[0]["role"], "user");
+	assert_eq!(input[0].get("phase"), None, "user messages carry no phase");
+	assert_eq!(
+		input[1],
+		json!({
+			"type": "message",
+			"role": "assistant",
+			"phase": "commentary",
+			"content": [{"type": "output_text", "text": "checking the registry"}],
+		})
+	);
+	assert_eq!(input[2]["type"], "function_call", "the call follows its preamble");
+	assert_eq!(input[3]["type"], "function_call_output");
+	assert_eq!(input[4]["phase"], "final_answer");
+	assert_eq!(
+		input[4]["content"],
+		json!([{"type": "output_text", "text": "all done"}])
+	);
+}
+
 // The plan route caches by rendered prefix: a later request of the same session
 // must start with the earlier request byte-for-byte, or every turn pays its whole
 // history again.

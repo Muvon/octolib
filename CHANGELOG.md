@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.46.1] - 2026-10-26
+
+### 📋 Release Summary
+
+Structured-output enforcement is now aligned across providers.
+
+### 🐛 Bug Fixes & Stability
+
+- **providers**: align structured-output enforcement by provider `8d76a8b1`
+
 ## [0.46.0] - 2026-10-26
 
 ### 📋 Release Summary

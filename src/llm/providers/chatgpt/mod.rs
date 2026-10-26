@@ -318,27 +318,15 @@ fn remember_turn_state_with_store(cache_key: Option<&str>, token: Option<&str>, 
 	}
 }
 
-/// The full transcript as Responses API input: each assistant turn preceded by
-/// its replayed encrypted reasoning, system messages sent as developer
-/// messages, and function calls tagged with the namespace they were declared in.
+/// The full transcript as Responses API input: assistant turns replay their
+/// captured output items verbatim, system messages are sent as developer
+/// messages, and function calls are tagged with the namespace they were declared in.
 fn build_input(messages: &[Message]) -> Vec<Value> {
 	messages
 		.iter()
 		.flat_map(|message| {
-			let mut items = stored_reasoning_items(message);
-			let phase = assistant_phase(message);
-			items.extend(
-				openai::messages_to_input(std::slice::from_ref(message), None, false)
-					.into_iter()
-					.map(|item| {
-						if item["role"] == "assistant" {
-							with_phase(item, phase)
-						} else {
-							item
-						}
-					}),
-			);
-			items
+			openai::replay_provider_items(message, "chatgpt")
+				.unwrap_or_else(|| openai::messages_to_input(std::slice::from_ref(message), None, false))
 		})
 		.map(|mut item| {
 			if item["role"] == "system" {
@@ -350,42 +338,6 @@ fn build_input(messages: &[Message]) -> Vec<Value> {
 			item
 		})
 		.collect()
-}
-
-/// The `phase` the API gave an assistant message: text that came with tool
-/// calls is a preamble (`commentary`); text that ended the response is the
-/// `final_answer`. OpenAI asks callers that replay history themselves to
-/// preserve it — a dropped phase lets the model read its own preambles as final
-/// answers, which shows up as early stopping in long tool-heavy runs.
-fn assistant_phase(message: &Message) -> &'static str {
-	if shared::parse_generic_tool_calls_lossy(message.tool_calls.as_ref(), "chatgpt").is_empty() {
-		"final_answer"
-	} else {
-		"commentary"
-	}
-}
-
-/// An assistant message as the Responses API returns it (typed, with output
-/// text parts and its phase).
-fn with_phase(mut item: Value, phase: &str) -> Value {
-	let content = item["content"].take();
-	item["type"] = json!("message");
-	item["phase"] = json!(phase);
-	item["content"] = match content {
-		Value::String(text) => json!([{ "type": "output_text", "text": text }]),
-		other => other,
-	};
-	item
-}
-
-fn stored_reasoning_items(message: &Message) -> Vec<Value> {
-	shared::parse_generic_tool_calls_lossy(message.tool_calls.as_ref(), "chatgpt")
-		.first()
-		.and_then(|call| call.meta.as_ref())
-		.and_then(|meta| meta.get(openai::REASONING_META_KEY))
-		.and_then(Value::as_array)
-		.cloned()
-		.unwrap_or_default()
 }
 
 /// Responses API error codes for a server-side fault or throttling: the stream

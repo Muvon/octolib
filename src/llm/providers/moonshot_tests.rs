@@ -248,6 +248,7 @@ fn test_reasoning_content_serialization() {
 			"name": "get_weather",
 			"arguments": {"city": "Beijing"}
 		}])),
+		provider_items: None,
 		images: None,
 		videos: None,
 		thinking: Some(ThinkingBlock {
@@ -285,6 +286,7 @@ fn test_reasoning_content_serialization() {
 			"name": "search",
 			"arguments": {"query": "test"}
 		}])),
+		provider_items: None,
 		images: None,
 		videos: None,
 		thinking: None,
@@ -313,6 +315,7 @@ fn test_reasoning_content_serialization() {
 		tool_call_id: None,
 		name: None,
 		tool_calls: None,
+		provider_items: None,
 		images: None,
 		videos: None,
 		thinking: None,
@@ -352,6 +355,7 @@ fn test_reasoning_content_serialization() {
 		tool_call_id: Some("call_123".to_string()),
 		name: Some("get_weather".to_string()),
 		tool_calls: None,
+		provider_items: None,
 		images: None,
 		videos: None,
 		thinking: None,

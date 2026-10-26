@@ -390,6 +390,7 @@ fn test_convert_messages_reasoning_content_replay() {
 		tool_call_id: None,
 		name: None,
 		tool_calls: Some(tool_calls_json.clone()),
+		provider_items: None,
 		images: None,
 		videos: None,
 		thinking: Some(ThinkingBlock {

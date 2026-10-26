@@ -61,6 +61,7 @@ fn test_gemini_thought_signature_round_trip() {
 		tool_call_id: None,
 		name: None,
 		tool_calls: Some(tool_calls_json),
+		provider_items: None,
 		images: None,
 		videos: None,
 		thinking: None,
@@ -122,6 +123,7 @@ fn test_ollama_reasoning_is_stored_and_replayed() {
 		tool_call_id: None,
 		name: None,
 		tool_calls: Some(tool_calls),
+		provider_items: None,
 		images: None,
 		videos: None,
 		thinking: Some(thinking),
@@ -147,6 +149,7 @@ fn test_ollama_reasoning_replays_only_on_last_assistant() {
 		tool_call_id: None,
 		name: None,
 		tool_calls: None,
+		provider_items: None,
 		images: None,
 		videos: None,
 		thinking: Some(ThinkingBlock {

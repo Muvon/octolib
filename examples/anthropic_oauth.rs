@@ -79,6 +79,7 @@ async fn main() -> anyhow::Result<()> {
 			name: None,
 			tool_call_id: None,
 			tool_calls: None,
+			provider_items: None,
 			images: None,
 			videos: None,
 			cached: false,

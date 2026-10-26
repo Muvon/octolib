@@ -41,6 +41,8 @@ pub struct Message {
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub tool_calls: Option<serde_json::Value>, // For assistant messages: original tool calls from API response
 	#[serde(skip_serializing_if = "Option::is_none")]
+	pub provider_items: Option<serde_json::Value>, // Provider-native ordered output items for exact replay
+	#[serde(skip_serializing_if = "Option::is_none")]
 	pub images: Option<Vec<ImageAttachment>>, // For messages with image attachments
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub videos: Option<Vec<VideoAttachment>>, // For messages with video attachments
@@ -66,6 +68,7 @@ impl Message {
 			tool_call_id: None,
 			name: None,
 			tool_calls: None,
+			provider_items: None,
 			images: None,
 			videos: None,
 			thinking: None,
@@ -84,6 +87,7 @@ impl Message {
 			tool_call_id: None,
 			name: None,
 			tool_calls: None,
+			provider_items: None,
 			images: None,
 			videos: None,
 			thinking: None,
@@ -102,6 +106,7 @@ impl Message {
 			tool_call_id: None,
 			name: None,
 			tool_calls: None,
+			provider_items: None,
 			images: None,
 			videos: None,
 			thinking: None,
@@ -120,6 +125,7 @@ impl Message {
 			tool_call_id: Some(tool_call_id.to_string()),
 			name: Some(name.to_string()),
 			tool_calls: None,
+			provider_items: None,
 			images: None,
 			videos: None,
 			thinking: None,
@@ -312,6 +318,7 @@ impl MessageBuilder {
 			tool_call_id: self.tool_call_id,
 			name: self.name,
 			tool_calls: self.tool_calls,
+			provider_items: None,
 			images: self.images,
 			videos: self.videos,
 			thinking: self.thinking,

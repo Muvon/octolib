@@ -178,81 +178,90 @@ fn turn_state_store_evicts_the_least_recently_used_key_at_capacity() {
 	assert_eq!(turn_states.get("overflow").as_deref(), Some("new-token"));
 }
 
+fn captured(items: Value) -> Option<Value> {
+	Some(json!({"provider": "chatgpt", "items": items}))
+}
+
 #[test]
-fn replay_puts_encrypted_reasoning_before_namespaced_calls() {
-	let reasoning = json!({
-		"type": "reasoning",
-		"id": "rs_1",
-		"summary": [],
-		"encrypted_content": "enc"
+fn captured_items_replay_verbatim_and_in_order() {
+	let items = json!([
+		{"type": "reasoning", "id": "rs_1", "summary": [], "encrypted_content": "enc-1"},
+		{"type": "message", "id": "msg_1", "role": "assistant", "phase": "commentary", "content": [{"type": "output_text", "text": "checking"}]},
+		{"type": "reasoning", "id": "rs_2", "summary": [], "encrypted_content": "enc-2"},
+		{"type": "function_call", "id": "fc_1", "call_id": "call_1", "status": "completed", "name": "view", "namespace": TOOL_NAMESPACE, "arguments": "{\"path\":\"a.rs\"}"}
+	]);
+	let mut assistant = assistant_with_call(None);
+	assistant.content = "flattened text is not replayed".to_string();
+	assistant.provider_items = captured(items.clone());
+
+	assert_eq!(build_input(&[assistant]), items.as_array().unwrap().clone());
+}
+
+#[test]
+fn text_only_response_round_trips_through_captured_items() {
+	let response_json = json!({
+		"id": "resp_text",
+		"output": [
+			{"type": "reasoning", "id": "rs_1", "summary": [], "encrypted_content": "enc-1"},
+			{"type": "message", "id": "msg_1", "role": "assistant", "phase": "commentary", "content": [{"type": "output_text", "text": "waiting"}]},
+			{"type": "reasoning", "id": "rs_2", "summary": [], "encrypted_content": "enc-2"},
+			{"type": "message", "id": "msg_2", "role": "assistant", "phase": "final_answer", "content": [{"type": "output_text", "text": "done"}]}
+		],
+		"usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
 	});
-	let meta = serde_json::Map::from_iter([(openai::REASONING_META_KEY.to_string(), json!([reasoning.clone()]))]);
-	let messages = vec![
-		Message::user("go"),
-		assistant_with_call(Some(meta)),
-		Message::tool("ok", "call_1", "view"),
-	];
+	let expected = response_json["output"].as_array().unwrap().clone();
+	let response = openai::parse_responses_api_response(
+		json!({"model": "gpt-6.1-sol", "store": false}),
+		response_json,
+		"chatgpt",
+		1,
+		HashMap::new(),
+	)
+	.unwrap();
+	let mut assistant = Message::assistant(&response.content);
+	assistant.provider_items = Some(response.exchange.response["output_items"].clone());
 
-	let input = build_input(&messages);
-
-	assert_eq!(input.len(), 4);
-	assert_eq!(input[1], reasoning);
-	assert_eq!(input[2]["type"], "function_call");
-	assert_eq!(input[2]["namespace"], TOOL_NAMESPACE);
-	assert_eq!(input[3]["type"], "function_call_output");
+	assert_eq!(build_input(&[assistant]), expected);
 }
 
-// OpenAI asks callers that replay history themselves to preserve each assistant
-// message's phase: a preamble that came with tool calls is `commentary`, the
-// text that ended a response is the `final_answer`.
 #[test]
-fn replayed_assistant_text_keeps_the_phase_it_was_given() {
-	let mut preamble = assistant_with_call(None);
-	preamble.content = "checking the registry".to_string();
-	let messages = vec![
-		Message::user("go"),
-		preamble,
-		Message::tool("ok", "call_1", "view"),
-		Message::assistant("all done"),
-		Message::user("and now?"),
-	];
-
-	let input = build_input(&messages);
-
-	assert_eq!(input.len(), 6);
-	assert_eq!(input[0]["role"], "user");
-	assert_eq!(input[0].get("phase"), None, "user messages carry no phase");
+fn captured_items_that_do_not_match_the_message_are_not_replayed() {
+	let mut assistant = assistant_with_call(None);
+	assistant.content = "working".to_string();
+	let fallback = build_input(std::slice::from_ref(&assistant));
 	assert_eq!(
-		input[1],
-		json!({
-			"type": "message",
-			"role": "assistant",
-			"phase": "commentary",
-			"content": [{"type": "output_text", "text": "checking the registry"}],
-		})
+		fallback[0],
+		json!({"role": "assistant", "content": "working"}),
+		"no phase is invented"
 	);
-	assert_eq!(input[2]["type"], "function_call", "the call follows its preamble");
-	assert_eq!(input[3]["type"], "function_call_output");
-	assert_eq!(input[4]["phase"], "final_answer");
-	assert_eq!(
-		input[4]["content"],
-		json!([{"type": "output_text", "text": "all done"}])
-	);
+	assert_eq!(fallback[1]["call_id"], "call_1");
+
+	let call = json!({"type": "function_call", "call_id": "call_1", "name": "view", "arguments": "{}"});
+	for provider_items in [
+		Some(json!({"provider": "openai", "items": [call.clone()]})),
+		captured(json!({"type": "reasoning"})),
+		captured(json!([{"type": "reasoning", "id": "rs_1"}])),
+		captured(json!([{"type": "function_call", "call_id": "other"}])),
+		captured(json!([call.clone(), call])),
+	] {
+		assistant.provider_items = provider_items;
+		assert_eq!(build_input(std::slice::from_ref(&assistant)), fallback);
+	}
 }
-
 // The plan route caches by rendered prefix: a later request of the same session
 // must start with the earlier request byte-for-byte, or every turn pays its whole
 // history again.
 #[test]
 fn a_grown_transcript_extends_the_previous_request_unchanged() {
-	let meta = serde_json::Map::from_iter([(
-		openai::REASONING_META_KEY.to_string(),
-		json!([{"type": "reasoning", "id": "rs_1", "summary": [], "encrypted_content": "enc"}]),
-	)]);
+	let mut first_assistant = assistant_with_call(None);
+	first_assistant.provider_items = captured(json!([
+		{"type": "reasoning", "id": "rs_1", "summary": [], "encrypted_content": "enc"},
+		{"type": "function_call", "call_id": "call_1", "name": "view", "arguments": "{\"path\":\"a.rs\"}"}
+	]));
 	let mut messages = vec![
 		Message::system("rules"),
 		Message::user("go"),
-		assistant_with_call(Some(meta)),
+		first_assistant,
 		Message::tool("ok", "call_1", "view"),
 	];
 	let request_at = |messages: &[Message]| {
@@ -272,6 +281,10 @@ fn a_grown_transcript_extends_the_previous_request_unchanged() {
 
 	let mut next_call = assistant_with_call(None);
 	next_call.content = "checking".to_string();
+	next_call.provider_items = captured(json!([
+		{"type": "message", "id": "msg_2", "role": "assistant", "phase": "commentary", "content": [{"type": "output_text", "text": "checking"}]},
+		{"type": "function_call", "call_id": "call_1", "name": "view", "arguments": "{\"path\":\"a.rs\"}"}
+	]));
 	messages.push(next_call);
 	messages.push(Message::tool("done", "call_1", "view"));
 	let second = request_at(&messages);
@@ -304,9 +317,14 @@ fn stream_folds_into_a_response_that_keeps_reasoning_for_replay() {
 	let merged = merge_stream(&body).unwrap();
 	assert_eq!(merged["output"].as_array().unwrap().len(), 2);
 
-	let response =
-		openai::parse_responses_api_response(json!({"model": "gpt-6.1-sol"}), merged, "chatgpt", 1, HashMap::new())
-			.unwrap();
+	let response = openai::parse_responses_api_response(
+		json!({"model": "gpt-6.1-sol", "store": false}),
+		merged,
+		"chatgpt",
+		1,
+		HashMap::new(),
+	)
+	.unwrap();
 
 	let calls = response.tool_calls.expect("tool call parsed");
 	assert_eq!(calls[0].name, "view");
@@ -315,10 +333,14 @@ fn stream_folds_into_a_response_that_keeps_reasoning_for_replay() {
 	assert!(cost.is_some_and(|cost| cost > 0.0), "{:?}", cost);
 	assert_eq!(response.exchange.provider, "chatgpt");
 
-	// Stored on the tool call, the reasoning is replayed by the next request.
+	// The streamed output items replay in order, reasoning first.
 	let mut assistant = Message::assistant("");
 	assistant.tool_calls = Some(response.exchange.response["tool_calls"].clone());
-	assert_eq!(stored_reasoning_items(&assistant)[0]["encrypted_content"], "enc");
+	assistant.provider_items = Some(response.exchange.response["output_items"].clone());
+	let input = build_input(&[assistant]);
+	assert_eq!(input[0]["encrypted_content"], "enc");
+	assert_eq!(input[1]["call_id"], "call_1");
+	assert_eq!(input[1]["namespace"], TOOL_NAMESPACE);
 }
 
 #[test]

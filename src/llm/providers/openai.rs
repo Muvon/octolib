@@ -1002,29 +1002,31 @@ async fn execute_openai_request(
 	.map_err(|error| shared::redact_error(error, per_call_api_key))
 }
 
-/// Tool-call metadata key holding a response's encrypted reasoning items.
-pub(super) const REASONING_META_KEY: &str = "openai_reasoning_items";
-
-/// Reasoning items that carry `encrypted_content`. They only come back when the
-/// request asked for them (`include: ["reasoning.encrypted_content"]`), which a
-/// stateless caller does so it can replay reasoning across tool calls.
-fn encrypted_reasoning_meta(response_json: &serde_json::Value) -> Option<serde_json::Map<String, serde_json::Value>> {
-	let items: Vec<serde_json::Value> = response_json
-		.get("output")?
-		.as_array()?
+/// Replay a message's captured output items verbatim, in their original order,
+/// as the Responses API asks of callers that keep history themselves. The items
+/// only stand for the message while they come from this provider (encrypted
+/// reasoning is bound to the account that produced it) and their function calls
+/// are exactly its tool calls; otherwise the caller falls back to its stored fields.
+pub(super) fn replay_provider_items(message: &Message, provider: &str) -> Option<Vec<serde_json::Value>> {
+	let captured = message.provider_items.as_ref()?;
+	if captured["provider"] != provider {
+		return None;
+	}
+	let items = captured["items"].as_array()?;
+	let calls = match message.tool_calls.as_ref() {
+		Some(tool_calls) => shared::parse_generic_tool_calls_strict(tool_calls, provider).ok()?,
+		None => Vec::new(),
+	};
+	let mut message_call_ids: Vec<&str> = calls.iter().map(|call| call.id.as_str()).collect();
+	let mut item_call_ids: Vec<&str> = items
 		.iter()
-		.filter(|item| {
-			item.get("type").and_then(serde_json::Value::as_str) == Some("reasoning")
-				&& item
-					.get("encrypted_content")
-					.and_then(serde_json::Value::as_str)
-					.is_some()
-		})
-		.cloned()
+		.filter(|item| item["type"] == "function_call")
+		.map(|item| item["call_id"].as_str().unwrap_or_default())
 		.collect();
+	message_call_ids.sort_unstable();
+	item_call_ids.sort_unstable();
 
-	(!items.is_empty())
-		.then(|| serde_json::Map::from_iter([(REASONING_META_KEY.to_string(), serde_json::Value::Array(items))]))
+	(item_call_ids == message_call_ids).then(|| items.clone())
 }
 
 /// Build a [`ProviderResponse`] from a complete Responses API response object.
@@ -1180,10 +1182,16 @@ pub(super) fn parse_responses_api_response(
 	};
 
 	// Store tool_calls in unified GenericToolCall format for conversation history.
-	// Encrypted reasoning rides along so a stateless caller can replay it.
 	if let Some(ref tc) = tool_calls {
-		let reasoning_meta = encrypted_reasoning_meta(&response_json);
-		shared::set_response_tool_calls(&mut response_json, tc, reasoning_meta.as_ref());
+		shared::set_response_tool_calls(&mut response_json, tc, None);
+	}
+	// A stateless caller (`store: false`) holds the conversation itself and must
+	// replay these items as returned.
+	if request_body["store"] == false {
+		response_json["output_items"] = serde_json::json!({
+			"provider": provider_name,
+			"items": response_json["output"].clone(),
+		});
 	}
 
 	let exchange = if rate_limit_headers.is_empty() {

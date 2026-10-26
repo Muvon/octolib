@@ -14,7 +14,7 @@
 
 //! Unit coverage for the Responses API response parser: output-item
 //! extraction, usage/cost normalization, rate-limit header plumbing, and
-//! encrypted-reasoning metadata attachment.
+//! output-item capture for stateless replay.
 
 use super::*;
 use serde_json::json;
@@ -233,45 +233,45 @@ fn rate_limit_headers_are_attached_to_the_exchange() {
 }
 
 #[test]
-fn encrypted_reasoning_rides_on_tool_calls_in_the_exchange() {
+fn stateless_responses_keep_their_output_items_tagged_with_the_provider() {
 	let response = json!({
 		"output": [
 			{"type": "reasoning", "id": "rs_1", "summary": [], "encrypted_content": "enc-blob"},
-			{"type": "function_call", "call_id": "call_1", "name": "view", "arguments": "{}"}
+			{"type": "message", "id": "msg_1", "role": "assistant", "phase": "commentary", "status": "completed", "content": [{"type": "output_text", "text": "checking"}]},
+			{"type": "reasoning", "id": "rs_2", "summary": [{"type": "summary_text", "text": "next"}], "encrypted_content": "enc-next"},
+			{"type": "function_call", "id": "fc_1", "call_id": "call_1", "name": "view", "arguments": "{\"path\":\"a.rs\"}", "status": "completed"}
 		],
 		"usage": usage_json(10, 5, 15)
 	});
+	let stateful =
+		parse_responses_api_response(json!({"model": "gpt-5"}), response.clone(), "openai", 0, HashMap::new()).unwrap();
+	assert!(
+		stateful.exchange.response.get("output_items").is_none(),
+		"the server holds stateful history"
+	);
+	let expected_items = json!({"provider": "chatgpt", "items": response["output"].clone()});
 
-	let parsed =
-		parse_responses_api_response(json!({"model": "gpt-4o"}), response, "openai", 0, HashMap::new()).unwrap();
+	let parsed = parse_responses_api_response(
+		json!({"model": "gpt-5", "store": false}),
+		response,
+		"chatgpt",
+		0,
+		HashMap::new(),
+	)
+	.unwrap();
 
-	assert!(parsed.tool_calls.is_some());
+	assert_eq!(
+		parsed.tool_calls.as_ref().expect("tool calls")[0].arguments,
+		json!({"path": "a.rs"})
+	);
 	let stored = parsed.exchange.response["tool_calls"]
 		.as_array()
 		.expect("stored tool calls");
 	assert!(
-		stored[0]["meta"].get(REASONING_META_KEY).is_some(),
-		"encrypted reasoning items must be attached for stateless replay"
+		stored[0].get("meta").is_none(),
+		"new captures must not duplicate reasoning"
 	);
-}
-
-#[test]
-fn reasoning_without_encrypted_content_attaches_no_meta() {
-	let response = json!({
-		"output": [
-			{"type": "reasoning", "id": "rs_1", "summary": []},
-			{"type": "function_call", "call_id": "call_1", "name": "view", "arguments": "{}"}
-		],
-		"usage": usage_json(10, 5, 15)
-	});
-
-	let parsed =
-		parse_responses_api_response(json!({"model": "gpt-4o"}), response, "openai", 0, HashMap::new()).unwrap();
-
-	let stored = parsed.exchange.response["tool_calls"]
-		.as_array()
-		.expect("stored tool calls");
-	assert!(stored[0]["meta"].get(REASONING_META_KEY).is_none());
+	assert_eq!(parsed.exchange.response["output_items"], expected_items);
 }
 
 #[test]

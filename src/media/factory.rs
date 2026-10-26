@@ -14,7 +14,7 @@
 
 use super::errors::{MediaError, MediaResult};
 use super::providers::{
-	CloudflareMediaProvider, ElevenLabsMediaProvider, FalMediaProvider, HiggsfieldMediaProvider,
+	CloudflareMediaProvider, ElevenLabsMediaProvider, FalMediaProvider, HiggsfieldMediaProvider, MinimaxMediaProvider,
 	OpenRouterMediaProvider, ReplicateMediaProvider, RunwayMediaProvider,
 };
 use super::traits::*;
@@ -40,6 +40,7 @@ impl MediaProviderFactory {
 			"cloudflare" => Ok(Box::new(CloudflareMediaProvider::new())),
 			"fal" => Ok(Box::new(FalMediaProvider::new())),
 			"higgsfield" => Ok(Box::new(HiggsfieldMediaProvider::new())),
+			"minimax" => Ok(Box::new(MinimaxMediaProvider::new())),
 			"openrouter" => Ok(Box::new(OpenRouterMediaProvider::new())),
 			"replicate" => Ok(Box::new(ReplicateMediaProvider::new())),
 			"runway" => Ok(Box::new(RunwayMediaProvider::new())),
@@ -64,6 +65,7 @@ impl MediaProviderFactory {
 		match name.to_ascii_lowercase().as_str() {
 			"fal" => Ok(Box::new(FalMediaProvider::new())),
 			"higgsfield" => Ok(Box::new(HiggsfieldMediaProvider::new())),
+			"minimax" => Ok(Box::new(MinimaxMediaProvider::new())),
 			"openrouter" => Ok(Box::new(OpenRouterMediaProvider::new())),
 			"replicate" => Ok(Box::new(ReplicateMediaProvider::new())),
 			"runway" => Ok(Box::new(RunwayMediaProvider::new())),
@@ -89,6 +91,7 @@ impl MediaProviderFactory {
 			"cloudflare" => Ok(Box::new(CloudflareMediaProvider::new())),
 			"elevenlabs" => Ok(Box::new(ElevenLabsMediaProvider::new())),
 			"fal" => Ok(Box::new(FalMediaProvider::new())),
+			"minimax" => Ok(Box::new(MinimaxMediaProvider::new())),
 			"openrouter" => Ok(Box::new(OpenRouterMediaProvider::new())),
 			"replicate" => Ok(Box::new(ReplicateMediaProvider::new())),
 			other => Err(MediaError::UnsupportedProvider(other.to_string())),
@@ -138,6 +141,7 @@ impl MediaProviderFactory {
 			"elevenlabs",
 			"fal",
 			"higgsfield",
+			"minimax",
 			"openrouter",
 			"replicate",
 			"runway",

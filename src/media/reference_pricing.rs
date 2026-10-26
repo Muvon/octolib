@@ -114,6 +114,17 @@ const REFERENCE_MEDIA_MODELS: &[MediaPricingEntry] = &[
 	entry("fal", "kling", UsageUnit::VideoSeconds, 0.09),
 	entry("fal", "minimax", UsageUnit::VideoSeconds, 0.07),
 	entry("fal", "fal-ai", UsageUnit::ComputeSeconds, 0.000_56),
+	// ── MiniMax (top-resolution pay-as-you-go rates, verified Oct 26, 2026) ──
+	// https://platform.minimax.io/docs/guides/pricing-paygo
+	entry("minimax", "minimax-h3-max", UsageUnit::VideoSeconds, 0.08),
+	entry("minimax", "minimax-h3-highspeed", UsageUnit::VideoSeconds, 0.06),
+	entry("minimax", "minimax-h3-lite", UsageUnit::VideoSeconds, 0.04),
+	entry("minimax", "minimax-h3", UsageUnit::VideoSeconds, 0.13),
+	entry("minimax", "image-01", UsageUnit::Images, 0.0035),
+	entry("minimax", "speech-2.8-hd", UsageUnit::Characters, 0.0001),
+	entry("minimax", "speech-2.8-turbo", UsageUnit::Characters, 0.00006),
+	entry("minimax", "speech-02-hd", UsageUnit::Characters, 0.0001),
+	entry("minimax", "speech-02-turbo", UsageUnit::Characters, 0.00006),
 	// ── Replicate (estimate — verify at replicate.com/pricing) ──
 	// Official models carry a flat per-output price; community models bill
 	// GPU-seconds, which the trailing per-owner entries cannot express — those

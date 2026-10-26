@@ -14,6 +14,26 @@
 
 use super::*;
 
+#[test]
+fn minimax_rates_match_each_model_and_billing_unit() {
+	for (model, unit, rate) in [
+		("MiniMax-H3-Max", UsageUnit::VideoSeconds, 0.08),
+		("MiniMax-H3-Highspeed", UsageUnit::VideoSeconds, 0.06),
+		("MiniMax-H3-Lite", UsageUnit::VideoSeconds, 0.04),
+		("MiniMax-H3", UsageUnit::VideoSeconds, 0.13),
+		("image-01", UsageUnit::Images, 0.0035),
+		("speech-2.8-hd", UsageUnit::Characters, 0.0001),
+		("speech-2.8-turbo", UsageUnit::Characters, 0.00006),
+		("speech-02-hd", UsageUnit::Characters, 0.0001),
+		("speech-02-turbo", UsageUnit::Characters, 0.00006),
+	] {
+		let pricing = get_reference_pricing("minimax", model).unwrap();
+		assert_eq!(pricing.pattern, model.to_ascii_lowercase());
+		assert_eq!(pricing.unit, unit);
+		assert_eq!(pricing.usd_per_unit, rate);
+	}
+}
+
 /// The model ids these providers actually take, so the table is exercised
 /// against real shapes rather than the tidy names in the patterns.
 #[test]

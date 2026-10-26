@@ -23,7 +23,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        rust: [1.99.0]
+        rust: [1.99.1]
 
     steps:
     - name: Checkout code

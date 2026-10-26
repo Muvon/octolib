@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.46.0] - 2026-10-26
+
+### 📋 Release Summary
+
+MiniMax media generation is now supported. Ordered provider output items are preserved.
+
+### ✨ New Features & Enhancements
+
+- **media**: support MiniMax media generation `2ea09cff`
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: preserve ordered provider output items `5cfd1a1c`
+
 ## [0.45.6] - 2026-10-26
 
 ### 📋 Release Summary

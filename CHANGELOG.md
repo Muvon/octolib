@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.45.6] - 2026-10-26
+
+### 📋 Release Summary
+
+Replayed ChatGPT inputs now preserve assistant phases. The Rust toolchain used by GitHub Actions has been updated to 1.99.1.
+
+### 🔧 Improvements & Optimizations
+
+- **github-actions**: update Rust toolchain to 1.99.1 `52bf4be5`
+
+### 🐛 Bug Fixes & Stability
+
+- **chatgpt**: preserve assistant phases in replayed input `fe13d246`
+
 ## [0.45.5] - 2026-10-25
 
 ### 📋 Release Summary

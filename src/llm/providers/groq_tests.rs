@@ -17,6 +17,14 @@ use crate::llm::utils::is_model_in_pricing_table;
 use crate::test_support::env::EnvGuard;
 
 #[test]
+fn only_strict_mode_models_enforce_a_response_schema() {
+	let provider = GroqProvider::new();
+	assert!(provider.enforces_response_schema("openai/gpt-oss-120b"));
+	assert!(provider.enforces_response_schema("qwen/qwen3.8-27b"));
+	assert!(!provider.enforces_response_schema("llama-3.3-70b-versatile"));
+}
+
+#[test]
 fn test_supports_model() {
 	let provider = GroqProvider::new();
 	assert!(provider.supports_model("openai/gpt-oss-120b"));

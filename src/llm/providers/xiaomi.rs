@@ -115,9 +115,11 @@ impl AiProvider for XiaomiProvider {
 		true
 	}
 
+	/// `json_schema` decodes against the schema: with `strict: true` and a
+	/// two-field object schema, a prompt demanding a JSON array got the object
+	/// on 4 of 4 mimo-v2.6-flash/pro calls (live, 2026-10-26).
 	fn enforces_response_schema(&self, _model: &str) -> bool {
-		// Only `json_object` mode exists; schemas are prompt guidance
-		false
+		true
 	}
 
 	fn supports_required_tool_choice(&self, _model: &str) -> bool {
@@ -162,7 +164,7 @@ impl AiProvider for XiaomiProvider {
 				provider_name: "xiaomi",
 				usage_fallback_cost: None,
 				use_response_cost: false,
-				enforces_response_schema: false,
+				enforces_response_schema: true,
 				supports_required_tool_choice: false,
 				supports_parallel_tool_calls: true,
 			},

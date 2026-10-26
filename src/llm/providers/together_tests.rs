@@ -25,6 +25,22 @@ fn test_supports_model() {
 }
 
 #[test]
+fn only_live_verified_models_enforce_a_response_schema() {
+	let provider = TogetherProvider::new();
+	for model in [
+		"deepseek-ai/DeepSeek-V4.1-Flash",
+		"thinkingmachines/Inkling",
+		"MiniMaxAI/MiniMax-M3",
+		"openai/gpt-oss-120b",
+	] {
+		assert!(provider.enforces_response_schema(model), "{model}");
+	}
+	for model in ["moonshotai/Kimi-K3", "Qwen/Qwen3.7-Plus", "unknown/model"] {
+		assert!(!provider.enforces_response_schema(model), "{model}");
+	}
+}
+
+#[test]
 fn current_serverless_pricing_uses_together_rates() {
 	let provider = TogetherProvider::new();
 
@@ -225,6 +241,7 @@ fn reasoning_off_disables_thinking_on_hybrid_models() {
 	for model in [
 		"moonshotai/Kimi-K3",
 		"deepseek-ai/DeepSeek-V4-Pro-0813",
+		"deepseek-ai/DeepSeek-V4.1-Flash",
 		"zai-org/GLM-5.2",
 		"MiniMaxAI/MiniMax-M3",
 		"Qwen/Qwen3.6-Plus",
@@ -270,6 +287,14 @@ fn effort_levels_follow_each_model_ladder() {
 	assert_eq!(effort(deepseek, ReasoningEffort::High), "high");
 	assert_eq!(effort(deepseek, ReasoningEffort::XHigh), "max");
 	assert_eq!(effort(deepseek, ReasoningEffort::Max), "max");
+
+	// DeepSeek V4.1 Flash: low|high|xhigh|max; medium floors to low.
+	let flash = "deepseek-ai/DeepSeek-V4.1-Flash";
+	assert_eq!(effort(flash, ReasoningEffort::Low), "low");
+	assert_eq!(effort(flash, ReasoningEffort::Medium), "low");
+	assert_eq!(effort(flash, ReasoningEffort::High), "high");
+	assert_eq!(effort(flash, ReasoningEffort::XHigh), "xhigh");
+	assert_eq!(effort(flash, ReasoningEffort::Max), "max");
 
 	// GPT-OSS tops out at high.
 	let gpt_oss = "openai/gpt-oss-120b";

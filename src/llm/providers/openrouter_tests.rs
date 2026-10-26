@@ -292,12 +292,56 @@ fn test_models_without_a_maker_table_price_from_the_reference_table() {
 }
 
 #[test]
-fn test_schema_enforcement_proxy_policy() {
+fn schema_enforcement_follows_live_verified_routes() {
 	let provider = OpenRouterProvider::new();
-	assert!(provider.enforces_response_schema("deepseek-v4-pro"));
-	assert!(provider.enforces_response_schema("openai/gpt-4o"));
-	assert!(provider.enforces_response_schema("unknown/provider-model"));
-	assert!(!provider.enforces_response_schema("mistral-7b"));
+	for model in [
+		"openai/gpt-6-luna",
+		"anthropic/claude-haiku-5.5",
+		"xiaomi/mimo-v2.6-flash",
+		"deepseek/deepseek-v4.1-flash",
+		"qwen/qwen3.7-plus",
+	] {
+		assert!(provider.enforces_response_schema(model), "{model}");
+	}
+	// Advertised structured_outputs that did not hold the shape, and unknowns.
+	for model in [
+		"inception/mercury-3",
+		"qwen/qwen3.8-omni-flash",
+		"thinkingmachines/inkling-small",
+		"unknown/provider-model",
+	] {
+		assert!(!provider.enforces_response_schema(model), "{model}");
+	}
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn schema_requests_require_endpoints_that_take_the_schema() {
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(
+		200,
+		crate::test_support::mock_http::chat_completion_body(r#"{"ok":true}"#),
+	)]);
+	let _env = EnvGuard::new().set("OPENROUTER_API_URL", mock.url.clone());
+
+	let mut params =
+		ChatCompletionParams::new(&[], "openai/gpt-6-luna", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
+	params.response_format = Some(crate::llm::types::StructuredOutputRequest {
+		format: crate::llm::types::OutputFormat::JsonSchema,
+		mode: crate::llm::types::ResponseMode::Strict,
+		schema: Some(
+			serde_json::json!({"type": "object", "properties": {"ok": {"type": "boolean"}}, "required": ["ok"]}),
+		),
+	});
+	OpenRouterProvider::new()
+		.chat_completion(params)
+		.await
+		.expect("mock completion");
+
+	let requests = mock.requests();
+	let chat_request = requests.last().expect("chat request recorded");
+	let req_body: serde_json::Value = serde_json::from_str(&chat_request.body).expect("request json");
+	assert_eq!(req_body["provider"]["require_parameters"], true);
+	assert_eq!(req_body["response_format"]["json_schema"]["strict"], true);
 }
 
 #[test]

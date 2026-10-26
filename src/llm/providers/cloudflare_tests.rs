@@ -118,6 +118,10 @@ fn model_pages_drive_context_vision_and_tool_support() {
 	assert!(provider.enforces_response_schema("@cf/deepseek-ai/deepseek-v4-flash-0731"));
 	assert!(!provider.enforces_response_schema("@cf/openai/gpt-oss-120b"));
 	assert!(!provider.enforces_response_schema("@cf/meta/llama-3.3-70b-instruct-fp8-fast"));
+	assert!(provider.enforces_response_schema("@cf/moonshotai/kimi-k2.6"));
+	// OpenAI-shaped but never measured: the docs call json_schema best-effort.
+	assert!(!provider.enforces_response_schema("@cf/zai-org/glm-5.3"));
+	assert!(!provider.enforces_response_schema("@cf/deepseek-ai/deepseek-v4-pro-0813"));
 
 	// Only the OpenAI-shaped schemas document tool_choice "required".
 	assert!(provider.supports_required_tool_choice("@cf/zai-org/glm-5.3"));

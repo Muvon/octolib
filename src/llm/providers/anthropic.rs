@@ -18,8 +18,8 @@ use super::shared;
 use crate::llm::retry;
 use crate::llm::traits::{AiProvider, KeepalivePolicy};
 use crate::llm::types::{
-	ChatCompletionParams, Message, ProviderExchange, ProviderResponse, ReasoningEffort, SamplingSupport, ThinkingBlock,
-	TokenUsage, ToolCall,
+	ChatCompletionParams, Message, OutputFormat, ProviderExchange, ProviderResponse, ReasoningEffort, SamplingSupport,
+	ThinkingBlock, TokenUsage, ToolCall,
 };
 use crate::llm::utils::{get_model_pricing, is_model_in_pricing_table, normalize_model_name, PricingTuple};
 use anyhow::Result;
@@ -138,6 +138,99 @@ const EFFORT_PARAM_MODELS: &[&str] = &[
 	"opus-4-5",
 	"haiku-5-5",
 ];
+
+/// Models that accept `output_config.format` JSON outputs, per
+/// https://platform.claude.com/docs/en/build-with-claude/structured-outputs
+/// (Oct 2026): Fable/Mythos 5 and 5.1, Opus 5.5/5/4.8/4.7/4.6/4.5, Sonnet
+/// 5.5/5/4.6/4.5, Haiku 5.5/4.5. Decoding is constrained to the schema.
+const STRUCTURED_OUTPUT_MODELS: &[&str] = &[
+	"fable-5",
+	"mythos-5",
+	"opus-5",
+	"opus-4-8",
+	"opus-4-7",
+	"opus-4-6",
+	"opus-4-5",
+	"sonnet-5",
+	"sonnet-4-6",
+	"sonnet-4-5",
+	"haiku-5-5",
+	"haiku-4-5",
+];
+
+/// Schema keywords the structured-outputs grammar rejects with a 400 (same
+/// page): numeric and string bounds, and array bounds other than `minItems`
+/// 0 or 1. `minItems` is handled separately for that reason.
+const UNSUPPORTED_SCHEMA_KEYWORDS: &[&str] = &[
+	"minimum",
+	"maximum",
+	"exclusiveMinimum",
+	"exclusiveMaximum",
+	"multipleOf",
+	"minLength",
+	"maxLength",
+	"maxItems",
+	"uniqueItems",
+];
+
+/// The schema Claude can decode against: every object closed with
+/// `additionalProperties: false`, unsupported bounds moved into the field's
+/// description. This is the documented SDK transform (the helpers "remove
+/// unsupported constraints", "update descriptions" and "validate responses
+/// against your original schema"); here `schema_enforcement` does that last
+/// step, so a bound the decoder could not hold still fails closed.
+fn output_format_schema(schema: &serde_json::Value) -> serde_json::Value {
+	let mut schema = crate::llm::utils::normalize_strict_schema(schema, crate::llm::types::ResponseMode::Strict);
+	strip_unsupported_bounds(&mut schema);
+	schema
+}
+
+fn strip_unsupported_bounds(schema: &mut serde_json::Value) {
+	let Some(obj) = schema.as_object_mut() else {
+		return;
+	};
+
+	let mut moved = Vec::new();
+	for keyword in UNSUPPORTED_SCHEMA_KEYWORDS {
+		if let Some(value) = obj.remove(*keyword) {
+			moved.push(format!("{keyword}: {value}"));
+		}
+	}
+	if let Some(min) = obj.get("minItems").and_then(|v| v.as_u64()).filter(|min| *min > 1) {
+		obj.remove("minItems");
+		moved.push(format!("minItems: {min}"));
+	}
+	if !moved.is_empty() {
+		let bounds = format!("{{{}}}", moved.join(", "));
+		let description = match obj.get("description").and_then(|d| d.as_str()) {
+			Some(text) => format!("{text}\n\n{bounds}"),
+			None => bounds,
+		};
+		obj.insert("description".to_string(), serde_json::Value::String(description));
+	}
+
+	// Recurse only into subschemas, never into a `properties` map itself: a
+	// property may be named like a keyword.
+	for key in ["properties", "$defs", "definitions"] {
+		if let Some(children) = obj.get_mut(key).and_then(|c| c.as_object_mut()) {
+			for child in children.values_mut() {
+				strip_unsupported_bounds(child);
+			}
+		}
+	}
+	for key in ["items", "additionalProperties"] {
+		if let Some(child) = obj.get_mut(key) {
+			strip_unsupported_bounds(child);
+		}
+	}
+	for key in ["anyOf", "allOf", "oneOf"] {
+		if let Some(variants) = obj.get_mut(key).and_then(|v| v.as_array_mut()) {
+			for variant in variants {
+				strip_unsupported_bounds(variant);
+			}
+		}
+	}
+}
 
 /// Output ceiling per model family, used when the caller leaves `max_tokens`
 /// at 0 ("no limit"): the Messages API requires the field, so omitting it is a
@@ -391,11 +484,8 @@ impl AiProvider for AnthropicProvider {
 			|| model_lower.contains("claude-mythos-5")
 	}
 
-	/// This provider never sends `output_config.format`, so schemas reach Claude
-	/// only through the shared tool-call path. The reference table records the
-	/// models' own support, which proxy routes rely on.
-	fn supports_structured_output(&self, _model: &str) -> bool {
-		false
+	fn supports_structured_output(&self, model: &str) -> bool {
+		STRUCTURED_OUTPUT_MODELS.iter().any(|p| model.contains(p))
 	}
 
 	fn get_max_input_tokens(&self, model: &str) -> usize {
@@ -583,6 +673,20 @@ impl AiProvider for AnthropicProvider {
 			}
 		}
 
+		// JSON outputs ride `output_config` next to `effort`, so merge rather
+		// than replace it.
+		let requested_schema = params
+			.response_format
+			.as_ref()
+			.filter(|f| matches!(f.format, OutputFormat::JsonSchema))
+			.and_then(|f| f.schema.clone());
+		if let Some(schema) = &requested_schema {
+			request_body["output_config"]["format"] = serde_json::json!({
+				"type": "json_schema",
+				"schema": output_format_schema(schema),
+			});
+		}
+
 		// Check if any message uses extended cache TTL
 		let needs_extended_cache = params.messages.iter().any(|m| m.cache_ttl.is_some());
 
@@ -604,7 +708,17 @@ impl AiProvider for AnthropicProvider {
 		)
 		.await?;
 
-		Ok(response)
+		// The bounds moved out of the sent schema are held here, against the
+		// caller's original.
+		match requested_schema {
+			Some(schema) => crate::llm::schema_enforcement::validate_response(
+				response,
+				&schema,
+				"anthropic",
+				params.api_key.as_ref(),
+			),
+			None => Ok(response),
+		}
 	}
 }
 
@@ -973,6 +1087,10 @@ async fn execute_anthropic_request(
 	}
 
 	let content = content_parts.join("\n");
+	// JSON outputs arrive as the text block (structured-outputs docs).
+	let structured_output = request_body["output_config"]
+		.get("format")
+		.and_then(|_| shared::parse_structured_output_from_text(&content));
 
 	// Extract thinking as a separate ThinkingBlock
 	let (thinking, reasoning_tokens) = if thinking_parts.is_empty() {
@@ -1066,7 +1184,7 @@ async fn execute_anthropic_request(
 		exchange,
 		tool_calls: if tool_calls.is_empty() { None } else { Some(tool_calls) },
 		finish_reason: anthropic_response.stop_reason,
-		structured_output: None, // Anthropic doesn't support structured output
+		structured_output,
 		id: Some(anthropic_response.id),
 	})
 }

@@ -44,9 +44,9 @@ fn test_model_capabilities() {
 #[test]
 fn test_chat_features() {
 	let provider = XiaomiProvider::new();
-	// json_object mode only: supported, but the schema is not enforced upstream
+	// Native json_schema constrains decoding (live, 2026-10-26)
 	assert!(provider.supports_structured_output("mimo-v2.6-pro"));
-	assert!(!provider.enforces_response_schema("mimo-v2.6-pro"));
+	assert!(provider.enforces_response_schema("mimo-v2.6-pro"));
 	assert!(!provider.supports_required_tool_choice("mimo-v2.6-pro"));
 	assert_eq!(
 		provider.supported_sampling_params("mimo-v2.6-pro"),

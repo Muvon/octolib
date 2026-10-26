@@ -587,8 +587,12 @@ impl AiProvider for MoonshotProvider {
 		true
 	}
 
-	fn enforces_response_schema(&self, _model: &str) -> bool {
-		true
+	/// Only Kimi K3.1 Pro decodes against the schema: with `strict: true` and a
+	/// two-field object schema, a prompt demanding a JSON array got the object
+	/// on 5 of 5 K3.1 Pro calls and the array on 4 of 4 Kimi K3 calls (live,
+	/// 2026-10-26). The request shape is the same for both.
+	fn enforces_response_schema(&self, model: &str) -> bool {
+		contains_ignore_ascii_case(model, "kimi-k3.1")
 	}
 
 	fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {

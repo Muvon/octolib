@@ -379,6 +379,14 @@ fn model_facts(model: &str) -> Option<&'static ModelFacts> {
 		.find(|(id, ..)| normalized.contains(&normalize_model_name(id)))
 }
 
+/// OpenAI-shaped models proven live to decode against a json_schema (see
+/// `enforces_response_schema`).
+const SCHEMA_ENFORCING_MODELS: &[&str] = &[
+	"@cf/zai-org/glm-5.3-flash",
+	"@cf/deepseek-ai/deepseek-v4-flash-0731",
+	"@cf/moonshotai/kimi-k2.6",
+];
+
 fn cloudflare_model_pricing(model: &str) -> Option<crate::llm::types::ModelPricing> {
 	let (input, output, cache_write, cache_read) = get_model_pricing(model, PRICING)?;
 	Some(crate::llm::types::ModelPricing::new(
@@ -534,14 +542,15 @@ impl AiProvider for CloudflareWorkersAiProvider {
 		}
 	}
 
-	/// OpenAI-shaped models decode against `response_format` json_schema: a
-	/// prompt demanding prose still got the single value an enum-only schema
-	/// allowed, 12 of 12 times (GLM-5.3 Flash, DeepSeek V4 Flash, Kimi K2.6,
-	/// Sep 18, 2026). The docs' "can't guarantee" caveat surfaces as an error
-	/// ("JSON Mode couldn't be met"), not as output of another shape. Legacy
-	/// models fall back to the forced tool call.
+	/// The JSON Mode page calls json_schema best-effort ("can't guarantee"),
+	/// so only models measured to decode against it count: a prompt demanding
+	/// prose still got the single value an enum-only schema allowed, 12 of 12
+	/// times (Sep 18, 2026), and every answer to octomind's gate, compression
+	/// and plan schemas validated (Oct 26, 2026). There the caveat surfaced as
+	/// an error ("JSON Mode couldn't be met"), not as output of another shape.
 	fn enforces_response_schema(&self, model: &str) -> bool {
-		model_facts(model).is_some_and(|(_, _, _, _, openai_schema)| *openai_schema)
+		let normalized = normalize_model_name(model);
+		SCHEMA_ENFORCING_MODELS.iter().any(|id| normalized.contains(id))
 	}
 
 	fn get_model_pricing(&self, model: &str) -> Option<ModelPricing> {

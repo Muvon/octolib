@@ -31,4 +31,5 @@ fn test_default_capabilities() {
 	assert_eq!(provider.name(), "nvidia");
 	assert!(!provider.supports_caching("any-model"));
 	assert!(provider.supports_structured_output("any-model"));
+	assert!(!provider.enforces_response_schema("any-model"));
 }

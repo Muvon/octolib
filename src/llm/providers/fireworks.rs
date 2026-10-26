@@ -152,6 +152,10 @@ impl AiProvider for FireworksProvider {
 		}
 	}
 
+	/// json_schema mode "enforces the schema during generation", with no
+	/// per-model exceptions listed
+	/// (docs.fireworks.ai/structured-responses/structured-response-formatting,
+	/// Oct 2026).
 	fn enforces_response_schema(&self, _model: &str) -> bool {
 		true
 	}

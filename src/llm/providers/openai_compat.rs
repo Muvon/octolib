@@ -529,11 +529,11 @@ fn apply_response_format(
 				} else {
 					request_body["format"] = serde_json::json!("json");
 				}
-			} else if is_alibaba_deepseek_v4(provider_name, model) || provider_name.eq_ignore_ascii_case("xiaomi") {
+			} else if is_alibaba_deepseek_v4(provider_name, model) {
 				// Model Studio exposes JSON Object, not JSON Schema, for
-				// DeepSeek V4, and Xiaomi MiMo only has JSON Object mode. Keep
-				// the requested schema in prompt guidance; schema_enforcement
-				// validates it locally and fails closed when guidance is ignored.
+				// DeepSeek V4. Keep the requested schema in prompt guidance;
+				// schema_enforcement validates it locally and fails closed when
+				// guidance is ignored.
 				if let Some(schema) = &response_format.schema {
 					request_body["response_format"] = serde_json::json!({
 						"type": "json_object"

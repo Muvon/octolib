@@ -15,6 +15,11 @@
 use super::*;
 
 #[test]
+fn schema_is_not_trusted_without_documented_decoding() {
+	assert!(!FeatherlessProvider::new().enforces_response_schema("Qwen/Qwen2.5-7B-Instruct"));
+}
+
+#[test]
 fn test_supports_model() {
 	let provider = FeatherlessProvider::new();
 	assert!(provider.supports_model("Qwen/Qwen2.5-7B-Instruct"));

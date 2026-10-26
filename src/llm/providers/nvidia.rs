@@ -74,8 +74,11 @@ impl AiProvider for NvidiaProvider {
 		true
 	}
 
+	/// NIM documents schema-guided decoding only through
+	/// `nvext.guided_json` (structured-generation guide, Oct 2026), and its
+	/// `response_format` json_schema path is undocumented and unmeasured.
 	fn enforces_response_schema(&self, _model: &str) -> bool {
-		true
+		false
 	}
 
 	fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
@@ -94,7 +97,7 @@ impl AiProvider for NvidiaProvider {
 				provider_name: "nvidia",
 				usage_fallback_cost: None,
 				use_response_cost: true,
-				enforces_response_schema: true,
+				enforces_response_schema: false,
 				supports_required_tool_choice: false,
 				supports_parallel_tool_calls: true,
 			},

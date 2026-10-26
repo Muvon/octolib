@@ -148,8 +148,10 @@ impl AiProvider for FeatherlessProvider {
 		true
 	}
 
+	/// Featherless documents no json_schema decoding guarantee (docs checked
+	/// Oct 2026) and none was measured.
 	fn enforces_response_schema(&self, _model: &str) -> bool {
-		true
+		false
 	}
 
 	fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
@@ -166,7 +168,7 @@ impl AiProvider for FeatherlessProvider {
 				provider_name: "featherless",
 				usage_fallback_cost: None,
 				use_response_cost: true,
-				enforces_response_schema: true,
+				enforces_response_schema: false,
 				supports_required_tool_choice: false,
 				supports_parallel_tool_calls: true,
 			},

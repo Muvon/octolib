@@ -16,6 +16,16 @@ use super::*;
 use crate::test_support::env::EnvGuard;
 
 #[test]
+fn only_kimi_k3_1_enforces_a_response_schema() {
+	let provider = MoonshotProvider::new();
+	assert!(provider.enforces_response_schema("kimi-k3.1-pro"));
+	for model in ["kimi-k3", "kimi-k2.6", "kimi-k2.7-code"] {
+		assert!(!provider.enforces_response_schema(model), "{model}");
+		assert!(provider.supports_structured_output(model), "{model}");
+	}
+}
+
+#[test]
 fn test_supports_model() {
 	let provider = MoonshotProvider::new();
 	// Kimi K3

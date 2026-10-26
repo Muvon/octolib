@@ -883,7 +883,7 @@ fn test_xiaomi_replays_every_reasoning_turn_as_reasoning_content() {
 }
 
 #[test]
-fn test_xiaomi_uses_json_object_guidance_not_json_schema() {
+fn test_xiaomi_sends_native_json_schema() {
 	let schema = serde_json::json!({
 		"type": "object",
 		"properties": {"answer": {"type": "integer"}},
@@ -896,14 +896,14 @@ fn test_xiaomi_uses_json_object_guidance_not_json_schema() {
 
 	apply_response_format(&mut request_body, "xiaomi", "mimo-v2.6-flash", &response_format);
 
+	assert_eq!(request_body["response_format"]["type"], "json_schema");
 	assert_eq!(
-		request_body["response_format"],
-		serde_json::json!({"type": "json_object"})
+		request_body["response_format"]["json_schema"]["schema"]["properties"],
+		schema["properties"]
 	);
-	let guidance = request_body["messages"]
-		.as_array()
-		.and_then(|messages| messages.last())
-		.and_then(|message| message["content"].as_str())
-		.expect("schema guidance message");
-	assert!(guidance.contains(&schema.to_string()));
+	assert_eq!(
+		request_body["messages"].as_array().map(Vec::len),
+		Some(1),
+		"no prompt guidance"
+	);
 }

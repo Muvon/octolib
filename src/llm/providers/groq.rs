@@ -77,6 +77,16 @@ const CACHED_INPUT_MODELS: &[&str] = &[
 	"openai/gpt-oss-safeguard-20b",
 ];
 
+// Models whose `strict: true` json_schema "uses constrained decoding"; on the
+// rest strict is unavailable and json_schema is best-effort.
+// Source: https://console.groq.com/docs/structured-outputs (Oct 2026)
+const STRICT_SCHEMA_MODELS: &[&str] = &[
+	"openai/gpt-oss-20b",
+	"openai/gpt-oss-120b",
+	"qwen/qwen3.8-27b",
+	"meta-models/muse-spark-open",
+];
+
 #[async_trait::async_trait]
 impl AiProvider for GroqProvider {
 	fn name(&self) -> &str {
@@ -102,8 +112,9 @@ impl AiProvider for GroqProvider {
 		true
 	}
 
-	fn enforces_response_schema(&self, _model: &str) -> bool {
-		true
+	fn enforces_response_schema(&self, model: &str) -> bool {
+		let lower = model.to_ascii_lowercase();
+		STRICT_SCHEMA_MODELS.iter().any(|m| lower.contains(m))
 	}
 
 	fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
@@ -129,7 +140,7 @@ impl AiProvider for GroqProvider {
 				provider_name: "groq",
 				usage_fallback_cost: None,
 				use_response_cost: true,
-				enforces_response_schema: true,
+				enforces_response_schema: self.enforces_response_schema(&model),
 				supports_required_tool_choice: false,
 				supports_parallel_tool_calls: true,
 			},

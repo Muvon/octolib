@@ -18,7 +18,6 @@
 
 use super::shared;
 use crate::errors::ToolCallError;
-use crate::llm::reference_models::proxy_route_enforces_response_schema;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
@@ -104,6 +103,18 @@ fn together_model_context(model: &str) -> Option<usize> {
 	}
 }
 
+/// Serverless models whose `json_schema` response format is a decoding
+/// constraint: with `strict: true` and a two-field object schema, a prompt
+/// demanding a JSON array still got the object (live, 2026-10-26). Kimi K3
+/// returned the array, so it stays out; a model not listed here is not
+/// trusted with a schema.
+const SCHEMA_ENFORCING_MODELS: &[&str] = &[
+	"deepseek-ai/deepseek-v4.1-flash",
+	"thinkingmachines/inkling",
+	"minimaxai/minimax-m3",
+	"openai/gpt-oss",
+];
+
 /// Together's documented reasoning controls (docs.together.ai, Oct 2026).
 enum ReasoningFamily {
 	/// Kimi K3: `reasoning_effort` low|medium|high|max (default max); thinking
@@ -116,6 +127,11 @@ enum ReasoningFamily {
 	/// to high and xhigh to max; hybrid, so `reasoning: {enabled: false}` turns
 	/// thinking off (deepseek-v4-quickstart, inference/chat/reasoning).
 	DeepSeekV4Pro,
+	/// DeepSeek V4.1 Flash: low|high|xhigh|max — Together rejects anything else
+	/// with 400 `process_messages_failed` ("reasoning_effort must be low, high,
+	/// xhigh, max, or an integer within [1, 100]"), and `reasoning: {enabled:
+	/// false}` turns thinking off (both verified live, 2026-10-26).
+	DeepSeekV41,
 	/// GPT-OSS: low|medium|high (default medium); reasoning cannot be disabled
 	/// (gpt-oss).
 	GptOss,
@@ -135,6 +151,8 @@ fn reasoning_family(model: &str) -> ReasoningFamily {
 		ReasoningFamily::Glm53
 	} else if normalized.contains("deepseek-ai/deepseek-v4-pro") {
 		ReasoningFamily::DeepSeekV4Pro
+	} else if normalized.contains("deepseek-ai/deepseek-v4.1") {
+		ReasoningFamily::DeepSeekV41
 	} else if normalized.contains("openai/gpt-oss") {
 		ReasoningFamily::GptOss
 	} else if normalized.contains("minimaxai/minimax-m3")
@@ -160,7 +178,13 @@ fn apply_reasoning_effort(request_body: &mut serde_json::Value, model: &str, eff
 		return;
 	};
 	let value = match (reasoning_family(model), effort) {
-		(ReasoningFamily::KimiK3 | ReasoningFamily::DeepSeekV4Pro | ReasoningFamily::Hybrid, ReasoningEffort::None) => {
+		(
+			ReasoningFamily::KimiK3
+			| ReasoningFamily::DeepSeekV4Pro
+			| ReasoningFamily::DeepSeekV41
+			| ReasoningFamily::Hybrid,
+			ReasoningEffort::None,
+		) => {
 			request_body["reasoning"] = serde_json::json!({ "enabled": false });
 			return;
 		}
@@ -169,6 +193,10 @@ fn apply_reasoning_effort(request_body: &mut serde_json::Value, model: &str, eff
 		(ReasoningFamily::KimiK3 | ReasoningFamily::Glm53, ReasoningEffort::Max) => "max",
 		(ReasoningFamily::DeepSeekV4Pro, ReasoningEffort::XHigh | ReasoningEffort::Max) => "max",
 		(ReasoningFamily::DeepSeekV4Pro, _) => "high",
+		(ReasoningFamily::DeepSeekV41, ReasoningEffort::Low | ReasoningEffort::Medium) => "low",
+		(ReasoningFamily::DeepSeekV41, ReasoningEffort::High) => "high",
+		(ReasoningFamily::DeepSeekV41, ReasoningEffort::XHigh) => "xhigh",
+		(ReasoningFamily::DeepSeekV41, ReasoningEffort::Max) => "max",
 		(_, ReasoningEffort::Low) => "low",
 		(_, ReasoningEffort::Medium) => "medium",
 		(_, ReasoningEffort::High | ReasoningEffort::XHigh | ReasoningEffort::Max) => "high",
@@ -214,7 +242,8 @@ impl AiProvider for TogetherProvider {
 	// are resolved via reference capabilities (trait defaults)
 
 	fn enforces_response_schema(&self, model: &str) -> bool {
-		proxy_route_enforces_response_schema(model)
+		let normalized = model.to_ascii_lowercase();
+		SCHEMA_ENFORCING_MODELS.iter().any(|m| normalized.contains(m))
 	}
 
 	fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {

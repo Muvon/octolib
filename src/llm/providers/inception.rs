@@ -108,9 +108,12 @@ impl AiProvider for InceptionProvider {
 		true
 	}
 
+	/// `/v1/models` advertises `structured_outputs`, but the schema is not a
+	/// decoding constraint: with `strict: true` and a two-field object schema,
+	/// a prompt asking for a JSON array got the array back on 8 of 9
+	/// mercury-3 calls and 1 of 3 mercury-2.5 calls (live, 2026-10-26).
 	fn enforces_response_schema(&self, _model: &str) -> bool {
-		// strict json_schema constrains output to match the schema exactly
-		true
+		false
 	}
 
 	fn supports_required_tool_choice(&self, _model: &str) -> bool {
@@ -151,7 +154,7 @@ impl AiProvider for InceptionProvider {
 				provider_name: "inception",
 				usage_fallback_cost: None,
 				use_response_cost: false,
-				enforces_response_schema: true,
+				enforces_response_schema: false,
 				supports_required_tool_choice: true,
 				supports_parallel_tool_calls: true,
 			},

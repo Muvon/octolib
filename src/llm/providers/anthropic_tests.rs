@@ -183,17 +183,52 @@ fn test_supports_vision_case_insensitive() {
 }
 
 #[test]
-fn native_provider_does_not_claim_structured_output() {
-	// The reference table records Claude's own support for OpenRouter-style
-	// routes; this provider never sends output_config.format.
+fn structured_outputs_follow_the_documented_model_list() {
 	let provider = AnthropicProvider::new();
-	assert!(!provider.supports_structured_output("claude-opus-5-5"));
-	assert!(!provider.enforces_response_schema("claude-opus-5-5"));
-	assert!(
-		crate::llm::reference_models::get_reference_capabilities("claude-opus-5-5")
-			.unwrap()
-			.structured_output
-	);
+	for model in [
+		"claude-opus-5-5",
+		"claude-sonnet-5-5",
+		"claude-haiku-5-5",
+		"claude-fable-5-1",
+		"claude-haiku-4-5",
+	] {
+		assert!(provider.supports_structured_output(model), "{model}");
+		assert!(provider.enforces_response_schema(model), "{model}");
+	}
+	assert!(!provider.supports_structured_output("claude-3-7-sonnet-latest"));
+}
+
+#[test]
+fn output_format_schema_moves_unsupported_bounds_into_descriptions() {
+	let schema = serde_json::json!({
+		"type": "object",
+		"required": ["maximum", "tags"],
+		"properties": {
+			// A property named like a keyword stays.
+			"maximum": {"type": "integer", "minimum": 1, "maximum": 10, "description": "Cap."},
+			"tags": {
+				"type": "array",
+				"minItems": 1,
+				"maxItems": 0,
+				"items": {"anyOf": [{"type": "object", "properties": {"t": {"type": "string", "maxLength": 0}}}]}
+			},
+			"many": {"type": "array", "minItems": 2, "items": {"type": "string"}}
+		}
+	});
+	let sent = output_format_schema(&schema);
+
+	assert_eq!(sent["additionalProperties"], false);
+	let cap = &sent["properties"]["maximum"];
+	assert!(cap.get("minimum").is_none() && cap.get("maximum").is_none());
+	assert_eq!(cap["description"], "Cap.\n\n{minimum: 1, maximum: 10}");
+	let tags = &sent["properties"]["tags"];
+	assert_eq!(tags["minItems"], 1, "minItems 0/1 is supported");
+	assert_eq!(tags["description"], "{maxItems: 0}");
+	let nested = &tags["items"]["anyOf"][0];
+	assert_eq!(nested["additionalProperties"], false);
+	assert_eq!(nested["properties"]["t"]["description"], "{maxLength: 0}");
+	assert_eq!(sent["properties"]["many"]["description"], "{minItems: 2}");
+	assert!(sent["properties"]["many"].get("minItems").is_none());
 }
 
 #[test]
@@ -464,7 +499,7 @@ fn test_haiku_5_5() {
 	assert_eq!(provider.get_max_input_tokens(model), 1_000_000);
 	assert!(provider.supports_vision(model));
 	assert!(provider.supports_caching(model));
-	assert!(!provider.supports_structured_output(model));
+	assert!(provider.supports_structured_output(model));
 	assert_eq!(provider.supported_sampling_params(model), SamplingSupport::NONE);
 	let pricing = provider.get_model_pricing(model).unwrap();
 	assert_eq!(pricing.input_price_per_1m, 0.10);
@@ -741,6 +776,42 @@ async fn chat_completion_via_mock_http_splits_blocks_and_cache_usage() {
 	for field in ["temperature", "top_p", "top_k"] {
 		assert!(req_body.get(field).is_none(), "{field} must not be sent");
 	}
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn chat_completion_sends_output_config_format_next_to_effort() {
+	let body = r#"{"id":"mock-anthropic","content":[{"type":"thinking","thinking":""},{"type":"text","text":"{\"verdict\":\"PASS\"}"}],"usage":{"input_tokens":10,"output_tokens":5},"stop_reason":"end_turn"}"#;
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, body.to_string())]);
+	let _env = EnvGuard::new().set("ANTHROPIC_API_URL", mock.url.clone());
+
+	let schema = serde_json::json!({
+		"type": "object",
+		"required": ["verdict"],
+		"properties": {"verdict": {"type": "string", "enum": ["PASS", "GAPS"]}}
+	});
+	let mut params =
+		ChatCompletionParams::new(&[], "claude-opus-5-5", 1.0, 1.0, 0, 100).with_api_key("mock-key".to_owned());
+	params.reasoning_effort = Some(ReasoningEffort::Medium);
+	params.response_format = Some(crate::llm::types::StructuredOutputRequest {
+		format: OutputFormat::JsonSchema,
+		mode: crate::llm::types::ResponseMode::Strict,
+		schema: Some(schema),
+	});
+	let response = AnthropicProvider::new()
+		.chat_completion(params)
+		.await
+		.expect("mock completion");
+	assert_eq!(response.structured_output, Some(serde_json::json!({"verdict": "PASS"})));
+
+	let req_body: serde_json::Value = serde_json::from_str(&mock.requests()[0].body).expect("request json");
+	assert_eq!(req_body["output_config"]["effort"], "medium");
+	assert_eq!(req_body["output_config"]["format"]["type"], "json_schema");
+	assert_eq!(
+		req_body["output_config"]["format"]["schema"]["additionalProperties"],
+		false
+	);
+	assert!(req_body.get("tools").is_none(), "no forced tool call");
 }
 
 #[tokio::test]

@@ -46,7 +46,10 @@ fn test_chat_features() {
 	let provider = InceptionProvider::new();
 	// supported_features: ["tools", "json_mode", "structured_outputs"]
 	assert!(provider.supports_structured_output("mercury-2.5"));
-	assert!(provider.enforces_response_schema("mercury-2.5"));
+	// Advertised structured_outputs does not constrain decoding (live, 2026-10-26).
+	for model in ["mercury-3", "mercury-2.5"] {
+		assert!(!provider.enforces_response_schema(model), "{model}");
+	}
 	assert!(provider.supports_required_tool_choice("mercury-2.5"));
 	// Automatic prefix caching with discounted cached-input billing
 	assert!(provider.supports_caching("mercury-2.5"));

@@ -16,7 +16,6 @@
 
 use super::shared;
 use crate::errors::ToolCallError;
-use crate::llm::reference_models::proxy_route_enforces_response_schema;
 use crate::llm::retry;
 use crate::llm::traits::{AiProvider, KeepalivePolicy};
 use crate::llm::types::{
@@ -48,6 +47,27 @@ impl OpenRouterProvider {
 const OPENROUTER_API_KEY_ENV: &str = "OPENROUTER_API_KEY";
 const OPENROUTER_API_URL_ENV: &str = "OPENROUTER_API_URL";
 const OPENROUTER_API_URL: &str = "https://openrouter.ai/api/v1/chat/completions";
+
+/// Routes whose upstream decodes against a `json_schema`, by model-id prefix.
+/// Schema requests also send `provider.require_parameters`, so they only reach
+/// endpoints whose catalog entry lists `structured_outputs`; every row here
+/// had such endpoints (`/api/v1/models/<id>/endpoints`, 2026-10-26). That
+/// flag is the endpoint's own claim and is not enough on its own: Inception's
+/// mercury-3 and Alibaba's qwen3.8-omni-flash both advertise it, yet answered a
+/// two-field object schema with the JSON array the prompt asked for. Every row
+/// returned the object instead (live, 2026-10-26). A route not listed is not
+/// trusted with a schema.
+const SCHEMA_ENFORCING_ROUTES: &[&str] = &[
+	"openai/",
+	"anthropic/claude-",
+	"google/gemini-",
+	"x-ai/grok-",
+	"meta/muse-",
+	"xiaomi/mimo-",
+	"moonshotai/kimi-k3.1",
+	"deepseek/deepseek-v4.1-flash",
+	"qwen/qwen3.7-plus",
+];
 
 #[derive(Debug, Deserialize)]
 struct CatalogResponse {
@@ -321,7 +341,10 @@ impl AiProvider for OpenRouterProvider {
 	}
 
 	fn enforces_response_schema(&self, model: &str) -> bool {
-		proxy_route_enforces_response_schema(model)
+		let normalized = normalize_model_name(model);
+		SCHEMA_ENFORCING_ROUTES
+			.iter()
+			.any(|route| normalized.starts_with(route))
 	}
 
 	fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
@@ -496,6 +519,10 @@ impl AiProvider for OpenRouterProvider {
 						}
 
 						request_body["response_format"] = format_obj;
+						// Without it OpenRouter still routes to the model when no
+						// endpoint takes `response_format` and drops the schema
+						// (docs: guides/routing/provider-selection, Oct 2026).
+						request_body["provider"]["require_parameters"] = serde_json::json!(true);
 					}
 				}
 			}

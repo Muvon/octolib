@@ -27,8 +27,8 @@
 //! temperature/top_p are pinned upstream to 1.0/0.95. Tool-call turns must
 //! replay their `reasoning_content` or the API returns 400.
 //!
-//! Structured output is `json_object` only (no `json_schema`), so schemas are
-//! sent as prompt guidance and validated locally.
+//! Structured output: native `json_schema` with strict decoding (also on the
+//! Token Plan endpoint), plus `json_object`.
 //!
 //! PRICING UPDATE: October 2026 (overseas USD rates)
 //! Source: <https://mimo.mi.com/docs/en-US/price/pay-as-you-go>
@@ -117,7 +117,8 @@ impl AiProvider for XiaomiProvider {
 
 	/// `json_schema` decodes against the schema: with `strict: true` and a
 	/// two-field object schema, a prompt demanding a JSON array got the object
-	/// on 4 of 4 mimo-v2.6-flash/pro calls (live, 2026-10-26).
+	/// on 4 of 4 mimo-v2.6-flash/pro calls (live, 2026-10-26); the Token Plan
+	/// endpoint behaves the same (2 of 2, live, 2026-10-27).
 	fn enforces_response_schema(&self, _model: &str) -> bool {
 		true
 	}

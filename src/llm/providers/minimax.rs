@@ -304,38 +304,6 @@ impl AiProvider for MinimaxProvider {
 			request_body["system"] = serde_json::json!(system_message);
 		}
 
-		// Add structured output format if specified
-		if let Some(response_format) = &params.response_format {
-			match &response_format.format {
-				crate::llm::types::OutputFormat::Json => {
-					request_body["response_format"] = serde_json::json!({
-						"type": "json_object"
-					});
-				}
-				crate::llm::types::OutputFormat::JsonSchema => {
-					if let Some(schema) = &response_format.schema {
-						// Strict structured outputs need additionalProperties:false on
-						// every nested object (no-op unless mode is Strict).
-						let schema = crate::llm::utils::normalize_strict_schema(schema, response_format.mode);
-
-						let mut format_obj = serde_json::json!({
-							"type": "json_schema",
-							"json_schema": {
-								"schema": schema
-							}
-						});
-
-						// Add strict mode if specified
-						if matches!(response_format.mode, crate::llm::types::ResponseMode::Strict) {
-							format_obj["json_schema"]["strict"] = serde_json::json!(true);
-						}
-
-						request_body["response_format"] = format_obj;
-					}
-				}
-			}
-		}
-
 		// Add tools if available (Anthropic format)
 		if let Some(tools) = &params.tools {
 			if !tools.is_empty() {

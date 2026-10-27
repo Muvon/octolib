@@ -32,7 +32,7 @@ use std::env;
 /// Note: For models without caching, cache_write = input and cache_read = input
 const PRICING: &[PricingTuple] = &[
 	// GPT-6 family. Cache writes cost 1.25x uncached input; cache reads 0.1x
-	// (0.05x for gpt-6.1-sol).
+	// (0.05x for gpt-6.1-sol and gpt-6.1-terra).
 	// gpt-6.1-sol verified Sep 30, 2026 against the official pricing page above.
 	// gpt-6.1-terra verified Oct 27, 2026 against
 	// https://developers.openai.com/api/docs/models/gpt-6.1-terra
@@ -447,23 +447,11 @@ pub(super) fn reasoning_effort(model: &str, effort: Option<ReasoningEffort>) -> 
 	}
 
 	let is_gpt_5_6_plus = is_gpt_5_6_or_later(&normalized);
-	// GPT-6.1 Terra accepts "none" (its model page lists none..max), unlike the
-	// rest of the GPT-6 family, which answers "none" with a 400.
-	if normalized.starts_with("gpt-6.1-terra") {
-		return Some(match effort {
-			ReasoningEffort::None => "none",
-			ReasoningEffort::Low => "low",
-			ReasoningEffort::Medium => "medium",
-			ReasoningEffort::High => "high",
-			ReasoningEffort::XHigh => "xhigh",
-			ReasoningEffort::Max => "max",
-		});
-	}
 	Some(match effort {
-		// GPT-5.x accepts "none" (no reasoning); the o-series and GPT-6 do not
-		// (GPT-6 answers "none" with a 400 listing low..max), so "low" is
-		// their floor.
-		ReasoningEffort::None if model.starts_with("gpt-6") => "low",
+		// GPT-5.x and GPT-6.1 Terra accept "none" (no reasoning); the o-series
+		// and the rest of GPT-6 do not (GPT-6 answers "none" with a 400 listing
+		// low..max), so "low" is their floor.
+		ReasoningEffort::None if model.starts_with("gpt-6") && !normalized.starts_with("gpt-6.1-terra") => "low",
 		ReasoningEffort::None if model.starts_with("gpt-") => "none",
 		ReasoningEffort::None => "low",
 		ReasoningEffort::Low => "low",

@@ -70,18 +70,16 @@ fn test_max_input_tokens() {
 	assert_eq!(provider.get_max_input_tokens("any-model"), 200_000);
 }
 
-/// wren-r1-fast is the Premium-plan chat model, but the account tier decides
-/// the rate and the client cannot see it, so the Standard rates are used for
-/// both chat models.
-/// https://webwright.ai/models
+/// wren-r1-fast is the Premium plan chat model, so it carries the Premium rates.
+/// https://webwright.ai/models and https://webwright.ai/pricing
 #[test]
 fn test_wren_r1_fast_published_pricing() {
 	let provider = WebWrightProvider::new();
 	let pricing = provider
 		.get_model_pricing("wren-r1-fast")
-		.expect("wren-r1-fast publishes Standard-tier rates");
-	assert_eq!(pricing.input_price_per_1m, 0.40);
-	assert_eq!(pricing.output_price_per_1m, 1.60);
-	assert_eq!(pricing.cache_write_price_per_1m, 0.40);
-	assert_eq!(pricing.cache_read_price_per_1m, 0.10);
+		.expect("wren-r1-fast publishes Premium-tier rates");
+	assert_eq!(pricing.input_price_per_1m, 0.80);
+	assert_eq!(pricing.output_price_per_1m, 3.20);
+	assert_eq!(pricing.cache_write_price_per_1m, 0.80);
+	assert_eq!(pricing.cache_read_price_per_1m, 0.20);
 }

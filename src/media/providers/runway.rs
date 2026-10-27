@@ -238,7 +238,7 @@ impl ImageGenerationProvider for RunwayMediaProvider {
 			&request.model,
 			task,
 			&id,
-			shared::resolved_cost_estimate(PROVIDER, &request.model, options.cost_estimate, None),
+			shared::resolved_cost_estimate(PROVIDER, &request.model, options.cost_estimate, None, None),
 			warnings,
 			None,
 		))
@@ -364,6 +364,7 @@ impl VideoGenerationProvider for RunwayMediaProvider {
 				PROVIDER,
 				&request.model,
 				options.cost_estimate,
+				None,
 				// Runway ignores `count` (dropped above), so the billable
 				// amount is one video's duration however many were asked for.
 				request.duration_secs.map(|seconds| (UsageUnit::VideoSeconds, seconds)),

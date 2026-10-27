@@ -334,7 +334,7 @@ impl ImageGenerationProvider for ReplicateMediaProvider {
 			&value,
 			&request.model,
 			task_for_image_mode(request.mode),
-			shared::resolved_cost_estimate(PROVIDER, &request.model, options.cost_estimate, None),
+			shared::resolved_cost_estimate(PROVIDER, &request.model, options.cost_estimate, None, None),
 			request.count,
 			&mut warnings,
 		)
@@ -458,6 +458,7 @@ impl VideoGenerationProvider for ReplicateMediaProvider {
 				PROVIDER,
 				&request.model,
 				options.cost_estimate,
+				None,
 				request
 					.duration_secs
 					.map(|seconds| (UsageUnit::VideoSeconds, seconds * f64::from(request.count.unwrap_or(1)))),
@@ -557,6 +558,7 @@ impl SpeechSynthesisProvider for ReplicateMediaProvider {
 			PROVIDER,
 			&request.model,
 			options.cost_estimate,
+			None,
 			Some((UsageUnit::Characters, request.text.chars().count() as f64)),
 		);
 		parse_speech_operation(&value, &request.model, estimate, &mut warnings)
@@ -619,7 +621,7 @@ impl TranscriptionProvider for ReplicateMediaProvider {
 				&mut warnings,
 			)
 			.await?;
-		let estimate = shared::resolved_cost_estimate(PROVIDER, &request.model, options.cost_estimate, None);
+		let estimate = shared::resolved_cost_estimate(PROVIDER, &request.model, options.cost_estimate, None, None);
 		parse_transcription_operation(&value, &request.model, estimate, &mut warnings)
 	}
 

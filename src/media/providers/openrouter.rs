@@ -324,7 +324,8 @@ impl ImageGenerationProvider for OpenRouterMediaProvider {
 		})
 		.await?;
 		let value = shared::parse_json(PROVIDER, &response)?;
-		let result = parse_image_response(&value, request.count, warnings)?;
+		let estimate = shared::resolved_cost_estimate(PROVIDER, &request.model, None, Some(&body), None);
+		let result = parse_image_response(&value, request.count, estimate.as_ref(), warnings)?;
 		Ok(Operation::completed(result))
 	}
 
@@ -733,6 +734,7 @@ impl TranscriptionProvider for OpenRouterMediaProvider {
 fn parse_image_response(
 	value: &Value,
 	expected_outputs: Option<u32>,
+	estimate: Option<&CostEstimate>,
 	mut warnings: Vec<ProviderWarning>,
 ) -> MediaResult<ImageGenerationResult> {
 	let data = value
@@ -788,13 +790,15 @@ fn parse_image_response(
 			provider_metadata: Value::Null,
 		});
 	}
-	let usage = parse_usage(value.get("usage"));
-	if usage.as_ref().and_then(|usage| usage.provider_reported_cost).is_none() {
+	let mut usage = parse_usage(value.get("usage")).unwrap_or_default();
+	// OpenRouter's own charge wins; the list price covers a response without one.
+	usage.estimated_cost = estimate.map(|rate| rate.usd_per_unit * rate.quantity.unwrap_or(artifacts.len() as f64));
+	if usage.provider_reported_cost.is_none() {
 		warnings.push(cost_unavailable_warning());
 	}
 	Ok(ImageGenerationResult {
 		artifacts,
-		usage,
+		usage: Some(usage),
 		warnings,
 		safety: SafetyReport::default(),
 		provider_metadata: value
@@ -1393,7 +1397,7 @@ mod tests {
 			"data": [{"b64_json": "aW1hZ2U=", "media_type": "image/png"}],
 			"usage": {"prompt_tokens": 2, "completion_tokens": 4, "cost": 0.04}
 		});
-		let result = parse_image_response(&fixture, Some(1), Vec::new()).unwrap();
+		let result = parse_image_response(&fixture, Some(1), None, Vec::new()).unwrap();
 		assert_eq!(result.artifacts.len(), 1);
 		assert_eq!(result.artifacts[0].size_bytes, Some(5));
 		assert_eq!(result.usage.and_then(|usage| usage.provider_reported_cost), Some(0.04));
@@ -1405,7 +1409,7 @@ mod tests {
 			"data": [{"b64_json": "aW1hZ2U=", "media_type": "image/png"}],
 			"usage": {"cost": 0.04}
 		});
-		let result = parse_image_response(&fixture, Some(2), Vec::new()).unwrap();
+		let result = parse_image_response(&fixture, Some(2), None, Vec::new()).unwrap();
 		assert_eq!(result.artifacts.len(), 1);
 		assert!(result
 			.warnings
@@ -1445,11 +1449,20 @@ mod tests {
 		let image = json!({
 			"data": [{"b64_json": "aW1hZ2U=", "media_type": "image/png"}]
 		});
-		let result = parse_image_response(&image, None, Vec::new()).unwrap();
+		let result = parse_image_response(&image, None, None, Vec::new()).unwrap();
 		assert!(result
 			.warnings
 			.iter()
 			.any(|warning| warning.code == WarningCode::CostUnavailable));
+		// The list price stands in when OpenRouter leaves its charge out.
+		let rate = CostEstimate {
+			unit: UsageUnit::Images,
+			usd_per_unit: 0.03,
+			quantity: None,
+		};
+		let result = parse_image_response(&image, None, Some(&rate), Vec::new()).unwrap();
+		let usage = result.usage.unwrap();
+		assert_eq!((usage.provider_reported_cost, usage.estimated_cost), (None, Some(0.03)));
 
 		let transcript = json!({"text":"hello"});
 		let result = parse_transcription_response(&transcript, Vec::new(), None).unwrap();

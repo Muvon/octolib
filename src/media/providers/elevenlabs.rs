@@ -209,6 +209,7 @@ impl SpeechSynthesisProvider for ElevenLabsMediaProvider {
 			PROVIDER,
 			&request.model,
 			options.cost_estimate,
+			None,
 			Some((UsageUnit::Characters, characters)),
 		);
 		let usage = character_usage(characters, estimate.as_ref(), &mut warnings);
@@ -327,7 +328,7 @@ impl TranscriptionProvider for ElevenLabsMediaProvider {
 		let value = shared::parse_json(PROVIDER, &response)?;
 		// Scribe bills the input audio's duration, which ElevenLabs only
 		// reports after the upload is processed, so no quantity is known here.
-		let estimate = shared::resolved_cost_estimate(PROVIDER, &request.model, options.cost_estimate, None);
+		let estimate = shared::resolved_cost_estimate(PROVIDER, &request.model, options.cost_estimate, None, None);
 		Ok(Operation::completed(parse_transcription(
 			&value,
 			estimate.as_ref(),

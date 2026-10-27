@@ -334,7 +334,7 @@ impl ImageGenerationProvider for HiggsfieldMediaProvider {
 		let id = self
 			.submit_request(
 				&request.model,
-				std::mem::take(&mut options.input),
+				options.input.clone(),
 				options.webhook.as_deref(),
 				&request.request_options,
 			)
@@ -343,7 +343,13 @@ impl ImageGenerationProvider for HiggsfieldMediaProvider {
 			&request.model,
 			task,
 			&id,
-			shared::resolved_cost_estimate(PROVIDER, &request.model, options.cost_estimate, None),
+			shared::resolved_cost_estimate(
+				PROVIDER,
+				&request.model,
+				options.cost_estimate,
+				Some(&options.input),
+				None,
+			),
 			warnings,
 			request.count,
 		))
@@ -440,7 +446,7 @@ impl VideoGenerationProvider for HiggsfieldMediaProvider {
 		let id = self
 			.submit_request(
 				&request.model,
-				std::mem::take(&mut options.input),
+				options.input.clone(),
 				options.webhook.as_deref(),
 				&request.request_options,
 			)
@@ -453,6 +459,7 @@ impl VideoGenerationProvider for HiggsfieldMediaProvider {
 				PROVIDER,
 				&request.model,
 				options.cost_estimate,
+				Some(&options.input),
 				request.duration_secs.map(|seconds| (UsageUnit::VideoSeconds, seconds)),
 			),
 			warnings,

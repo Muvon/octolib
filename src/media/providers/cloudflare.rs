@@ -428,6 +428,7 @@ impl SpeechSynthesisProvider for CloudflareMediaProvider {
 			PROVIDER,
 			&request.model,
 			options.cost_estimate,
+			None,
 			Some((UsageUnit::Characters, characters)),
 		);
 		let mut warnings = plan.warnings;
@@ -539,7 +540,7 @@ impl TranscriptionProvider for CloudflareMediaProvider {
 			}
 		};
 		let result = unwrap_result(&response)?;
-		let estimate = shared::resolved_cost_estimate(PROVIDER, &request.model, options.cost_estimate, None);
+		let estimate = shared::resolved_cost_estimate(PROVIDER, &request.model, options.cost_estimate, None, None);
 		Ok(Operation::completed(parse_transcription(
 			api,
 			&result,
@@ -1404,6 +1405,7 @@ mod tests {
 			PROVIDER,
 			"@cf/deepgram/aura-2-en",
 			None,
+			None,
 			Some((UsageUnit::Characters, 1000.0)),
 		)
 		.unwrap();
@@ -1416,6 +1418,7 @@ mod tests {
 		let estimate = shared::resolved_cost_estimate(
 			PROVIDER,
 			"@cf/myshell-ai/melotts",
+			None,
 			None,
 			Some((UsageUnit::Characters, 1000.0)),
 		)
@@ -1436,7 +1439,7 @@ mod tests {
 				{"word": "world", "start": 0.5, "end": 0.9}
 			]
 		});
-		let estimate = shared::resolved_cost_estimate(PROVIDER, "@cf/openai/whisper", None, None);
+		let estimate = shared::resolved_cost_estimate(PROVIDER, "@cf/openai/whisper", None, None, None);
 		let parsed = parse_transcription(TranscriptionApi::Whisper, &result, estimate.as_ref(), Vec::new()).unwrap();
 		assert_eq!(parsed.text, "hello world");
 		assert_eq!(parsed.words.len(), 2);
@@ -1458,7 +1461,7 @@ mod tests {
 				{"start": 1.0, "end": 2.0, "text": "two ", "words": [{"word": "two", "start": 1.1, "end": 1.5}]}
 			]
 		});
-		let estimate = shared::resolved_cost_estimate(PROVIDER, "@cf/openai/whisper-large-v3-turbo", None, None);
+		let estimate = shared::resolved_cost_estimate(PROVIDER, "@cf/openai/whisper-large-v3-turbo", None, None, None);
 		let parsed =
 			parse_transcription(TranscriptionApi::WhisperTurbo, &result, estimate.as_ref(), Vec::new()).unwrap();
 		assert_eq!(parsed.language.as_deref(), Some("en"));
@@ -1491,7 +1494,7 @@ mod tests {
 				}]
 			}]}
 		});
-		let estimate = shared::resolved_cost_estimate(PROVIDER, "@cf/deepgram/nova-3", None, None);
+		let estimate = shared::resolved_cost_estimate(PROVIDER, "@cf/deepgram/nova-3", None, None, None);
 		let parsed = parse_transcription(TranscriptionApi::Nova3, &result, estimate.as_ref(), Vec::new()).unwrap();
 		assert_eq!(parsed.text, "good morning");
 		assert_eq!(parsed.language.as_deref(), Some("en"));

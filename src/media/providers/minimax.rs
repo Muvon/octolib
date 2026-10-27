@@ -234,7 +234,7 @@ impl ImageGenerationProvider for MinimaxMediaProvider {
 				provider_metadata: Value::Null,
 			});
 		}
-		let estimate = shared::resolved_cost_estimate(PROVIDER, &request.model, None, None);
+		let estimate = shared::resolved_cost_estimate(PROVIDER, &request.model, None, None, None);
 		let usage = usage(
 			&request.model,
 			UsageUnit::Images,
@@ -339,7 +339,11 @@ impl VideoGenerationProvider for MinimaxMediaProvider {
 			model: request.model,
 			task,
 			remote_id: id.to_string(),
-			cost_estimate: Some(estimate),
+			// The requested length stands in when the finished task reports none.
+			cost_estimate: Some(CostEstimate {
+				quantity: Some(duration),
+				..estimate
+			}),
 			warnings,
 			expected_outputs: Some(1),
 		};
@@ -473,7 +477,14 @@ impl SpeechSynthesisProvider for MinimaxMediaProvider {
 				provider_metadata: Value::Null,
 			});
 		}
-		let estimate = shared::resolved_cost_estimate(PROVIDER, &request.model, None, None);
+		// The text's length stands in when MiniMax reports no billable characters.
+		let estimate = shared::resolved_cost_estimate(
+			PROVIDER,
+			&request.model,
+			None,
+			None,
+			Some((UsageUnit::Characters, characters as f64)),
+		);
 		let usage = usage(
 			&request.model,
 			UsageUnit::Characters,
@@ -792,8 +803,7 @@ fn usage(
 ) -> MediaUsage {
 	let estimated_cost = rate
 		.filter(|rate| rate.unit == unit)
-		.zip(quantity)
-		.map(|(rate, quantity)| rate.usd_per_unit * quantity);
+		.and_then(|rate| quantity.or(rate.quantity).map(|quantity| rate.usd_per_unit * quantity));
 	if estimated_cost.is_none() {
 		warnings.push(ProviderWarning {
 			code: WarningCode::CostUnavailable,

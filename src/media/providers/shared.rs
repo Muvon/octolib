@@ -44,17 +44,19 @@ pub(crate) struct CapturedResponse {
 /// reference table. An explicit `CostEstimate` is a deliberate override and
 /// always wins — the table is the floor, not a correction.
 ///
-/// `known_quantity` is the billable amount already settled at submit, such as
-/// requested video seconds or input characters. A unit only the upstream can
-/// report is left open so the adapter's usage builder fills it from the
-/// response metrics.
+/// `body` is the request the adapter sends, for a model priced by its own
+/// parameters. `known_quantity` is the billable amount already settled at
+/// submit, such as requested video seconds or input characters. A unit only the
+/// upstream can report is left open so the adapter's usage builder fills it
+/// from the response metrics.
 pub(crate) fn resolved_cost_estimate(
 	provider: &str,
 	model: &str,
 	supplied: Option<CostEstimate>,
+	body: Option<&Map<String, Value>>,
 	known_quantity: Option<(UsageUnit, f64)>,
 ) -> Option<CostEstimate> {
-	supplied.or_else(|| crate::media::reference_pricing::reference_cost_estimate(provider, model, known_quantity))
+	supplied.or_else(|| crate::media::reference_pricing::reference_cost_estimate(provider, model, body, known_quantity))
 }
 
 /// What a job the provider reports finished yielded: its parsed result, or a

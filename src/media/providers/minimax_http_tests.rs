@@ -44,7 +44,7 @@ fn handle() -> JobHandle {
 		model: "MiniMax-H3".to_string(),
 		task: MediaTask::TextToVideo,
 		remote_id: "task-1".to_string(),
-		cost_estimate: shared::resolved_cost_estimate(PROVIDER, "MiniMax-H3", None, None),
+		cost_estimate: shared::resolved_cost_estimate(PROVIDER, "MiniMax-H3", None, None, None),
 		warnings: Vec::new(),
 		expected_outputs: Some(1),
 	}
@@ -131,7 +131,7 @@ async fn video_submit_and_poll_queued_running_succeeded() {
 	let submitted = provider.submit_video(request).await.unwrap();
 	assert_eq!(submitted.status, OperationStatus::Queued);
 	let handle: JobHandle = serde_json::from_str(&serde_json::to_string(&submitted.handle.unwrap()).unwrap()).unwrap();
-	assert_eq!(handle.cost_estimate.as_ref().unwrap().quantity, None);
+	assert_eq!(handle.cost_estimate.as_ref().unwrap().quantity, Some(5.0));
 	assert_eq!(
 		provider.poll_video(&handle).await.unwrap().status,
 		OperationStatus::Queued
@@ -752,7 +752,7 @@ async fn video_estimates_snapshot_the_selected_model_and_resolution_rate() {
 		let estimate = handle.cost_estimate.as_ref().unwrap();
 		assert_eq!(estimate.unit, UsageUnit::VideoSeconds);
 		assert_eq!(estimate.usd_per_unit, rate);
-		assert_eq!(estimate.quantity, None);
+		assert_eq!(estimate.quantity, Some(5.0));
 		let result = provider.poll_video(&handle).await.unwrap().result.unwrap();
 		let usage = result.usage.unwrap();
 		assert_eq!(usage.line_items[0].quantity, 7.0);
@@ -765,7 +765,7 @@ async fn video_estimates_snapshot_the_selected_model_and_resolution_rate() {
 
 #[tokio::test]
 #[serial_test::serial]
-async fn speech_without_reported_characters_marks_usage_unavailable() {
+async fn speech_without_reported_characters_bills_the_text_length() {
 	let mut missing_characters: Value = serde_json::from_str(&speech_reply()).unwrap();
 	missing_characters["extra_info"]
 		.as_object_mut()
@@ -786,7 +786,8 @@ async fn speech_without_reported_characters_marks_usage_unavailable() {
 			.unwrap();
 		let usage = result.usage.unwrap();
 		assert!(usage.line_items.is_empty());
-		assert_eq!(usage.estimated_cost, None);
+		// "hello" at speech-2.8-hd's $0.0001 a character.
+		assert!((usage.estimated_cost.unwrap() - 5.0 * 0.0001).abs() < 1e-12);
 		assert_eq!(usage.provider_reported_cost, None);
 		assert!(result
 			.warnings

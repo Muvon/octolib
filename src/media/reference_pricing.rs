@@ -267,7 +267,8 @@ const REFERENCE_MEDIA_MODELS: &[MediaPricingEntry] = &[
 	rule("higgsfield", "minimax/h3/text-to-video", |body| {
 		body.video("2K", &[("2K", 0.13)], 5.0, 15.0)
 	}),
-	// "standard rates are $0.084 per second"; 3-15 s.
+	// "standard rates are $0.084 per second", one flat rate: the catalog's price range
+	// is a single value and no sound surcharge is published (read 2026-10-27); 3-15 s.
 	rule("higgsfield", "kling-video/v3.0/std/text-to-video", |body| {
 		per_second(0.084, body.seconds("duration", 5.0, 15.0))
 	}),
@@ -447,8 +448,10 @@ const FAL_MAX_IMAGE_SIZE: (u64, u64) = (14_142, 14_142);
 const FAL_NANO_BANANA_WEB_SEARCH_USD: f64 = 0.015;
 
 /// "The output can run up to about 0.7 s longer than requested"
-/// (https://fal.ai/models/minimax/h3-max/text-to-video, read 2026-10-27), and
-/// fal bills that endpoint per second of output.
+/// (https://fal.ai/models/minimax/h3-max/text-to-video, read 2026-10-27). That
+/// page never says whether it bills requested or generated seconds, and its
+/// siblings disagree (reference-to-video: requested; extend-video: generated),
+/// so the overrun is billed as the worst case.
 const H3_MAX_OVERRUN_SECS: f64 = 0.7;
 
 /// Seedance 2.0 per second by resolution, the same ByteDance meter on fal and
@@ -461,7 +464,8 @@ const H3_MAX_OVERRUN_SECS: f64 = 0.7;
 /// - 480p: no published figure; it meters fewer pixels than 720p at the same
 ///   token rate, so 720p's rate bounds it.
 /// - 4k: no published figure; 3840 × 2160 × 24 / 1024 = 194,400 tokens a
-///   second at $0.008 per 1,000. Neither host documents per-ratio pixel sizes.
+///   second at $0.008 per 1,000. Neither host documents 4k pixel sizes; 3840 ×
+///   2160 is the native 16:9 4k size third parties report (read 2026-10-27).
 const SEEDANCE_2_PER_SECOND: &[(&str, f64)] = &[("480p", 0.3034), ("720p", 0.3034), ("1080p", 0.682), ("4k", 1.5552)];
 
 /// Longest clips the endpoints accept, from each one's `duration` schema: the
@@ -516,9 +520,12 @@ fn nano_banana_pro(body: &Body) -> CostEstimate {
 /// `medium` thinking": 1K $0.040, 2K $0.059, 4K $0.134, with input at "$1.764"
 /// and output text and thinking at "$8.823" per 1M tokens. The prompt is added
 /// at one token per character, an upper bound; `minimal` thinking costs less
-/// than the table. `high` thinking and web search add a token count nobody
-/// knows up front, so each is priced at a full `max_output_tokens` budget
-/// (32,768, the cap fal's Nano Banana 2 schema documents) at its own rate.
+/// than the table. fal: "There are no flat per-image fees or surcharges for
+/// resolution, web search, or thinking" — thinking bills as output text and
+/// search results as input tokens, counts nobody knows up front (read
+/// 2026-10-27). So `high` thinking and web search are each priced at a full
+/// `max_output_tokens` budget (32,768, the cap fal's Nano Banana 2 schema
+/// documents) at its own rate.
 fn nano_banana_2_1(body: &Body) -> CostEstimate {
 	const INPUT_USD_PER_TOKEN: f64 = 1.764 / TOKENS_PER_MILLION;
 	const THINKING_USD_PER_TOKEN: f64 = 8.823 / TOKENS_PER_MILLION;
@@ -600,9 +607,9 @@ fn gpt_image_2(body: &Body) -> CostEstimate {
 
 /// "Your request will cost $0.0075 per megapixel in TURBO mode, $0.015 per
 /// megapixel in BALANCED mode, or $0.025 per megapixel in QUALITY mode." The
-/// schema adds that `expansion_model: None` "skips its fee", a fee the page
-/// never prices; it is charged as one more of the endpoint's $0.01 billing
-/// units (the page's endpoint billing record), an assumption to re-check.
+/// schema adds that `expansion_model: None` "skips its fee", a fee neither fal
+/// nor Ideogram's API pricing states (read 2026-10-27); it is charged as one more
+/// of the endpoint's $0.01 billing units (the page's endpoint billing record).
 fn fal_ideogram_v4(body: &Body) -> CostEstimate {
 	const EXPANSION_FEE_USD: f64 = 0.01;
 	let per_megapixel = body.tier(

@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.46.4] - 2026-10-27
+
+### 📋 Release Summary
+
+New LLM models from the 2026-10-27 model watch have been added and corrected.
+
+### ✨ New Features & Enhancements
+
+- **llm**: add new models from model watch 2026-10-27 `54cafc21`
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: correct model watch 2026-10-27 additions `84fc5bbd`
+
 ## [0.46.3] - 2026-10-27
 
 ### 📋 Release Summary

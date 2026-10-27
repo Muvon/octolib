@@ -17,11 +17,12 @@
 //! Uses WebWright's OpenAI-compatible chat endpoint at:
 //! `https://webwright.ai/v1/chat/completions`
 //!
-//! WebWright serves a single proprietary model, `wren-r1` (200k-token context,
-//! `owned_by: "webwright"`). The catalogue is fixed and known (see `MODELS`),
-//! so unknown model IDs are rejected rather than served by `wren-r1`. Because
-//! `wren-r1` matches no reference model, every capability and the context
-//! window are declared here instead of resolved from the reference tables.
+//! WebWright serves two proprietary chat models, `wren-r1` and `wren-r1-fast`
+//! (both 200k-token context, `owned_by: "webwright"`). The catalogue is fixed
+//! and known (see `MODELS`), so unknown model IDs are rejected rather than
+//! served by `wren-r1`. Because neither `wren-r1` nor `wren-r1-fast` matches
+//! any reference model, every capability and the context window are declared
+//! here instead of resolved from the reference tables.
 //!
 //! Reasoning: WebWright publishes low and medium reasoning modes on the
 //! Standard tier and high-to-max on Premium. The client cannot see which tier
@@ -56,15 +57,22 @@ const WEBWRIGHT_API_URL_ENV: &str = "WEBWRIGHT_API_URL";
 const WEBWRIGHT_API_URL: &str = "https://webwright.ai/v1/chat/completions";
 
 /// (model id, max input tokens) — WebWright's `GET /v1/models` reports
-/// `context_length: 200000` for the single deployed model.
-const MODELS: &[(&str, usize)] = &[("wren-r1", 200_000)];
+/// `context_length: 200000` for both deployed chat models.
+const MODELS: &[(&str, usize)] = &[("wren-r1", 200_000), ("wren-r1-fast", 200_000)];
 
 // WebWright pricing (per 1M tokens in USD) — Standard tier, Oct 2026
-// Source: https://webwright.ai/pricing
+// Source: https://webwright.ai/pricing and https://webwright.ai/models
 // Format: (model, input, output, cache_write, cache_read)
 // WebWright bills no separate cache-write fee, so cache writes price at the
 // input rate; cached input reads at $0.10/1M.
-const PRICING: &[PricingTuple] = &[("wren-r1", 0.40, 1.60, 0.40, 0.10)];
+// The Standard rates are used for both chat models: the account's tier
+// decides the actual rate, and the client cannot see which tier an account
+// holds.
+const PRICING: &[PricingTuple] = &[
+	// The longer id comes first: pricing lookups are substring matches.
+	("wren-r1-fast", 0.40, 1.60, 0.40, 0.10),
+	("wren-r1", 0.40, 1.60, 0.40, 0.10),
+];
 
 /// Case-insensitive lookup; requests are canonicalized to the table's exact ID.
 fn find_model(model: &str) -> Option<&'static (&'static str, usize)> {

@@ -211,6 +211,25 @@ fn null_supported_efforts_accepts_every_gateway_level() {
 }
 
 #[test]
+fn october_2026_models_are_priced_on_the_aggregator_route() {
+	let provider = OpenRouterProvider::new();
+
+	let terra = provider
+		.get_model_pricing("openai/gpt-6.1-terra")
+		.expect("gpt-6.1-terra must be priced");
+	assert_eq!(terra.input_price_per_1m, 1.00);
+	assert_eq!(terra.output_price_per_1m, 5.00);
+	assert_eq!(terra.cache_write_price_per_1m, 1.25);
+	assert_eq!(terra.cache_read_price_per_1m, 0.05);
+
+	let omni_plus = provider
+		.get_model_pricing("qwen/qwen3.5-omni-plus")
+		.expect("qwen3.5-omni-plus must be priced");
+	assert_eq!(omni_plus.input_price_per_1m, 1.40);
+	assert_eq!(omni_plus.output_price_per_1m, 8.30);
+}
+
+#[test]
 fn test_supports_model() {
 	let provider = OpenRouterProvider::new();
 

@@ -134,6 +134,22 @@ fn newly_listed_serverless_models_use_together_rates() {
 }
 
 #[test]
+fn deepseek_v4_1_flash_1017_snapshot_uses_together_rates() {
+	let provider = TogetherProvider::new();
+	// https://docs.together.ai/docs/inference-models
+	let pricing = provider
+		.get_model_pricing("deepseek-ai/DeepSeek-V4.1-Flash-1017")
+		.unwrap();
+	assert_eq!(pricing.input_price_per_1m, 0.30);
+	assert_eq!(pricing.cache_read_price_per_1m, 0.006);
+	assert_eq!(pricing.output_price_per_1m, 1.20);
+	assert_eq!(
+		provider.get_max_input_tokens("deepseek-ai/DeepSeek-V4.1-Flash-1017"),
+		1_000_000
+	);
+}
+
+#[test]
 fn retired_serverless_models_leave_together_table() {
 	assert!(together_model_pricing("moonshotai/Kimi-K2.7-Code").is_none());
 	assert!(together_model_context("moonshotai/Kimi-K2.7-Code").is_none());

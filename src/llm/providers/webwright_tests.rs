@@ -18,8 +18,10 @@ use super::*;
 fn test_supports_model() {
 	let provider = WebWrightProvider::new();
 	assert!(provider.supports_model("wren-r1"));
+	assert!(provider.supports_model("wren-r1-fast"));
 	// Case-insensitive: requests are canonicalized to the table's ID.
 	assert!(provider.supports_model("Wren-R1"));
+	assert!(provider.supports_model("WREN-R1-FAST"));
 	// The catalogue is fixed, so unknown IDs are rejected rather than served
 	// by wren-r1.
 	assert!(!provider.supports_model("any-future-model"));
@@ -62,7 +64,24 @@ fn test_published_pricing() {
 fn test_max_input_tokens() {
 	let provider = WebWrightProvider::new();
 	assert_eq!(provider.get_max_input_tokens("wren-r1"), 200_000);
+	assert_eq!(provider.get_max_input_tokens("wren-r1-fast"), 200_000);
 	// Unknown models still report the deployed model's window rather than the
 	// generic reference default.
 	assert_eq!(provider.get_max_input_tokens("any-model"), 200_000);
+}
+
+/// wren-r1-fast is the Premium-plan chat model, but the account tier decides
+/// the rate and the client cannot see it, so the Standard rates are used for
+/// both chat models.
+/// https://webwright.ai/models
+#[test]
+fn test_wren_r1_fast_published_pricing() {
+	let provider = WebWrightProvider::new();
+	let pricing = provider
+		.get_model_pricing("wren-r1-fast")
+		.expect("wren-r1-fast publishes Standard-tier rates");
+	assert_eq!(pricing.input_price_per_1m, 0.40);
+	assert_eq!(pricing.output_price_per_1m, 1.60);
+	assert_eq!(pricing.cache_write_price_per_1m, 0.40);
+	assert_eq!(pricing.cache_read_price_per_1m, 0.10);
 }

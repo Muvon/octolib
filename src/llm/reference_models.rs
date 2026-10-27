@@ -770,6 +770,13 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		pricing: pricing(10.00, 50.00, 12.50, 1.00),
 	},
 	ReferenceModelEntry {
+		// GPT-6.1 Terra: https://developers.openai.com/api/docs/models/gpt-6.1-terra
+		// 1.05M context window, text/image input, verified Oct 27, 2026.
+		pattern: "gpt-6.1-terra",
+		capabilities: caps(true, false, true, 1_050_000),
+		pricing: pricing(1.00, 5.00, 1.25, 0.05),
+	},
+	ReferenceModelEntry {
 		// GPT-6.1 Sol: https://developers.openai.com/api/docs/pricing
 		// Standard short-context rates, verified Sep 30, 2026.
 		pattern: "gpt-6.1-sol",
@@ -1442,6 +1449,28 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		pattern: "qwen-3.6-27b",
 		capabilities: caps(true, false, true, 131_072),
 		pricing: pricing(0.60, 3.00, 0.60, 0.60),
+	},
+	ReferenceModelEntry {
+		// Qwen-Long: text-generation model for ultra-long context. The context
+		// window is 10M tokens, but HTTP requests carry at most 1M tokens —
+		// longer content must be submitted as a file — so 1M is the ceiling
+		// for a request this client can send.
+		// https://www.alibabacloud.com/help/en/model-studio/qwen-long
+		// Model Studio publishes only the China (Beijing) CNY rate, so no
+		// baseline USD price is declared here. JSON object mode only, so the
+		// response is not guaranteed to conform to a supplied schema.
+		pattern: "qwen-long",
+		capabilities: caps(false, false, false, 1_000_000),
+		pricing: None,
+	},
+	ReferenceModelEntry {
+		// Qwen3.5-Omni-Plus (Mar 2026 snapshot): text/image/video/audio input,
+		// 262K context window and a 196,608-token input cap. Model Studio
+		// international list price; context caching is unsupported, so cache
+		// hits bill at the input rate.
+		pattern: "qwen-3.5-omni-plus",
+		capabilities: caps(true, true, false, 196_608),
+		pricing: pricing(1.40, 8.30, 1.40, 1.40),
 	},
 	ReferenceModelEntry {
 		// Qwen3.5-Omni-Flash (Mar 2026): text/image/video/audio input, 262K

@@ -130,17 +130,16 @@ const PRICING: &[PricingTuple] = &[
 		2.49,
 		0.498,
 	),
-	// NVIDIA Nemotron. The Super-VL checkpoint carries the same rate as the
-	// 3-Super one; the `:peft:` variant widens the context, not the price.
+	// Super-VL: the `:peft:` variant widens the context, not the price.
 	(
-		"nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-BF16:peft:262144",
+		"nvidia/nvidia-nemotron-3.5-super-vl-120b-a12b-bf16:peft:262144",
 		0.57,
 		1.44,
 		0.57,
 		0.114,
 	),
 	(
-		"nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-BF16",
+		"nvidia/nvidia-nemotron-3.5-super-vl-120b-a12b-bf16",
 		0.57,
 		1.44,
 		0.57,
@@ -156,7 +155,7 @@ const PRICING: &[PricingTuple] = &[
 	("nvidia/nvidia-nemotron-3-super-120b-a12b-bf16", 0.57, 1.44, 0.57, 0.114),
 	("nvidia/nvidia-nemotron-3-nano-30b-a3b-bf16", 0.195, 0.495, 0.195, 0.039),
 	// GLM / Kimi
-	("zai-org/GLM-5.3-Flash:peft:262144", 0.84, 2.11, 0.84, 0.168),
+	("zai-org/glm-5.3-flash:peft:262144", 0.84, 2.11, 0.84, 0.168),
 	("zai-org/glm-5.3:peft:262144", 4.86, 12.15, 4.86, 0.972),
 	("moonshotai/kimi-k2.6:peft:131072", 5.15, 12.81, 5.15, 1.03),
 	("moonshotai/kimi-k2.6", 2.205, 5.49, 2.205, 0.441),
@@ -164,8 +163,6 @@ const PRICING: &[PricingTuple] = &[
 	("qwen/qwen3.8-27b:peft:262144", 2.48, 7.46, 2.48, 0.496),
 	("qwen/qwen3.8-27b", 1.86, 5.595, 1.86, 0.372),
 	("qwen/qwen3.6-35b-a3b", 0.54, 1.335, 0.54, 0.108),
-	// Qwen3.6-27B retires on Oct 23, 2026 in favour of Qwen3.8-27B.
-	("Qwen/Qwen3.6-27B", 1.86, 5.595, 1.86, 0.372),
 	("qwen/qwen3.5-397b-a17b:peft:262144", 4.00, 10.00, 4.00, 0.80),
 	("qwen/qwen3.5-397b-a17b", 3.00, 7.50, 3.00, 0.60),
 	("qwen/qwen3.5-35b-a3b-base", 0.54, 1.335, 0.54, 0.108),
@@ -178,9 +175,9 @@ const PRICING: &[PricingTuple] = &[
 	("openai/gpt-oss-120b", 0.33, 0.84, 0.33, 0.066),
 	("openai/gpt-oss-20b", 0.18, 0.45, 0.18, 0.036),
 	// DeepSeek
-	("deepseek-ai/DeepSeek-V4.1-Flash:peft:262144", 0.60, 3.60, 0.60, 0.12),
+	("deepseek-ai/deepseek-v4.1-flash:peft:262144", 0.60, 3.60, 0.60, 0.12),
 	(
-		"deepseek-ai/DeepSeek-V4.1-Flash-1017:peft:262144",
+		"deepseek-ai/deepseek-v4.1-flash-1017:peft:262144",
 		0.60,
 		3.60,
 		0.60,
@@ -206,18 +203,17 @@ const CONTEXTS: &[(&str, usize)] = &[
 	("nvidia/nvidia-nemotron-3-super-120b-a12b-bf16", 65_536),
 	("nvidia/nvidia-nemotron-3-nano-30b-a3b-bf16", 65_536),
 	(
-		"nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-BF16:peft:262144",
+		"nvidia/nvidia-nemotron-3.5-super-vl-120b-a12b-bf16:peft:262144",
 		262_144,
 	),
-	("nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-BF16", 65_536),
-	("zai-org/GLM-5.3-Flash:peft:262144", 262_144),
+	("nvidia/nvidia-nemotron-3.5-super-vl-120b-a12b-bf16", 65_536),
+	("zai-org/glm-5.3-flash:peft:262144", 262_144),
 	("zai-org/glm-5.3:peft:262144", 262_144),
 	("moonshotai/kimi-k2.6:peft:131072", 131_072),
 	("moonshotai/kimi-k2.6", 32_768),
 	("qwen/qwen3.8-27b:peft:262144", 262_144),
 	("qwen/qwen3.8-27b", 65_536),
 	("qwen/qwen3.6-35b-a3b", 65_536),
-	("Qwen/Qwen3.6-27B", 65_536),
 	("qwen/qwen3.5-397b-a17b:peft:262144", 262_144),
 	("qwen/qwen3.5-397b-a17b", 65_536),
 	("qwen/qwen3.5-35b-a3b-base", 65_536),
@@ -228,8 +224,8 @@ const CONTEXTS: &[(&str, usize)] = &[
 	("openai/gpt-oss-120b:peft:131072", 131_072),
 	("openai/gpt-oss-120b", 32_768),
 	("openai/gpt-oss-20b", 32_768),
-	("deepseek-ai/DeepSeek-V4.1-Flash:peft:262144", 262_144),
-	("deepseek-ai/DeepSeek-V4.1-Flash-1017:peft:262144", 262_144),
+	("deepseek-ai/deepseek-v4.1-flash:peft:262144", 262_144),
+	("deepseek-ai/deepseek-v4.1-flash-1017:peft:262144", 262_144),
 	("deepseek-ai/deepseek-v3.1", 32_768),
 ];
 

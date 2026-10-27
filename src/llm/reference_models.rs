@@ -1456,9 +1456,10 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		// longer content must be submitted as a file — so 1M is the ceiling
 		// for a request this client can send.
 		// https://www.alibabacloud.com/help/en/model-studio/qwen-long
-		// Model Studio publishes only the China (Beijing) CNY rate, so no
-		// baseline USD price is declared here. JSON object mode only, so the
-		// response is not guaranteed to conform to a supplied schema.
+		// Model Studio lists it for China (Beijing) only and publishes no
+		// international USD rate, so no baseline price is declared here.
+		// JSON object mode only, so the response is not guaranteed to conform
+		// to a supplied schema.
 		pattern: "qwen-long",
 		capabilities: caps(false, false, false, 1_000_000),
 		pricing: None,

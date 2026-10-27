@@ -56,21 +56,21 @@ const WEBWRIGHT_API_KEY_ENV: &str = "WEBWRIGHT_API_KEY";
 const WEBWRIGHT_API_URL_ENV: &str = "WEBWRIGHT_API_URL";
 const WEBWRIGHT_API_URL: &str = "https://webwright.ai/v1/chat/completions";
 
-/// (model id, max input tokens) — WebWright's `GET /v1/models` reports
-/// `context_length: 200000` for both deployed chat models.
+/// (model id, max input tokens) — WebWright's `GET /v1/models` lists both chat
+/// models; https://webwright.ai/models gives each a 200,000-token window.
 const MODELS: &[(&str, usize)] = &[("wren-r1", 200_000), ("wren-r1-fast", 200_000)];
 
-// WebWright pricing (per 1M tokens in USD) — Standard tier, Oct 2026
+// WebWright pricing (per 1M tokens in USD), Oct 2026
 // Source: https://webwright.ai/pricing and https://webwright.ai/models
 // Format: (model, input, output, cache_write, cache_read)
 // WebWright bills no separate cache-write fee, so cache writes price at the
-// input rate; cached input reads at $0.10/1M.
-// The Standard rates are used for both chat models: the account's tier
-// decides the actual rate, and the client cannot see which tier an account
-// holds.
+// input rate.
+// wren-r1 is priced at the Standard tier: the account's tier decides its
+// actual rate, and the client cannot see which tier an account holds.
+// wren-r1-fast is the Premium plan model, so it carries the Premium rates.
 const PRICING: &[PricingTuple] = &[
 	// The longer id comes first: pricing lookups are substring matches.
-	("wren-r1-fast", 0.40, 1.60, 0.40, 0.10),
+	("wren-r1-fast", 0.80, 3.20, 0.80, 0.20),
 	("wren-r1", 0.40, 1.60, 0.40, 0.10),
 ];
 

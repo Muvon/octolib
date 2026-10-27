@@ -272,6 +272,7 @@ fn every_pricing_entry_is_reachable() {
 		}
 	}
 }
+
 /// The October 2026 model watch: every new family resolves through the
 /// reference table, so aggregators and proxies can price it too.
 #[test]

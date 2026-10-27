@@ -279,6 +279,7 @@ Files still showing `Copyright 2025` (`src/storage.rs`, `src/embedding/constants
 7. Re-export from `src/lib.rs`
 8. Add example in `examples/`
 9. Do "Every new model or maker: routers must price it too" below for each model
+10. Do "Structured output: prove it live" below
 
 ### OpenAI-Compatible Proxy
 
@@ -288,6 +289,7 @@ Files still showing `Copyright 2025` (`src/storage.rs`, `src/embedding/constants
 4. In `chat_completion()`: call `openai_compat_chat_completion(OpenAiCompatConfig { provider_name: "newprovider", usage_fallback_cost: None, use_response_cost: true }, api_key, api_url, params).await?`, then if `response.exchange.usage.cost.is_none()` fill it via `calculate_reference_cost(&params.model, usage.input_tokens, usage.cache_read_tokens, usage.billable_output_tokens())` — see the `nvidia.rs` cost block
 5. Add missing model families to `reference_pricing.rs` and `reference_capabilities.rs` if needed
 6. Register in `providers/mod.rs`, `factory.rs`, `lib.rs`; add example
+7. Do "Structured output: prove it live" below
 
 ### Every new model or maker: routers must price it too
 
@@ -309,6 +311,29 @@ default ratios` and its compression decisions run on guesses).
 4. Pin it with a test: `OpenRouterProvider::new().get_model_pricing("<org>/<model>")`
    is `Some` with the expected rates (see `openrouter_tests.rs`), plus a
    `reference_models_tests.rs` row.
+
+### Structured output: prove it live
+
+OctoHub routes `json_schema` requests only to providers whose `enforces_response_schema`
+is true; the rest go through the forced-tool path in `schema_enforcement.rs`. A wrong
+`true` hands typed callers JSON of the wrong shape; a wrong `false` drops a working
+provider from the schema pool. Provider docs are often silent or wrong, and subscription
+endpoints (Token / Coding Plan) can behave differently from pay-as-you-go, so declare each
+mode only from a live probe:
+
+1. Send a strict `json_schema` (an object schema with `additionalProperties: false`) with a
+   prompt that demands something else, e.g. "Reply ONLY with a JSON array of three color
+   names". Enforced means the object comes back on every call; the array means the schema
+   was ignored.
+2. Send `json_object` with the same prompt. A bare array or prose means JSON mode is
+   ignored too.
+3. Repeat for each model family and on every endpoint the provider can be pointed at
+   (pay-as-you-go and plan base URLs via `*_API_URL`).
+4. Set `supports_structured_output`, `enforces_response_schema`, the matching
+   `OpenAiCompatConfig` field and the reference row's `structured_output` from the result.
+   Above the override, cite the probe: models, call count, endpoint, date.
+5. If the endpoint ignores `response_format`, do not send it: leave
+   `supports_structured_output` false so the forced-tool path takes over (MiniMax).
 
 ### Embedding Provider
 

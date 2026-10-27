@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.46.2] - 2026-10-27
+
+### 📋 Release Summary
+
+Media pricing now supports request-dependent rates, with clearer pricing assumptions.
+
+### ✨ New Features & Enhancements
+
+- **media-pricing**: support request-dependent media pricing `f5a39d0a`
+
+### 🔧 Improvements & Optimizations
+
+- **media**: clarify pricing assumptions `3b029ad2`
+
 ## [0.46.1] - 2026-10-26
 
 ### 📋 Release Summary

@@ -2265,7 +2265,7 @@ dependencies = [
 
 [[package]]
 name = "octolib"
-version = "0.46.1"
+version = "0.46.2"
 dependencies = [
  "anyhow",
  "arc-swap",

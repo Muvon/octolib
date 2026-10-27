@@ -272,6 +272,45 @@ fn every_pricing_entry_is_reachable() {
 		}
 	}
 }
+/// The October 2026 model watch: every new family resolves through the
+/// reference table, so aggregators and proxies can price it too.
+#[test]
+fn october_2026_additions_resolve_with_documented_capabilities_and_pricing() {
+	for (model, capabilities, pricing) in [
+		(
+			"openai/gpt-6.1-terra",
+			caps(true, false, true, 1_050_000),
+			pricing(1.00, 5.00, 1.25, 0.05),
+		),
+		(
+			"qwen/qwen3.5-omni-plus",
+			caps(true, true, false, 196_608),
+			pricing(1.40, 8.30, 1.40, 1.40),
+		),
+	] {
+		assert_same_capabilities(get_reference_capabilities(model).unwrap(), capabilities.unwrap());
+		assert_same_pricing(get_reference_pricing(model).unwrap(), pricing.unwrap());
+		assert_eq!(
+			proxy_route_enforces_response_schema(model),
+			capabilities.unwrap().structured_output,
+		);
+		assert!(reference_model_id(model).is_some(), "{model}");
+	}
+}
+
+/// qwen-long has no published international USD rate, so it carries
+/// capabilities only and must not report a price.
+#[test]
+fn qwen_long_resolves_capabilities_without_pricing() {
+	let caps = get_reference_capabilities("qwen-long").expect("qwen-long must resolve to a reference entry");
+	assert!(!caps.vision);
+	assert!(!caps.video);
+	assert!(!caps.structured_output);
+	assert_eq!(caps.max_input_tokens, 1_000_000);
+	assert!(get_reference_pricing("qwen-long").is_none());
+	assert!(reference_model_id("qwen-long").is_some());
+}
+
 #[test]
 fn august_2026_additions_resolve() {
 	// Seed 2.1 family (ByteDance, Aug 2026)
@@ -426,6 +465,7 @@ fn specific_patterns_win_over_the_broader_rows_they_extend() {
 		("qwen3.8-max-0902", "qwen-3.8-max-0902", 2.00, 6.00),
 		("qwen3.8-max", "qwen-3.8-max", 2.00, 6.00),
 		("qwen3.5-omni-flash", "qwen-3.5-omni-flash", 0.40, 2.20),
+		("qwen3.5-omni-plus", "qwen-3.5-omni-plus", 1.40, 8.30),
 	] {
 		let props = get_reference_model_properties(model)
 			.unwrap_or_else(|| panic!("{model} must resolve to a reference entry"));

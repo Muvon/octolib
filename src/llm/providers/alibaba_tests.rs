@@ -290,6 +290,38 @@ fn test_qwen3_5_omni_flash_pricing() {
 }
 
 #[test]
+fn test_qwen3_5_omni_plus_pricing() {
+	let provider = AlibabaProvider::new();
+	// International list price: text/image/video input $1.40, text output
+	// $8.30. Context caching is unsupported, so hits bill at the input rate.
+	// https://www.alibabacloud.com/help/en/model-studio/qwen3-5-omni-plus
+	let p = provider.get_model_pricing("qwen3.5-omni-plus").unwrap();
+	assert_eq!(p.input_price_per_1m, 1.40);
+	assert_eq!(p.output_price_per_1m, 8.30);
+	assert_eq!(p.cache_write_price_per_1m, 1.40);
+	assert_eq!(p.cache_read_price_per_1m, 1.40);
+
+	// The dated snapshot carries the moving alias's list rates.
+	let p = provider.get_model_pricing("qwen3.5-omni-plus-2026-03-15").unwrap();
+	assert_eq!(p.input_price_per_1m, 1.40);
+	assert_eq!(p.output_price_per_1m, 8.30);
+}
+
+/// qwen-long is a text-generation model with no published international USD
+/// rate, so it is declared without a price and resolves its context window
+/// from the reference table.
+#[test]
+fn test_qwen_long_resolves_without_a_published_price() {
+	let provider = AlibabaProvider::new();
+	assert!(provider.supports_model("qwen-long"));
+	assert!(!is_model_in_pricing_table("qwen-long", PRICING));
+	assert!(provider.get_model_pricing("qwen-long").is_none());
+	// HTTP requests carry at most 1M tokens of the 10M-token window.
+	assert_eq!(provider.get_max_input_tokens("qwen-long"), 1_000_000);
+	assert!(!provider.supports_vision("qwen-long"));
+}
+
+#[test]
 fn test_qwen3_8_max_0902_snapshot_pricing() {
 	let provider = AlibabaProvider::new();
 	// The dated snapshot carries the moving alias's list rates.

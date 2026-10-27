@@ -169,6 +169,65 @@ fn test_context_windows() {
 	assert_eq!(provider.get_max_input_tokens("tinker://some/checkpoint"), 262_144);
 }
 
+/// The checkpoints added in the October 2026 model watch, with the rates and
+/// windows published on https://tinker-docs.thinkingmachines.ai/tinker/models/
+#[test]
+fn test_october_2026_checkpoints_use_the_published_rates() {
+	let provider = TinkerProvider::new();
+	for (model, input, output, cache_read, context) in [
+		(
+			"nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-BF16",
+			0.57,
+			1.44,
+			0.114,
+			65_536,
+		),
+		(
+			"nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-BF16:peft:262144",
+			0.57,
+			1.44,
+			0.114,
+			262_144,
+		),
+		("zai-org/GLM-5.3-Flash:peft:262144", 0.84, 2.11, 0.168, 262_144),
+		("deepseek-ai/DeepSeek-V4.1-Flash:peft:262144", 0.60, 3.60, 0.12, 262_144),
+		(
+			"deepseek-ai/DeepSeek-V4.1-Flash-1017:peft:262144",
+			0.60,
+			3.60,
+			0.12,
+			262_144,
+		),
+		("Qwen/Qwen3.6-27B", 1.86, 5.595, 0.372, 65_536),
+	] {
+		let pricing = provider
+			.get_model_pricing(model)
+			.unwrap_or_else(|| panic!("{model} must have a pricing entry"));
+		assert_eq!(pricing.input_price_per_1m, input, "{model}");
+		assert_eq!(pricing.output_price_per_1m, output, "{model}");
+		assert_eq!(pricing.cache_write_price_per_1m, input, "{model}");
+		assert_eq!(pricing.cache_read_price_per_1m, cache_read, "{model}");
+		assert_eq!(provider.get_max_input_tokens(model), context, "{model}");
+	}
+}
+
+/// Tinker's ids are matched case-insensitively, so the mixed-case spellings
+/// resolve to the same rows.
+#[test]
+fn test_october_2026_checkpoints_match_case_insensitively() {
+	let provider = TinkerProvider::new();
+	for model in [
+		"nvidia/nvidia-nemotron-3.5-super-vl-120b-a12b-bf16",
+		"nvidia/nvidia-nemotron-3.5-super-vl-120b-a12b-bf16:peft:262144",
+		"zai-org/glm-5.3-flash:peft:262144",
+		"deepseek-ai/deepseek-v4.1-flash:peft:262144",
+		"deepseek-ai/deepseek-v4.1-flash-1017:peft:262144",
+		"qwen/qwen3.6-27b",
+	] {
+		assert!(provider.get_model_pricing(model).is_some(), "{model}");
+	}
+}
+
 #[test]
 fn test_conservative_capabilities() {
 	let provider = TinkerProvider::new();

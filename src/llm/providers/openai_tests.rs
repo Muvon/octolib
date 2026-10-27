@@ -1070,6 +1070,49 @@ fn test_gpt_6_sol_and_luna_provider_and_reference_support() {
 }
 
 #[test]
+fn test_gpt_6_1_terra_provider_and_reference_support() {
+	let provider = OpenAiProvider::new();
+	let model = "gpt-6.1-terra";
+	// https://developers.openai.com/api/docs/models/gpt-6.1-terra
+	assert!(provider.supports_model(model));
+	assert!(provider.supports_vision(model));
+	assert!(provider.supports_caching(model));
+	assert!(provider.supports_structured_output(model));
+	assert_eq!(provider.get_max_input_tokens(model), 1_050_000);
+
+	let sampling = provider.supported_sampling_params(model);
+	assert!(!sampling.temperature && !sampling.top_p && !sampling.top_k);
+
+	let proxy_model = format!("openai/{model}");
+	for pricing in [
+		provider.get_model_pricing(model).unwrap(),
+		crate::llm::reference_pricing::get_reference_pricing(&proxy_model).unwrap(),
+	] {
+		assert_eq!(pricing.input_price_per_1m, 1.00);
+		assert_eq!(pricing.output_price_per_1m, 5.00);
+		assert_eq!(pricing.cache_write_price_per_1m, 1.25);
+		assert_eq!(pricing.cache_read_price_per_1m, 0.05);
+	}
+	let caps = crate::llm::reference_capabilities::get_reference_capabilities(&proxy_model).unwrap();
+	assert!(caps.vision && caps.structured_output && !caps.video);
+	assert_eq!(caps.max_input_tokens, 1_050_000);
+}
+
+/// Terra accepts "none" (its model page lists none..max), unlike the rest of
+/// the GPT-6 family, which rejects "none" with a 400.
+#[test]
+fn test_gpt_6_1_terra_reasoning_effort_supports_none() {
+	use ReasoningEffort::{High, Low, Max, Medium, None as Off, XHigh};
+	let levels = |model: &str| [Off, Low, Medium, High, XHigh, Max].map(|effort| reasoning_effort(model, Some(effort)));
+	assert_eq!(
+		levels("gpt-6.1-terra"),
+		["none", "low", "medium", "high", "xhigh", "max"].map(Some)
+	);
+	// The rest of the family still floors "none" to "low".
+	assert_eq!(reasoning_effort("gpt-6.1-sol", Some(Off)), Some("low"));
+}
+
+#[test]
 fn test_gpt_6_sol_and_luna_long_context_boundary_includes_cache_tokens() {
 	for (model, standard_cost, long_cost) in [
 		("gpt-6.1-sol", 0.5752, 1.1024002),

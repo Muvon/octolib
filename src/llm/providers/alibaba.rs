@@ -84,6 +84,12 @@ const PRICING: &[PricingTuple] = &[
 	("qwen3.6-plus", 0.50, 3.00, 0.50, 0.05),
 	("qwen3.6-flash", 0.25, 1.50, 0.25, 0.025),
 	("qwen3.5-plus", 0.40, 2.40, 0.40, 0.04),
+	// Qwen3.5-Omni-Plus: text/image/video input at $1.40 and text output at
+	// $8.30 (international list price). Audio input ($11.00) and text-and-audio
+	// output ($44.00) are not representable in a single-rate row, so the text
+	// rates are used. Context caching is unsupported, so cache hits bill at
+	// the input rate.
+	("qwen3.5-omni-plus", 1.40, 8.30, 1.40, 1.40),
 	// Qwen3.5-Omni-Flash: text/image/video input at $0.40 and text output at
 	// $2.20 (international list price). Audio input ($3.00) and text-and-audio
 	// output ($11.90) are not representable in a single-rate row, so the text

@@ -50,6 +50,9 @@ const PRICING: &[PricingTuple] = &[
 	("zai-org/GLM-5.3-Flash", 0.15, 0.50, 0.15, 0.03),
 	("zai-org/GLM-5.3", 1.40, 4.40, 1.40, 0.26),
 	("zai-org/GLM-5.2", 1.40, 4.40, 1.40, 0.26),
+	// The 1017 snapshot carries the same rate card as the moving alias; the
+	// longer id must precede it, since lookups are substring matches.
+	("deepseek-ai/DeepSeek-V4.1-Flash-1017", 0.30, 1.20, 0.30, 0.006),
 	("deepseek-ai/DeepSeek-V4.1-Flash", 0.30, 1.20, 0.30, 0.006),
 	("deepseek-ai/DeepSeek-V4-Pro-0813", 1.32, 3.96, 1.32, 0.13),
 	("deepseek-ai/DeepSeek-V4-Flash-0731", 0.14, 0.28, 0.14, 0.03),

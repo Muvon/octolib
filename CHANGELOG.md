@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.46.3] - 2026-10-27
+
+### 📋 Release Summary
+
+Minimax requests no longer send response format parameters. Documentation now explains how to verify structured output.
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: stop sending Minimax response formats `8a2ff5ca`
+
+### 📚 Documentation & Examples
+
+- **agents**: document structured output verification `943ba56e`
+
 ## [0.46.2] - 2026-10-27
 
 ### 📋 Release Summary

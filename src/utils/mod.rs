@@ -21,6 +21,7 @@
 
 pub mod config_file;
 pub mod config_migration;
+pub mod line_hash;
 #[cfg(any(feature = "llm", feature = "media"))]
 pub(crate) mod naming;
 

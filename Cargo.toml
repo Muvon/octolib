@@ -216,11 +216,11 @@ codegen-units = 1      # max optimization, slower compile
 strip = "symbols"
 # Keep Apple dependencies off other platforms without a separate helper crate.
 [target.'cfg(target_os = "macos")'.dependencies]
-fastembed = { version = "7.3.0", default-features = false, features = ["hf-hub-rustls-tls", "ort-download-binaries-rustls-tls"], optional = true }
+fastembed = { version = "7.5.0", default-features = false, features = ["hf-hub-rustls-tls", "ort-download-binaries-rustls-tls"], optional = true }
 candle-core = { version = "0.11.0", git = "https://github.com/huggingface/candle.git", rev = "70f72e9cfdbfc570846ca363ead2135394af3e9a", features = ["metal"], optional = true }
 candle-nn = { version = "0.11.0", git = "https://github.com/huggingface/candle.git", rev = "70f72e9cfdbfc570846ca363ead2135394af3e9a", features = ["metal"], optional = true }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
-fastembed = { version = "7.3.0", default-features = false, features = ["hf-hub-rustls-tls", "ort-download-binaries-rustls-tls"], optional = true }
+fastembed = { version = "7.5.0", default-features = false, features = ["hf-hub-rustls-tls", "ort-download-binaries-rustls-tls"], optional = true }
 candle-core = { version = "0.11.0", git = "https://github.com/huggingface/candle.git", rev = "70f72e9cfdbfc570846ca363ead2135394af3e9a", optional = true }
 candle-nn = { version = "0.11.0", git = "https://github.com/huggingface/candle.git", rev = "70f72e9cfdbfc570846ca363ead2135394af3e9a", optional = true }

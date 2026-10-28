@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.47.0] - 2026-10-28
+
+### 📋 Release Summary
+
+Content-based line identifiers are now available.
+
+### ✨ New Features & Enhancements
+
+- **utils**: add content-based line identifiers `36e7857c`
+
+### 🔧 Improvements & Optimizations
+
+- **dependencies**: update fastembed and transitive dependencies `674fa165`
+
 ## [0.46.4] - 2026-10-27
 
 ### 📋 Release Summary

@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.47.2] - 2026-10-29
+
+### 📋 Release Summary
+
+Transport failures are now classified without refreshing clients.
+
+### 🐛 Bug Fixes & Stability
+
+- **transport**: classify transport failures without refreshing clients `82464dcf`
+
 ## [0.47.1] - 2026-10-29
 
 ### 📋 Release Summary

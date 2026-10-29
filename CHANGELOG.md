@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.47.1] - 2026-10-29
+
+### 📋 Release Summary
+
+OpenRouter now respects the capabilities specified by the selected model.
+
+### 🐛 Bug Fixes & Stability
+
+- **openrouter**: respect model parameter capabilities `bbcd4c2b`
+
 ## [0.47.0] - 2026-10-28
 
 ### 📋 Release Summary

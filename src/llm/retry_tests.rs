@@ -50,7 +50,11 @@ async fn test_upstream_key_is_redacted_in_returned_error_and_retry_logs() {
 		.finish();
 	let body = r#"{"error":"rejected private-request-key; private-request-key is invalid"}"#;
 	let result = retry_provider_request(
-		|| Box::pin(async move { Err(anyhow::anyhow!("upstream API error 503: {body}")) }),
+		|| {
+			Box::pin(async move {
+				Err(anyhow::anyhow!("upstream API error 503: {body}").context("upstream request failed"))
+			})
+		},
 		1,
 		Duration::ZERO,
 		None,
@@ -70,9 +74,10 @@ async fn test_upstream_key_is_redacted_in_returned_error_and_retry_logs() {
 	let log = String::from_utf8(buffer.0.lock().unwrap().clone()).unwrap();
 	assert!(log.contains("API request attempt 1 failed"));
 	assert!(log.contains("API request attempt 2 failed"));
+	assert!(log.contains("upstream request failed: upstream API error 503:"));
 	assert_eq!(log.matches("[redacted]").count(), 4);
 	assert!(!log.contains("private-request-key"));
-	assert!(!shared::is_connection_error(&error));
+	assert_eq!(shared::transport_error_kind(&error), None);
 }
 
 #[tokio::test]
@@ -248,12 +253,8 @@ async fn test_retry_chat_operation_uses_the_observer_on_params() {
 		.with_max_retries(1)
 		.with_retry_timeout(Duration::ZERO)
 		.with_retry_observer(observer);
-	let result: Result<()> = retry_chat_operation(
-		|| Box::pin(async { Err(anyhow::anyhow!("stream broke")) }),
-		&params,
-		|_| false,
-	)
-	.await;
+	let result: Result<()> =
+		retry_chat_operation(|| Box::pin(async { Err(anyhow::anyhow!("stream broke")) }), &params).await;
 
 	assert!(result.is_err());
 	assert_eq!(
@@ -379,4 +380,45 @@ fn test_is_retryable_status_1xx_informational_not_retryable() {
 	// 1xx informational codes should NOT be retryable
 	assert!(!is_retryable_status(100), "100 should not be retryable");
 	assert!(!is_retryable_status(101), "101 should not be retryable");
+}
+
+#[tokio::test]
+#[serial_test::serial(retry_log)]
+async fn retry_logs_include_the_underlying_error_without_flattening_the_returned_error() {
+	use tracing::instrument::WithSubscriber;
+	let buffer = LogBuffer(std::sync::Arc::new(std::sync::Mutex::new(Vec::new())));
+	let writer = buffer.clone();
+	let subscriber = tracing_subscriber::fmt()
+		.with_max_level(tracing::Level::DEBUG)
+		.with_ansi(false)
+		.without_time()
+		.with_writer(move || writer.clone())
+		.finish();
+	let result = retry_provider_request(
+		|| {
+			Box::pin(async {
+				Err(
+					anyhow::Error::new(std::io::Error::new(std::io::ErrorKind::ConnectionReset, "peer closed"))
+						.context("sending request"),
+				)
+			})
+		},
+		0,
+		Duration::ZERO,
+		None,
+		None,
+		None,
+	)
+	.with_subscriber(subscriber)
+	.await;
+	let error = match result {
+		Ok(_) => panic!("the operation always fails"),
+		Err(error) => error,
+	};
+	assert_eq!(
+		error.downcast_ref::<std::io::Error>().unwrap().kind(),
+		std::io::ErrorKind::ConnectionReset
+	);
+	let log = String::from_utf8(buffer.0.lock().unwrap().clone()).unwrap();
+	assert!(log.contains("sending request: peer closed"));
 }

@@ -20,11 +20,11 @@ fn test_redaction_removes_error_sources_and_preserves_connection_classification(
 		.with_api_key("private-request-key".to_owned());
 	let error = anyhow::Error::new(RedactedError {
 		message: "connection failed: private-request-key".to_owned(),
-		connection_error: true,
+		transport_error: Some(TransportErrorKind::Connect),
 	})
 	.context("outer context contains private-request-key");
 	let error = redact_error(error, params.api_key.as_ref());
-	assert!(is_connection_error(&error));
+	assert_eq!(transport_error_kind(&error), Some(TransportErrorKind::Connect));
 	assert_eq!(error.chain().count(), 1);
 	assert_eq!(error.to_string().matches("[redacted]").count(), 2);
 	assert!(!format!("{error:#?}").contains("private-request-key"));

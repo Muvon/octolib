@@ -69,7 +69,7 @@ pub struct RetryEvent {
 	/// How long the call sleeps before that retry.
 	pub delay: Duration,
 	/// Short, secret-free cause of the failed attempt: `HTTP 503`,
-	/// `connection error`, or `request failed`.
+	/// a transport failure category, or `request failed`.
 	pub reason: String,
 }
 
@@ -165,11 +165,8 @@ fn describe_error(error: &anyhow::Error) -> RetryCause {
 			retry_after: status.retry_after,
 		};
 	}
-	let reason = if crate::llm::providers::shared::is_connection_error(error) {
-		"connection error"
-	} else {
-		"request failed"
-	};
+	let reason =
+		crate::llm::providers::shared::transport_error_kind(error).map_or("request failed", |kind| kind.reason());
 	RetryCause {
 		reason: reason.to_owned(),
 		retry_after: None,
@@ -270,7 +267,6 @@ where
 		cancellation_token,
 		|| ProviderError::Cancelled.into(),
 		|error| matches!(error.downcast_ref::<ProviderError>(), Some(ProviderError::Cancelled)),
-		shared::is_connection_error,
 		describe_error,
 		retry_observer,
 	)
@@ -283,7 +279,6 @@ where
 pub(crate) async fn retry_chat_operation<F, T>(
 	operation: F,
 	params: &crate::llm::types::ChatCompletionParams,
-	on_connection_error: impl Fn(&anyhow::Error) -> bool + Copy,
 ) -> Result<T>
 where
 	F: FnMut() -> Pin<Box<dyn Future<Output = Result<T>> + Send>>,
@@ -296,7 +291,6 @@ where
 		params.cancellation_token.as_ref(),
 		|| ProviderError::Cancelled.into(),
 		|error| matches!(error.downcast_ref::<ProviderError>(), Some(ProviderError::Cancelled)),
-		on_connection_error,
 		describe_error,
 		params.retry_observer.as_ref(),
 	)
@@ -308,12 +302,8 @@ where
 /// This function implements exponential backoff with a configurable base timeout.
 /// The delay grows as: base_timeout * 2^attempt, capped at 5 minutes.
 ///
-/// # Connection Error Recovery
-///
-/// When a connection-level error is detected (DNS failure, TCP reset, TLS handshake
-/// failure, network unreachable), the shared HTTP client is atomically refreshed
-/// before the next retry attempt. This ensures retries use a fresh connection pool
-/// instead of reusing stale/broken connections.
+/// Connection health and eviction remain owned by the HTTP transport. The
+/// `on_connection_error` classifier supplies diagnostic context only.
 ///
 /// # Arguments
 /// * `operation` - The async operation to retry (must return Result<T, E>)
@@ -344,9 +334,13 @@ where
 		cancellation_token,
 		on_cancel,
 		is_cancelled,
-		on_connection_error,
-		|_| RetryCause {
-			reason: "request failed".to_owned(),
+		|error| RetryCause {
+			reason: if on_connection_error(error) {
+				"connection error"
+			} else {
+				"request failed"
+			}
+			.to_owned(),
 			retry_after: None,
 		},
 		None,
@@ -362,7 +356,6 @@ async fn retry_with_backoff<F, T, E>(
 	cancellation_token: Option<&watch::Receiver<bool>>,
 	on_cancel: impl Fn() -> E + Copy,
 	is_cancelled: impl Fn(&E) -> bool + Copy,
-	on_connection_error: impl Fn(&E) -> bool + Copy,
 	describe: impl Fn(&E) -> RetryCause,
 	retry_observer: Option<&RetryObserver>,
 ) -> Result<T, E>
@@ -387,20 +380,11 @@ where
 					return Err(e);
 				}
 
-				// Simple debug logging without external dependencies
-				tracing::debug!("API request attempt {} failed: {}", attempt + 1, e);
-
-				// On connection errors, refresh the shared HTTP client so the
-				// next retry uses a fresh connection pool instead of stale/broken
-				// connections from the old pool.
-				if on_connection_error(&e) {
-					tracing::debug!("Connection error detected, refreshing HTTP client before retry");
-					crate::llm::providers::shared::refresh_http_client();
-				}
+				let cause = describe(&e);
+				tracing::debug!(reason = %cause.reason, "API request attempt {} failed: {:#}", attempt + 1, e);
 
 				// Don't sleep after the last attempt
 				if attempt < max_retries {
-					let cause = describe(&e);
 					let delay = backoff_delay(base_timeout, attempt, cause.retry_after);
 
 					tracing::debug!("Waiting {:?} before retry attempt {}", delay, attempt + 2);

@@ -314,7 +314,6 @@ async fn send_with_retry_policy(
 				});
 			}
 			Err(error) if retry_safe && attempt < options.max_retries && !error.is_timeout() => {
-				crate::http::refresh_http_client();
 				tracing::warn!(provider, attempt, error = %error, "retrying media request");
 				tokio::time::sleep(backoff(options.retry_backoff, attempt)).await;
 				attempt += 1;

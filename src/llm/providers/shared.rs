@@ -19,8 +19,8 @@ use crate::llm::tool_calls::GenericToolCall;
 use crate::llm::types::{ReasoningEffort, ToolCall};
 use std::time::Duration;
 
+pub(crate) use crate::http::http_client;
 pub use crate::http::set_user_agent;
-pub(crate) use crate::http::{http_client, refresh_http_client};
 
 /// Resolve request credentials before accessing any process-wide credentials.
 pub(super) fn resolve_api_key(
@@ -61,7 +61,7 @@ pub(crate) fn redact_text(text: &str, api_key: Option<&crate::llm::types::PerCal
 #[error("{message}")]
 struct RedactedError {
 	message: String,
-	connection_error: bool,
+	transport_error: Option<TransportErrorKind>,
 }
 
 pub(crate) fn redact_error(error: anyhow::Error, api_key: Option<&crate::llm::types::PerCallApiKey>) -> anyhow::Error {
@@ -80,7 +80,7 @@ pub(crate) fn redact_error(error: anyhow::Error, api_key: Option<&crate::llm::ty
 	// Retaining the original source would expose the credential through error chains.
 	RedactedError {
 		message: redact_text(&message, Some(key)),
-		connection_error: is_connection_error(&error),
+		transport_error: transport_error_kind(&error),
 	}
 	.into()
 }
@@ -150,30 +150,45 @@ pub(super) fn anthropic_tool_content(message: &crate::llm::types::Message) -> se
 	}
 	serde_json::Value::Array(blocks)
 }
-/// Returns true if the error is a connection-level failure that indicates
-/// the HTTP client's connection pool may contain stale/broken connections.
-///
-/// Such errors include: DNS resolution failure, TCP connection refused/reset,
-/// TLS handshake failure, network unreachable, and similar transport errors.
-///
-/// Also catches `is_request()` errors: a stale pooled connection that gets
-/// TCP-reset mid-request (e.g. server closed idle connection, NAT timeout)
-/// produces `is_request()=true, is_connect()=false`. Without this, the pool
-/// is never refreshed and all retries reuse the same broken connection.
-///
-/// Also catches `is_body()` errors: the connection is killed AFTER response
-/// headers arrive but WHILE the body is streaming. This is the classic
-/// mid-stream RST — DPI inspecting the payload, an overloaded upstream or LB
-/// dropping a slow response, or a NAT/firewall resetting a long generation.
-/// Without this, a body-read failure is neither retried nor pool-refreshed.
-///
-/// Callers should call `refresh_http_client()` before retrying.
-pub(crate) fn is_connection_error(err: &anyhow::Error) -> bool {
-	err.downcast_ref::<RedactedError>()
-		.is_some_and(|error| error.connection_error)
-		|| err
-			.downcast_ref::<reqwest::Error>()
-			.is_some_and(|e| e.is_connect() || e.is_request() || e.is_body())
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TransportErrorKind {
+	Timeout,
+	Connect,
+	Request,
+	Body,
+	Decode,
+}
+
+impl TransportErrorKind {
+	pub(crate) fn reason(self) -> &'static str {
+		match self {
+			Self::Timeout => "request timed out",
+			Self::Connect => "connection establishment failed",
+			Self::Request => "request transport failed",
+			Self::Body => "body transport failed",
+			Self::Decode => "response decoding failed",
+		}
+	}
+}
+
+pub(crate) fn transport_error_kind(error: &anyhow::Error) -> Option<TransportErrorKind> {
+	if let Some(error) = error.downcast_ref::<RedactedError>() {
+		return error.transport_error;
+	}
+	let error = error.chain().find_map(|cause| cause.downcast_ref::<reqwest::Error>())?;
+	if error.is_timeout() {
+		Some(TransportErrorKind::Timeout)
+	} else if error.is_connect() {
+		Some(TransportErrorKind::Connect)
+	} else if error.is_request() {
+		Some(TransportErrorKind::Request)
+	} else if error.is_body() {
+		Some(TransportErrorKind::Body)
+	} else if error.is_decode() {
+		Some(TransportErrorKind::Decode)
+	} else {
+		None
+	}
 }
 
 /// A fully-buffered HTTP response: status, headers, and body read to completion.
@@ -223,8 +238,8 @@ pub(super) fn apply_extra_headers(
 /// Both the `send()` (connect/headers) and the body read happen here, so any
 /// transport failure — including a mid-body RST that only manifests during
 /// `text()` — is returned as an `Err` to the surrounding retry loop, where
-/// `is_connection_error` classifies it and `refresh_http_client` runs before
-/// the next attempt. Status and headers are cloned before the body is consumed.
+/// transport errors are classified before the next attempt. Reqwest manages
+/// failed connections. Status and headers are cloned before consuming the body.
 ///
 /// `extra_headers` ([`ChatCompletionParams::extra_headers`]) are folded in here
 /// — the one choke point every provider's chat path goes through — so the
@@ -475,3 +490,7 @@ pub(super) fn supported_reasoning_effort(provider_name: &str, model: &str, effor
 #[cfg(test)]
 #[path = "shared_tests.rs"]
 pub(super) mod tests;
+
+#[cfg(test)]
+#[path = "shared_transport_tests.rs"]
+mod transport_tests;

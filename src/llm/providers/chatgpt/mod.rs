@@ -211,7 +211,6 @@ impl AiProvider for ChatGptProvider {
 				})
 			},
 			&params,
-			shared::is_connection_error,
 		)
 		.await??;
 

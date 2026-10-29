@@ -22,7 +22,7 @@ src/
 │   ├── reference_capabilities.rs   → Baseline capabilities (vision, video, structured_output, context window)
 │   └── providers/
 │       ├── openai_compat.rs        → Shared OpenAI-compatible request/response layer; auto-passes reasoning_effort; also OpenAiCompatConfig, get_optional_api_key, get_api_url (internal, not pub)
-│       ├── shared.rs               → HTTP client (arc-swap pool), cache control helpers, tool call parsers
+│       ├── shared.rs               → Shared HTTP client access, cache control helpers, tool call parsers
 │       ├── openai.rs               → Native — PRICING table, Responses API, OAuth support
 │       ├── anthropic.rs            → Native — PRICING table, caching, thinking blocks, OAuth support
 │       ├── google_vertex.rs        → Vertex AI — service-account auth, delegates to openai_compat; shared Gemini PRICING table + model-cache helpers
@@ -359,7 +359,7 @@ mode only from a live probe:
 - **CLI provider model format** is `backend/model` (slash, not colon) — `cli:codex/gpt-5.2-codex`. No tool calls, no structured output, prompt-only.
 - **OpenAI uses the Responses API** (`/v1/responses`), not `/v1/chat/completions`. The `openai_compat` layer uses `/v1/chat/completions`.
 - **`fastembed` and `huggingface` are default features** — code gated on them must use `#[cfg(feature = "...")]`.
-- **Shared HTTP client** in `providers/shared.rs` is process-wide and arc-swapped on connection errors — don't create per-request clients.
+- **Shared HTTP client** in `src/http.rs` is process-wide. Reqwest manages failed connections within its pool; rebuild only when application configuration changes, never on request errors. Don't create per-request clients.
 - **`supports_model()` for native providers** should use `is_model_in_pricing_table()` — this enforces that only known/priced models are accepted.
 - **ReasoningEffort is a hint, not a guarantee** — models without thinking support silently ignore it. Anthropic clamps budget_tokens below max_tokens.
 - **A finished media job always resolves** — when a provider reports a job finished, pass the parsed output through `shared::readable_output`: output with no readable media of the requested kind is the job's `Failed` outcome, not an `Err`. An `Err` from a poll leaves a caller's stored job live forever, re-polled (and failing) on every read.

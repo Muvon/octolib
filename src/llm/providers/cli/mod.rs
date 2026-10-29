@@ -190,7 +190,6 @@ impl AiProvider for CliProvider {
 						Box::pin(async move { execute_command(command, args, Some(prompt)).await })
 					},
 					&params,
-					|_: &anyhow::Error| false,
 				)
 				.await?;
 
@@ -217,7 +216,6 @@ impl AiProvider for CliProvider {
 						Box::pin(async move { execute_command(command, args, None).await })
 					},
 					&params,
-					|_: &anyhow::Error| false,
 				)
 				.await?;
 
@@ -236,7 +234,6 @@ impl AiProvider for CliProvider {
 						Box::pin(async move { execute_command(command, args, None).await })
 					},
 					&params,
-					|_: &anyhow::Error| false,
 				)
 				.await?;
 
@@ -255,7 +252,6 @@ impl AiProvider for CliProvider {
 						Box::pin(async move { execute_command(command, args, None).await })
 					},
 					&params,
-					|_: &anyhow::Error| false,
 				)
 				.await?;
 
@@ -274,7 +270,6 @@ impl AiProvider for CliProvider {
 						Box::pin(async move { execute_command(command, args, None).await })
 					},
 					&params,
-					|_: &anyhow::Error| false,
 				)
 				.await?;
 

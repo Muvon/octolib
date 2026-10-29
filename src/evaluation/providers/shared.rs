@@ -66,7 +66,6 @@ pub(crate) async fn send(
 				return Ok(CapturedResponse { status, headers, body });
 			}
 			Err(error) if attempt < request.max_retries && !error.is_timeout() => {
-				crate::http::refresh_http_client();
 				tracing::warn!(provider, attempt, error = %error, "retrying evaluation request");
 				tokio::time::sleep(RETRY_BACKOFF * 2u32.pow(attempt)).await;
 				attempt += 1;

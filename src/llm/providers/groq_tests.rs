@@ -94,6 +94,25 @@ fn test_retired_models_removed() {
 }
 
 #[test]
+fn test_pricing_new_october_models() {
+	let provider = GroqProvider::new();
+
+	// Enterprise-only on Groq; reference-baseline rates, need confirmation.
+	let p = provider.get_model_pricing("minimaxai/minimax-m2.7").unwrap();
+	assert_eq!(p.input_price_per_1m, 0.30);
+	assert_eq!(p.output_price_per_1m, 1.20);
+	assert_eq!(p.cache_read_price_per_1m, 0.06);
+	assert_eq!(provider.get_max_input_tokens("minimaxai/minimax-m2.7"), 204_800);
+
+	// Limited preview on Groq; reference-baseline rates, need confirmation.
+	let p = provider.get_model_pricing("meta-models/muse-spark-open").unwrap();
+	assert_eq!(p.input_price_per_1m, 1.25);
+	assert_eq!(p.output_price_per_1m, 4.25);
+	assert_eq!(p.cache_read_price_per_1m, 0.15);
+	assert!(provider.enforces_response_schema("meta-models/muse-spark-open"));
+}
+
+#[test]
 fn test_pricing_falls_back_to_reference() {
 	let provider = GroqProvider::new();
 	assert!(!is_model_in_pricing_table("gpt-oss-120b", PRICING));

@@ -193,6 +193,23 @@ fn october_serverless_models_use_fireworks_pricing_and_context() {
 }
 
 #[test]
+fn deepseek_v4p1_flash_1017_spot_snapshot_uses_fireworks_rates() {
+	let provider = FireworksProvider::new();
+	// https://docs.fireworks.ai/guides/spot-serverless — same rate card as the
+	// moving alias; needs confirmation if a dedicated spot rate is published.
+	let pricing = provider
+		.get_model_pricing("accounts/fireworks/models/deepseek-v4p1-flash-1017")
+		.unwrap();
+	assert_eq!(pricing.input_price_per_1m, 0.30);
+	assert_eq!(pricing.cache_read_price_per_1m, 0.006);
+	assert_eq!(pricing.output_price_per_1m, 1.20);
+	assert_eq!(
+		provider.get_max_input_tokens("accounts/fireworks/models/deepseek-v4p1-flash-1017"),
+		1_040_000
+	);
+}
+
+#[test]
 fn retired_routes_leave_fireworks_table() {
 	for model in [
 		"accounts/fireworks/models/qwen3p7-plus",

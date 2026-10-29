@@ -46,6 +46,9 @@ const PRICING: &[PricingTuple] = &[
 	("Qwen/Qwen3.6-Plus", 0.50, 3.00, 0.50, 0.50),
 	("Qwen/Qwen3.5-9B", 0.17, 0.25, 0.17, 0.17),
 	("MiniMaxAI/MiniMax-M3", 0.30, 1.20, 0.30, 0.06),
+	// M3.1 Flash (Oct 2026) carries the same rate card as M3; the longer id
+	// must precede it, since lookups are substring matches.
+	("MiniMaxAI/MiniMax-M3.1-Flash", 0.30, 1.20, 0.30, 0.06),
 	("moonshotai/Kimi-K3", 3.00, 15.00, 3.00, 0.30),
 	("zai-org/GLM-5.3-Flash", 0.15, 0.50, 0.15, 0.03),
 	("zai-org/GLM-5.3", 1.40, 4.40, 1.40, 0.26),
@@ -61,6 +64,15 @@ const PRICING: &[PricingTuple] = &[
 	("google/gemma-4-31B-it", 0.39, 0.97, 0.39, 0.39),
 	("thinkingmachines/Inkling", 1.00, 4.05, 1.00, 0.17),
 	("meta-models/Muse-Glimmer-30B", 0.35, 1.50, 0.35, 0.04),
+	// Muse Spark Open 816B-A42B (Oct 2026): reference-baseline prices, need
+	// confirmation once a Together rate card is published.
+	("meta-models/Muse-Spark-Open-816B-A42B", 1.25, 4.25, 1.25, 0.15),
+	// Beam 1.0 501B-A23B (Oct 2026): reference-baseline prices, need
+	// confirmation once a Together rate card is published.
+	("reflection/Beam-1.0-501B-A23B", 0.30, 1.00, 0.30, 0.04),
+	// Nemotron 3.5 Super VL (Oct 2026): reference-baseline prices, need
+	// confirmation once a Together rate card is published.
+	("nvidia/NVIDIA-Nemotron-3.5-Super-VL", 0.15, 0.50, 0.15, 0.02),
 	// Free serverless model (verified Oct 2, 2026).
 	("Prism-ML/Ternary-Bonsai-27B", 0.00, 0.00, 0.00, 0.00),
 ];
@@ -83,6 +95,12 @@ fn together_model_context(model: &str) -> Option<usize> {
 		Some(1_048_576)
 	} else if normalized.contains("zai-org/glm-5.3") {
 		Some(1_048_575)
+	} else if normalized.contains("meta-models/muse-spark-open-816b-a42b")
+		|| normalized.contains("reflection/beam-1.0-501b-a23b")
+		|| normalized.contains("nvidia/nvidia-nemotron-3.5-super-vl")
+	{
+		// Reference-baseline context, needs confirmation.
+		Some(1_048_576)
 	} else if normalized.contains("google/gemma-4-31b-it")
 		|| normalized.contains("qwen/qwen3.5-9b")
 		|| normalized.contains("prism-ml/ternary-bonsai-27b")

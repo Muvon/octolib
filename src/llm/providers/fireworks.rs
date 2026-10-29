@@ -72,6 +72,10 @@ const FIREWORKS_API_URL: &str = "https://api.fireworks.ai/inference/v1/chat/comp
 const PRICING: &[PricingTuple] = &[
 	("qwen3p8-max", 2.00, 6.00, 2.00, 0.25),
 	("deepseek-v4p1-flash-us", 0.45, 1.80, 0.45, 0.009),
+	// Spot-serverless 1017 snapshot (Oct 2026) carries the same rate card as
+	// the moving alias; longer id precedes it because lookups are substring
+	// matches. Needs confirmation if a dedicated spot rate is published.
+	("deepseek-v4p1-flash-1017", 0.30, 1.20, 0.30, 0.006),
 	("deepseek-v4p1-flash", 0.30, 1.20, 0.30, 0.006),
 	("kimi-k3-fast", 4.50, 22.50, 4.50, 0.45),
 	("kimi-k3-us", 4.50, 22.50, 4.50, 0.45),

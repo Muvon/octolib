@@ -148,6 +148,46 @@ fn deepseek_v4_1_flash_1017_snapshot_uses_together_rates() {
 		1_000_000
 	);
 }
+#[test]
+fn october_changelog_models_use_together_rates() {
+	let provider = TogetherProvider::new();
+	// https://docs.together.ai/docs/changelog (Oct 15–16, 2026). Rates and
+	// contexts are reference baselines, need confirmation once Together
+	// publishes rate cards.
+	let m31 = provider.get_model_pricing("MiniMaxAI/MiniMax-M3.1-Flash").unwrap();
+	assert_eq!(m31.input_price_per_1m, 0.30);
+	assert_eq!(m31.cache_read_price_per_1m, 0.06);
+	assert_eq!(m31.output_price_per_1m, 1.20);
+	assert_eq!(provider.get_max_input_tokens("MiniMaxAI/MiniMax-M3.1-Flash"), 524_288);
+
+	let muse = provider
+		.get_model_pricing("meta-models/Muse-Spark-Open-816B-A42B")
+		.unwrap();
+	assert_eq!(muse.input_price_per_1m, 1.25);
+	assert_eq!(muse.output_price_per_1m, 4.25);
+	assert_eq!(
+		provider.get_max_input_tokens("meta-models/Muse-Spark-Open-816B-A42B"),
+		1_048_576
+	);
+
+	let beam = provider.get_model_pricing("reflection/Beam-1.0-501B-A23B").unwrap();
+	assert_eq!(beam.input_price_per_1m, 0.30);
+	assert_eq!(beam.output_price_per_1m, 1.00);
+	assert_eq!(
+		provider.get_max_input_tokens("reflection/Beam-1.0-501B-A23B"),
+		1_048_576
+	);
+
+	let nemotron = provider
+		.get_model_pricing("nvidia/NVIDIA-Nemotron-3.5-Super-VL")
+		.unwrap();
+	assert_eq!(nemotron.input_price_per_1m, 0.15);
+	assert_eq!(nemotron.output_price_per_1m, 0.50);
+	assert_eq!(
+		provider.get_max_input_tokens("nvidia/NVIDIA-Nemotron-3.5-Super-VL"),
+		1_048_576
+	);
+}
 
 #[test]
 fn retired_serverless_models_leave_together_table() {

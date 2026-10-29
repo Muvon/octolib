@@ -67,6 +67,12 @@ const PRICING: &[PricingTuple] = &[
 	("openai/gpt-oss-safeguard-20b", 0.075, 0.30, 0.075, 0.0375),
 	// Qwen3.8-27B (Aug 2026) — multimodal; no cached-input discount published
 	("qwen/qwen3.8-27b", 0.80, 4.00, 0.80, 0.80),
+	// Minimax M2.7 (Oct 2026) — Enterprise-only on Groq, no Groq rate card;
+	// reference-baseline prices, need confirmation once a Groq rate is published.
+	("minimaxai/minimax-m2.7", 0.30, 1.20, 0.375, 0.06),
+	// Muse Spark Open (Oct 2026) — limited preview on Groq, no Groq rate card;
+	// reference-baseline prices, need confirmation once a Groq rate is published.
+	("meta-models/muse-spark-open", 1.25, 4.25, 1.25, 0.15),
 ];
 
 // Models with documented prompt-caching support on Groq.

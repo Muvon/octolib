@@ -44,6 +44,8 @@ impl OpenRouterProvider {
 	}
 }
 
+const DEFAULT_REPETITION_PENALTY: f64 = 1.1;
+
 const OPENROUTER_API_KEY_ENV: &str = "OPENROUTER_API_KEY";
 const OPENROUTER_API_URL_ENV: &str = "OPENROUTER_API_URL";
 const OPENROUTER_API_URL: &str = "https://openrouter.ai/api/v1/chat/completions";
@@ -77,6 +79,8 @@ struct CatalogResponse {
 #[derive(Debug, Deserialize)]
 struct CatalogModel {
 	id: String,
+	#[serde(default)]
+	supported_parameters: Option<Vec<String>>,
 	#[serde(default, deserialize_with = "deserialize_catalog_reasoning")]
 	reasoning: Option<CatalogReasoning>,
 }
@@ -149,6 +153,21 @@ fn catalog_model<'a>(catalog: &'a [CatalogModel], model: &str) -> Option<&'a Cat
 	catalog
 		.iter()
 		.find(|entry| normalize_model_name(&entry.id) == normalized)
+}
+
+fn supports_parameter(catalog: Option<&[CatalogModel]>, model: &str, parameter: &str) -> Option<bool> {
+	let supported = catalog_model(catalog?, model)?.supported_parameters.as_ref()?;
+	Some(supported.iter().any(|name| name == parameter))
+}
+
+fn sampling_support(catalog: Option<&[CatalogModel]>, model: &str) -> SamplingSupport {
+	// Unknown support must not turn optional sampling into a routing requirement.
+	let supported = |name| supports_parameter(catalog, model, name) == Some(true);
+	SamplingSupport {
+		temperature: supported("temperature"),
+		top_p: supported("top_p"),
+		top_k: supported("top_k"),
+	}
 }
 
 const EFFORT_LADDER: [&str; 7] = ["none", "minimal", "low", "medium", "high", "xhigh", "max"];
@@ -246,10 +265,8 @@ impl AiProvider for OpenRouterProvider {
 		"openrouter"
 	}
 
-	fn supported_sampling_params(&self, _model: &str) -> SamplingSupport {
-		// OpenRouter supports temperature, top_p, and top_k.
-		// See: https://openrouter.ai/docs/api/reference/parameters
-		SamplingSupport::ALL
+	fn supported_sampling_params(&self, model: &str) -> SamplingSupport {
+		sampling_support(CATALOG.get().map(Vec::as_slice), model)
 	}
 
 	fn supports_model(&self, model: &str) -> bool {
@@ -402,7 +419,7 @@ impl AiProvider for OpenRouterProvider {
 		let catalog_key = api_key.clone();
 		let per_call_api_key = params.api_key.clone();
 		let catalog_url = api_url.clone();
-		// Catalog failures leave the legacy mapping in charge and retry next call.
+		// A failed fetch is retried next call; unknown optional support is omitted.
 		let _ = CATALOG
 			.get_or_try_init(
 				|| async move { fetch_catalog(&catalog_key, &catalog_url, per_call_api_key.as_ref()).await },
@@ -410,123 +427,7 @@ impl AiProvider for OpenRouterProvider {
 			.await;
 		let requested_schema = params.response_format.as_ref().and_then(|format| format.schema.clone());
 
-		// Convert messages to OpenRouter format (same as OpenAI)
-		let messages = convert_messages(&params.messages)?;
-
-		// Apply sampling parameters based on model support
-		let sampling = self.effective_sampling_params(&params);
-
-		// Create the request body
-		let mut request_body = serde_json::json!({
-			"model": params.model,
-			"messages": messages,
-			"repetition_penalty": 1.1,
-			"usage": {
-				"include": true  // Always enable usage tracking for all requests
-			},
-			"provider": {
-				"order": [
-					"Anthropic",
-					"OpenAI",
-					"Amazon Bedrock",
-					"Azure",
-					"Cloudflare",
-					"Google Vertex",
-					"xAI",
-				],
-				"allow_fallbacks": true,
-			},
-		});
-		if let Some(temp) = sampling.temperature {
-			request_body["temperature"] = serde_json::json!(temp);
-		}
-		if let Some(top_p) = sampling.top_p {
-			request_body["top_p"] = serde_json::json!(top_p);
-		}
-		if let Some(top_k) = sampling.top_k {
-			request_body["top_k"] = serde_json::json!(top_k);
-		}
-
-		// Add max_tokens if specified (0 means don't include it in request)
-		if params.max_tokens > 0 {
-			request_body["max_tokens"] = serde_json::json!(params.max_tokens);
-		}
-
-		if let Some(effort) = params.reasoning_effort {
-			apply_reasoning_effort(
-				&mut request_body,
-				CATALOG.get().map(Vec::as_slice),
-				&params.model,
-				effort,
-			);
-		}
-
-		// Add tools if available (OpenRouter supports OpenAI-compatible tools)
-		if let Some(tools) = &params.tools {
-			if !tools.is_empty() {
-				// Sort tools by name for consistent ordering
-				let mut sorted_tools = tools.clone();
-				sorted_tools.sort_by(|a, b| a.name.cmp(&b.name));
-
-				let openai_tools = sorted_tools
-					.iter()
-					.map(|f| {
-						serde_json::json!({
-							"type": "function",
-							"function": {
-								"name": f.name,
-								"description": f.description,
-								"parameters": f.parameters
-							}
-						})
-					})
-					.collect::<Vec<_>>();
-
-				request_body["tools"] = serde_json::json!(openai_tools);
-				request_body["tool_choice"] = serde_json::json!("auto");
-				// Explicit: OpenRouter proxies to many backends; forward the flag
-				// so providers that default to single-call honor parallel batching.
-				request_body["parallel_tool_calls"] = serde_json::json!(true);
-			}
-		}
-
-		// Add structured output format if specified (OpenRouter supports OpenAI-compatible format)
-		if let Some(response_format) = &params.response_format {
-			match &response_format.format {
-				crate::llm::types::OutputFormat::Json => {
-					request_body["response_format"] = serde_json::json!({
-						"type": "json_object"
-					});
-				}
-				crate::llm::types::OutputFormat::JsonSchema => {
-					if let Some(schema) = &response_format.schema {
-						// Strict structured outputs need additionalProperties:false on
-						// every nested object; OpenRouter forwards strict to OpenAI/Azure.
-						// No-op unless mode is Strict.
-						let schema = crate::llm::utils::normalize_strict_schema(schema, response_format.mode);
-
-						let mut format_obj = serde_json::json!({
-							"type": "json_schema",
-							"json_schema": {
-								"name": "response",
-								"schema": schema
-							}
-						});
-
-						// Add strict mode if specified
-						if matches!(response_format.mode, crate::llm::types::ResponseMode::Strict) {
-							format_obj["json_schema"]["strict"] = serde_json::json!(true);
-						}
-
-						request_body["response_format"] = format_obj;
-						// Without it OpenRouter still routes to the model when no
-						// endpoint takes `response_format` and drops the schema
-						// (docs: guides/routing/provider-selection, Oct 2026).
-						request_body["provider"]["require_parameters"] = serde_json::json!(true);
-					}
-				}
-			}
-		}
+		let request_body = build_request_body(&params, CATALOG.get().map(Vec::as_slice))?;
 
 		let response = execute_openrouter_request(
 			api_key,
@@ -548,6 +449,137 @@ impl AiProvider for OpenRouterProvider {
 			Ok(response)
 		}
 	}
+}
+
+fn build_request_body(params: &ChatCompletionParams, catalog: Option<&[CatalogModel]>) -> Result<serde_json::Value> {
+	// Convert messages to OpenRouter format (same as OpenAI)
+	let messages = convert_messages(&params.messages)?;
+
+	// Apply sampling parameters based on model support
+	let sampling = sampling_support(catalog, &params.model).effective(params.temperature, params.top_p, params.top_k);
+
+	// Create the request body
+	let mut request_body = serde_json::json!({
+		"model": params.model,
+		"messages": messages,
+		"usage": {
+			"include": true  // Always enable usage tracking for all requests
+		},
+		"provider": {
+			"order": [
+				"Anthropic",
+				"OpenAI",
+				"Amazon Bedrock",
+				"Azure",
+				"Cloudflare",
+				"Google Vertex",
+				"xAI",
+			],
+			"allow_fallbacks": true,
+		},
+	});
+	// Unsupported optional parameters reject every endpoint under strict routing.
+	if supports_parameter(catalog, &params.model, "repetition_penalty") == Some(true) {
+		request_body["repetition_penalty"] = serde_json::json!(DEFAULT_REPETITION_PENALTY);
+	}
+	if let Some(temp) = sampling.temperature {
+		request_body["temperature"] = serde_json::json!(temp);
+	}
+	if let Some(top_p) = sampling.top_p {
+		request_body["top_p"] = serde_json::json!(top_p);
+	}
+	if let Some(top_k) = sampling.top_k {
+		request_body["top_k"] = serde_json::json!(top_k);
+	}
+
+	// Add max_tokens if specified (0 means don't include it in request)
+	if params.max_tokens > 0 {
+		request_body["max_tokens"] = serde_json::json!(params.max_tokens);
+	}
+
+	if let Some(effort) = params.reasoning_effort {
+		apply_reasoning_effort(&mut request_body, catalog, &params.model, effort);
+	}
+
+	// Add tools if available (OpenRouter supports OpenAI-compatible tools)
+	if let Some(tools) = &params.tools {
+		if !tools.is_empty() {
+			// Sort tools by name for consistent ordering
+			let mut sorted_tools = tools.clone();
+			sorted_tools.sort_by(|a, b| a.name.cmp(&b.name));
+
+			let openai_tools = sorted_tools
+				.iter()
+				.map(|f| {
+					serde_json::json!({
+						"type": "function",
+						"function": {
+							"name": f.name,
+							"description": f.description,
+							"parameters": f.parameters
+						}
+					})
+				})
+				.collect::<Vec<_>>();
+
+			request_body["tools"] = serde_json::json!(openai_tools);
+			request_body["tool_choice"] = serde_json::json!("auto");
+			// Explicit: OpenRouter proxies to many backends; forward the flag
+			// so providers that default to single-call honor parallel batching.
+			request_body["parallel_tool_calls"] = serde_json::json!(true);
+		}
+	}
+
+	// Add structured output format if specified (OpenRouter supports OpenAI-compatible format)
+	if let Some(response_format) = &params.response_format {
+		match &response_format.format {
+			crate::llm::types::OutputFormat::Json => {
+				request_body["response_format"] = serde_json::json!({
+					"type": "json_object"
+				});
+			}
+			crate::llm::types::OutputFormat::JsonSchema => {
+				if let Some(schema) = &response_format.schema {
+					// Strict structured outputs need additionalProperties:false on
+					// every nested object; OpenRouter forwards strict to OpenAI/Azure.
+					// No-op unless mode is Strict.
+					let schema = crate::llm::utils::normalize_strict_schema(schema, response_format.mode);
+
+					let mut format_obj = serde_json::json!({
+						"type": "json_schema",
+						"json_schema": {
+							"name": "response",
+							"schema": schema
+						}
+					});
+
+					// Add strict mode if specified
+					if matches!(response_format.mode, crate::llm::types::ResponseMode::Strict) {
+						format_obj["json_schema"]["strict"] = serde_json::json!(true);
+					}
+
+					request_body["response_format"] = format_obj;
+					// Without it OpenRouter still routes to the model when no
+					// endpoint takes `response_format` and drops the schema
+					// (docs: guides/routing/provider-selection, Oct 2026).
+					request_body["provider"]["require_parameters"] = serde_json::json!(true);
+				}
+			}
+		}
+	}
+
+	if request_body["provider"]["require_parameters"] == true {
+		// These are hints, unlike the schema, tools and output-token limit.
+		// Requiring an unknown/unsupported hint can exclude every schema endpoint.
+		for parameter in ["reasoning", "reasoning_effort", "tool_choice", "parallel_tool_calls"] {
+			if supports_parameter(catalog, &params.model, parameter) != Some(true) {
+				if let Some(object) = request_body.as_object_mut() {
+					object.remove(parameter);
+				}
+			}
+		}
+	}
+	Ok(request_body)
 }
 
 // Reuse OpenAI structures since OpenRouter is compatible

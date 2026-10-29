@@ -335,11 +335,21 @@ fn schema_enforcement_follows_live_verified_routes() {
 
 #[tokio::test]
 #[serial_test::serial]
-async fn schema_requests_require_endpoints_that_take_the_schema() {
-	let mock = crate::test_support::mock_http::MockHttp::start(vec![(
-		200,
-		crate::test_support::mock_http::chat_completion_body(r#"{"ok":true}"#),
-	)]);
+async fn schema_requests_omit_unsupported_sampling_and_keep_strict_routing() {
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![
+		(
+			200,
+			serde_json::json!({"data": [
+				{"id": "openai/gpt-6-luna", "supported_parameters": ["max_tokens", "response_format", "structured_outputs"]},
+				{"id": "example/sampling", "supported_parameters": ["temperature", "top_p", "top_k", "repetition_penalty"]}
+			]})
+			.to_string(),
+		),
+		(
+			200,
+			crate::test_support::mock_http::chat_completion_body(r#"{"ok":true}"#),
+		),
+	]);
 	let _env = EnvGuard::new().set("OPENROUTER_API_URL", mock.url.clone());
 
 	let mut params =
@@ -361,6 +371,197 @@ async fn schema_requests_require_endpoints_that_take_the_schema() {
 	let req_body: serde_json::Value = serde_json::from_str(&chat_request.body).expect("request json");
 	assert_eq!(req_body["provider"]["require_parameters"], true);
 	assert_eq!(req_body["response_format"]["json_schema"]["strict"], true);
+	for parameter in ["temperature", "top_p", "top_k", "repetition_penalty"] {
+		assert!(
+			req_body.get(parameter).is_none(),
+			"unsupported {parameter} prevents strict routing"
+		);
+	}
+}
+
+fn strict_schema_params(model: &str) -> ChatCompletionParams {
+	let mut params = ChatCompletionParams::new(&[], model, 0.25, 0.5, 17, 10);
+	params.response_format = Some(crate::llm::types::StructuredOutputRequest {
+		format: crate::llm::types::OutputFormat::JsonSchema,
+		mode: crate::llm::types::ResponseMode::Strict,
+		schema: Some(serde_json::json!({
+			"type": "object", "properties": {"ok": {"type": "boolean"}}, "required": ["ok"]
+		})),
+	});
+	params.tools = Some(vec![crate::llm::types::FunctionDefinition {
+		name: "verify".to_string(),
+		description: "Read verification evidence".to_string(),
+		parameters: serde_json::json!({"type": "object", "properties": {}}),
+		cache_control: None,
+	}]);
+	params.reasoning_effort = Some(ReasoningEffort::Low);
+	params
+}
+
+fn assert_strict_requirements(body: &serde_json::Value) {
+	assert_eq!(body["provider"]["require_parameters"], true);
+	assert_eq!(body["response_format"]["type"], "json_schema");
+	assert_eq!(body["response_format"]["json_schema"]["strict"], true);
+	assert_eq!(
+		body["response_format"]["json_schema"]["schema"],
+		serde_json::json!({
+			"type": "object", "properties": {"ok": {"type": "boolean"}},
+			"required": ["ok"], "additionalProperties": false
+		})
+	);
+	assert_eq!(body["tools"][0]["function"]["name"], "verify");
+	assert_eq!(body["max_tokens"], 10);
+}
+
+fn assert_optional_hints_omitted(body: &serde_json::Value) {
+	for parameter in [
+		"temperature",
+		"top_p",
+		"top_k",
+		"repetition_penalty",
+		"reasoning",
+		"reasoning_effort",
+		"tool_choice",
+		"parallel_tool_calls",
+	] {
+		assert!(
+			body.get(parameter).is_none(),
+			"unexpected routing constraint: {parameter}"
+		);
+	}
+	assert_strict_requirements(body);
+}
+
+#[test]
+fn strict_schema_without_catalog_omits_optional_hints() {
+	for effort in [ReasoningEffort::Low, ReasoningEffort::None] {
+		let mut params = strict_schema_params("example/model");
+		params.reasoning_effort = Some(effort);
+		assert_optional_hints_omitted(&build_request_body(&params, None).unwrap());
+	}
+}
+
+#[tokio::test]
+async fn strict_schema_after_catalog_fetch_failure_omits_optional_hints() {
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(503, "unavailable".to_owned())]);
+	let catalog = fetch_catalog("mock-key", &mock.url, None).await;
+	assert!(catalog.is_err());
+	let body = build_request_body(&strict_schema_params("example/model"), catalog.as_deref().ok()).unwrap();
+	assert_optional_hints_omitted(&body);
+}
+
+#[test]
+fn strict_schema_with_model_absent_from_catalog_omits_optional_hints() {
+	let catalog = catalog_fixture();
+	let body = build_request_body(&strict_schema_params("example/unlisted"), Some(&catalog)).unwrap();
+	assert_optional_hints_omitted(&body);
+}
+
+#[test]
+fn strict_schema_with_unknown_or_unsupported_metadata_omits_optional_hints() {
+	for metadata in [
+		serde_json::json!({}),
+		serde_json::json!({"supported_parameters": null}),
+		serde_json::json!({"supported_parameters": []}),
+	] {
+		let mut entry = metadata;
+		entry["id"] = serde_json::json!("example/model");
+		let catalog = vec![serde_json::from_value::<CatalogModel>(entry).unwrap()];
+		let body = build_request_body(&strict_schema_params("example/model"), Some(&catalog)).unwrap();
+		assert_optional_hints_omitted(&body);
+	}
+}
+
+#[test]
+fn strict_schema_retains_only_supported_optional_parameters() {
+	let optional = [
+		"temperature",
+		"top_p",
+		"top_k",
+		"repetition_penalty",
+		"reasoning",
+		"reasoning_effort",
+		"tool_choice",
+		"parallel_tool_calls",
+	];
+	// Exercise every hint independently so one advertised field cannot enable another.
+	for supported in optional {
+		let catalog = vec![serde_json::from_value::<CatalogModel>(serde_json::json!({
+			"id": "example/model", "supported_parameters": [supported]
+		}))
+		.unwrap()];
+		let mut params = strict_schema_params("EXAMPLE/MODEL:nitro");
+		if supported == "reasoning" {
+			params.reasoning_effort = Some(ReasoningEffort::None);
+		}
+		let body = build_request_body(&params, Some(&catalog)).unwrap();
+		assert_strict_requirements(&body);
+		for parameter in optional {
+			assert_eq!(
+				body.get(parameter).is_some(),
+				parameter == supported,
+				"{supported}: {parameter}"
+			);
+		}
+	}
+	let catalog = vec![serde_json::from_value::<CatalogModel>(serde_json::json!({
+		"id": "example/model", "supported_parameters": optional
+	}))
+	.unwrap()];
+	let body = build_request_body(&strict_schema_params("example/model"), Some(&catalog)).unwrap();
+	assert_strict_requirements(&body);
+	assert_eq!(body["temperature"], 0.25);
+	assert_eq!(body["top_p"], 0.5);
+	assert_eq!(body["top_k"], 17);
+	assert_eq!(body["repetition_penalty"], DEFAULT_REPETITION_PENALTY);
+	assert_eq!(body["reasoning_effort"], "low");
+	assert_eq!(body["tool_choice"], "auto");
+	assert_eq!(body["parallel_tool_calls"], true);
+}
+
+#[test]
+fn ordinary_requests_keep_reasoning_and_tool_hints_without_strict_routing() {
+	let mut params = strict_schema_params("example/model");
+	params.response_format = None;
+	let body = build_request_body(&params, None).unwrap();
+	assert!(body["provider"].get("require_parameters").is_none());
+	assert_eq!(body["reasoning_effort"], "low");
+	assert_eq!(body["tool_choice"], "auto");
+	assert_eq!(body["parallel_tool_calls"], true);
+}
+
+#[test]
+fn catalog_parameter_support_distinguishes_missing_and_empty_lists() {
+	let catalog = serde_json::from_value::<CatalogResponse>(serde_json::json!({"data": [
+		{"id": "example/none", "supported_parameters": []},
+		{"id": "example/missing"},
+		{"id": "example/null", "supported_parameters": null},
+		{"id": "example/partial", "supported_parameters": ["temperature"]}
+	]}))
+	.unwrap()
+	.data;
+	assert_eq!(
+		supports_parameter(Some(&catalog), "example/none", "temperature"),
+		Some(false)
+	);
+	assert_eq!(
+		supports_parameter(Some(&catalog), "example/missing", "temperature"),
+		None
+	);
+	assert_eq!(supports_parameter(Some(&catalog), "example/null", "temperature"), None);
+	assert_eq!(
+		supports_parameter(Some(&catalog), "example/unknown", "temperature"),
+		None
+	);
+	assert_eq!(supports_parameter(None, "example/partial", "temperature"), None);
+	assert_eq!(
+		supports_parameter(Some(&catalog), "EXAMPLE/PARTIAL:nitro", "temperature"),
+		Some(true)
+	);
+	assert_eq!(
+		supports_parameter(Some(&catalog), "example/partial", "top_k"),
+		Some(false)
+	);
 }
 
 #[test]

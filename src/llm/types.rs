@@ -891,11 +891,25 @@ pub enum ChatGptTransport {
 	WebSocket,
 }
 
+/// Transport for the `octohub:` provider. Both modes use OctoHub's `/v1/completions` protocol.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum OctoHubTransport {
+	/// HTTP POST with a JSON completion response.
+	#[default]
+	Http,
+	/// Persistent WebSocket using OctoHub's completion envelope.
+	#[cfg(feature = "websockets")]
+	WebSocket,
+}
+
 #[derive(Debug, Clone)]
 pub struct ChatCompletionParams {
 	/// ChatGPT transport. Defaults to HTTP/SSE, even when WebSocket support is compiled.
 	/// Other providers do not use this setting.
 	pub chatgpt_transport: ChatGptTransport,
+	/// OctoHub transport. Defaults to HTTP, even when WebSocket support is compiled.
+	/// Other providers do not use this setting.
+	pub octohub_transport: OctoHubTransport,
 	/// Array of conversation messages
 	pub messages: Vec<Message>,
 	/// Model identifier (e.g., "claude-3-5-sonnet", "gpt-4")
@@ -913,9 +927,11 @@ pub struct ChatCompletionParams {
 	/// Base timeout for exponential backoff retry logic
 	pub retry_timeout: std::time::Duration,
 	/// HTTP: total request timeout. ChatGPT WebSocket: maximum time without
-	/// receiving a frame during a response, also bounding request/keepalive writes.
-	/// WebSocket queue waits and connection setup do not consume this budget.
-	/// `None` disables the request/inactivity timeout; connection setup stays bounded.
+	/// receiving a frame during a response, also bounding request/keepalive writes;
+	/// its queue waits and connection setup do not consume this budget.
+	/// OctoHub WebSocket: total budget including queue, setup, replies and retry backoff;
+	/// `None` uses 600 seconds. For HTTP/ChatGPT, `None` disables this timeout.
+	/// WebSocket connection setup is always bounded separately.
 	pub request_timeout: Option<std::time::Duration>,
 	/// Cancellation token for request abortion
 	pub cancellation_token: Option<tokio::sync::watch::Receiver<bool>>,
@@ -933,7 +949,7 @@ pub struct ChatCompletionParams {
 	pub use_long_cache: bool,
 	/// Explicit prompt-cache routing key (OpenAI `prompt_cache_key`). Optional hint
 	/// that pins requests sharing a long common prefix to the same cache, improving
-	/// hit rates. ChatGPT WebSocket mode also uses this key to reuse a session's socket across
+	/// hit rates. ChatGPT and OctoHub WebSocket modes also use this key to reuse a session's socket across
 	/// provider instances. `None` = automatic cache routing and, in WebSocket mode, a fresh socket.
 	pub prompt_cache_key: Option<String>,
 	/// Reasoning effort hint for thinking-capable models. `None` = provider default
@@ -954,6 +970,7 @@ impl ChatCompletionParams {
 	pub fn new(messages: &[Message], model: &str, temperature: f32, top_p: f32, top_k: u32, max_tokens: u32) -> Self {
 		Self {
 			chatgpt_transport: ChatGptTransport::Http,
+			octohub_transport: OctoHubTransport::Http,
 			messages: messages.to_vec(),
 			model: model.to_string(),
 			temperature,
@@ -979,6 +996,27 @@ impl ChatCompletionParams {
 	/// Select the transport for the `chatgpt:` provider.
 	pub fn with_chatgpt_transport(mut self, transport: ChatGptTransport) -> Self {
 		self.chatgpt_transport = transport;
+		self
+	}
+
+	/// Select the transport for the `octohub:` provider. HTTP is the default.
+	///
+	/// ```
+	/// use octolib::{ChatCompletionParams, OctoHubTransport};
+	///
+	/// let params = ChatCompletionParams::new(&[], "auto", 1.0, 1.0, 0, 100);
+	/// assert_eq!(params.octohub_transport, OctoHubTransport::Http);
+	///
+	/// #[cfg(feature = "websockets")]
+	/// let params = params
+	///     .with_octohub_transport(OctoHubTransport::WebSocket)
+	///     .with_prompt_cache_key("conversation-id");
+	///
+	/// let params = params.with_octohub_transport(OctoHubTransport::Http);
+	/// assert_eq!(params.octohub_transport, OctoHubTransport::Http);
+	/// ```
+	pub fn with_octohub_transport(mut self, transport: OctoHubTransport) -> Self {
+		self.octohub_transport = transport;
 		self
 	}
 
@@ -1029,8 +1067,8 @@ impl ChatCompletionParams {
 		self
 	}
 
-	/// Set the total HTTP request timeout or ChatGPT WebSocket inactivity timeout.
-	/// `None` disables this timeout (LLM responses may take minutes).
+	/// Set the total HTTP/OctoHub WebSocket timeout or ChatGPT WebSocket inactivity timeout.
+	/// `None` disables this timeout for HTTP/ChatGPT; OctoHub WebSocket uses 600 seconds.
 	pub fn with_request_timeout(mut self, timeout: Option<std::time::Duration>) -> Self {
 		self.request_timeout = timeout;
 		self

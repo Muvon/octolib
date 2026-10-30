@@ -42,7 +42,7 @@ Capability modules are on by default; `websockets` is opt-in. Pick only what you
 | Feature | Module | Pulls in |
 |---|---|---|
 | `llm` | `octolib::llm` — chat completion, tool calling, structured output | `jsonschema`, `jsonwebtoken` |
-| `websockets` (off by default) | WebSocket transport support (implies `llm`; currently ChatGPT) | `reqwest-websocket`, `futures-util` |
+| `websockets` (off by default) | WebSocket transport support (implies `llm`; ChatGPT and OctoHub) | `reqwest-websocket`, `futures-util` |
 | `embeddings` | `octolib::embedding` | `tiktoken-rs` |
 | `reranker` | `octolib::reranker` | — |
 | `media` | `octolib::media` — image, video, speech, transcription | `base64` |
@@ -457,6 +457,57 @@ async fn reranking_example() -> anyhow::Result<()> {
 // Local (no API keys, requires features):
 // - FastEmbed (fastembed feature): bge-reranker-base, bge-reranker-large, jina-reranker-v1-turbo-en
 ```
+
+### OctoHub transport
+
+`octohub:<model>` uses HTTP by default, including when the optional `websockets`
+feature is enabled. Enable that feature and select `OctoHubTransport::WebSocket`
+per request to opt in; select `Http` to switch back. This setting is independent
+of `ChatGptTransport` and is ignored by other providers.
+
+```toml
+octolib = { version = "<latest>", features = ["websockets"] }
+```
+
+```rust
+use octolib::{ChatCompletionParams, Message, OctoHubTransport};
+
+let messages = vec![Message::user("Hello")];
+let params = ChatCompletionParams::new(&messages, "auto", 1.0, 1.0, 0, 100);
+assert_eq!(params.octohub_transport, OctoHubTransport::Http);
+
+#[cfg(feature = "websockets")]
+let params = params
+    .with_octohub_transport(OctoHubTransport::WebSocket)
+    .with_prompt_cache_key("conversation-id");
+
+let params = params.with_octohub_transport(OctoHubTransport::Http);
+assert_eq!(params.octohub_transport, OctoHubTransport::Http);
+```
+
+Both transports use OctoHub's `/v1/completions` protocol: Responses-shaped `input`
+and `output`, with `previous_completion_id` for server-backed continuation, not
+Chat Completions or ChatGPT's connection-local continuation. HTTP POST returns a
+JSON completion. WebSocket upgrades GET over HTTP/1.1, sends the same request JSON
+as one text message (maximum 16 MiB), and receives one text envelope:
+`{"status":200,"headers":{"content-type":"application/json"},"body":{...}}`.
+Requests are sequential, not multiplexed or token-streamed; native ping/pong is supported.
+
+`OCTOHUB_API_URL` retains its HTTP(S) base URL for other routes; completion requests
+also accept explicit WS(S) URLs and normalize them for HTTP. Hosts, local IPs,
+ports and base paths are preserved. Bearer auth, attribution and extra headers
+(including purpose) are applied at the handshake, with extras upserting last.
+Use a stable, conversation-specific `prompt_cache_key` to reuse a socket across
+provider instances; without it, each call uses a fresh socket. The bounded pool
+isolates endpoints, credentials, effective headers and session keys. Keep supplying
+conversation history: OctoHub's server retains continuation state, not the socket.
+
+WebSocket setup is bounded to 20 seconds. `request_timeout` bounds the entire
+WebSocket call, including queue waits and retry backoff; `None` uses 600 seconds.
+Cancellation, timeout, a dropped future or protocol failure discards the socket.
+Only explicit retryable server statuses use the configured retry policy and
+`Retry-After`/retry observer. A lost reply may already be paid work: the library
+never replays ambiguous requests or silently falls back to HTTP.
 
 ### 🔐 OAuth Authentication
 

@@ -186,11 +186,11 @@ pub use llm::{
 	CerebrasProvider, ChatCompletionParams, ChatGptTransport, CloudflareWorkersAiProvider, DeepSeekProvider,
 	EffectiveSamplingParams, FireworksProvider, FunctionDefinition, GenericToolCall, GoogleStudioProvider,
 	GoogleVertexProvider, ImageAttachment, ImageData, LocalProvider, Message, MessageBuilder, MetaProvider,
-	MinimaxProvider, ModelLimits, MoonshotProvider, OllamaProvider, OpenAiProvider, OpenRouterProvider, OutputFormat,
-	ProviderExchange, ProviderFactory, ProviderResponse, ProviderStrategy, ProviderToolCalls, ReasoningEffort,
-	ResponseMode, SamplingSupport, SourceType, StrategyFactory, StructuredOutputRequest, ThinkingBlock,
-	TogetherProvider, TokenUsage, ToolCall, ToolChoice, ToolResult, VideoAttachment, VideoData, WebWrightProvider,
-	XaiProvider, ZaiProvider,
+	MinimaxProvider, ModelLimits, MoonshotProvider, OctoHubTransport, OllamaProvider, OpenAiProvider,
+	OpenRouterProvider, OutputFormat, ProviderExchange, ProviderFactory, ProviderResponse, ProviderStrategy,
+	ProviderToolCalls, ReasoningEffort, ResponseMode, SamplingSupport, SourceType, StrategyFactory,
+	StructuredOutputRequest, ThinkingBlock, TogetherProvider, TokenUsage, ToolCall, ToolChoice, ToolResult,
+	VideoAttachment, VideoData, WebWrightProvider, XaiProvider, ZaiProvider,
 };
 #[cfg(feature = "media")]
 pub use media::{

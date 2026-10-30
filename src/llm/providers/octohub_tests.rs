@@ -15,6 +15,33 @@
 use super::*;
 
 #[test]
+fn completion_endpoint_normalizes_only_scheme_and_preserves_address_and_base_path() {
+	for (base, expected) in [
+		(
+			"http://127.0.0.1:8080/proxy/",
+			"http://127.0.0.1:8080/proxy/v1/completions",
+		),
+		(
+			"https://10.0.0.1:8443/proxy",
+			"https://10.0.0.1:8443/proxy/v1/completions",
+		),
+		("ws://localhost:8080/base", "http://localhost:8080/base/v1/completions"),
+		("wss://hub.example/base", "https://hub.example/base/v1/completions"),
+		(
+			"http://[::1]:8080/base?route=a",
+			"http://[::1]:8080/base/v1/completions?route=a",
+		),
+	] {
+		assert_eq!(completion_url(base).unwrap(), expected);
+	}
+	for invalid in ["not a url", "ftp://host", "https://user:secret@host"] {
+		let error = completion_url(invalid).unwrap_err().to_string();
+		assert!(error.contains("OCTOHUB_API_URL"));
+		assert!(!error.contains("secret"));
+	}
+}
+
+#[test]
 fn test_provider_name() {
 	let provider = OctoHubProvider::new();
 	assert_eq!(provider.name(), "octohub");

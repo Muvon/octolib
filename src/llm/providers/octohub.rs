@@ -24,8 +24,8 @@ use crate::llm::reference_models::proxy_route_enforces_response_schema;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-	ChatCompletionParams, Message, ProviderExchange, ProviderResponse, SamplingSupport, ThinkingBlock, TokenUsage,
-	ToolCall,
+	ChatCompletionParams, Message, OctoHubTransport, ProviderExchange, ProviderResponse, SamplingSupport,
+	ThinkingBlock, TokenUsage, ToolCall,
 };
 use anyhow::Result;
 use serde::Deserialize;
@@ -33,6 +33,9 @@ use serde::Deserialize;
 const OCTOHUB_API_KEY_ENV: &str = "OCTOHUB_API_KEY";
 const OCTOHUB_API_URL_ENV: &str = "OCTOHUB_API_URL";
 const OCTOHUB_DEFAULT_BASE_URL: &str = "https://hub.octomind.run";
+
+#[cfg(feature = "websockets")]
+mod websocket;
 
 /// OctoHub provider — routes through an OctoHub proxy server using the
 /// Responses API format (`/v1/completions`).
@@ -82,6 +85,57 @@ fn auth_aware_error(status: u16, body: &str, per_call_key: bool) -> anyhow::Erro
 		return anyhow::anyhow!("OctoHub API error {status}: {hint}. Server said: {msg}");
 	}
 	anyhow::anyhow!("OctoHub API error {status}: {msg}")
+}
+
+// Normalize only this completion endpoint; embeddings and media keep their HTTP configuration.
+fn completion_url(base: &str) -> Result<String> {
+	let mut url = reqwest::Url::parse(base).map_err(|_| anyhow::anyhow!("Invalid OCTOHUB_API_URL"))?;
+	let scheme = match url.scheme() {
+		"http" | "ws" => "http",
+		"https" | "wss" => "https",
+		_ => anyhow::bail!("OCTOHUB_API_URL must use http, https, ws, or wss"),
+	};
+	if url.host_str().is_none() || !url.username().is_empty() || url.password().is_some() {
+		anyhow::bail!("OCTOHUB_API_URL must have a host and no embedded credentials; use OCTOHUB_API_KEY");
+	}
+	url.set_scheme(scheme)
+		.map_err(|_| anyhow::anyhow!("Invalid OCTOHUB_API_URL scheme"))?;
+	url.set_path(&format!("{}/v1/completions", url.path().trim_end_matches('/')));
+	url.set_fragment(None);
+	Ok(url.into())
+}
+
+fn request_headers(url: &str, api_key: &str, params: &ChatCompletionParams) -> Result<reqwest::header::HeaderMap> {
+	let mut request = shared::http_client()
+		.post(url)
+		.header("Content-Type", "application/json");
+	if !api_key.is_empty() {
+		request = request.bearer_auth(api_key);
+	}
+	// Attribution and purpose headers must be identical on POST and the upgrade handshake.
+	for (env, header) in [
+		("OPENROUTER_APP_TITLE", "X-Title"),
+		("OPENROUTER_HTTP_REFERER", "HTTP-Referer"),
+		("OPENROUTER_APP_CATEGORIES", "X-OpenRouter-Categories"),
+	] {
+		if let Ok(value) = std::env::var(env) {
+			request = request.header(header, value);
+		}
+	}
+	Ok(shared::apply_extra_headers(request, params.extra_headers.as_ref())
+		.build()?
+		.headers()
+		.clone())
+}
+
+fn retryable_response(response: shared::CapturedResponse) -> Result<shared::CapturedResponse> {
+	if retry::is_retryable_status(response.status.as_u16()) {
+		return Err(retry::retryable_status_error(
+			&response,
+			format!("OctoHub API error {}: {}", response.status, response.body),
+		));
+	}
+	Ok(response)
 }
 
 #[async_trait::async_trait]
@@ -135,8 +189,7 @@ impl AiProvider for OctoHubProvider {
 	}
 
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-		let base_url = Self::base_url();
-		let api_url = format!("{}/v1/completions", base_url.trim_end_matches('/'));
+		let api_url = completion_url(&Self::base_url())?;
 
 		// Resolve previous_response_id: explicit param > last non-compression assistant id.
 		// Compression summaries inherit the previous OctoHub completion id only so
@@ -254,60 +307,34 @@ impl AiProvider for OctoHubProvider {
 			}
 		}
 
-		// Execute request with retry
 		let api_key = shared::resolve_api_key(self, &params)?;
+		let headers = request_headers(&api_url, &api_key, &params)?;
 		let start_time = std::time::Instant::now();
-		let request_timeout = params.request_timeout;
-		let extra_headers = params.extra_headers.clone();
-
-		let response = retry::retry_provider_request(
-			|| {
-				let client = shared::http_client();
-				let api_key = api_key.clone();
-				let api_url = api_url.clone();
-				let request_body = request_body.clone();
-				let extra_headers = extra_headers.clone();
-				Box::pin(async move {
-					let mut req = client.post(&api_url).header("Content-Type", "application/json");
-
-					if !api_key.is_empty() {
-						req = req.bearer_auth(&api_key);
-					}
-
-					// App attribution rides through the proxy: octohub forwards
-					// X-Title / HTTP-Referer / X-OpenRouter-Categories to its upstream
-					// (e.g. OpenRouter), so the originating app gets credited, not the proxy. No
-					// defaults here — absent vars leave attribution to octohub.
-					if let Ok(title) = std::env::var("OPENROUTER_APP_TITLE") {
-						req = req.header("X-Title", title);
-					}
-					if let Ok(referer) = std::env::var("OPENROUTER_HTTP_REFERER") {
-						req = req.header("HTTP-Referer", referer);
-					}
-					if let Ok(categories) = std::env::var("OPENROUTER_APP_CATEGORIES") {
-						req = req.header("X-OpenRouter-Categories", categories);
-					}
-
-					let captured =
-						shared::send_and_read(req.json(&request_body), request_timeout, extra_headers.as_ref()).await?;
-
-					if retry::is_retryable_status(captured.status.as_u16()) {
-						return Err(retry::retryable_status_error(
-							&captured,
-							format!("OctoHub API error {}: {}", captured.status, captured.body),
-						));
-					}
-
-					Ok(captured)
-				})
-			},
-			params.max_retries,
-			params.retry_timeout,
-			params.cancellation_token.as_ref(),
-			params.api_key.as_ref(),
-			params.retry_observer.as_ref(),
-		)
-		.await?;
+		let response = match params.octohub_transport {
+			OctoHubTransport::Http => {
+				retry::retry_provider_request(
+					|| {
+						let req = shared::http_client()
+							.post(&api_url)
+							.headers(headers.clone())
+							.json(&request_body);
+						let timeout = params.request_timeout;
+						Box::pin(async move {
+							let captured = shared::send_and_read(req, timeout, None).await?;
+							retryable_response(captured)
+						})
+					},
+					params.max_retries,
+					params.retry_timeout,
+					params.cancellation_token.as_ref(),
+					params.api_key.as_ref(),
+					params.retry_observer.as_ref(),
+				)
+				.await?
+			}
+			#[cfg(feature = "websockets")]
+			OctoHubTransport::WebSocket => websocket::complete(&params, &api_url, &api_key, &headers, &request_body).await?,
+		};
 
 		let request_time_ms = start_time.elapsed().as_millis() as u64;
 
@@ -743,3 +770,7 @@ mod tests;
 #[cfg(test)]
 #[path = "octohub_http_tests.rs"]
 mod http_tests;
+
+#[cfg(test)]
+#[path = "octohub_transport_tests.rs"]
+mod transport_tests;

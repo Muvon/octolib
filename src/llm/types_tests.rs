@@ -93,6 +93,39 @@ fn test_chat_completion_params() {
 }
 
 #[test]
+fn test_octohub_transport_defaults_to_http() {
+	let params = ChatCompletionParams::new(&[], "auto", 1.0, 1.0, 0, 100);
+	assert_eq!(OctoHubTransport::default(), OctoHubTransport::Http);
+	assert_eq!(params.octohub_transport, crate::OctoHubTransport::Http);
+	assert_eq!(params.chatgpt_transport, ChatGptTransport::Http);
+	assert_eq!(
+		params
+			.with_octohub_transport(crate::llm::OctoHubTransport::Http)
+			.octohub_transport,
+		OctoHubTransport::Http
+	);
+}
+
+#[cfg(feature = "websockets")]
+#[test]
+fn test_octohub_transport_selection_is_independent_of_chatgpt() {
+	let params = ChatCompletionParams::new(&[], "auto", 1.0, 1.0, 0, 100)
+		.with_prompt_cache_key("session")
+		.with_octohub_transport(OctoHubTransport::WebSocket);
+	assert_eq!(params.octohub_transport, OctoHubTransport::WebSocket);
+	assert_eq!(params.chatgpt_transport, ChatGptTransport::Http);
+
+	let params = params.clone().with_chatgpt_transport(ChatGptTransport::WebSocket);
+	assert_eq!(params.octohub_transport, OctoHubTransport::WebSocket);
+	assert_eq!(params.chatgpt_transport, ChatGptTransport::WebSocket);
+
+	let params = params.with_octohub_transport(OctoHubTransport::Http);
+	assert_eq!(params.octohub_transport, OctoHubTransport::Http);
+	assert_eq!(params.chatgpt_transport, ChatGptTransport::WebSocket);
+	assert_eq!(params.prompt_cache_key.as_deref(), Some("session"));
+}
+
+#[test]
 fn test_token_usage() {
 	let usage = TokenUsage {
 		input_tokens: 100,

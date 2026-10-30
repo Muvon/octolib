@@ -214,9 +214,6 @@ enum RetryableStreamError {
 	/// The stream closed before any terminal event.
 	#[error("ChatGPT stream ended without response.completed")]
 	CutOff,
-	#[cfg(feature = "websockets")]
-	#[error("ChatGPT WebSocket request timed out")]
-	Timeout,
 	/// A terminal event carrying one of [`TRANSIENT_ERROR_CODES`].
 	#[error("{0}")]
 	Transient(String),

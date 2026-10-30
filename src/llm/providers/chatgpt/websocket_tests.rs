@@ -62,7 +62,14 @@ fn output() -> Value {
 async fn request(session: &Session, full: &Value, url: &str) -> Result<(Value, Value)> {
 	tokio::time::timeout(
 		Duration::from_secs(5),
-		exchange(session, full, &HeaderMap::new(), "test-token", url),
+		exchange(
+			session,
+			full,
+			&HeaderMap::new(),
+			"test-token",
+			url,
+			Some(Duration::from_secs(5)),
+		),
 	)
 	.await
 	.unwrap()
@@ -459,4 +466,170 @@ async fn handshake_errors_keep_status_retry_after_and_usage_guidance() {
 		}
 		peer.await.unwrap();
 	}
+}
+
+#[tokio::test]
+async fn response_events_and_keepalives_each_extend_the_inactivity_deadline() {
+	for frame in [
+		ServerMessage::Text(
+			json!({"type":"response.output_text.delta", "delta":"working"})
+				.to_string()
+				.into(),
+		),
+		ServerMessage::Ping(vec![1].into()),
+		ServerMessage::Pong(vec![1].into()),
+	] {
+		let (listener, url) = server().await;
+		let peer = tokio::spawn(async move {
+			let mut socket = accept(&listener).await;
+			receive(&mut socket).await;
+			for _ in 0..4 {
+				tokio::time::sleep(Duration::from_millis(350)).await;
+				socket.send(frame.clone()).await.unwrap();
+				if matches!(frame, ServerMessage::Ping(_)) {
+					assert!(matches!(socket.next().await.unwrap().unwrap(), ServerMessage::Pong(_)));
+				}
+			}
+			finish(&mut socket, "long_response", output()).await;
+		});
+		let session = Arc::new(AsyncMutex::new(None));
+		let full = full_request(json!([]));
+		let started = Instant::now();
+		let response = tokio::time::timeout(
+			Duration::from_secs(10),
+			exchange(
+				&session,
+				&full,
+				&HeaderMap::new(),
+				"test-token",
+				&url,
+				Some(Duration::from_secs(1)),
+			),
+		)
+		.await
+		.unwrap()
+		.unwrap();
+		assert!(started.elapsed() > Duration::from_secs(1));
+		assert_eq!(response.1["id"], "long_response");
+		peer.await.unwrap();
+	}
+}
+
+#[tokio::test]
+async fn silent_response_times_out_and_reconnects_with_full_context() {
+	for progress in [false, true] {
+		let (listener, url) = server().await;
+		let peer = tokio::spawn(async move {
+			let mut silent = accept(&listener).await;
+			receive(&mut silent).await;
+			if progress {
+				silent
+					.send(ServerMessage::Text(
+						json!({"type":"response.output_text.delta", "delta":"partial"})
+							.to_string()
+							.into(),
+					))
+					.await
+					.unwrap();
+				silent.send(ServerMessage::Ping(vec![1].into())).await.unwrap();
+				assert!(matches!(silent.next().await.unwrap().unwrap(), ServerMessage::Pong(_)));
+			}
+			let mut next = accept(&listener).await;
+			let request = receive(&mut next).await;
+			assert!(request.get("previous_response_id").is_none());
+			assert_eq!(request["input"][0]["content"], "retry");
+			finish(&mut next, "recovered", json!([])).await;
+		});
+		let session = Arc::new(AsyncMutex::new(None));
+		let error = exchange(
+			&session,
+			&full_request(json!([])),
+			&HeaderMap::new(),
+			"test-token",
+			&url,
+			Some(Duration::from_millis(100)),
+		)
+		.await
+		.unwrap_err();
+		assert!(matches!(
+			error.downcast_ref::<ProviderError>(),
+			Some(ProviderError::TimeoutError { .. })
+		));
+		assert_eq!(
+			error.to_string(),
+			"ChatGPT WebSocket timed out after 0.1s without receiving a frame"
+		);
+		assert_eq!(
+			shared::transport_error_kind(&error),
+			Some(shared::TransportErrorKind::Timeout)
+		);
+		assert!(is_retryable(&error));
+		assert!(session.try_lock().unwrap().is_none());
+		request(
+			&session,
+			&full_request(json!([{"role":"user", "content":"retry"}])),
+			&url,
+		)
+		.await
+		.unwrap();
+		peer.await.unwrap();
+	}
+}
+
+#[tokio::test]
+async fn queue_wait_and_idle_connection_do_not_consume_response_timeout() {
+	let (listener, url) = server().await;
+	let peer = tokio::spawn(async move {
+		let mut socket = accept(&listener).await;
+		for id in ["first", "second"] {
+			receive(&mut socket).await;
+			finish(&mut socket, id, json!([])).await;
+		}
+	});
+	let session = Arc::new(AsyncMutex::new(None));
+	let guard = session.lock().await;
+	let full = full_request(json!([]));
+	let headers = HeaderMap::new();
+	let timeout = Duration::from_millis(200);
+	let mut first = Box::pin(exchange(&session, &full, &headers, "test-token", &url, Some(timeout)));
+	tokio::select! {
+		result = &mut first => panic!("Request must wait for its session: {result:?}"),
+		_ = tokio::time::sleep(timeout * 2) => {},
+	}
+	drop(guard);
+	assert_eq!(first.await.unwrap().1["id"], "first");
+	tokio::time::sleep(timeout * 2).await;
+	assert_eq!(
+		exchange(&session, &full, &headers, "test-token", &url, Some(timeout))
+			.await
+			.unwrap()
+			.1["id"],
+		"second"
+	);
+	peer.await.unwrap();
+}
+
+#[tokio::test]
+async fn disabled_inactivity_timeout_waits_for_completion() {
+	let (listener, url) = server().await;
+	let (ready, received) = tokio::sync::oneshot::channel();
+	let (release, wait) = tokio::sync::oneshot::channel();
+	let peer = tokio::spawn(async move {
+		let mut socket = accept(&listener).await;
+		receive(&mut socket).await;
+		ready.send(()).unwrap();
+		wait.await.unwrap();
+		finish(&mut socket, "completed", json!([])).await;
+	});
+	let session = Arc::new(AsyncMutex::new(None));
+	let full = full_request(json!([]));
+	let headers = HeaderMap::new();
+	let mut pending = Box::pin(exchange(&session, &full, &headers, "test-token", &url, None));
+	tokio::select! {
+		result = &mut pending => panic!("Request completed before release: {result:?}"),
+		result = received => result.unwrap(),
+	}
+	release.send(()).unwrap();
+	assert_eq!(pending.await.unwrap().1["id"], "completed");
+	peer.await.unwrap();
 }

@@ -21,6 +21,8 @@ use arc_swap::ArcSwap;
 use std::sync::LazyLock;
 use std::time::Duration;
 
+pub(crate) const CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
+
 const DEFAULT_USER_AGENT: &str = concat!("octolib/", env!("CARGO_PKG_VERSION"));
 
 /// `User-Agent` sent with every upstream request. reqwest sends none by default
@@ -60,7 +62,7 @@ static WEBSOCKET_CLIENT: LazyLock<ArcSwap<reqwest::Client>> =
 fn build_http_client(http1_only: bool) -> reqwest::Client {
 	let builder = reqwest::Client::builder()
 		.user_agent(USER_AGENT.load().as_str())
-		.connect_timeout(Duration::from_secs(20))
+		.connect_timeout(CONNECT_TIMEOUT)
 		.tcp_keepalive(Duration::from_secs(10))
 		.tcp_keepalive_interval(Duration::from_secs(5))
 		.tcp_nodelay(true)

@@ -422,3 +422,28 @@ async fn retry_logs_include_the_underlying_error_without_flattening_the_returned
 	let log = String::from_utf8(buffer.0.lock().unwrap().clone()).unwrap();
 	assert!(log.contains("sending request: peer closed"));
 }
+
+#[tokio::test]
+async fn typed_provider_timeout_is_reported_as_a_timeout_to_the_observer() {
+	let (observer, events) = recording_observer();
+	let params = crate::llm::types::ChatCompletionParams::new(&[], "model", 0.0, 1.0, 0, 0)
+		.with_max_retries(1)
+		.with_retry_timeout(Duration::ZERO)
+		.with_retry_observer(observer);
+	let result: anyhow::Result<()> = retry_chat_operation(
+		|| {
+			Box::pin(async {
+				Err(anyhow::Error::new(crate::errors::ProviderError::TimeoutError {
+					provider: "chatgpt".into(),
+				})
+				.context("ChatGPT WebSocket timed out after 100s without receiving a frame"))
+			})
+		},
+		&params,
+	)
+	.await;
+	assert!(result.is_err());
+	let events = events.lock().unwrap();
+	assert_eq!(events.len(), 1);
+	assert_eq!(events[0].reason, "request timed out");
+}

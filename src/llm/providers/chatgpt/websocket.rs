@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::{auth, normalize_input_item, request_headers, with_usage_guidance, ResponseEvents, RetryableStreamError};
+use crate::errors::ProviderError;
 use crate::llm::{providers::shared, retry, types::ChatCompletionParams};
 use anyhow::{Context, Result};
 use futures_util::{SinkExt, StreamExt};
@@ -167,23 +168,18 @@ pub(super) async fn complete(params: &ChatCompletionParams, full: Value) -> Resu
 			let cache_key = params.prompt_cache_key.clone();
 			let timeout = params.request_timeout;
 			Box::pin(async move {
-				let attempt = async {
+				let result = async {
 					let token = auth::access_token(None).await?;
-					match authenticated_request(cache_key.as_deref(), &model, &full, &headers, &token).await {
+					match authenticated_request(cache_key.as_deref(), &model, &full, &headers, &token, timeout).await {
 						Err(error) if error.is::<Unauthorized>() => {
 							let refreshed = auth::access_token(Some(&token)).await?;
-							authenticated_request(cache_key.as_deref(), &model, &full, &headers, &refreshed).await
+							authenticated_request(cache_key.as_deref(), &model, &full, &headers, &refreshed, timeout)
+								.await
 						}
 						result => result,
 					}
-				};
-				let result = match timeout {
-					Some(timeout) => match tokio::time::timeout(timeout, attempt).await {
-						Ok(result) => result,
-						Err(_) => Err(RetryableStreamError::Timeout.into()),
-					},
-					None => attempt.await,
-				};
+				}
+				.await;
 				match result {
 					Err(error) if is_retryable(&error) => Err(error),
 					result => Ok(result),
@@ -197,7 +193,10 @@ pub(super) async fn complete(params: &ChatCompletionParams, full: Value) -> Resu
 
 fn is_retryable(error: &anyhow::Error) -> bool {
 	error.is::<RetryableStreamError>()
-		|| error.is::<retry::RetryableStatusError>()
+		|| matches!(
+			error.downcast_ref::<ProviderError>(),
+			Some(ProviderError::TimeoutError { .. })
+		) || error.is::<retry::RetryableStatusError>()
 		|| error.is::<reqwest::Error>()
 		|| matches!(
 			error.downcast_ref::<reqwest_websocket::Error>(),
@@ -211,6 +210,7 @@ async fn authenticated_request(
 	full: &Value,
 	headers: &HeaderMap,
 	token: &str,
+	timeout: Option<Duration>,
 ) -> Result<(Value, Value)> {
 	let session = match session_key(cache_key, model, token, headers)? {
 		Some(key) => SESSIONS
@@ -219,7 +219,7 @@ async fn authenticated_request(
 			.get(key, Instant::now())?,
 		None => Arc::new(AsyncMutex::new(None)),
 	};
-	exchange(&session, full, headers, token, RESPONSES_URL).await
+	exchange(&session, full, headers, token, RESPONSES_URL, timeout).await
 }
 
 async fn exchange(
@@ -228,6 +228,7 @@ async fn exchange(
 	headers: &HeaderMap,
 	token: &str,
 	url: &str,
+	timeout: Option<Duration>,
 ) -> Result<(Value, Value)> {
 	let mut slot = session.lock().await;
 	// The future owns the socket until completion. Cancellation or any error
@@ -240,11 +241,15 @@ async fn exchange(
 		Some(previous) => previous.request(full)?,
 		None => full.clone(),
 	};
-	connection
-		.socket
-		.send(Message::Text(serde_json::to_string(&request)?))
-		.await?;
-	let response = read_response(&mut connection.socket).await?;
+	let message = Message::Text(serde_json::to_string(&request)?);
+	let send = connection.socket.send(message);
+	match timeout {
+		Some(timeout) => tokio::time::timeout(timeout, send)
+			.await
+			.map_err(|_| timeout_error(timeout, "sending the request"))??,
+		None => send.await?,
+	}
+	let response = read_response(&mut connection.socket, timeout).await?;
 	connection.continuation = Some(Continuation::from_response(full, &response)?);
 	*slot = Some(connection);
 	Ok((request, response))
@@ -257,11 +262,13 @@ struct Unauthorized;
 async fn connect(url: &str, token: &str, headers: &HeaderMap) -> Result<Connection> {
 	let response = crate::http::websocket_client()
 		.get(url)
+		.timeout(crate::http::CONNECT_TIMEOUT)
 		.bearer_auth(token)
 		.headers(headers.clone())
 		.upgrade()
 		.send()
-		.await?;
+		.await
+		.context("Opening ChatGPT WebSocket connection")?;
 	if response.status() == reqwest::StatusCode::UNAUTHORIZED {
 		return Err(Unauthorized.into());
 	}
@@ -292,9 +299,30 @@ async fn connect(url: &str, token: &str, headers: &HeaderMap) -> Result<Connecti
 	})
 }
 
-async fn read_response(socket: &mut WebSocket) -> Result<Value> {
+fn timeout_error(timeout: Duration, phase: &str) -> anyhow::Error {
+	anyhow::Error::new(ProviderError::TimeoutError {
+		provider: "chatgpt".to_owned(),
+	})
+	.context(format!(
+		"ChatGPT WebSocket timed out after {}s {phase}",
+		timeout.as_secs_f64()
+	))
+}
+
+async fn read_response(socket: &mut WebSocket, timeout: Option<Duration>) -> Result<Value> {
 	let mut events = ResponseEvents::default();
-	while let Some(message) = socket.next().await {
+	let mut last_received = tokio::time::Instant::now();
+	loop {
+		let message = match timeout {
+			Some(timeout) => tokio::time::timeout_at(last_received + timeout, socket.next())
+				.await
+				.map_err(|_| timeout_error(timeout, "without receiving a frame"))?,
+			None => socket.next().await,
+		};
+		let Some(message) = message else {
+			break;
+		};
+		last_received = tokio::time::Instant::now();
 		match message? {
 			Message::Text(text) => {
 				let event = serde_json::from_str(&text).context("Malformed ChatGPT WebSocket event")?;
@@ -302,7 +330,12 @@ async fn read_response(socket: &mut WebSocket) -> Result<Value> {
 					return Ok(response);
 				}
 			}
-			Message::Ping(_) => socket.flush().await?,
+			Message::Ping(_) => match timeout {
+				Some(timeout) => tokio::time::timeout_at(last_received + timeout, socket.flush())
+					.await
+					.map_err(|_| timeout_error(timeout, "sending a keepalive reply"))??,
+				None => socket.flush().await?,
+			},
 			Message::Pong(_) => {}
 			Message::Close { .. } => break,
 			Message::Binary(_) => anyhow::bail!("ChatGPT WebSocket returned a binary event; expected JSON text"),

@@ -912,8 +912,10 @@ pub struct ChatCompletionParams {
 	pub max_retries: u32,
 	/// Base timeout for exponential backoff retry logic
 	pub retry_timeout: std::time::Duration,
-	/// Per-request timeout. `None` = no timeout (LLM may take minutes);
-	/// `Some(d)` = abort the HTTP request or WebSocket round trip if it exceeds `d`.
+	/// HTTP: total request timeout. ChatGPT WebSocket: maximum time without
+	/// receiving a frame during a response, also bounding request/keepalive writes.
+	/// WebSocket queue waits and connection setup do not consume this budget.
+	/// `None` disables the request/inactivity timeout; connection setup stays bounded.
 	pub request_timeout: Option<std::time::Duration>,
 	/// Cancellation token for request abortion
 	pub cancellation_token: Option<tokio::sync::watch::Receiver<bool>>,
@@ -1027,8 +1029,8 @@ impl ChatCompletionParams {
 		self
 	}
 
-	/// Set per-request timeout. `None` disables (LLM may take minutes);
-	/// `Some(d)` aborts the HTTP request if it exceeds `d`.
+	/// Set the total HTTP request timeout or ChatGPT WebSocket inactivity timeout.
+	/// `None` disables this timeout (LLM responses may take minutes).
 	pub fn with_request_timeout(mut self, timeout: Option<std::time::Duration>) -> Self {
 		self.request_timeout = timeout;
 		self

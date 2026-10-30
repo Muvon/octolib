@@ -175,6 +175,12 @@ pub(crate) fn transport_error_kind(error: &anyhow::Error) -> Option<TransportErr
 	if let Some(error) = error.downcast_ref::<RedactedError>() {
 		return error.transport_error;
 	}
+	if matches!(
+		error.downcast_ref::<crate::errors::ProviderError>(),
+		Some(crate::errors::ProviderError::TimeoutError { .. })
+	) {
+		return Some(TransportErrorKind::Timeout);
+	}
 	let error = error.chain().find_map(|cause| cause.downcast_ref::<reqwest::Error>())?;
 	if error.is_timeout() {
 		Some(TransportErrorKind::Timeout)

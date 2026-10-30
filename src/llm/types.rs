@@ -912,11 +912,14 @@ pub struct ChatCompletionParams {
 	pub max_retries: u32,
 	/// Base timeout for exponential backoff retry logic
 	pub retry_timeout: std::time::Duration,
-	/// HTTP: total request timeout. ChatGPT WebSocket: maximum time without
-	/// receiving a frame during a response, also bounding request/keepalive writes.
-	/// WebSocket queue waits and connection setup do not consume this budget.
-	/// `None` disables the request/inactivity timeout; connection setup stays bounded.
+	/// Total deadline for one HTTP or WebSocket request attempt, including connection
+	/// setup, sending and receiving the complete response. Excludes retry backoff
+	/// and waiting for a shared WebSocket session. `None` disables the deadline.
 	pub request_timeout: Option<std::time::Duration>,
+	/// Maximum wait for response data in SSE or WebSocket requests. Resets on SSE
+	/// chunks or WebSocket response messages, not WebSocket ping/pong frames.
+	/// `None` disables this limit (default). Does not extend `request_timeout`.
+	pub stream_timeout: Option<std::time::Duration>,
 	/// Cancellation token for request abortion
 	pub cancellation_token: Option<tokio::sync::watch::Receiver<bool>>,
 	/// Told before every backoff sleep so the caller can show that the call is
@@ -963,6 +966,7 @@ impl ChatCompletionParams {
 			max_retries: 3,                                   // Default retry attempts
 			retry_timeout: std::time::Duration::from_secs(1), // Default 1 second base timeout
 			request_timeout: None,                            // No per-request timeout by default
+			stream_timeout: None,
 			cancellation_token: None,
 			retry_observer: None,
 			tools: None,
@@ -1029,10 +1033,16 @@ impl ChatCompletionParams {
 		self
 	}
 
-	/// Set the total HTTP request timeout or ChatGPT WebSocket inactivity timeout.
+	/// Set the total deadline for one HTTP or WebSocket request attempt.
 	/// `None` disables this timeout (LLM responses may take minutes).
 	pub fn with_request_timeout(mut self, timeout: Option<std::time::Duration>) -> Self {
 		self.request_timeout = timeout;
+		self
+	}
+
+	/// Set the SSE/WebSocket response inactivity limit. `None` disables it.
+	pub fn with_stream_timeout(mut self, timeout: Option<std::time::Duration>) -> Self {
+		self.stream_timeout = timeout;
 		self
 	}
 

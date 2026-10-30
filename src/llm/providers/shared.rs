@@ -181,6 +181,9 @@ impl TransportErrorKind {
 }
 
 pub(crate) fn transport_error_kind(error: &anyhow::Error) -> Option<TransportErrorKind> {
+	if error.is::<super::streaming::StreamTimeout>() {
+		return Some(TransportErrorKind::Timeout);
+	}
 	if error.is::<super::streaming::IncompleteStream>() {
 		return Some(TransportErrorKind::Body);
 	}

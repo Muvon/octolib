@@ -548,6 +548,7 @@ async fn execute_together_request(
 ) -> Result<ProviderResponse> {
 	let start_time = std::time::Instant::now();
 	let request_timeout = params.request_timeout;
+	let stream_timeout = params.stream_timeout;
 
 	let response = retry::retry_provider_request(
 		|| {
@@ -563,6 +564,7 @@ async fn execute_together_request(
 				let captured = super::streaming::send_and_read(
 					req,
 					request_timeout,
+					stream_timeout,
 					extra_headers.as_ref(),
 					super::streaming::Format::Chat,
 				)

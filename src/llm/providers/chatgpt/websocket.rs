@@ -167,14 +167,33 @@ pub(super) async fn complete(params: &ChatCompletionParams, full: Value) -> Resu
 			let model = params.model.clone();
 			let cache_key = params.prompt_cache_key.clone();
 			let timeout = params.request_timeout;
+			let stream_timeout = params.stream_timeout;
 			Box::pin(async move {
 				let result = async {
 					let token = auth::access_token(None).await?;
-					match authenticated_request(cache_key.as_deref(), &model, &full, &headers, &token, timeout).await {
+					match authenticated_request(
+						cache_key.as_deref(),
+						&model,
+						&full,
+						&headers,
+						&token,
+						timeout,
+						stream_timeout,
+					)
+					.await
+					{
 						Err(error) if error.is::<Unauthorized>() => {
 							let refreshed = auth::access_token(Some(&token)).await?;
-							authenticated_request(cache_key.as_deref(), &model, &full, &headers, &refreshed, timeout)
-								.await
+							authenticated_request(
+								cache_key.as_deref(),
+								&model,
+								&full,
+								&headers,
+								&refreshed,
+								timeout,
+								stream_timeout,
+							)
+							.await
 						}
 						result => result,
 					}
@@ -193,6 +212,7 @@ pub(super) async fn complete(params: &ChatCompletionParams, full: Value) -> Resu
 
 fn is_retryable(error: &anyhow::Error) -> bool {
 	error.is::<RetryableStreamError>()
+		|| error.is::<super::super::streaming::StreamTimeout>()
 		|| matches!(
 			error.downcast_ref::<ProviderError>(),
 			Some(ProviderError::TimeoutError { .. })
@@ -211,6 +231,7 @@ async fn authenticated_request(
 	headers: &HeaderMap,
 	token: &str,
 	timeout: Option<Duration>,
+	stream_timeout: Option<Duration>,
 ) -> Result<(Value, Value)> {
 	let session = match session_key(cache_key, model, token, headers)? {
 		Some(key) => SESSIONS
@@ -219,7 +240,7 @@ async fn authenticated_request(
 			.get(key, Instant::now())?,
 		None => Arc::new(AsyncMutex::new(None)),
 	};
-	exchange(&session, full, headers, token, RESPONSES_URL, timeout).await
+	exchange(&session, full, headers, token, RESPONSES_URL, timeout, stream_timeout).await
 }
 
 async fn exchange(
@@ -229,30 +250,33 @@ async fn exchange(
 	token: &str,
 	url: &str,
 	timeout: Option<Duration>,
+	stream_timeout: Option<Duration>,
 ) -> Result<(Value, Value)> {
 	let mut slot = session.lock().await;
-	// The future owns the socket until completion. Cancellation or any error
-	// drops it, so a later request cannot consume a cancelled response's events.
-	let mut connection = match slot.take() {
-		Some(connection) if connection.opened_at.elapsed() < CONNECTION_LIFETIME => connection,
-		_ => connect(url, token, headers).await?,
+	let operation = async {
+		// Taking ownership before awaiting ensures cancellation or failure drops the
+		// socket instead of exposing this response's remaining events to the next call.
+		let mut connection = match slot.take() {
+			Some(connection) if connection.opened_at.elapsed() < CONNECTION_LIFETIME => connection,
+			_ => connect(url, token, headers).await?,
+		};
+		let request = match &connection.continuation {
+			Some(previous) => previous.request(full)?,
+			None => full.clone(),
+		};
+		let message = Message::Text(serde_json::to_string(&request)?);
+		connection.socket.send(message).await?;
+		let response = read_response(&mut connection.socket, stream_timeout).await?;
+		connection.continuation = Some(Continuation::from_response(full, &response)?);
+		*slot = Some(connection);
+		Ok((request, response))
 	};
-	let request = match &connection.continuation {
-		Some(previous) => previous.request(full)?,
-		None => full.clone(),
-	};
-	let message = Message::Text(serde_json::to_string(&request)?);
-	let send = connection.socket.send(message);
 	match timeout {
-		Some(timeout) => tokio::time::timeout(timeout, send)
+		Some(timeout) => tokio::time::timeout(timeout, operation)
 			.await
-			.map_err(|_| timeout_error(timeout, "sending the request"))??,
-		None => send.await?,
+			.map_err(|_| timeout_error(timeout, "before the complete response (request deadline)"))?,
+		None => operation.await,
 	}
-	let response = read_response(&mut connection.socket, timeout).await?;
-	connection.continuation = Some(Continuation::from_response(full, &response)?);
-	*slot = Some(connection);
-	Ok((request, response))
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -316,15 +340,15 @@ async fn read_response(socket: &mut WebSocket, timeout: Option<Duration>) -> Res
 		let message = match timeout {
 			Some(timeout) => tokio::time::timeout_at(last_received + timeout, socket.next())
 				.await
-				.map_err(|_| timeout_error(timeout, "without receiving a frame"))?,
+				.map_err(|_| super::super::streaming::StreamTimeout(timeout))?,
 			None => socket.next().await,
 		};
 		let Some(message) = message else {
 			break;
 		};
-		last_received = tokio::time::Instant::now();
 		match message? {
 			Message::Text(text) => {
+				last_received = tokio::time::Instant::now();
 				let event = serde_json::from_str(&text).context("Malformed ChatGPT WebSocket event")?;
 				if let Some(response) = events.push(event)? {
 					return Ok(response);
@@ -333,7 +357,7 @@ async fn read_response(socket: &mut WebSocket, timeout: Option<Duration>) -> Res
 			Message::Ping(_) => match timeout {
 				Some(timeout) => tokio::time::timeout_at(last_received + timeout, socket.flush())
 					.await
-					.map_err(|_| timeout_error(timeout, "sending a keepalive reply"))??,
+					.map_err(|_| super::super::streaming::StreamTimeout(timeout))??,
 				None => socket.flush().await?,
 			},
 			Message::Pong(_) => {}

@@ -88,10 +88,16 @@ fn decoder_handles_every_byte_boundary_multiline_bom_and_line_endings() {
 			let mut decoder = Decoder::default();
 			let mut accumulator = Accumulator::new(Format::Chat);
 			decoder
-				.push(&body.as_bytes()[..split], |data| accumulator.push(data))
+				.push(&body.as_bytes()[..split], |data| {
+					accumulator.push(data)?;
+					Ok(None)
+				})
 				.unwrap();
 			decoder
-				.push(&body.as_bytes()[split..], |data| accumulator.push(data))
+				.push(&body.as_bytes()[split..], |data| {
+					accumulator.push(data)?;
+					Ok(None)
+				})
 				.unwrap();
 			decoder.finish().unwrap();
 			assert_eq!(
@@ -123,9 +129,9 @@ fn malformed_truncated_empty_and_provider_error_streams_fail() {
 		assert!(Accumulator::new(Format::Chat).push(data).is_err(), "{data}");
 	}
 	let mut decoder = Decoder::default();
-	decoder.push(b"data: {", |_| Ok(())).unwrap();
+	decoder.push(b"data: {", |_| Ok(None)).unwrap();
 	assert!(decoder.finish().is_err());
-	assert!(Decoder::default().push(b"data: \xff\n\n", |_| Ok(())).is_err());
+	assert!(Decoder::default().push(b"data: \xff\n\n", |_| Ok(None)).is_err());
 }
 
 #[test]
@@ -209,14 +215,14 @@ fn groq_usage_envelope_is_preserved() {
 #[tokio::test]
 async fn http_accumulates_sse_and_preserves_status_and_json_error_bodies() {
 	let mock = MockHttp::start(vec![(200, wire(&chat_events(), true))]);
-	let response = send_and_read(shared::http_client().post(&mock.url), None, None, Format::Chat)
+	let response = send_and_read(shared::http_client().post(&mock.url), None, None, None, Format::Chat)
 		.await
 		.unwrap();
 	assert_eq!(response.status, 200);
 	let body: Value = serde_json::from_str(&response.body).unwrap();
 	assert_eq!(body["choices"][0]["message"]["content"], "Hello 世界");
 	let mock = MockHttp::start(vec![(429, r#"{"error":{"message":"slow down"}}"#.to_owned())]);
-	let response = send_and_read(shared::http_client().post(&mock.url), None, None, Format::Chat)
+	let response = send_and_read(shared::http_client().post(&mock.url), None, None, None, Format::Chat)
 		.await
 		.unwrap();
 	assert_eq!(response.status, 429);
@@ -263,7 +269,12 @@ async fn native_chat_providers_accumulate_and_keep_usage() {
 		let usage = response.exchange.usage.unwrap();
 		assert_eq!(usage.billable_output_tokens(), 9, "{}", provider.name());
 		assert!(usage.cost.is_some(), "{}", provider.name());
-		let request: Value = serde_json::from_str(&mock.requests()[0].body).unwrap();
+		let requests = mock.requests();
+		let completion = requests
+			.iter()
+			.find(|request| request.method == "POST")
+			.expect("completion request");
+		let request: Value = serde_json::from_str(&completion.body).unwrap();
 		assert_eq!(request["stream"], true, "{}", provider.name());
 	}
 }
@@ -369,6 +380,7 @@ async fn truncated_stream_retries_but_malformed_and_permanent_errors_do_not() {
 					shared::http_client().post(&mock.url),
 					None,
 					None,
+					None,
 					Format::Chat,
 				))
 			},
@@ -419,6 +431,7 @@ async fn timeout_and_cancellation_cover_the_stream_body() {
 					Box::pin(send_and_read(
 						shared::http_client().get(&url),
 						Some(Duration::from_millis(250)),
+						None,
 						None,
 						Format::Chat,
 					))
@@ -478,6 +491,7 @@ async fn http_chunk_boundaries_do_not_define_event_boundaries() {
 	let response = send_and_read(
 		shared::http_client().get(&url),
 		Some(Duration::from_secs(2)),
+		None,
 		None,
 		Format::Chat,
 	)
@@ -570,4 +584,269 @@ fn stream_failure_finish_reason_and_invalid_accumulated_shapes_are_errors() {
 		true
 	)
 	.is_err());
+}
+
+// The peer never sends HTTP EOF: terminal events must complete the model request.
+async fn open_stream(content_type: &str) -> (String, tokio::sync::mpsc::Sender<String>, tokio::task::JoinHandle<()>) {
+	use tokio::io::{AsyncReadExt, AsyncWriteExt};
+	let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+	let url = format!("http://{}", listener.local_addr().unwrap());
+	let headers = format!("HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nTransfer-Encoding: chunked\r\n\r\n");
+	let (sender, mut chunks) = tokio::sync::mpsc::channel::<String>(1);
+	let peer = tokio::spawn(async move {
+		let (mut socket, _) = listener.accept().await.unwrap();
+		let mut request = Vec::new();
+		while !request.ends_with(b"\r\n\r\n") {
+			request.push(socket.read_u8().await.unwrap());
+		}
+		socket.write_all(headers.as_bytes()).await.unwrap();
+		while let Some(chunk) = chunks.recv().await {
+			socket
+				.write_all(format!("{:x}\r\n{chunk}\r\n", chunk.len()).as_bytes())
+				.await
+				.unwrap();
+		}
+		let mut byte = [0];
+		assert_eq!(
+			tokio::time::timeout(Duration::from_secs(3), socket.read(&mut byte))
+				.await
+				.unwrap()
+				.unwrap(),
+			0
+		);
+	});
+	(url, sender, peer)
+}
+
+#[tokio::test]
+async fn active_chunks_reset_stream_timeout_and_preserve_final_usage_without_http_eof() {
+	let (url, chunks, peer) = open_stream("text/event-stream").await;
+	let call = tokio::spawn(async move {
+		send_and_read(
+			shared::http_client().get(url),
+			Some(Duration::from_secs(5)),
+			Some(Duration::from_secs(1)),
+			None,
+			Format::Chat,
+		)
+		.await
+	});
+	// Partial event bytes and SSE comments are both network activity.
+	for chunk in [": heartbeat\n\n", "data:", " ", "{\"choices\":[]}", "\n\n"] {
+		chunks.send(chunk.to_owned()).await.unwrap();
+		tokio::time::sleep(Duration::from_millis(300)).await;
+	}
+	chunks.send(wire(&chat_events(), true)).await.unwrap();
+	drop(chunks);
+	let response = call.await.unwrap().unwrap();
+	let body: Value = serde_json::from_str(&response.body).unwrap();
+	assert_eq!(body["choices"][0]["message"]["content"], "Hello 世界");
+	assert_eq!(body["usage"]["completion_tokens"], 9);
+	peer.await.unwrap();
+}
+
+#[tokio::test]
+async fn terminal_events_finish_all_sse_formats_without_http_eof() {
+	for (format, body) in [
+		(Format::Chat, wire(&chat_events(), true)),
+		(
+			Format::Messages,
+			wire(
+				&[
+					json!({"type":"message_start","message":{"type":"message","content":[],"usage":{"input_tokens":2}}}),
+					json!({"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":3}}),
+					json!({"type":"message_stop"}),
+				],
+				false,
+			),
+		),
+		(
+			Format::Responses,
+			wire(
+				&[json!({"type":"response.completed","response":{"id":"r1","output":[],"usage":{"output_tokens":3}}})],
+				false,
+			),
+		),
+	] {
+		let (url, chunks, peer) = open_stream("text/event-stream").await;
+		chunks.send(body).await.unwrap();
+		drop(chunks);
+		let result = send_and_read(
+			shared::http_client().get(url),
+			Some(Duration::from_secs(2)),
+			Some(Duration::from_millis(500)),
+			None,
+			format,
+		)
+		.await;
+		assert!(result.is_ok(), "{:?}", result.err());
+		peer.await.unwrap();
+	}
+}
+
+#[tokio::test]
+async fn stream_timeout_discards_partial_text_and_tool_arguments() {
+	for partial in [
+		json!({"choices":[{"index":0,"delta":{"content":"unfinished"}}]}),
+		json!({"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"c1","type":"function","function":{"name":"run","arguments":"{"}}]}}]}),
+	] {
+		let (url, chunks, peer) = open_stream("text/event-stream").await;
+		chunks.send(wire(&[partial], false)).await.unwrap();
+		drop(chunks);
+		let error = send_and_read(
+			shared::http_client().get(url),
+			Some(Duration::from_secs(5)),
+			Some(Duration::from_millis(100)),
+			None,
+			Format::Chat,
+		)
+		.await
+		.err()
+		.expect("must time out");
+		assert!(error.is::<StreamTimeout>(), "{error:#}");
+		assert_eq!(
+			shared::transport_error_kind(&error),
+			Some(shared::TransportErrorKind::Timeout)
+		);
+		peer.await.unwrap();
+	}
+}
+
+#[tokio::test]
+async fn active_sse_cannot_extend_the_total_request_deadline() {
+	let (url, chunks, peer) = open_stream("text/event-stream").await;
+	let call = tokio::spawn(async move {
+		send_and_read(
+			shared::http_client().get(url),
+			Some(Duration::from_millis(800)),
+			Some(Duration::from_millis(600)),
+			None,
+			Format::Chat,
+		)
+		.await
+	});
+	for _ in 0..3 {
+		chunks.send(": heartbeat\n\n".to_owned()).await.unwrap();
+		tokio::time::sleep(Duration::from_millis(200)).await;
+	}
+	drop(chunks);
+	let error = call.await.unwrap().err().expect("must time out");
+	assert!(
+		error
+			.downcast_ref::<reqwest::Error>()
+			.is_some_and(reqwest::Error::is_timeout),
+		"{error:#}"
+	);
+	peer.await.unwrap();
+}
+
+#[tokio::test]
+async fn first_response_headers_are_bounded_by_stream_timeout() {
+	use tokio::io::{AsyncReadExt, AsyncWriteExt};
+	let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+	let url = format!("http://{}", listener.local_addr().unwrap());
+	let peer = tokio::spawn(async move {
+		let (mut socket, _) = listener.accept().await.unwrap();
+		let mut bytes = Vec::new();
+		socket.read_to_end(&mut bytes).await.unwrap();
+		assert!(!bytes.is_empty());
+		socket.shutdown().await.unwrap();
+	});
+	let error = send_and_read(
+		shared::http_client().get(url),
+		None,
+		Some(Duration::from_millis(100)),
+		None,
+		Format::Chat,
+	)
+	.await
+	.err()
+	.expect("must time out");
+	assert!(error.is::<StreamTimeout>());
+	peer.await.unwrap();
+}
+
+#[tokio::test]
+#[serial_test::serial(retry_log)]
+async fn timeout_retry_starts_with_a_fresh_stream_accumulator() {
+	use tokio::io::{AsyncReadExt, AsyncWriteExt};
+	let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+	let url = format!("http://{}", listener.local_addr().unwrap());
+	let peer = tokio::spawn(async move {
+		for body in [
+			wire(
+				&[json!({"choices":[{"index":0,"delta":{"content":"discard me"}}]})],
+				false,
+			),
+			wire(&chat_events(), true),
+		] {
+			let (mut socket, _) = listener.accept().await.unwrap();
+			let mut request = Vec::new();
+			while !request.ends_with(b"\r\n\r\n") {
+				request.push(socket.read_u8().await.unwrap());
+			}
+			socket.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\n{:x}\r\n{body}\r\n", body.len()).as_bytes()).await.unwrap();
+			let mut byte = [0];
+			assert_eq!(
+				tokio::time::timeout(Duration::from_secs(3), socket.read(&mut byte))
+					.await
+					.unwrap()
+					.unwrap(),
+				0
+			);
+		}
+	});
+	let captured = crate::llm::retry::retry_provider_request(
+		|| {
+			Box::pin(send_and_read(
+				shared::http_client().get(&url),
+				None,
+				Some(Duration::from_millis(100)),
+				None,
+				Format::Chat,
+			))
+		},
+		1,
+		Duration::ZERO,
+		None,
+		None,
+		None,
+	)
+	.await
+	.unwrap();
+	let body: Value = serde_json::from_str(&captured.body).unwrap();
+	assert_eq!(body["choices"][0]["message"]["content"], "Hello 世界");
+	assert_eq!(body["usage"]["completion_tokens"], 9);
+	peer.await.unwrap();
+}
+
+#[tokio::test]
+async fn json_response_uses_total_deadline_without_stream_inactivity_limit() {
+	use tokio::io::{AsyncReadExt, AsyncWriteExt};
+	let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+	let url = format!("http://{}", listener.local_addr().unwrap());
+	let peer = tokio::spawn(async move {
+		let (mut socket, _) = listener.accept().await.unwrap();
+		let mut request = Vec::new();
+		while !request.ends_with(b"\r\n\r\n") {
+			request.push(socket.read_u8().await.unwrap());
+		}
+		socket
+			.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n")
+			.await
+			.unwrap();
+		tokio::time::sleep(Duration::from_millis(300)).await;
+		socket.write_all(b"{}").await.unwrap();
+	});
+	let response = send_and_read(
+		shared::http_client().get(url),
+		Some(Duration::from_secs(3)),
+		Some(Duration::from_millis(100)),
+		None,
+		Format::Chat,
+	)
+	.await
+	.unwrap();
+	assert_eq!(response.body, "{}");
+	peer.await.unwrap();
 }

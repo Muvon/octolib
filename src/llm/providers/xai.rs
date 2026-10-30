@@ -545,6 +545,7 @@ async fn execute_request(
 			let request = request.clone();
 			let extra_headers = params.extra_headers.clone();
 			let request_timeout = params.request_timeout;
+			let stream_timeout = params.stream_timeout;
 			Box::pin(async move {
 				let captured = super::streaming::send_and_read(
 					client
@@ -553,6 +554,7 @@ async fn execute_request(
 						.header("Content-Type", "application/json")
 						.json(&request),
 					request_timeout,
+					stream_timeout,
 					extra_headers.as_ref(),
 					super::streaming::Format::Responses,
 				)

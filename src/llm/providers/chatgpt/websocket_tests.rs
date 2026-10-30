@@ -69,6 +69,7 @@ async fn request(session: &Session, full: &Value, url: &str) -> Result<(Value, V
 			"test-token",
 			url,
 			Some(Duration::from_secs(5)),
+			None,
 		),
 	)
 	.await
@@ -469,50 +470,43 @@ async fn handshake_errors_keep_status_retry_after_and_usage_guidance() {
 }
 
 #[tokio::test]
-async fn response_events_and_keepalives_each_extend_the_inactivity_deadline() {
-	for frame in [
-		ServerMessage::Text(
-			json!({"type":"response.output_text.delta", "delta":"working"})
-				.to_string()
-				.into(),
+async fn response_events_extend_only_the_stream_deadline() {
+	let frame = ServerMessage::Text(
+		json!({"type":"response.output_text.delta", "delta":"working"})
+			.to_string()
+			.into(),
+	);
+	let (listener, url) = server().await;
+	let peer = tokio::spawn(async move {
+		let mut socket = accept(&listener).await;
+		receive(&mut socket).await;
+		for _ in 0..4 {
+			tokio::time::sleep(Duration::from_millis(350)).await;
+			socket.send(frame.clone()).await.unwrap();
+		}
+		finish(&mut socket, "long_response", output()).await;
+	});
+	let session = Arc::new(AsyncMutex::new(None));
+	let full = full_request(json!([]));
+	let started = Instant::now();
+	let response = tokio::time::timeout(
+		Duration::from_secs(10),
+		exchange(
+			&session,
+			&full,
+			&HeaderMap::new(),
+			"test-token",
+			&url,
+			Some(Duration::from_secs(10)),
+			Some(Duration::from_secs(1)),
 		),
-		ServerMessage::Ping(vec![1].into()),
-		ServerMessage::Pong(vec![1].into()),
-	] {
-		let (listener, url) = server().await;
-		let peer = tokio::spawn(async move {
-			let mut socket = accept(&listener).await;
-			receive(&mut socket).await;
-			for _ in 0..4 {
-				tokio::time::sleep(Duration::from_millis(350)).await;
-				socket.send(frame.clone()).await.unwrap();
-				if matches!(frame, ServerMessage::Ping(_)) {
-					assert!(matches!(socket.next().await.unwrap().unwrap(), ServerMessage::Pong(_)));
-				}
-			}
-			finish(&mut socket, "long_response", output()).await;
-		});
-		let session = Arc::new(AsyncMutex::new(None));
-		let full = full_request(json!([]));
-		let started = Instant::now();
-		let response = tokio::time::timeout(
-			Duration::from_secs(10),
-			exchange(
-				&session,
-				&full,
-				&HeaderMap::new(),
-				"test-token",
-				&url,
-				Some(Duration::from_secs(1)),
-			),
-		)
-		.await
-		.unwrap()
-		.unwrap();
-		assert!(started.elapsed() > Duration::from_secs(1));
-		assert_eq!(response.1["id"], "long_response");
-		peer.await.unwrap();
-	}
+	)
+	.await
+	.unwrap()
+	.unwrap();
+	assert!(started.elapsed() > Duration::from_secs(1));
+	assert_eq!(response.1["id"], "long_response");
+	peer.await.unwrap();
 }
 
 #[tokio::test]
@@ -547,18 +541,13 @@ async fn silent_response_times_out_and_reconnects_with_full_context() {
 			&HeaderMap::new(),
 			"test-token",
 			&url,
+			None,
 			Some(Duration::from_millis(100)),
 		)
 		.await
 		.unwrap_err();
-		assert!(matches!(
-			error.downcast_ref::<ProviderError>(),
-			Some(ProviderError::TimeoutError { .. })
-		));
-		assert_eq!(
-			error.to_string(),
-			"ChatGPT WebSocket timed out after 0.1s without receiving a frame"
-		);
+		assert!(error.is::<super::super::super::streaming::StreamTimeout>());
+		assert_eq!(error.to_string(), "Stream timed out after 100ms without response data");
 		assert_eq!(
 			shared::transport_error_kind(&error),
 			Some(shared::TransportErrorKind::Timeout)
@@ -591,7 +580,15 @@ async fn queue_wait_and_idle_connection_do_not_consume_response_timeout() {
 	let full = full_request(json!([]));
 	let headers = HeaderMap::new();
 	let timeout = Duration::from_millis(200);
-	let mut first = Box::pin(exchange(&session, &full, &headers, "test-token", &url, Some(timeout)));
+	let mut first = Box::pin(exchange(
+		&session,
+		&full,
+		&headers,
+		"test-token",
+		&url,
+		Some(timeout),
+		None,
+	));
 	tokio::select! {
 		result = &mut first => panic!("Request must wait for its session: {result:?}"),
 		_ = tokio::time::sleep(timeout * 2) => {},
@@ -600,7 +597,7 @@ async fn queue_wait_and_idle_connection_do_not_consume_response_timeout() {
 	assert_eq!(first.await.unwrap().1["id"], "first");
 	tokio::time::sleep(timeout * 2).await;
 	assert_eq!(
-		exchange(&session, &full, &headers, "test-token", &url, Some(timeout))
+		exchange(&session, &full, &headers, "test-token", &url, Some(timeout), None)
 			.await
 			.unwrap()
 			.1["id"],
@@ -624,12 +621,101 @@ async fn disabled_inactivity_timeout_waits_for_completion() {
 	let session = Arc::new(AsyncMutex::new(None));
 	let full = full_request(json!([]));
 	let headers = HeaderMap::new();
-	let mut pending = Box::pin(exchange(&session, &full, &headers, "test-token", &url, None));
+	let mut pending = Box::pin(exchange(&session, &full, &headers, "test-token", &url, None, None));
 	tokio::select! {
 		result = &mut pending => panic!("Request completed before release: {result:?}"),
 		result = received => result.unwrap(),
 	}
 	release.send(()).unwrap();
 	assert_eq!(pending.await.unwrap().1["id"], "completed");
+	peer.await.unwrap();
+}
+
+#[tokio::test]
+async fn total_deadline_and_stream_inactivity_are_independent() {
+	for (response_data, total, idle) in [
+		(true, Duration::from_millis(400), Duration::from_secs(2)),
+		(false, Duration::from_millis(400), Duration::from_secs(2)),
+		(false, Duration::from_secs(2), Duration::from_millis(400)),
+	] {
+		let (listener, url) = server().await;
+		let peer = tokio::spawn(async move {
+			let mut socket = accept(&listener).await;
+			receive(&mut socket).await;
+			let mut tick = tokio::time::interval(Duration::from_millis(50));
+			loop {
+				tokio::select! {
+					_ = tick.tick() => {
+						let frame = if response_data {
+							ServerMessage::Text(json!({"type":"response.output_text.delta","delta":"working"}).to_string().into())
+						} else { ServerMessage::Ping(vec![1].into()) };
+						if socket.send(frame).await.is_err() { break; }
+					}
+					message = socket.next() => match message {
+						Some(Ok(ServerMessage::Pong(_))) => {},
+						None | Some(Err(_)) | Some(Ok(ServerMessage::Close(_))) => break,
+						other => panic!("unexpected client frame: {other:?}"),
+					}
+				}
+			}
+		});
+		let session = Arc::new(AsyncMutex::new(None));
+		let error = exchange(
+			&session,
+			&full_request(json!([])),
+			&HeaderMap::new(),
+			"test-token",
+			&url,
+			Some(total),
+			Some(idle),
+		)
+		.await
+		.unwrap_err();
+		if total < idle {
+			assert!(
+				matches!(
+					error.downcast_ref::<ProviderError>(),
+					Some(ProviderError::TimeoutError { .. })
+				),
+				"{error:#}"
+			);
+		} else {
+			assert!(error.is::<super::super::super::streaming::StreamTimeout>(), "{error:#}");
+		}
+		assert!(session.try_lock().unwrap().is_none());
+		tokio::time::timeout(Duration::from_secs(3), peer)
+			.await
+			.unwrap()
+			.unwrap();
+	}
+}
+
+#[tokio::test]
+async fn request_deadline_includes_websocket_handshake() {
+	use tokio::io::AsyncReadExt;
+	let (listener, url) = server().await;
+	let peer = tokio::spawn(async move {
+		let (mut socket, _) = listener.accept().await.unwrap();
+		let mut bytes = Vec::new();
+		socket.read_to_end(&mut bytes).await.unwrap();
+		assert!(!bytes.is_empty());
+	});
+	let session = Arc::new(AsyncMutex::new(None));
+	let error = exchange(
+		&session,
+		&full_request(json!([])),
+		&HeaderMap::new(),
+		"test-token",
+		&url,
+		Some(Duration::from_millis(100)),
+		None,
+	)
+	.await
+	.unwrap_err();
+	assert!(matches!(
+		error.downcast_ref::<ProviderError>(),
+		Some(ProviderError::TimeoutError { .. })
+	));
+	assert!(session.try_lock().unwrap().is_none());
 	peer.await.unwrap();
 }

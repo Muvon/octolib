@@ -722,6 +722,7 @@ impl AiProvider for MoonshotProvider {
 
 		let start_time = std::time::Instant::now();
 		let request_timeout = params.request_timeout;
+		let stream_timeout = params.stream_timeout;
 		let extra_headers = params.extra_headers.clone();
 		let response = retry::retry_provider_request(
 			|| {
@@ -740,6 +741,7 @@ impl AiProvider for MoonshotProvider {
 					let captured = super::streaming::send_and_read(
 						req,
 						request_timeout,
+						stream_timeout,
 						extra_headers.as_ref(),
 						super::streaming::Format::Chat,
 					)

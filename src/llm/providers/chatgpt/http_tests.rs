@@ -121,17 +121,24 @@ fn turn_state_store_evicts_the_least_recently_used_key_at_capacity() {
 	assert_eq!(turn_states.get("overflow").as_deref(), Some("new-token"));
 }
 
-#[test]
-fn sse_accepts_multiline_data_and_requires_a_completed_event() {
+#[tokio::test]
+async fn sse_accepts_multiline_data_and_requires_a_completed_event() {
 	let body = concat!(
 		": keepalive\r\n\r\n",
 		"event: response.completed\r\n",
 		"data: {\"type\":\"response.completed\",\r\n",
 		"data: \"response\":{\"id\":\"resp_http\",\"output\":[]}}\r\n\r\n"
 	);
-	assert_eq!(merge_stream(body).unwrap()["id"], "resp_http");
-	assert!(merge_stream(": keepalive\n\n")
-		.unwrap_err()
-		.is::<RetryableStreamError>());
-	assert!(merge_stream("data: invalid JSON\n\n").is_err());
+	for (body, expected) in [
+		(body, Some("resp_http")),
+		(": keepalive\n\n", None),
+		("data: invalid JSON\n\n", None),
+	] {
+		let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, body.to_string())]);
+		let result = read_response(shared::http_client().get(&mock.url), None, None, None).await;
+		match expected {
+			Some(id) => assert_eq!(serde_json::from_str::<Value>(&result.unwrap().body).unwrap()["id"], id),
+			None => assert!(result.is_err()),
+		}
+	}
 }

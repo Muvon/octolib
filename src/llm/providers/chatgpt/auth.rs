@@ -31,7 +31,7 @@ use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
@@ -283,9 +283,11 @@ pub async fn list_models() -> Result<Vec<ChatGptModel>> {
 		visibility: String,
 	}
 
-	let response = send_authenticated(shared::http_client().get(MODELS_URL), None, None)
-		.await
-		.context("ChatGPT model catalog request failed")?;
+	let response = send_authenticated(shared::http_client().get(MODELS_URL), |request| {
+		shared::send_and_read(request, None, None)
+	})
+	.await
+	.context("ChatGPT model catalog request failed")?;
 	if !response.status.is_success() {
 		anyhow::bail!("ChatGPT model catalog error {}: {}", response.status, response.body);
 	}
@@ -304,29 +306,27 @@ pub async fn list_models() -> Result<Vec<ChatGptModel>> {
 }
 
 /// Send a replayable request with current credentials, recovering once on 401.
-pub(super) async fn send_authenticated(
+pub(super) async fn send_authenticated<F: std::future::Future<Output = Result<shared::CapturedResponse>>>(
 	request: reqwest::RequestBuilder,
-	timeout: Option<Duration>,
-	extra_headers: Option<&HashMap<String, String>>,
+	send: impl Fn(reqwest::RequestBuilder) -> F,
 ) -> Result<shared::CapturedResponse> {
-	send_authenticated_at(&auth_dir()?.join(AUTH_FILE), TOKEN_URL, request, timeout, extra_headers).await
+	send_authenticated_at(&auth_dir()?.join(AUTH_FILE), TOKEN_URL, request, send).await
 }
 
-async fn send_authenticated_at(
+async fn send_authenticated_at<F: std::future::Future<Output = Result<shared::CapturedResponse>>>(
 	path: &Path,
 	token_url: &str,
 	request: reqwest::RequestBuilder,
-	timeout: Option<Duration>,
-	extra_headers: Option<&HashMap<String, String>>,
+	send: impl Fn(reqwest::RequestBuilder) -> F,
 ) -> Result<shared::CapturedResponse> {
 	let access_token = access_token_at(path, token_url, None).await?;
 	let first = request.try_clone().context("ChatGPT request body is not replayable")?;
-	let response = shared::send_and_read(first.bearer_auth(&access_token), timeout, extra_headers).await?;
+	let response = send(first.bearer_auth(&access_token)).await?;
 	if response.status != reqwest::StatusCode::UNAUTHORIZED {
 		return Ok(response);
 	}
 	let access_token = access_token_at(path, token_url, Some(&access_token)).await?;
-	shared::send_and_read(request.bearer_auth(access_token), timeout, extra_headers).await
+	send(request.bearer_auth(access_token)).await
 }
 
 /// Refresh near expiry or after rejection, without rotating the same token twice.

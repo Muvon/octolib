@@ -21,11 +21,18 @@ use serde_json::{json, Value};
 use std::future::Future;
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::{Duration, Instant};
+use tokio::io::AsyncWriteExt;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::oneshot;
 use tokio_tungstenite::tungstenite::{
 	handshake::server::{Callback, ErrorResponse, Request, Response},
-	protocol::WebSocketConfig,
+	protocol::{
+		frame::{
+			coding::{Data, OpCode},
+			Frame,
+		},
+		WebSocketConfig,
+	},
 	Message as ServerMessage,
 };
 use tokio_tungstenite::{accept_hdr_async_with_config, WebSocketStream};
@@ -33,6 +40,7 @@ use tokio_tungstenite::{accept_hdr_async_with_config, WebSocketStream};
 type ServerSocket = WebSocketStream<TcpStream>;
 const TEST_DEADLINE: Duration = Duration::from_secs(10);
 const WIRE_REQUEST_LIMIT: usize = 16 * 1024 * 1024;
+const WIRE_REPLY_LIMIT: usize = 64 * 1024 * 1024;
 
 // Every wait is bounded, and dropping a failed test aborts its mock server.
 // Each test gets its own ephemeral endpoint, including its global-pool namespace.
@@ -597,6 +605,121 @@ async fn complete_preserves_envelope_status_headers_and_object_body_at_status_bo
 		}
 		peer.finish().await;
 	}
+}
+
+fn sized_envelope(bytes: usize) -> String {
+	let mut value = envelope(200, json!({"payload":""}));
+	let overhead = value.to_string().len();
+	value["body"]["payload"] = Value::String("x".repeat(bytes - overhead));
+	let wire = value.to_string();
+	assert_eq!(wire.len(), bytes);
+	wire
+}
+
+#[tokio::test]
+async fn complete_accepts_single_frame_envelopes_above_sixteen_mib_through_exactly_sixty_four_mib() {
+	for bytes in [WIRE_REQUEST_LIMIT + 1, WIRE_REPLY_LIMIT] {
+		let (listener, url) = server().await;
+		let auth = headers("large-reply", "one");
+		let expected = auth.clone();
+		let wire = sized_envelope(bytes);
+		let payload_bytes = bytes - envelope(200, json!({"payload":""})).to_string().len();
+		let peer = Peer::spawn(async move {
+			let mut socket = accept(&listener, &expected).await;
+			assert_eq!(receive(&mut socket).await, body("large"));
+			let reply = Frame::message(wire.into_bytes(), OpCode::Data(Data::Text), true);
+			bounded(socket.send(ServerMessage::Frame(reply))).await.unwrap();
+			assert_eq!(receive(&mut socket).await, body("reused"));
+			succeed(&mut socket, "reused").await;
+		});
+		let params = params(Some("large-reply"));
+		let response = call(&params, &url, &auth, &body("large")).await.unwrap();
+		assert_eq!(response.status.as_u16(), 200);
+		assert_eq!(response.headers["content-type"], "application/json");
+		let body: Value = serde_json::from_str(&response.body).unwrap();
+		let payload = body["payload"].as_str().unwrap();
+		assert_eq!(payload.len(), payload_bytes);
+		assert!(payload.bytes().all(|byte| byte == b'x'));
+		assert_success(
+			call(&params, &url, &auth, &self::body("reused")).await.unwrap(),
+			"reused",
+		);
+		peer.finish().await;
+	}
+}
+
+#[tokio::test]
+async fn complete_rejects_reply_frames_one_byte_over_sixty_four_mib_without_replay() {
+	let (listener, url) = server().await;
+	let auth = headers("reply-frame-over", "one");
+	let expected = auth.clone();
+	let (done, finished) = oneshot::channel();
+	let peer = Peer::spawn(async move {
+		let mut socket = accept(&listener, &expected).await;
+		assert_eq!(receive(&mut socket).await, body("bill-once"));
+		// The frame header alone must fail before buffering an oversized payload.
+		let mut header = vec![0x81, 127];
+		header.extend_from_slice(&((WIRE_REPLY_LIMIT + 1) as u64).to_be_bytes());
+		bounded(socket.get_mut().write_all(&header)).await.unwrap();
+		no_replay(&listener, &mut socket, finished).await;
+	});
+	let mut params = params(Some("reply-frame-over"))
+		.with_max_retries(3)
+		.with_retry_timeout(Duration::ZERO);
+	let events = observe(&mut params);
+	let error = call(&params, &url, &auth, &body("bill-once")).await.err().unwrap();
+	assert!(
+		matches!(
+			error.downcast_ref::<reqwest_websocket::Error>(),
+			Some(reqwest_websocket::Error::Tungstenite(tungstenite::Error::Capacity(
+				tungstenite::error::CapacityError::MessageTooLong { size, max_size }
+			))) if *size == WIRE_REPLY_LIMIT + 1 && *max_size == WIRE_REPLY_LIMIT
+		),
+		"{error:#}"
+	);
+	assert!(events.lock().unwrap().is_empty());
+	done.send(()).unwrap();
+	peer.finish().await;
+}
+
+#[tokio::test]
+async fn complete_rejects_aggregate_replies_one_byte_over_sixty_four_mib_without_replay() {
+	let (listener, url) = server().await;
+	let auth = headers("reply-message-over", "one");
+	let expected = auth.clone();
+	let wire = sized_envelope(WIRE_REPLY_LIMIT + 1).into_bytes();
+	let (done, finished) = oneshot::channel();
+	let peer = Peer::spawn(async move {
+		let mut socket = accept(&listener, &expected).await;
+		assert_eq!(receive(&mut socket).await, body("bill-once"));
+		for (index, chunk) in wire.chunks(WIRE_REQUEST_LIMIT).enumerate() {
+			let opcode = if index == 0 { Data::Text } else { Data::Continue };
+			let reply = Frame::message(
+				chunk.to_vec(),
+				OpCode::Data(opcode),
+				(index + 1) * WIRE_REQUEST_LIMIT >= wire.len(),
+			);
+			bounded(socket.send(ServerMessage::Frame(reply))).await.unwrap();
+		}
+		no_replay(&listener, &mut socket, finished).await;
+	});
+	let mut params = params(Some("reply-message-over"))
+		.with_max_retries(3)
+		.with_retry_timeout(Duration::ZERO);
+	let events = observe(&mut params);
+	let error = call(&params, &url, &auth, &body("bill-once")).await.err().unwrap();
+	assert!(
+		matches!(
+			error.downcast_ref::<reqwest_websocket::Error>(),
+			Some(reqwest_websocket::Error::Tungstenite(tungstenite::Error::Capacity(
+				tungstenite::error::CapacityError::MessageTooLong { size, max_size }
+			))) if *size == WIRE_REPLY_LIMIT + 1 && *max_size == WIRE_REPLY_LIMIT
+		),
+		"{error:#}"
+	);
+	assert!(events.lock().unwrap().is_empty());
+	done.send(()).unwrap();
+	peer.finish().await;
 }
 
 fn sized_request(bytes: usize) -> Value {

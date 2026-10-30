@@ -32,6 +32,8 @@ const IDLE_TIMEOUT: Duration = Duration::from_secs(300);
 const CONNECTION_LIFETIME: Duration = Duration::from_secs(55 * 60);
 const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(600);
 const MAX_REQUEST_BYTES: usize = 16 * 1024 * 1024;
+#[cfg(not(target_arch = "wasm32"))]
+const MAX_REPLY_BYTES: usize = 64 * 1024 * 1024;
 
 type Session = Arc<AsyncMutex<Option<Connection>>>;
 static SESSIONS: LazyLock<Mutex<SessionPool>> = LazyLock::new(|| Mutex::new(SessionPool::default()));
@@ -179,15 +181,20 @@ async fn exchange(
 
 async fn connect(url: &str, headers: &HeaderMap, per_call_key: bool) -> Result<Connection> {
 	let setup = async {
-		let response = crate::http::websocket_client()
+		let request = crate::http::websocket_client()
 			.get(url)
 			.version(reqwest::Version::HTTP_11)
 			.timeout(crate::http::CONNECT_TIMEOUT)
 			.headers(headers.clone())
-			.upgrade()
-			.send()
-			.await
-			.context("Opening OctoHub WebSocket connection")?;
+			.upgrade();
+		#[cfg(not(target_arch = "wasm32"))]
+		let request = request.web_socket_config(
+			// OctoHub sends each envelope in one frame, capped at 64 MiB.
+			tungstenite::protocol::WebSocketConfig::default()
+				.max_frame_size(Some(MAX_REPLY_BYTES))
+				.max_message_size(Some(MAX_REPLY_BYTES)),
+		);
+		let response = request.send().await.context("Opening OctoHub WebSocket connection")?;
 		if response.status() != reqwest::StatusCode::SWITCHING_PROTOCOLS {
 			let status = response.status();
 			let headers = response.headers().clone();

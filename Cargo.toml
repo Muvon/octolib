@@ -20,7 +20,7 @@ default = ["llm", "embeddings", "reranker", "media", "evaluation", "fastembed", 
 # it needs, so an LLM-only build does not compile the media or embedding stack.
 llm = ["dep:jsonschema", "dep:jsonwebtoken", "dep:base64"]
 # Optional WebSocket transports; HTTP/SSE remains the per-request default.
-websockets = ["llm", "dep:reqwest-websocket", "dep:futures-util"]
+websockets = ["llm", "dep:reqwest-websocket", "dep:futures-util", "dep:tungstenite"]
 embeddings = ["dep:tiktoken-rs"]
 reranker = []
 media = ["dep:base64"]
@@ -230,3 +230,6 @@ candle-nn = { version = "0.11.0", git = "https://github.com/huggingface/candle.g
 fastembed = { version = "7.5.0", default-features = false, features = ["hf-hub-rustls-tls", "ort-download-binaries-rustls-tls"], optional = true }
 candle-core = { version = "0.11.0", git = "https://github.com/huggingface/candle.git", rev = "70f72e9cfdbfc570846ca363ead2135394af3e9a", optional = true }
 candle-nn = { version = "0.11.0", git = "https://github.com/huggingface/candle.git", rev = "70f72e9cfdbfc570846ca363ead2135394af3e9a", optional = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tungstenite = { version = "0.27", default-features = false, optional = true }

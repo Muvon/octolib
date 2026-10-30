@@ -32,6 +32,10 @@ pub(super) enum Format {
 }
 
 #[derive(Debug, thiserror::Error)]
+#[error("Stream timed out after {0:?} without response data")]
+pub(crate) struct StreamTimeout(pub(super) Duration);
+
+#[derive(Debug, thiserror::Error)]
 #[error("{0:?} stream ended before its terminal event")]
 pub(crate) struct IncompleteStream(Format);
 
@@ -79,14 +83,41 @@ fn upstream_error(error: &Value) -> anyhow::Error {
 pub(super) async fn send_and_read(
 	request: reqwest::RequestBuilder,
 	timeout: Option<Duration>,
+	stream_timeout: Option<Duration>,
 	extra_headers: Option<&HashMap<String, String>>,
 	format: Format,
+) -> Result<CapturedResponse> {
+	let mut accumulator = Accumulator::new(format);
+	send_and_read_events(request, timeout, stream_timeout, extra_headers, format, |data| {
+		accumulator.push(data).map_err(protocol_error)?;
+		if accumulator.finished {
+			Ok(Some(accumulator.finish().map_err(protocol_error)?))
+		} else {
+			Ok(None)
+		}
+	})
+	.await
+}
+
+pub(super) async fn send_and_read_events(
+	request: reqwest::RequestBuilder,
+	timeout: Option<Duration>,
+	stream_timeout: Option<Duration>,
+	extra_headers: Option<&HashMap<String, String>>,
+	format: Format,
+	mut consume: impl FnMut(&str) -> Result<Option<Value>>,
 ) -> Result<CapturedResponse> {
 	let request = shared::apply_extra_headers(
 		request.header(reqwest::header::ACCEPT, "text/event-stream"),
 		extra_headers,
 	);
-	let mut response = shared::apply_request_timeout(request, timeout).send().await?;
+	let send = shared::apply_request_timeout(request, timeout).send();
+	let mut response = match stream_timeout {
+		Some(limit) => tokio::time::timeout(limit, send)
+			.await
+			.map_err(|_| StreamTimeout(limit))??,
+		None => send.await?,
+	};
 	let status = response.status();
 	let headers = response.headers().clone();
 	let is_sse = headers
@@ -100,16 +131,20 @@ pub(super) async fn send_and_read(
 		});
 	let body = if status.is_success() && is_sse {
 		let mut decoder = Decoder::default();
-		let mut accumulator = Accumulator::new(format);
-		while let Some(chunk) = response.chunk().await? {
-			decoder
-				.push(&chunk, |data| accumulator.push(data))
-				.map_err(protocol_error)?;
+		loop {
+			let chunk = match stream_timeout {
+				Some(limit) => tokio::time::timeout(limit, response.chunk())
+					.await
+					.map_err(|_| StreamTimeout(limit))??,
+				None => response.chunk().await?,
+			};
+			let Some(chunk) = chunk else {
+				return Err(IncompleteStream(format).into());
+			};
+			if let Some(body) = decoder.push(&chunk, &mut consume)? {
+				break serde_json::to_string(&body)?;
+			}
 		}
-		if decoder.finish().is_err() {
-			return Err(IncompleteStream(format).into());
-		}
-		serde_json::to_string(&accumulator.finish().map_err(protocol_error)?)?
 	} else {
 		response.text().await?
 	};
@@ -126,7 +161,7 @@ struct Decoder {
 }
 
 impl Decoder {
-	fn push(&mut self, bytes: &[u8], mut emit: impl FnMut(&str) -> Result<()>) -> Result<()> {
+	fn push(&mut self, bytes: &[u8], mut emit: impl FnMut(&str) -> Result<Option<Value>>) -> Result<Option<Value>> {
 		for &byte in bytes {
 			if self.after_cr {
 				self.after_cr = false;
@@ -138,7 +173,9 @@ impl Decoder {
 				self.after_cr = byte == b'\r';
 				let first_line = !self.lines_seen;
 				self.lines_seen = true;
-				let line = std::str::from_utf8(&self.line).context("Invalid UTF-8 in SSE line")?;
+				let line = std::str::from_utf8(&self.line)
+					.context("Invalid UTF-8 in SSE line")
+					.map_err(protocol_error)?;
 				let line = if first_line {
 					line.trim_start_matches('\u{feff}')
 				} else {
@@ -147,7 +184,9 @@ impl Decoder {
 				if line.is_empty() {
 					if !self.data.is_empty() {
 						self.data.pop(); // SSE joins data lines with LF, excluding the last LF.
-						emit(&self.data)?;
+						if let Some(response) = emit(&self.data)? {
+							return Ok(Some(response));
+						}
 						self.data.clear();
 					}
 				} else if let Some(value) = line.strip_prefix("data:") {
@@ -160,14 +199,16 @@ impl Decoder {
 			} else {
 				self.line.push(byte);
 			}
-			ensure!(
-				self.line.len() + self.data.len() <= MAX_EVENT_BYTES,
-				"SSE event exceeds {MAX_EVENT_BYTES} bytes"
-			);
+			if self.line.len() + self.data.len() > MAX_EVENT_BYTES {
+				return Err(protocol_error(anyhow::anyhow!(
+					"SSE event exceeds {MAX_EVENT_BYTES} bytes"
+				)));
+			}
 		}
-		Ok(())
+		Ok(None)
 	}
 
+	#[cfg(test)]
 	fn finish(&self) -> Result<()> {
 		ensure!(
 			self.line.is_empty() && self.data.is_empty(),
@@ -355,13 +396,13 @@ impl Accumulator {
 		Ok(())
 	}
 
-	fn finish(mut self) -> Result<Value> {
+	fn finish(&mut self) -> Result<Value> {
 		if !self.finished {
 			return Err(IncompleteStream(self.format).into());
 		}
 		if matches!(self.format, Format::Chat) {
 			ensure!(!self.choices.is_empty(), "Chat stream has no choices");
-			let mut choices = ordered(self.choices, "choice")?;
+			let mut choices = ordered(std::mem::take(&mut self.choices), "choice")?;
 			for choice in &mut choices {
 				ensure!(
 					choice["finish_reason"].is_string(),
@@ -379,7 +420,7 @@ impl Accumulator {
 				}
 			}
 		}
-		Ok(self.response)
+		Ok(std::mem::take(&mut self.response))
 	}
 }
 

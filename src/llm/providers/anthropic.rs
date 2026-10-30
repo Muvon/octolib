@@ -701,6 +701,7 @@ impl AiProvider for AnthropicProvider {
 			params.max_retries,
 			params.retry_timeout,
 			params.request_timeout,
+			params.stream_timeout,
 			params.cancellation_token.as_ref(),
 			needs_extended_cache,
 			params.extra_headers.clone(),
@@ -951,6 +952,7 @@ async fn execute_anthropic_request(
 	max_retries: u32,
 	base_timeout: std::time::Duration,
 	request_timeout: Option<std::time::Duration>,
+	stream_timeout: Option<std::time::Duration>,
 	cancellation_token: Option<&tokio::sync::watch::Receiver<bool>>,
 	extended_cache_ttl: bool,
 	extra_headers: Option<std::collections::HashMap<String, String>>,
@@ -986,6 +988,7 @@ async fn execute_anthropic_request(
 				let captured = super::streaming::send_and_read(
 					req,
 					request_timeout,
+					stream_timeout,
 					extra_headers.as_ref(),
 					super::streaming::Format::Messages,
 				)

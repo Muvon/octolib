@@ -503,8 +503,10 @@ isolates endpoints, credentials, effective headers and session keys. Keep supply
 conversation history: OctoHub's server retains continuation state, not the socket.
 
 WebSocket setup is bounded to 20 seconds. `request_timeout` bounds the entire
-WebSocket call, including queue waits and retry backoff; `None` uses 600 seconds.
-Cancellation, timeout, a dropped future or protocol failure discards the socket.
+WebSocket call, including queue waits, setup, sending, replies and retry backoff;
+`None` uses 600 seconds. The separate `stream_timeout` does not apply to OctoHub's
+buffered HTTP or WebSocket envelope. Cancellation, timeout, a dropped future or
+protocol failure discards the socket.
 Only explicit retryable server statuses use the configured retry policy and
 `Retry-After`/retry observer. A lost reply may already be paid work: the library
 never replays ambiguous requests or silently falls back to HTTP.
@@ -538,11 +540,14 @@ across provider instances; calls without a key use a fresh connection. Continue
 supplying the full message history, including captured `provider_items`: Octolib sends
 only new input when history matches the connection's last response and sends full
 context after a reconnect or history change. Credentials, model, and handshake headers
-isolate connections. For WebSockets, `request_timeout` is an inactivity limit: each
-received frame (including ping/pong) restarts it. Queue waits and connection setup do
-not consume that limit; connection setup has its own 20-second deadline. `None`
-disables inactivity timeouts. HTTP keeps its total-request deadline. Cancellation or
-inactivity timeout discards the in-flight connection.
+isolate connections. For ChatGPT, `request_timeout` caps each complete HTTP or
+WebSocket request attempt, excluding shared-session waits and retry backoff;
+`None` disables this deadline. The optional `stream_timeout` separately limits
+waiting for SSE chunks or WebSocket
+response messages; it defaults to `None` (disabled). WebSocket ping/pong frames do
+not reset this response inactivity limit. Stream activity never extends the total
+request deadline. Cancellation or timeout discards the in-flight WebSocket connection.
+
 Idle sessions are evicted on pool access, with at most 64 pooled sessions per process.
 
 Octolib supports OAuth authentication for ChatGPT subscriptions and Anthropic:

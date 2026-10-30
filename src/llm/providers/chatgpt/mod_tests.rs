@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::http::merge_stream;
 use super::*;
 use crate::llm::factory::ProviderFactory;
 use crate::llm::providers::shared;
@@ -220,8 +219,8 @@ fn a_grown_transcript_extends_the_previous_request_unchanged() {
 	}
 }
 
-#[test]
-fn stream_folds_into_a_response_that_keeps_reasoning_for_replay() {
+#[tokio::test]
+async fn stream_folds_into_a_response_that_keeps_reasoning_for_replay() {
 	let body = [
         "event: response.created",
         r#"data: {"type":"response.created","response":{"id":"resp_1"}}"#,
@@ -237,7 +236,7 @@ fn stream_folds_into_a_response_that_keeps_reasoning_for_replay() {
     ]
     .join("\n");
 
-	let merged = merge_stream(&body).unwrap();
+	let merged = merge_stream(&body).await.unwrap();
 	assert_eq!(merged["output"].as_array().unwrap().len(), 2);
 
 	let response = openai::parse_responses_api_response(
@@ -266,10 +265,10 @@ fn stream_folds_into_a_response_that_keeps_reasoning_for_replay() {
 	assert_eq!(input[1]["namespace"], TOOL_NAMESPACE);
 }
 
-#[test]
-fn failed_and_unfinished_streams_are_errors_and_only_transient_ones_are_retried() {
+#[tokio::test]
+async fn failed_and_unfinished_streams_are_errors_and_only_transient_ones_are_retried() {
 	let failed = r#"data: {"type":"response.failed","response":{"error":{"code":"subscription_sharing_usage_limit_exceeded","message":"weekly cap reached"}}}"#;
-	let error = merge_stream(failed).unwrap_err();
+	let error = merge_stream(failed).await.unwrap_err();
 	assert!(!error.is::<RetryableStreamError>());
 	assert!(
 		error.to_string().contains("subscription_sharing_usage_limit_exceeded"),
@@ -279,16 +278,16 @@ fn failed_and_unfinished_streams_are_errors_and_only_transient_ones_are_retried(
 
 	let unfinished =
 		r#"data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","content":[]}}"#;
-	let error = merge_stream(unfinished).unwrap_err();
+	let error = merge_stream(unfinished).await.unwrap_err();
 	assert!(error.is::<RetryableStreamError>());
 	assert!(error.to_string().contains("without response.completed"), "{}", error);
 }
 
-#[test]
-fn server_faults_reported_mid_stream_are_retried() {
+#[tokio::test]
+async fn server_faults_reported_mid_stream_are_retried() {
 	// Verbatim shape of a plan-route `error` event observed in a live session.
 	let stream_error = r#"data: {"type":"error","error":{"type":"server_error","code":"server_error","message":"An error occurred while processing your request. You can retry your request.","param":null},"sequence_number":7}"#;
-	let error = merge_stream(stream_error).unwrap_err();
+	let error = merge_stream(stream_error).await.unwrap_err();
 	assert!(error.is::<RetryableStreamError>());
 	assert!(error.to_string().starts_with("ChatGPT stream error: "), "{}", error);
 	assert!(error.to_string().contains("server_error"), "{}", error);
@@ -298,28 +297,28 @@ fn server_faults_reported_mid_stream_are_retried() {
 			r#"data: {{"type":"response.failed","response":{{"error":{{"code":"{}","message":"try again"}}}}}}"#,
 			code
 		);
-		let error = merge_stream(&failed).unwrap_err();
+		let error = merge_stream(&failed).await.unwrap_err();
 		assert!(error.is::<RetryableStreamError>(), "{}", code);
 		assert!(error.to_string().starts_with("ChatGPT response failed: "), "{}", error);
 	}
 }
 
-#[test]
-fn request_faults_reported_mid_stream_are_not_retried() {
+#[tokio::test]
+async fn request_faults_reported_mid_stream_are_not_retried() {
 	let stream_error = r#"data: {"type":"error","error":{"type":"invalid_request_error","code":"invalid_prompt","message":"Invalid prompt.","param":null},"sequence_number":3}"#;
-	let error = merge_stream(stream_error).unwrap_err();
+	let error = merge_stream(stream_error).await.unwrap_err();
 	assert!(!error.is::<RetryableStreamError>());
 	assert!(error.to_string().contains("invalid_prompt"), "{}", error);
 
 	let uncoded = r#"data: {"type":"error","error":{"message":"no code"},"sequence_number":1}"#;
-	assert!(!merge_stream(uncoded).unwrap_err().is::<RetryableStreamError>());
+	assert!(!merge_stream(uncoded).await.unwrap_err().is::<RetryableStreamError>());
 }
 
-#[test]
-fn plan_usage_errors_lead_with_guidance_and_keep_the_raw_error() {
+#[tokio::test]
+async fn plan_usage_errors_lead_with_guidance_and_keep_the_raw_error() {
 	// Verbatim shape of the plan-route event observed when the app limit was hit.
 	let limit = r#"data: {"type":"error","error":{"type":"invalid_request_error","code":"subscription_sharing_usage_limit_exceeded","message":"The ChatGPT user has reached their Subscription Sharing usage limit.","param":null},"sequence_number":2}"#;
-	let error = merge_stream(limit).unwrap_err();
+	let error = merge_stream(limit).await.unwrap_err();
 	assert!(!error.is::<RetryableStreamError>());
 	let text = error.to_string();
 	assert!(
@@ -365,4 +364,10 @@ fn websocket_selection_is_explicit_and_http_can_be_selected_again() {
 	}
 	let params = params.with_chatgpt_transport(crate::ChatGptTransport::Http);
 	assert_eq!(build_request(&params), http);
+}
+
+async fn merge_stream(body: &str) -> Result<Value> {
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, format!("{body}\n\n"))]);
+	let captured = super::http::read_response(shared::http_client().get(&mock.url), None, None, None).await?;
+	Ok(serde_json::from_str(&captured.body)?)
 }

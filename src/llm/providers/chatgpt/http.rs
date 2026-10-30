@@ -13,7 +13,11 @@
 // limitations under the License.
 
 use super::{auth, with_usage_guidance, ResponseEvents, RetryableStreamError, SESSION_HEADER};
-use crate::llm::{providers::shared, retry, types::ChatCompletionParams};
+use crate::llm::{
+	providers::{shared, streaming},
+	retry,
+	types::ChatCompletionParams,
+};
 use anyhow::{Context, Result};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -81,14 +85,24 @@ pub(super) async fn complete(params: &ChatCompletionParams, request_body: &Value
 			let client = shared::http_client();
 			let request_body = request_body.clone();
 			let request_timeout = params.request_timeout;
+			let stream_timeout = params.stream_timeout;
 			let extra_headers = extra_headers.clone();
 			let capture_turn_state = params.prompt_cache_key.is_some();
 			Box::pin(async move {
 				let request = client.post(RESPONSES_URL).json(&request_body);
-				let captured = match auth::send_authenticated(request, request_timeout, extra_headers.as_ref()).await {
+				let captured = match auth::send_authenticated(request, |request| {
+					read_response(request, request_timeout, stream_timeout, extra_headers.as_ref())
+				})
+				.await
+				{
 					Ok(captured) => captured,
-					Err(error) if error.is::<reqwest::Error>() => return Err(error),
-					// Credential failures need sign-in, not another refresh attempt.
+					Err(error)
+						if error.is::<reqwest::Error>()
+							|| error.is::<RetryableStreamError>()
+							|| shared::transport_error_kind(&error).is_some() =>
+					{
+						return Err(error)
+					}
 					Err(error) => return Ok(Err(error)),
 				};
 
@@ -119,10 +133,9 @@ pub(super) async fn complete(params: &ChatCompletionParams, request_body: &Value
 					None
 				};
 
-				match merge_stream(&captured.body) {
-					Err(e) if e.is::<RetryableStreamError>() => Err(e),
-					merged => Ok(merged.map(|body| (body, turn_state))),
-				}
+				Ok(serde_json::from_str(&captured.body)
+					.context("Malformed ChatGPT response")
+					.map(|body| (body, turn_state)))
 			})
 		},
 		params,
@@ -196,22 +209,29 @@ fn remember_turn_state_with_store(cache_key: Option<&str>, token: Option<&str>, 
 	}
 }
 
-pub(super) fn merge_stream(body: &str) -> Result<Value> {
+pub(super) async fn read_response(
+	request: reqwest::RequestBuilder,
+	timeout: Option<std::time::Duration>,
+	stream_timeout: Option<std::time::Duration>,
+	extra_headers: Option<&HashMap<String, String>>,
+) -> Result<shared::CapturedResponse> {
 	let mut events = ResponseEvents::default();
-	let mut data = String::new();
-	for line in body.lines().chain(std::iter::once("")) {
-		if line.is_empty() && !data.is_empty() {
-			let event = serde_json::from_str(&data).context("Malformed ChatGPT SSE event")?;
-			if let Some(response) = events.push(event)? {
-				return Ok(response);
-			}
-			data.clear();
-		} else if let Some(value) = line.strip_prefix("data:") {
-			data.push_str(value);
-			data.push('\n');
+	streaming::send_and_read_events(
+		request,
+		timeout,
+		stream_timeout,
+		extra_headers,
+		streaming::Format::Responses,
+		|data| events.push(serde_json::from_str(data).context("Malformed ChatGPT SSE event")?),
+	)
+	.await
+	.map_err(|error| {
+		if error.is::<streaming::IncompleteStream>() {
+			RetryableStreamError::CutOff.into()
+		} else {
+			error
 		}
-	}
-	Err(RetryableStreamError::CutOff.into())
+	})
 }
 
 #[cfg(test)]

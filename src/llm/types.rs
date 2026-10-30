@@ -926,13 +926,18 @@ pub struct ChatCompletionParams {
 	pub max_retries: u32,
 	/// Base timeout for exponential backoff retry logic
 	pub retry_timeout: std::time::Duration,
-	/// HTTP: total request timeout. ChatGPT WebSocket: maximum time without
-	/// receiving a frame during a response, also bounding request/keepalive writes;
-	/// its queue waits and connection setup do not consume this budget.
-	/// OctoHub WebSocket: total budget including queue, setup, replies and retry backoff;
-	/// `None` uses 600 seconds. For HTTP/ChatGPT, `None` disables this timeout.
-	/// WebSocket connection setup is always bounded separately.
+	/// HTTP and ChatGPT WebSocket: total deadline per attempt, including connection
+	/// setup, sending and receiving the complete response. Excludes retry backoff
+	/// and shared WebSocket session waits; `None` disables this deadline.
+	/// OctoHub WebSocket: total operation budget including session waits, setup,
+	/// replies and retry backoff; `None` uses 600 seconds.
+	/// WebSocket connection setup is also bounded separately.
 	pub request_timeout: Option<std::time::Duration>,
+	/// Maximum wait for response data on SSE paths or ChatGPT WebSocket. Resets on
+	/// SSE chunks or ChatGPT response messages, not WebSocket ping/pong frames.
+	/// Does not apply to OctoHub's buffered HTTP or WebSocket envelope.
+	/// `None` disables this limit (default). Does not extend `request_timeout`.
+	pub stream_timeout: Option<std::time::Duration>,
 	/// Cancellation token for request abortion
 	pub cancellation_token: Option<tokio::sync::watch::Receiver<bool>>,
 	/// Told before every backoff sleep so the caller can show that the call is
@@ -980,6 +985,7 @@ impl ChatCompletionParams {
 			max_retries: 3,                                   // Default retry attempts
 			retry_timeout: std::time::Duration::from_secs(1), // Default 1 second base timeout
 			request_timeout: None,                            // No per-request timeout by default
+			stream_timeout: None,
 			cancellation_token: None,
 			retry_observer: None,
 			tools: None,
@@ -1067,10 +1073,19 @@ impl ChatCompletionParams {
 		self
 	}
 
-	/// Set the total HTTP/OctoHub WebSocket timeout or ChatGPT WebSocket inactivity timeout.
-	/// `None` disables this timeout for HTTP/ChatGPT; OctoHub WebSocket uses 600 seconds.
+	/// Set the total deadline per HTTP or ChatGPT WebSocket attempt.
+	/// OctoHub WebSocket instead bounds the whole operation, including session waits
+	/// and retry backoff. `None` disables the deadline except for OctoHub WebSocket,
+	/// which uses 600 seconds.
 	pub fn with_request_timeout(mut self, timeout: Option<std::time::Duration>) -> Self {
 		self.request_timeout = timeout;
+		self
+	}
+
+	/// Set the SSE/ChatGPT WebSocket response inactivity limit. `None` disables it.
+	/// Does not apply to OctoHub's buffered HTTP or WebSocket envelope.
+	pub fn with_stream_timeout(mut self, timeout: Option<std::time::Duration>) -> Self {
+		self.stream_timeout = timeout;
 		self
 	}
 

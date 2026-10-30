@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::*;
+use std::time::Duration;
 
 fn temp_dir(tag: &str) -> PathBuf {
 	let dir = std::env::temp_dir().join(format!("octolib-chatgpt-{}-{}", tag, uuid::Uuid::new_v4().simple()));
@@ -180,7 +181,7 @@ async fn rejected_access_token_refreshes_and_replays_the_request() {
 	])
 	.await;
 	let headers = HashMap::from([("x-test".to_string(), "kept".to_string())]);
-	let response = send_authenticated_at(
+	let response = send_plain_authenticated_at(
 		&path,
 		&format!("{}/token", url),
 		shared::http_client()
@@ -224,7 +225,7 @@ async fn a_second_unauthorized_response_is_not_retried() {
 		(401, serde_json::json!({})),
 	])
 	.await;
-	let response = send_authenticated_at(&path, &url, shared::http_client().get(&url), None, None)
+	let response = send_plain_authenticated_at(&path, &url, shared::http_client().get(&url), None, None)
 		.await
 		.unwrap();
 	assert_eq!(response.status, reqwest::StatusCode::UNAUTHORIZED);
@@ -236,7 +237,7 @@ async fn non_authentication_errors_do_not_rotate_credentials() {
 	let path = temp_dir("forbidden").join(AUTH_FILE);
 	save_registration(&path, &registration(unix_now().unwrap() + 3600)).unwrap();
 	let (url, server) = mock_server(vec![(403, serde_json::json!({"error": "usage_limit"}))]).await;
-	let response = send_authenticated_at(&path, &url, shared::http_client().get(&url), None, None)
+	let response = send_plain_authenticated_at(&path, &url, shared::http_client().get(&url), None, None)
 		.await
 		.unwrap();
 	assert_eq!(response.status, reqwest::StatusCode::FORBIDDEN);
@@ -258,7 +259,7 @@ async fn refresh_failure_preserves_credentials_and_requires_sign_in() {
 			let path = path.clone();
 			let url = url.clone();
 			Box::pin(async move {
-				match send_authenticated_at(&path, &url, shared::http_client().get(&url), None, None).await {
+				match send_plain_authenticated_at(&path, &url, shared::http_client().get(&url), None, None).await {
 					Ok(response) => Ok(Ok::<_, anyhow::Error>(response)),
 					Err(error) if error.is::<reqwest::Error>() => Err(error),
 					Err(error) => Ok(Err(error)),
@@ -422,13 +423,25 @@ async fn default_transport_posts_responses_and_reads_authenticated_sse() {
 		&path,
 		TOKEN_URL,
 		shared::http_client().post(&url).json(&body),
-		Some(Duration::from_secs(5)),
-		None,
+		|request| super::super::http::read_response(request, Some(Duration::from_secs(5)), None, None),
 	)
 	.await
 	.unwrap();
-	let response = super::super::http::merge_stream(&captured.body).unwrap();
+	let response: serde_json::Value = serde_json::from_str(&captured.body).unwrap();
 	assert_eq!(response["id"], "resp_http");
 	server.await.unwrap();
 	fs::remove_dir_all(path.parent().unwrap()).unwrap();
+}
+
+async fn send_plain_authenticated_at(
+	path: &Path,
+	token_url: &str,
+	request: reqwest::RequestBuilder,
+	timeout: Option<Duration>,
+	extra_headers: Option<&HashMap<String, String>>,
+) -> Result<shared::CapturedResponse> {
+	send_authenticated_at(path, token_url, request, |request| {
+		shared::send_and_read(request, timeout, extra_headers)
+	})
+	.await
 }

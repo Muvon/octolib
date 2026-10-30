@@ -344,6 +344,7 @@ impl AiProvider for MinimaxProvider {
 			params.max_retries,
 			params.retry_timeout,
 			params.request_timeout,
+			params.stream_timeout,
 			params.cancellation_token.as_ref(),
 			params.extra_headers.clone(),
 			params.api_key.as_ref(),
@@ -566,6 +567,7 @@ async fn execute_minimax_request(
 	max_retries: u32,
 	base_timeout: std::time::Duration,
 	request_timeout: Option<std::time::Duration>,
+	stream_timeout: Option<std::time::Duration>,
 	cancellation_token: Option<&tokio::sync::watch::Receiver<bool>>,
 	extra_headers: Option<std::collections::HashMap<String, String>>,
 	per_call_api_key: Option<&crate::llm::types::PerCallApiKey>,
@@ -591,6 +593,7 @@ async fn execute_minimax_request(
 				let captured = super::streaming::send_and_read(
 					req,
 					request_timeout,
+					stream_timeout,
 					extra_headers.as_ref(),
 					super::streaming::Format::Messages,
 				)

@@ -40,12 +40,11 @@ impl FastEmbedProvider {
 
 		let cache_dir = crate::storage::get_model_cache_dir().context("Failed to get FastEmbed cache directory")?;
 
+		let providers = crate::ort_env::execution_providers(&format!("reranker:{model_enum:?}"))?;
 		let model = TextRerank::try_new(
 			RerankInitOptions::new(model_enum)
 				.with_environment(crate::ort_env::environment()?)
-				.with_execution_providers(crate::ort_env::execution_providers(&format!(
-					"reranker:{model_enum:?}"
-				))?)
+				.with_execution_providers(providers)
 				.with_show_download_progress(false)
 				.with_cache_dir(cache_dir),
 		)

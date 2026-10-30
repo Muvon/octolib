@@ -29,8 +29,8 @@
 //! layout, the window and the Platt parameters, under `onnx/` in the
 //! Hugging Face repo or in any local directory.
 //!
-//! Everything runs on CPU through ONNX Runtime: roughly 30 ms to encode an
-//! event (once, when it happens) and a few milliseconds to score a boundary.
+//! Inference runs through ONNX Runtime. On macOS, compiled CoreML models are
+//! cached across loads; other platforms retain their execution-provider selection.
 //! No labelers, no network at inference.
 //!
 //! ```rust,no_run

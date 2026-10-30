@@ -373,10 +373,6 @@ async fn chat_completion_raw(
 		request_body["top_p"] = serde_json::json!(top_p);
 	}
 
-	if config.provider_name.eq_ignore_ascii_case("ollama") {
-		request_body["stream"] = serde_json::json!(false);
-	}
-
 	if params.max_tokens > 0 {
 		request_body["max_tokens"] = serde_json::json!(params.max_tokens);
 	}
@@ -426,7 +422,30 @@ async fn chat_completion_raw(
 		apply_response_format(&mut request_body, config.provider_name, &params.model, response_format);
 	}
 
+	configure_streaming(config.provider_name, &api_url, &mut request_body)?;
 	execute_request(config, api_key, api_url, request_body, params).await
+}
+
+// Provider evidence and exceptions: AGENTS.md, HTTP and internal streaming.
+fn configure_streaming(provider: &str, api_url: &str, request: &mut serde_json::Value) -> Result<()> {
+	let include_usage = match provider {
+		"alibaba" | "amazon" | "byteplus" | "fireworks" | "google-studio" | "google-vertex" | "groq" | "inception"
+		| "local" | "nvidia" | "ollama" | "opencode-zen" | "opencode-go" | "meta" => true,
+		"cerebras" | "cloudflare" | "featherless" | "xiaomi" => false,
+		// No verified streaming contract for these endpoints yet.
+		"tinker" | "webwright" | "hetzner" => return Ok(()),
+		_ => anyhow::bail!("Missing streaming policy for provider {provider}"),
+	};
+	let native_ollama = matches!(provider, "ollama" | "local")
+		&& reqwest::Url::parse(api_url)?.path().trim_end_matches('/') == "/api/chat";
+	let buffered = native_ollama
+		|| (provider == "cerebras" && request["response_format"]["type"] == "json_object")
+		|| (provider == "groq" && request["response_format"]["type"] == "json_schema");
+	request["stream"] = serde_json::json!(!buffered);
+	if !buffered && include_usage {
+		request["stream_options"] = serde_json::json!({"include_usage": true});
+	}
+	Ok(())
 }
 
 fn apply_reasoning_effort(
@@ -916,7 +935,17 @@ async fn execute_request(
 			Box::pin(async move {
 				let request = build_http_request(&api_key, &api_url, &request_body);
 
-				let captured = shared::send_and_read(request, request_timeout, extra_headers.as_ref()).await?;
+				let captured = if request_body["stream"] == true {
+					super::streaming::send_and_read(
+						request,
+						request_timeout,
+						extra_headers.as_ref(),
+						super::streaming::Format::Chat,
+					)
+					.await?
+				} else {
+					shared::send_and_read(request, request_timeout, extra_headers.as_ref()).await?
+				};
 
 				// Return Err for retryable HTTP errors so the retry loop catches them
 				if retry::is_retryable_status(captured.status.as_u16()) {

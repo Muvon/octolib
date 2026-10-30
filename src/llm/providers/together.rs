@@ -376,55 +376,36 @@ struct TogetherMessage {
 	tool_calls: Option<serde_json::Value>,
 }
 
-/// One Server-Sent-Events chunk from Together's streaming response.
-#[derive(Deserialize, Debug)]
-struct TogetherStreamChunk {
-	#[serde(default)]
+#[derive(Deserialize)]
+struct TogetherResponse {
 	id: Option<String>,
-	#[serde(default)]
-	choices: Vec<TogetherStreamChoice>,
-	/// Present only in the final chunk (stream_options.include_usage = true).
-	#[serde(default)]
-	usage: Option<TogetherUsage>,
+	choices: Vec<TogetherChoice>,
+	usage: TogetherUsage,
 }
 
-#[derive(Deserialize, Debug)]
-struct TogetherStreamChoice {
-	#[serde(default)]
-	delta: TogetherStreamDelta,
-	#[serde(default)]
+#[derive(Deserialize)]
+struct TogetherChoice {
+	message: TogetherResponseMessage,
 	finish_reason: Option<String>,
 }
 
-#[derive(Deserialize, Debug, Default)]
-struct TogetherStreamDelta {
-	#[serde(default)]
+#[derive(Deserialize)]
+struct TogetherResponseMessage {
 	content: Option<String>,
-	/// Dedicated chain-of-thought field on reasoning models (Qwen3, GPT-OSS, GLM…).
-	/// DeepSeek-R1 instead embeds it as `<think>…</think>` inside `content`.
-	#[serde(default)]
 	reasoning: Option<String>,
-	#[serde(default)]
-	tool_calls: Option<Vec<TogetherStreamToolCall>>,
+	tool_calls: Option<Vec<TogetherToolCall>>,
 }
 
-/// A streamed tool-call fragment: `id`/`name` arrive once, `arguments` in pieces.
-#[derive(Deserialize, Debug)]
-struct TogetherStreamToolCall {
-	#[serde(default)]
-	index: usize,
-	#[serde(default)]
-	id: Option<String>,
-	#[serde(default)]
-	function: Option<TogetherStreamFunction>,
+#[derive(Deserialize)]
+struct TogetherToolCall {
+	id: String,
+	function: TogetherFunction,
 }
 
-#[derive(Deserialize, Debug)]
-struct TogetherStreamFunction {
-	#[serde(default)]
-	name: Option<String>,
-	#[serde(default)]
-	arguments: Option<String>,
+#[derive(Deserialize)]
+struct TogetherFunction {
+	name: String,
+	arguments: String,
 }
 
 #[derive(Deserialize, Debug, Default)]
@@ -446,90 +427,6 @@ struct TogetherUsage {
 struct TogetherPromptTokensDetails {
 	#[serde(default)]
 	cached_tokens: Option<u64>,
-}
-
-/// A tool call being assembled from streaming deltas.
-#[derive(Default)]
-struct ToolCallBuilder {
-	id: String,
-	name: String,
-	arguments: String,
-}
-
-/// All streaming deltas folded into a single logical response.
-#[derive(Default)]
-struct MergedStream {
-	id: Option<String>,
-	content: String,
-	reasoning: String,
-	finish_reason: Option<String>,
-	tool_calls: Vec<ToolCallBuilder>,
-	usage: Option<TogetherUsage>,
-	parsed_any: bool,
-}
-
-/// Parse Together's SSE body (`data: {json}` lines, terminated by `data: [DONE]`)
-/// and fold every delta into one [`MergedStream`]. Unparseable / keep-alive lines
-/// are skipped; `parsed_any` reports whether at least one real chunk was seen.
-fn merge_sse_stream(body: &str) -> MergedStream {
-	let mut merged = MergedStream::default();
-
-	for line in body.lines() {
-		// SSE event lines look like `data: {...}`; skip blanks, comments (`:`), etc.
-		let Some(data) = line.trim_start().strip_prefix("data:") else {
-			continue;
-		};
-		let data = data.trim();
-		if data.is_empty() || data == "[DONE]" {
-			continue;
-		}
-		let Ok(chunk) = serde_json::from_str::<TogetherStreamChunk>(data) else {
-			continue;
-		};
-		merged.parsed_any = true;
-
-		if merged.id.is_none() {
-			merged.id = chunk.id;
-		}
-		if chunk.usage.is_some() {
-			merged.usage = chunk.usage;
-		}
-
-		for choice in chunk.choices {
-			if let Some(c) = choice.delta.content {
-				merged.content.push_str(&c);
-			}
-			if let Some(r) = choice.delta.reasoning {
-				merged.reasoning.push_str(&r);
-			}
-			if choice.finish_reason.is_some() {
-				merged.finish_reason = choice.finish_reason;
-			}
-			for tc in choice.delta.tool_calls.into_iter().flatten() {
-				if merged.tool_calls.len() <= tc.index {
-					merged.tool_calls.resize_with(tc.index + 1, ToolCallBuilder::default);
-				}
-				let slot = &mut merged.tool_calls[tc.index];
-				if let Some(id) = tc.id {
-					if !id.is_empty() {
-						slot.id = id;
-					}
-				}
-				if let Some(f) = tc.function {
-					if let Some(name) = f.name {
-						if !name.is_empty() {
-							slot.name = name;
-						}
-					}
-					if let Some(args) = f.arguments {
-						slot.arguments.push_str(&args);
-					}
-				}
-			}
-		}
-	}
-
-	merged
 }
 
 fn convert_messages(messages: &[Message]) -> Result<Vec<TogetherMessage>, ToolCallError> {
@@ -663,7 +560,13 @@ async fn execute_together_request(
 				let api_url = env::var(TOGETHER_API_URL_ENV).unwrap_or_else(|_| TOGETHER_API_URL.to_string());
 				let req = client.post(&api_url).bearer_auth(&api_key).json(&request_body);
 
-				let captured = shared::send_and_read(req, request_timeout, extra_headers.as_ref()).await?;
+				let captured = super::streaming::send_and_read(
+					req,
+					request_timeout,
+					extra_headers.as_ref(),
+					super::streaming::Format::Chat,
+				)
+				.await?;
 
 				if retry::is_retryable_status(captured.status.as_u16()) {
 					return Err(retry::retryable_status_error(
@@ -693,34 +596,34 @@ async fn execute_together_request(
 		));
 	}
 
-	let merged = merge_sse_stream(&response.body);
-	if !merged.parsed_any {
-		return Err(anyhow::anyhow!(
-			"Together.ai: could not parse streaming response: {}",
-			shared::redact_text(&response.body, params.api_key.as_ref())
-		));
-	}
-
-	// Reasoning models surface chain-of-thought in a dedicated `reasoning` stream or
-	// as inline <think>…</think> tags (DeepSeek-R1). Pull it out, keep content clean.
-	let reasoning = (!merged.reasoning.trim().is_empty()).then_some(merged.reasoning);
-	let (thinking, content) = extract_thinking(&merged.content, reasoning);
-
-	let tool_calls: Option<Vec<ToolCall>> = {
-		let calls: Vec<ToolCall> = merged
-			.tool_calls
-			.into_iter()
-			.filter(|b| !b.name.is_empty())
-			.map(|b| ToolCall {
-				id: b.id,
-				name: b.name,
-				arguments: shared::parse_tool_call_arguments_lossy(&b.arguments),
-			})
-			.collect();
-		(!calls.is_empty()).then_some(calls)
-	};
-
-	let usage_data = merged.usage.unwrap_or_default();
+	let api_response: TogetherResponse = shared::parse_response(&response.body, params.api_key.as_ref())?;
+	let choice = api_response
+		.choices
+		.into_iter()
+		.next()
+		.ok_or_else(|| anyhow::anyhow!("Together response is missing choices"))?;
+	let (thinking, content) = extract_thinking(
+		choice.message.content.as_deref().unwrap_or(""),
+		choice.message.reasoning,
+	);
+	let tool_calls = choice
+		.message
+		.tool_calls
+		.filter(|calls| !calls.is_empty())
+		.map(|calls| {
+			calls
+				.into_iter()
+				.map(|call| {
+					Ok(ToolCall {
+						id: call.id,
+						name: call.function.name,
+						arguments: serde_json::from_str(&call.function.arguments)?,
+					})
+				})
+				.collect::<Result<Vec<_>>>()
+		})
+		.transpose()?;
+	let usage_data = api_response.usage;
 	let prompt_tokens = usage_data.prompt_tokens.unwrap_or(0);
 	let output_tokens = usage_data.completion_tokens.unwrap_or(0);
 	let total_tokens = usage_data
@@ -758,7 +661,7 @@ async fn execute_together_request(
 
 	// Reconstruct a normalized (non-streamed) chat-completion shape for the exchange log.
 	let mut response_json = serde_json::json!({
-		"id": merged.id.clone(),
+		"id": api_response.id.clone(),
 		"object": "chat.completion",
 		"choices": [{
 			"index": 0,
@@ -767,7 +670,7 @@ async fn execute_together_request(
 				"content": content.clone(),
 				"reasoning": thinking.as_ref().map(|t| t.content.clone()),
 			},
-			"finish_reason": merged.finish_reason.clone(),
+			"finish_reason": choice.finish_reason.clone(),
 		}],
 		"usage": {
 			"prompt_tokens": prompt_tokens,
@@ -789,9 +692,9 @@ async fn execute_together_request(
 		thinking,
 		exchange,
 		tool_calls,
-		finish_reason: merged.finish_reason,
+		finish_reason: choice.finish_reason,
 		structured_output,
-		id: merged.id,
+		id: api_response.id,
 	})
 }
 

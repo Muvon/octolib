@@ -907,3 +907,55 @@ fn test_xiaomi_sends_native_json_schema() {
 		"no prompt guidance"
 	);
 }
+
+#[test]
+fn streaming_defaults_and_documented_exceptions() {
+	for provider in [
+		"alibaba",
+		"amazon",
+		"byteplus",
+		"fireworks",
+		"google-studio",
+		"google-vertex",
+		"groq",
+		"inception",
+		"local",
+		"nvidia",
+		"ollama",
+		"opencode-zen",
+		"opencode-go",
+		"featherless",
+		"cerebras",
+		"cloudflare",
+		"meta",
+		"xiaomi",
+	] {
+		let mut request = serde_json::json!({});
+		configure_streaming(provider, "http://localhost/v1/chat/completions", &mut request).unwrap();
+		assert_eq!(request["stream"], true, "{provider}");
+	}
+	for (provider, format, stream) in [
+		("groq", "json_schema", false),
+		("groq", "json_object", true),
+		("cerebras", "json_object", false),
+		("cerebras", "json_schema", true),
+	] {
+		let mut request = serde_json::json!({"response_format":{"type":format}});
+		configure_streaming(provider, "http://localhost/v1/chat/completions", &mut request).unwrap();
+		assert_eq!(request["stream"], stream, "{provider} {format}");
+		if !stream {
+			assert!(request.get("stream_options").is_none());
+		}
+	}
+	for provider in ["ollama", "local"] {
+		let mut request = serde_json::json!({});
+		configure_streaming(provider, "http://localhost/api/chat?test=true", &mut request).unwrap();
+		assert_eq!(request["stream"], false);
+		assert!(request.get("stream_options").is_none());
+	}
+	for provider in ["tinker", "webwright", "hetzner"] {
+		let mut request = serde_json::json!({});
+		configure_streaming(provider, "https://example.com/v1/chat/completions", &mut request).unwrap();
+		assert!(request.get("stream").is_none());
+	}
+}

@@ -358,6 +358,7 @@ fn add_response_format(request: &mut Value, params: &ChatCompletionParams) {
 
 fn build_request(params: &ChatCompletionParams, previous_response_id: Option<&str>) -> Value {
 	let mut request = json!({
+		"stream": true,
 		"model": params.model,
 		"input": messages_to_input(&params.messages, previous_response_id),
 		"include": ["reasoning.encrypted_content"],
@@ -545,7 +546,7 @@ async fn execute_request(
 			let extra_headers = params.extra_headers.clone();
 			let request_timeout = params.request_timeout;
 			Box::pin(async move {
-				let captured = shared::send_and_read(
+				let captured = super::streaming::send_and_read(
 					client
 						.post(api_url)
 						.bearer_auth(api_key)
@@ -553,6 +554,7 @@ async fn execute_request(
 						.json(&request),
 					request_timeout,
 					extra_headers.as_ref(),
+					super::streaming::Format::Responses,
 				)
 				.await?;
 				if retry::is_retryable_status(captured.status.as_u16()) {

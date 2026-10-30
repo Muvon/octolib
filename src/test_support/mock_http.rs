@@ -123,10 +123,18 @@ fn handle_connection(
 	}
 
 	let (status, response_body) = reply.unwrap_or((200, String::from("{}")));
+	let content_type = if response_body.starts_with("data:")
+		|| response_body.starts_with("event:")
+		|| response_body.starts_with(':')
+	{
+		"text/event-stream"
+	} else {
+		"application/json"
+	};
 	let mut stream = stream;
 	write!(
 		stream,
-		"HTTP/1.1 {status} MOCK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+		"HTTP/1.1 {status} MOCK\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
 		response_body.len(),
 		response_body
 	)?;

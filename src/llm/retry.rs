@@ -266,7 +266,10 @@ where
 		base_timeout,
 		cancellation_token,
 		|| ProviderError::Cancelled.into(),
-		|error| matches!(error.downcast_ref::<ProviderError>(), Some(ProviderError::Cancelled)),
+		|error| {
+			matches!(error.downcast_ref::<ProviderError>(), Some(ProviderError::Cancelled))
+				|| shared::is_terminal_stream_error(error)
+		},
 		describe_error,
 		retry_observer,
 	)
@@ -355,7 +358,7 @@ async fn retry_with_backoff<F, T, E>(
 	base_timeout: Duration,
 	cancellation_token: Option<&watch::Receiver<bool>>,
 	on_cancel: impl Fn() -> E + Copy,
-	is_cancelled: impl Fn(&E) -> bool + Copy,
+	stop_retrying: impl Fn(&E) -> bool + Copy,
 	describe: impl Fn(&E) -> RetryCause,
 	retry_observer: Option<&RetryObserver>,
 ) -> Result<T, E>
@@ -376,7 +379,7 @@ where
 		match cancellable(operation(), cancellation_token, on_cancel).await {
 			Ok(result) => return Ok(result),
 			Err(e) => {
-				if is_cancelled(&e) {
+				if stop_retrying(&e) {
 					return Err(e);
 				}
 

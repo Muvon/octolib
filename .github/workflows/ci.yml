@@ -18,10 +18,10 @@ jobs:
     name: Rust CI
     uses: muvon/ci-workflow/.github/workflows/rust-ci.yml@master
     with:
-      feature-flags: '--features fastembed,huggingface'
+      feature-flags: '--features fastembed,huggingface,websockets'
       test-script: |
         cargo test --verbose --lib --no-default-features
-        for module in llm embeddings reranker media evaluation; do
+        for module in llm websockets embeddings reranker media evaluation; do
           cargo test --verbose --lib --no-default-features --features "$module"
         done
         if [ "$RUNNER_OS" != "Windows" ]; then
@@ -40,7 +40,7 @@ jobs:
     uses: muvon/ci-workflow/.github/workflows/rust-coverage.yml@master
     with:
       # Mirrors the CI test run: lib tests with all provider features on
-      feature-flags: '--lib --features fastembed,huggingface'
+      feature-flags: '--lib --features fastembed,huggingface,websockets'
 
   brief:
     uses: muvon/ci-workflow/.github/workflows/brief.yml@master

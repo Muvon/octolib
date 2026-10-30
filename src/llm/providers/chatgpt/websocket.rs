@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{auth, normalize_input_item, request_headers, terminal_error, with_usage_guidance, RetryableStreamError};
+use super::{auth, normalize_input_item, request_headers, with_usage_guidance, ResponseEvents, RetryableStreamError};
 use crate::llm::{providers::shared, retry, types::ChatCompletionParams};
 use anyhow::{Context, Result};
 use futures_util::{SinkExt, StreamExt};
@@ -309,65 +309,6 @@ async fn read_response(socket: &mut WebSocket) -> Result<Value> {
 		}
 	}
 	Err(RetryableStreamError::CutOff.into())
-}
-
-#[derive(Default)]
-pub(super) struct ResponseEvents {
-	output: BTreeMap<usize, Value>,
-}
-
-impl ResponseEvents {
-	pub(super) fn push(&mut self, event: Value) -> Result<Option<Value>> {
-		match event["type"].as_str().context("ChatGPT event is missing type")? {
-			"response.output_item.done" => {
-				let index: usize = serde_json::from_value(event["output_index"].clone())
-					.context("ChatGPT output item is missing output_index")?;
-				let item = event
-					.get("item")
-					.filter(|item| item.is_object())
-					.context("ChatGPT output event is missing item")?;
-				anyhow::ensure!(
-					self.output.insert(index, item.clone()).is_none(),
-					"Duplicate ChatGPT output_index {index}"
-				);
-			}
-			"response.completed" => {
-				let mut response = event
-					.get("response")
-					.filter(|response| response.is_object())
-					.context("ChatGPT completed event is missing response")?
-					.clone();
-				if !self.output.is_empty() {
-					let output = std::mem::take(&mut self.output);
-					let mut items = Vec::with_capacity(output.len());
-					for (expected, (index, item)) in output.into_iter().enumerate() {
-						anyhow::ensure!(index == expected, "ChatGPT response is missing output_index {expected}");
-						items.push(item);
-					}
-					response["output"] = json!(items);
-				}
-				return Ok(Some(response));
-			}
-			"response.failed" => {
-				return Err(terminal_error(
-					&event["response"]["error"],
-					format!("ChatGPT response failed: {}", event["response"]["error"]),
-				))
-			}
-			"response.incomplete" => anyhow::bail!(
-				"ChatGPT response incomplete: {}",
-				event["response"]["incomplete_details"]
-			),
-			"error" => {
-				return Err(terminal_error(
-					&event["error"],
-					format!("ChatGPT stream error: {event}"),
-				))
-			}
-			_ => {}
-		}
-		Ok(None)
-	}
 }
 
 #[cfg(test)]

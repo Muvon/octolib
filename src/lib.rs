@@ -36,7 +36,8 @@
 //!
 //! ## Cargo features
 //!
-//! Every capability is enabled by default. Turn defaults off to compile only
+//! Capability modules are enabled by default; the `websockets` transport
+//! is opt-in. Turn defaults off to compile only
 //! what you use: `llm`, `embeddings`, `reranker`, and `media` — each gates the
 //! module of the same name. The local embedding backends `fastembed` and
 //! `huggingface` both imply `embeddings`; `hindsight` implies `onnx`. The
@@ -182,13 +183,14 @@ pub use evaluation::{
 #[cfg(feature = "llm")]
 pub use llm::{
 	chat_completion_enforced, AiProvider, AmazonBedrockProvider, AnthropicProvider, CacheConfig, CacheTTL, CacheType,
-	CerebrasProvider, ChatCompletionParams, CloudflareWorkersAiProvider, DeepSeekProvider, EffectiveSamplingParams,
-	FireworksProvider, FunctionDefinition, GenericToolCall, GoogleStudioProvider, GoogleVertexProvider,
-	ImageAttachment, ImageData, LocalProvider, Message, MessageBuilder, MetaProvider, MinimaxProvider, ModelLimits,
-	MoonshotProvider, OllamaProvider, OpenAiProvider, OpenRouterProvider, OutputFormat, ProviderExchange,
-	ProviderFactory, ProviderResponse, ProviderStrategy, ProviderToolCalls, ReasoningEffort, ResponseMode,
-	SamplingSupport, SourceType, StrategyFactory, StructuredOutputRequest, ThinkingBlock, TogetherProvider, TokenUsage,
-	ToolCall, ToolChoice, ToolResult, VideoAttachment, VideoData, WebWrightProvider, XaiProvider, ZaiProvider,
+	CerebrasProvider, ChatCompletionParams, ChatGptTransport, CloudflareWorkersAiProvider, DeepSeekProvider,
+	EffectiveSamplingParams, FireworksProvider, FunctionDefinition, GenericToolCall, GoogleStudioProvider,
+	GoogleVertexProvider, ImageAttachment, ImageData, LocalProvider, Message, MessageBuilder, MetaProvider,
+	MinimaxProvider, ModelLimits, MoonshotProvider, OllamaProvider, OpenAiProvider, OpenRouterProvider, OutputFormat,
+	ProviderExchange, ProviderFactory, ProviderResponse, ProviderStrategy, ProviderToolCalls, ReasoningEffort,
+	ResponseMode, SamplingSupport, SourceType, StrategyFactory, StructuredOutputRequest, ThinkingBlock,
+	TogetherProvider, TokenUsage, ToolCall, ToolChoice, ToolResult, VideoAttachment, VideoData, WebWrightProvider,
+	XaiProvider, ZaiProvider,
 };
 #[cfg(feature = "media")]
 pub use media::{

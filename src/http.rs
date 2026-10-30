@@ -53,7 +53,7 @@ static HTTP_CLIENT: LazyLock<ArcSwap<reqwest::Client>> =
 	LazyLock::new(|| ArcSwap::from_pointee(build_http_client(false)));
 
 // WebSocket upgrades require HTTP/1.1, including during TLS ALPN negotiation.
-#[cfg(feature = "llm")]
+#[cfg(feature = "websockets")]
 static WEBSOCKET_CLIENT: LazyLock<ArcSwap<reqwest::Client>> =
 	LazyLock::new(|| ArcSwap::from_pointee(build_http_client(true)));
 
@@ -84,17 +84,17 @@ pub(crate) fn http_client() -> reqwest::Client {
 fn refresh_http_client() {
 	let fresh = build_http_client(false);
 	HTTP_CLIENT.store(std::sync::Arc::new(fresh));
-	#[cfg(feature = "llm")]
+	#[cfg(feature = "websockets")]
 	WEBSOCKET_CLIENT.store(std::sync::Arc::new(build_http_client(true)));
 	tracing::debug!("HTTP client refreshed with new connection pool");
 }
 
-#[cfg(feature = "llm")]
+#[cfg(feature = "websockets")]
 pub(crate) fn websocket_client() -> reqwest::Client {
 	(*WEBSOCKET_CLIENT.load_full()).clone()
 }
 
-#[cfg(feature = "llm")]
+#[cfg(feature = "websockets")]
 pub(crate) fn user_agent() -> std::sync::Arc<String> {
 	USER_AGENT.load_full()
 }

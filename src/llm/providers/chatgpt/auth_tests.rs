@@ -383,3 +383,52 @@ async fn login_holds_the_refresh_lock_during_token_exchange() {
 	let lock = lock_refresh(&path).await.unwrap();
 	drop(lock);
 }
+
+#[tokio::test]
+async fn default_transport_posts_responses_and_reads_authenticated_sse() {
+	use crate::{ChatCompletionParams, ChatGptTransport, Message};
+	let path = temp_dir("http-responses").join(AUTH_FILE);
+	save_registration(&path, &registration(unix_now().unwrap() + 3600)).unwrap();
+	let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+	let url = format!("http://{}/v1/responses", listener.local_addr().unwrap());
+	let server = tokio::spawn(async move {
+		let (mut stream, _) = listener.accept().await.unwrap();
+		let request = read_http_request(&mut stream).await;
+		assert!(request.starts_with("POST /v1/responses HTTP/1.1\r\n"));
+		assert!(request.contains("authorization: Bearer access\r\n"));
+		assert!(!request.to_lowercase().contains("upgrade: websocket"));
+		let body: serde_json::Value = serde_json::from_str(request.split_once("\r\n\r\n").unwrap().1).unwrap();
+		assert_eq!(body["stream"], true);
+		assert_eq!(body["store"], false);
+		assert!(body.get("type").is_none());
+		assert!(body.get("previous_response_id").is_none());
+		assert_eq!(body["input"][0]["role"], "developer");
+		let sse = "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_http\",\"output\":[]}}\n\n";
+		stream.write_all(format!(
+			"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{sse}", sse.len()
+		).as_bytes()).await.unwrap();
+	});
+	let params = ChatCompletionParams::new(
+		&[Message::system("rules"), Message::user("hello")],
+		"gpt-6.1-sol",
+		0.0,
+		1.0,
+		0,
+		0,
+	);
+	assert_eq!(params.chatgpt_transport, ChatGptTransport::Http);
+	let body = super::super::build_request(&params);
+	let captured = send_authenticated_at(
+		&path,
+		TOKEN_URL,
+		shared::http_client().post(&url).json(&body),
+		Some(Duration::from_secs(5)),
+		None,
+	)
+	.await
+	.unwrap();
+	let response = super::super::http::merge_stream(&captured.body).unwrap();
+	assert_eq!(response["id"], "resp_http");
+	server.await.unwrap();
+	fs::remove_dir_all(path.parent().unwrap()).unwrap();
+}

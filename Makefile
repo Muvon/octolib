@@ -9,4 +9,4 @@ help: ## List available tasks
 # are excluded so percentages describe product code.
 coverage: ## Generate test coverage report (cargo-llvm-cov)
 	@echo "Generating coverage report..."
-	cargo llvm-cov --summary-only --lib --features fastembed,huggingface --ignore-filename-regex '_tests\.rs$$'
+	cargo llvm-cov --summary-only --lib --features fastembed,huggingface,websockets --ignore-filename-regex '_tests\.rs$$'

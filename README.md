@@ -37,11 +37,12 @@ octolib = "<latest>"
 octolib = { git = "https://github.com/muvon/octolib" }
 ```
 
-Every capability is on by default. Pick only what you need to cut compile time and dependencies:
+Capability modules are on by default; `websockets` is opt-in. Pick only what you need to cut compile time and dependencies:
 
 | Feature | Module | Pulls in |
 |---|---|---|
 | `llm` | `octolib::llm` — chat completion, tool calling, structured output | `jsonschema`, `jsonwebtoken` |
+| `websockets` (off by default) | WebSocket transport support (implies `llm`; currently ChatGPT) | `reqwest-websocket`, `futures-util` |
 | `embeddings` | `octolib::embedding` | `tiktoken-rs` |
 | `reranker` | `octolib::reranker` | — |
 | `media` | `octolib::media` — image, video, speech, transcription | `base64` |
@@ -460,15 +461,34 @@ async fn reranking_example() -> anyhow::Result<()> {
 ### 🔐 OAuth Authentication
 
 The `chatgpt:<model>` provider uses Sign in with ChatGPT (`llm::providers::chatgpt::start_login`)
-and the user's authorized plan allowance. Inference runs over a persistent Responses
-WebSocket. Supply a stable, conversation-specific `with_prompt_cache_key(...)` to reuse
-the connection across provider instances; calls without a key use a fresh connection.
-Continue supplying the full message history, including captured `provider_items`:
-Octolib sends only new input when the history matches the connection's last response,
-and sends full context after a reconnect or history change. Credentials, model, and
-handshake headers isolate connections. Cancellation and request timeouts discard an
-in-flight connection. Idle sessions are evicted on pool access, with at most 64 pooled
-sessions retained per process.
+and the user's authorized plan allowance. HTTP/SSE Responses is the default transport.
+To enable WebSocket support, add the optional Cargo feature:
+
+```toml
+octolib = { version = "<latest>", features = ["websockets"] }
+```
+
+Then opt in for each request:
+
+```rust
+use octolib::ChatGptTransport;
+
+let params = params
+    .with_chatgpt_transport(ChatGptTransport::WebSocket)
+    .with_prompt_cache_key("conversation-id");
+```
+
+`ChatCompletionParams::new(...)` defaults to `ChatGptTransport::Http` even with the
+feature enabled. Select `Http` explicitly to switch back; transports never silently
+fall back to each other. The `WebSocket` variant is only available with the feature.
+
+In WebSocket mode, a stable, conversation-specific cache key reuses the connection
+across provider instances; calls without a key use a fresh connection. Continue
+supplying the full message history, including captured `provider_items`: Octolib sends
+only new input when history matches the connection's last response and sends full
+context after a reconnect or history change. Credentials, model, and handshake headers
+isolate connections. Cancellation and request timeouts discard an in-flight connection.
+Idle sessions are evicted on pool access, with at most 64 pooled sessions per process.
 
 Octolib supports OAuth authentication for ChatGPT subscriptions and Anthropic:
 

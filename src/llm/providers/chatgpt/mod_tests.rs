@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::http::merge_stream;
 use super::*;
 use crate::llm::factory::ProviderFactory;
 use crate::llm::providers::shared;
@@ -55,8 +56,9 @@ fn request_follows_the_plan_route_contract() {
 	let request = build_request(&params);
 
 	assert_eq!(request["store"], false);
-	assert_eq!(request["type"], "response.create");
-	assert!(request.get("stream").is_none());
+	assert_eq!(params.chatgpt_transport, crate::ChatGptTransport::Http);
+	assert_eq!(request["stream"], true);
+	assert!(request.get("type").is_none());
 	assert_eq!(request["include"], json!(["reasoning.encrypted_content"]));
 	for rejected in [
 		"previous_response_id",
@@ -75,6 +77,7 @@ fn request_follows_the_plan_route_contract() {
 	assert_eq!(request["tools"][0]["tools"][0]["strict"], false);
 }
 
+#[cfg(feature = "websockets")]
 #[test]
 fn cache_key_names_the_session_so_the_plan_route_keeps_it() {
 	let messages = vec![Message::user("hi")];
@@ -90,22 +93,12 @@ fn cache_key_names_the_session_so_the_plan_route_keeps_it() {
 	);
 }
 
+#[cfg(feature = "websockets")]
 #[test]
 fn malformed_handshake_headers_fail_before_connecting() {
 	let params = ChatCompletionParams::new(&[], "gpt-6.1-sol", 0.7, 1.0, 50, 1000)
 		.with_extra_headers(HashMap::from([("x-test".to_string(), "bad\nvalue".to_string())]));
 	assert!(request_headers(&params).is_err());
-}
-
-// Existing captured SSE fixtures exercise the same Responses events over WS.
-fn merge_stream(body: &str) -> Result<Value> {
-	let mut events = websocket::ResponseEvents::default();
-	for data in body.lines().filter_map(|line| line.strip_prefix("data:")) {
-		if let Some(response) = events.push(serde_json::from_str(data)?)? {
-			return Ok(response);
-		}
-	}
-	Err(RetryableStreamError::CutOff.into())
 }
 
 fn captured(items: Value) -> Option<Value> {
@@ -355,4 +348,21 @@ fn tool_images_reach_the_chatgpt_plan_route() {
 	assert_eq!(input[0]["type"], "function_call_output");
 	assert_eq!(input[0]["call_id"], "call_image");
 	assert_eq!(input[0]["output"][1]["image_url"], "data:image/png;base64,aW1hZ2U=");
+}
+
+#[cfg(feature = "websockets")]
+#[test]
+fn websocket_selection_is_explicit_and_http_can_be_selected_again() {
+	let params = ChatCompletionParams::new(&[Message::user("hello")], "gpt-6.1-sol", 0.0, 1.0, 0, 0);
+	assert_eq!(params.chatgpt_transport, crate::ChatGptTransport::Http);
+	let http = build_request(&params);
+	let params = params.with_chatgpt_transport(crate::ChatGptTransport::WebSocket);
+	let ws = build_request(&params);
+	assert_eq!(ws["type"], "response.create");
+	assert!(ws.get("stream").is_none());
+	for field in ["model", "input", "store", "include"] {
+		assert_eq!(http[field], ws[field]);
+	}
+	let params = params.with_chatgpt_transport(crate::ChatGptTransport::Http);
+	assert_eq!(build_request(&params), http);
 }

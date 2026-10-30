@@ -880,8 +880,22 @@ impl std::fmt::Debug for PerCallApiKey {
 	}
 }
 
+/// Transport for the `chatgpt:` provider. Both modes use the Responses API.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ChatGptTransport {
+	/// HTTP POST with an SSE response stream.
+	#[default]
+	Http,
+	/// Persistent WebSocket with connection-local continuation state.
+	#[cfg(feature = "websockets")]
+	WebSocket,
+}
+
 #[derive(Debug, Clone)]
 pub struct ChatCompletionParams {
+	/// ChatGPT transport. Defaults to HTTP/SSE, even when WebSocket support is compiled.
+	/// Other providers do not use this setting.
+	pub chatgpt_transport: ChatGptTransport,
 	/// Array of conversation messages
 	pub messages: Vec<Message>,
 	/// Model identifier (e.g., "claude-3-5-sonnet", "gpt-4")
@@ -917,8 +931,8 @@ pub struct ChatCompletionParams {
 	pub use_long_cache: bool,
 	/// Explicit prompt-cache routing key (OpenAI `prompt_cache_key`). Optional hint
 	/// that pins requests sharing a long common prefix to the same cache, improving
-	/// hit rates. ChatGPT also uses this key to reuse a session's WebSocket across
-	/// provider instances. `None` = automatic cache routing and a fresh ChatGPT socket.
+	/// hit rates. ChatGPT WebSocket mode also uses this key to reuse a session's socket across
+	/// provider instances. `None` = automatic cache routing and, in WebSocket mode, a fresh socket.
 	pub prompt_cache_key: Option<String>,
 	/// Reasoning effort hint for thinking-capable models. `None` = provider default
 	/// (most providers omit the field; hybrid models stay non-thinking).
@@ -937,6 +951,7 @@ impl ChatCompletionParams {
 	/// Create new chat completion parameters
 	pub fn new(messages: &[Message], model: &str, temperature: f32, top_p: f32, top_k: u32, max_tokens: u32) -> Self {
 		Self {
+			chatgpt_transport: ChatGptTransport::Http,
 			messages: messages.to_vec(),
 			model: model.to_string(),
 			temperature,
@@ -957,6 +972,12 @@ impl ChatCompletionParams {
 			extra_headers: None,
 			api_key: None,
 		}
+	}
+
+	/// Select the transport for the `chatgpt:` provider.
+	pub fn with_chatgpt_transport(mut self, transport: ChatGptTransport) -> Self {
+		self.chatgpt_transport = transport;
+		self
 	}
 
 	/// Use this API key instead of environment or OAuth credentials for this call.

@@ -18,7 +18,9 @@ default = ["llm", "embeddings", "reranker", "media", "evaluation", "fastembed", 
 
 # Capability modules. Each gates one top-level module and the dependencies only
 # it needs, so an LLM-only build does not compile the media or embedding stack.
-llm = ["dep:jsonschema", "dep:jsonwebtoken", "dep:base64", "dep:reqwest-websocket", "dep:futures-util"]
+llm = ["dep:jsonschema", "dep:jsonwebtoken", "dep:base64"]
+# Optional WebSocket transports; HTTP/SSE remains the per-request default.
+websockets = ["llm", "dep:reqwest-websocket", "dep:futures-util"]
 embeddings = ["dep:tiktoken-rs"]
 reranker = []
 media = ["dep:base64"]

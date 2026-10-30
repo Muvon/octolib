@@ -363,6 +363,7 @@ async fn access_token_at(path: &Path, token_url: &str, rejected_token: Option<&s
 	Ok(registration.access_token)
 }
 
+#[cfg(feature = "websockets")]
 pub(super) async fn access_token(rejected_token: Option<&str>) -> Result<String> {
 	access_token_at(&auth_dir()?.join(AUTH_FILE), TOKEN_URL, rejected_token).await
 }

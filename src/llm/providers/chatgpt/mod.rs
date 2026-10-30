@@ -15,22 +15,26 @@
 //! ChatGPT plan usage: Responses API requests billed to the user's ChatGPT
 //! subscription through Sign in with ChatGPT (see [`start_login`]).
 //!
-//! Requests use a persistent Responses WebSocket per credential, model and
-//! session cache key. Matching history continues on that connection; changed
-//! history or a reconnect sends the full input. `store: false` remains mandatory.
+//! Requests default to HTTP/SSE. The optional `websockets` feature enables
+//! per-request WebSocket selection through `ChatGptTransport`. Both transports
+//! preserve tool and reasoning replay and require `store: false`.
 //! See <https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations>
 
 mod auth;
+mod http;
+#[cfg(feature = "websockets")]
 mod websocket;
 
 pub use auth::{current_account, list_models, start_login, Account, ChatGptModel, PendingLogin};
 
 use super::openai::{self, OpenAiProvider};
 use crate::llm::traits::AiProvider;
-use crate::llm::types::{ChatCompletionParams, Message, ModelPricing, ProviderResponse, SamplingSupport};
+use crate::llm::types::{
+	ChatCompletionParams, ChatGptTransport, Message, ModelPricing, ProviderResponse, SamplingSupport,
+};
 use anyhow::{Context, Result};
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 /// Replayed function calls carry the namespace used to declare their tools.
 const TOOL_NAMESPACE: &str = "tools";
@@ -88,7 +92,14 @@ impl AiProvider for ChatGptProvider {
 		crate::llm::providers::shared::reject_api_key(self.name(), &params)?;
 		let request_body = build_request(&params);
 		let start_time = std::time::Instant::now();
-		let (request_body, response_json) = websocket::complete(&params, request_body).await?;
+		let (request_body, response_json) = match params.chatgpt_transport {
+			ChatGptTransport::Http => {
+				let response = http::complete(&params, &request_body).await?;
+				(request_body, response)
+			}
+			#[cfg(feature = "websockets")]
+			ChatGptTransport::WebSocket => websocket::complete(&params, request_body).await?,
+		};
 		let request_time_ms = start_time.elapsed().as_millis() as u64;
 
 		openai::parse_responses_api_response(request_body, response_json, "chatgpt", request_time_ms, HashMap::new())
@@ -100,9 +111,14 @@ fn build_request(params: &ChatCompletionParams) -> Value {
 		"model": params.model,
 		"input": build_input(&params.messages),
 		"store": false,
-		"type": "response.create",
 		"include": ["reasoning.encrypted_content"],
 	});
+
+	match params.chatgpt_transport {
+		ChatGptTransport::Http => request["stream"] = json!(true),
+		#[cfg(feature = "websockets")]
+		ChatGptTransport::WebSocket => request["type"] = json!("response.create"),
+	}
 
 	if let Some(effort) = openai::reasoning_effort(&params.model, params.reasoning_effort) {
 		request["reasoning"] = json!({ "effort": effort });
@@ -128,6 +144,7 @@ fn build_request(params: &ChatCompletionParams) -> Value {
 	request
 }
 
+#[cfg(feature = "websockets")]
 fn request_headers(params: &ChatCompletionParams) -> Result<reqwest::header::HeaderMap> {
 	let mut headers = reqwest::header::HeaderMap::new();
 	// Include the configured identity in the pool key as well as the handshake.
@@ -197,6 +214,7 @@ enum RetryableStreamError {
 	/// The stream closed before any terminal event.
 	#[error("ChatGPT stream ended without response.completed")]
 	CutOff,
+	#[cfg(feature = "websockets")]
 	#[error("ChatGPT WebSocket request timed out")]
 	Timeout,
 	/// A terminal event carrying one of [`TRANSIENT_ERROR_CODES`].
@@ -232,6 +250,65 @@ fn with_usage_guidance(code: Option<&str>, message: String) -> anyhow::Error {
 		_ => return anyhow::Error::msg(message),
 	};
 	anyhow::Error::msg(format!("{guidance}\n{message}"))
+}
+
+#[derive(Default)]
+struct ResponseEvents {
+	output: BTreeMap<usize, Value>,
+}
+
+impl ResponseEvents {
+	fn push(&mut self, event: Value) -> Result<Option<Value>> {
+		match event["type"].as_str().context("ChatGPT event is missing type")? {
+			"response.output_item.done" => {
+				let index: usize = serde_json::from_value(event["output_index"].clone())
+					.context("ChatGPT output item is missing output_index")?;
+				let item = event
+					.get("item")
+					.filter(|item| item.is_object())
+					.context("ChatGPT output event is missing item")?;
+				anyhow::ensure!(
+					self.output.insert(index, item.clone()).is_none(),
+					"Duplicate ChatGPT output_index {index}"
+				);
+			}
+			"response.completed" => {
+				let mut response = event
+					.get("response")
+					.filter(|response| response.is_object())
+					.context("ChatGPT completed event is missing response")?
+					.clone();
+				if !self.output.is_empty() {
+					let output = std::mem::take(&mut self.output);
+					let mut items = Vec::with_capacity(output.len());
+					for (expected, (index, item)) in output.into_iter().enumerate() {
+						anyhow::ensure!(index == expected, "ChatGPT response is missing output_index {expected}");
+						items.push(item);
+					}
+					response["output"] = json!(items);
+				}
+				return Ok(Some(response));
+			}
+			"response.failed" => {
+				return Err(terminal_error(
+					&event["response"]["error"],
+					format!("ChatGPT response failed: {}", event["response"]["error"]),
+				))
+			}
+			"response.incomplete" => anyhow::bail!(
+				"ChatGPT response incomplete: {}",
+				event["response"]["incomplete_details"]
+			),
+			"error" => {
+				return Err(terminal_error(
+					&event["error"],
+					format!("ChatGPT stream error: {event}"),
+				))
+			}
+			_ => {}
+		}
+		Ok(None)
+	}
 }
 
 #[cfg(test)]

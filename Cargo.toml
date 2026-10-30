@@ -18,7 +18,7 @@ default = ["llm", "embeddings", "reranker", "media", "evaluation", "fastembed", 
 
 # Capability modules. Each gates one top-level module and the dependencies only
 # it needs, so an LLM-only build does not compile the media or embedding stack.
-llm = ["dep:jsonschema", "dep:jsonwebtoken", "dep:base64"]
+llm = ["dep:jsonschema", "dep:jsonwebtoken", "dep:base64", "dep:reqwest-websocket", "dep:futures-util"]
 embeddings = ["dep:tiktoken-rs"]
 reranker = []
 media = ["dep:base64"]
@@ -58,6 +58,9 @@ anyhow = "1.0.104"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 reqwest = { version = "0.12", features = ["json", "multipart", "rustls-tls", "gzip", "brotli", "zstd", "deflate", "http2", "charset"], default-features = false }
+# 0.5.x shares the existing reqwest 0.12 client and its TLS/proxy configuration.
+reqwest-websocket = { version = "0.5.1", optional = true }
+futures-util = { version = "0.3", features = ["sink"], optional = true }
 tokio = { version = "1.54.1", features = ["time", "sync", "macros", "rt-multi-thread", "net", "io-util"] }
 arc-swap = "1"
 base64 = { version = "0.22", optional = true }
@@ -201,6 +204,7 @@ name = "reranker_comparison"
 required-features = ["reranker"]
 
 [dev-dependencies]
+tokio-tungstenite = { version = "0.27", default-features = false, features = ["handshake"] }
 # Examples encode local media inline regardless of which features are on.
 base64 = "0.22"
 serial_test = "3.5.0"

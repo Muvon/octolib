@@ -49,18 +49,24 @@ pub fn set_user_agent(user_agent: impl Into<String>) {
 /// Total request deadlines are supplied by callers; connection establishment
 /// is bounded separately. HTTP/2 PINGs stay disabled because upstreams have
 /// different keepalive policies; TCP keepalive remains enabled.
-static HTTP_CLIENT: LazyLock<ArcSwap<reqwest::Client>> = LazyLock::new(|| ArcSwap::from_pointee(build_http_client()));
+static HTTP_CLIENT: LazyLock<ArcSwap<reqwest::Client>> =
+	LazyLock::new(|| ArcSwap::from_pointee(build_http_client(false)));
 
-fn build_http_client() -> reqwest::Client {
-	reqwest::Client::builder()
+// WebSocket upgrades require HTTP/1.1, including during TLS ALPN negotiation.
+#[cfg(feature = "llm")]
+static WEBSOCKET_CLIENT: LazyLock<ArcSwap<reqwest::Client>> =
+	LazyLock::new(|| ArcSwap::from_pointee(build_http_client(true)));
+
+fn build_http_client(http1_only: bool) -> reqwest::Client {
+	let builder = reqwest::Client::builder()
 		.user_agent(USER_AGENT.load().as_str())
 		.connect_timeout(Duration::from_secs(20))
 		.tcp_keepalive(Duration::from_secs(10))
 		.tcp_keepalive_interval(Duration::from_secs(5))
 		.tcp_nodelay(true)
-		.pool_idle_timeout(Duration::from_secs(15))
-		.build()
-		.expect("failed to build HTTP client")
+		.pool_idle_timeout(Duration::from_secs(15));
+	let builder = if http1_only { builder.http1_only() } else { builder };
+	builder.build().expect("failed to build HTTP client")
 }
 
 /// Returns a cloned handle to the process-wide shared HTTP client.
@@ -76,7 +82,19 @@ pub(crate) fn http_client() -> reqwest::Client {
 /// Rebuild after application configuration changes. Existing requests retain
 /// their client until completion.
 fn refresh_http_client() {
-	let fresh = build_http_client();
+	let fresh = build_http_client(false);
 	HTTP_CLIENT.store(std::sync::Arc::new(fresh));
+	#[cfg(feature = "llm")]
+	WEBSOCKET_CLIENT.store(std::sync::Arc::new(build_http_client(true)));
 	tracing::debug!("HTTP client refreshed with new connection pool");
+}
+
+#[cfg(feature = "llm")]
+pub(crate) fn websocket_client() -> reqwest::Client {
+	(*WEBSOCKET_CLIENT.load_full()).clone()
+}
+
+#[cfg(feature = "llm")]
+pub(crate) fn user_agent() -> std::sync::Arc<String> {
+	USER_AGENT.load_full()
 }

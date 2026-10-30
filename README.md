@@ -459,6 +459,17 @@ async fn reranking_example() -> anyhow::Result<()> {
 
 ### 🔐 OAuth Authentication
 
+The `chatgpt:<model>` provider uses Sign in with ChatGPT (`llm::providers::chatgpt::start_login`)
+and the user's authorized plan allowance. Inference runs over a persistent Responses
+WebSocket. Supply a stable, conversation-specific `with_prompt_cache_key(...)` to reuse
+the connection across provider instances; calls without a key use a fresh connection.
+Continue supplying the full message history, including captured `provider_items`:
+Octolib sends only new input when the history matches the connection's last response,
+and sends full context after a reconnect or history change. Credentials, model, and
+handshake headers isolate connections. Cancellation and request timeouts discard an
+in-flight connection. Idle sessions are evicted on pool access, with at most 64 pooled
+sessions retained per process.
+
 Octolib supports OAuth authentication for ChatGPT subscriptions and Anthropic:
 
 **OpenAI OAuth** (ChatGPT Plus/Pro/Team/Enterprise):

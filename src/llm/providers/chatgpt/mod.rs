@@ -15,90 +15,27 @@
 //! ChatGPT plan usage: Responses API requests billed to the user's ChatGPT
 //! subscription through Sign in with ChatGPT (see [`start_login`]).
 //!
-//! The plan route is a restricted Responses API: `store: false` and
-//! `stream: true` are mandatory, there is no server-side conversation state
-//! (`previous_response_id`), sampling/limit/retention fields are rejected,
-//! system items must be developer messages, and function tools must sit in a
-//! namespace. Reasoning survives tool calls only by replaying its encrypted
-//! form, which this provider requests and replays.
+//! Requests use a persistent Responses WebSocket per credential, model and
+//! session cache key. Matching history continues on that connection; changed
+//! history or a reconnect sends the full input. `store: false` remains mandatory.
 //! See <https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations>
 
 mod auth;
+mod websocket;
 
 pub use auth::{current_account, list_models, start_login, Account, ChatGptModel, PendingLogin};
 
 use super::openai::{self, OpenAiProvider};
-use super::shared;
-use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, Message, ModelPricing, ProviderResponse, SamplingSupport};
 use anyhow::{Context, Result};
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use std::sync::{LazyLock, Mutex};
 
-const RESPONSES_URL: &str = "https://api.openai.com/v1/responses";
-/// Every function tool is declared in this one namespace, so replayed
-/// `function_call` items carry it too.
+/// Replayed function calls carry the namespace used to declare their tools.
 const TOOL_NAMESPACE: &str = "tools";
 const TOOL_NAMESPACE_DESCRIPTION: &str = "Tools available in this session.";
-/// Error codes for an exhausted plan allowance or per-app weekly cap
-/// (`subscription_sharing_usage_limit_exceeded`, `…_usage_unavailable`).
-const USAGE_LIMIT_ERROR_PREFIX: &str = "subscription_sharing_usage";
-/// The plan route replaces `prompt_cache_key` with a random per-request key
-/// unless this header names the session, so without it a repeated prefix lands
-/// on a cold cache (measured: 0 of 6 repeats cached without it, 12 of 12 with
-/// it, 10 of 12 with `session_id`). Codex sends the same header name.
 const SESSION_HEADER: &str = "session-id";
-/// Echoing the first server token throughout a turn eliminated all measured
-/// cache breaks; later server values must not replace it.
-const TURN_STATE_HEADER: &str = "x-codex-turn-state";
-const TURN_STATE_STORE_CAPACITY: usize = 1_024;
-
-#[derive(Debug)]
-struct TurnStateEntry {
-	cache_key: String,
-	token: String,
-}
-
-#[derive(Debug, Default)]
-struct TurnStateStore {
-	entries: Vec<TurnStateEntry>,
-}
-
-impl TurnStateStore {
-	fn clear(&mut self, cache_key: &str) {
-		if let Some(index) = self.entries.iter().position(|entry| entry.cache_key == cache_key) {
-			self.entries.remove(index);
-		}
-	}
-
-	fn get(&mut self, cache_key: &str) -> Option<String> {
-		let index = self.entries.iter().position(|entry| entry.cache_key == cache_key)?;
-		let entry = self.entries.remove(index);
-		let token = entry.token.clone();
-		self.entries.push(entry);
-		Some(token)
-	}
-
-	fn store_first(&mut self, cache_key: &str, token: &str) {
-		if let Some(index) = self.entries.iter().position(|entry| entry.cache_key == cache_key) {
-			let entry = self.entries.remove(index);
-			self.entries.push(entry);
-			return;
-		}
-
-		if self.entries.len() == TURN_STATE_STORE_CAPACITY {
-			self.entries.remove(0);
-		}
-		self.entries.push(TurnStateEntry {
-			cache_key: cache_key.to_string(),
-			token: token.to_string(),
-		});
-	}
-}
-
-static TURN_STATES: LazyLock<Mutex<TurnStateStore>> = LazyLock::new(|| Mutex::new(TurnStateStore::default()));
 
 /// ChatGPT subscription provider (`chatgpt:<model>`).
 #[derive(Debug, Clone, Default)]
@@ -150,72 +87,8 @@ impl AiProvider for ChatGptProvider {
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
 		crate::llm::providers::shared::reject_api_key(self.name(), &params)?;
 		let request_body = build_request(&params);
-		let extra_headers = request_headers(&params)?;
 		let start_time = std::time::Instant::now();
-
-		// Errors are retried; `Ok` holds the outcome of a delivered response,
-		// which a retry would not change.
-		let response_json = retry::retry_chat_operation(
-			|| {
-				let client = shared::http_client();
-				let request_body = request_body.clone();
-				let request_timeout = params.request_timeout;
-				let extra_headers = extra_headers.clone();
-				let capture_turn_state = params.prompt_cache_key.is_some();
-				Box::pin(async move {
-					let request = client.post(RESPONSES_URL).json(&request_body);
-					let captured =
-						match auth::send_authenticated(request, request_timeout, extra_headers.as_ref()).await {
-							Ok(captured) => captured,
-							Err(error) if error.is::<reqwest::Error>() => return Err(error),
-							// Credential failures need sign-in, not another refresh attempt.
-							Err(error) => return Ok(Err(error)),
-						};
-
-					// An exhausted plan allowance or app cap does not clear on retry.
-					if retry::is_retryable_status(captured.status.as_u16())
-						&& !captured.body.contains(USAGE_LIMIT_ERROR_PREFIX)
-					{
-						return Err(retry::retryable_status_error(
-							&captured,
-							format!("ChatGPT API error {}: {}", captured.status, captured.body),
-						));
-					}
-
-					if !captured.status.is_success() {
-						let code = serde_json::from_str::<Value>(&captured.body)
-							.ok()
-							.and_then(|body| body["error"]["code"].as_str().map(str::to_owned));
-						return Ok(Err(with_usage_guidance(
-							code.as_deref(),
-							format!("ChatGPT API error {}: {}", captured.status, captured.body),
-						)));
-					}
-
-					let turn_state = if capture_turn_state {
-						captured
-							.headers
-							.get(TURN_STATE_HEADER)
-							.map(|value| value.to_str())
-							.transpose()
-							.context("ChatGPT response returned an invalid x-codex-turn-state header")?
-							.map(str::to_owned)
-					} else {
-						None
-					};
-
-					match merge_stream(&captured.body) {
-						Err(e) if e.is::<RetryableStreamError>() => Err(e),
-						merged => Ok(merged.map(|body| (body, turn_state))),
-					}
-				})
-			},
-			&params,
-		)
-		.await??;
-
-		let (response_json, response_turn_state) = response_json;
-		remember_turn_state(params.prompt_cache_key.as_deref(), response_turn_state.as_deref())?;
+		let (request_body, response_json) = websocket::complete(&params, request_body).await?;
 		let request_time_ms = start_time.elapsed().as_millis() as u64;
 
 		openai::parse_responses_api_response(request_body, response_json, "chatgpt", request_time_ms, HashMap::new())
@@ -227,7 +100,7 @@ fn build_request(params: &ChatCompletionParams) -> Value {
 		"model": params.model,
 		"input": build_input(&params.messages),
 		"store": false,
-		"stream": true,
+		"type": "response.create",
 		"include": ["reasoning.encrypted_content"],
 	});
 
@@ -255,66 +128,31 @@ fn build_request(params: &ChatCompletionParams) -> Value {
 	request
 }
 
-fn request_headers(params: &ChatCompletionParams) -> Result<Option<HashMap<String, String>>> {
-	if params.prompt_cache_key.is_none() {
-		return Ok(request_headers_without_turn_state(params));
+fn request_headers(params: &ChatCompletionParams) -> Result<reqwest::header::HeaderMap> {
+	let mut headers = reqwest::header::HeaderMap::new();
+	// Include the configured identity in the pool key as well as the handshake.
+	headers.insert(
+		reqwest::header::USER_AGENT,
+		crate::http::user_agent()
+			.parse()
+			.context("Invalid ChatGPT User-Agent")?,
+	);
+	if let Some(cache_key) = &params.prompt_cache_key {
+		headers.insert(
+			SESSION_HEADER,
+			cache_key.parse().context("Invalid ChatGPT session header")?,
+		);
 	}
-	let mut turn_states = TURN_STATES
-		.lock()
-		.map_err(|_| anyhow::anyhow!("ChatGPT turn-state store lock poisoned"))?;
-	Ok(request_headers_with_store(params, &mut turn_states))
-}
-
-fn request_headers_with_store(
-	params: &ChatCompletionParams,
-	turn_states: &mut TurnStateStore,
-) -> Option<HashMap<String, String>> {
-	let mut headers = request_headers_without_turn_state(params);
-
-	let Some(cache_key) = &params.prompt_cache_key else {
-		return headers;
-	};
-
-	let request_headers = headers.get_or_insert_with(HashMap::new);
-	request_headers
-		.entry(SESSION_HEADER.to_string())
-		.or_insert_with(|| cache_key.clone());
-
-	if params.messages.last().is_some_and(|message| message.role == "user") {
-		turn_states.clear(cache_key);
-	} else if let Some(token) = turn_states.get(cache_key) {
-		request_headers.insert(TURN_STATE_HEADER.to_string(), token);
+	if let Some(extra) = &params.extra_headers {
+		for (name, value) in extra {
+			let name: reqwest::header::HeaderName = name.parse().context("Invalid ChatGPT header name")?;
+			let value = value
+				.parse()
+				.with_context(|| format!("Invalid ChatGPT header {name}"))?;
+			headers.insert(name, value);
+		}
 	}
-	headers
-}
-
-fn request_headers_without_turn_state(params: &ChatCompletionParams) -> Option<HashMap<String, String>> {
-	let mut headers = params.extra_headers.clone();
-	remove_header(&mut headers, TURN_STATE_HEADER);
-	headers.filter(|headers| !headers.is_empty())
-}
-
-fn remove_header(headers: &mut Option<HashMap<String, String>>, name: &str) {
-	if let Some(headers) = headers {
-		headers.retain(|header, _| !header.eq_ignore_ascii_case(name));
-	}
-}
-
-fn remember_turn_state(cache_key: Option<&str>, token: Option<&str>) -> Result<()> {
-	let (Some(cache_key), Some(token)) = (cache_key, token) else {
-		return Ok(());
-	};
-	let mut turn_states = TURN_STATES
-		.lock()
-		.map_err(|_| anyhow::anyhow!("ChatGPT turn-state store lock poisoned"))?;
-	remember_turn_state_with_store(Some(cache_key), Some(token), &mut turn_states);
-	Ok(())
-}
-
-fn remember_turn_state_with_store(cache_key: Option<&str>, token: Option<&str>, turn_states: &mut TurnStateStore) {
-	if let (Some(cache_key), Some(token)) = (cache_key, token) {
-		turn_states.store_first(cache_key, token);
-	}
+	Ok(headers)
 }
 
 /// The full transcript as Responses API input: assistant turns replay their
@@ -327,27 +165,29 @@ fn build_input(messages: &[Message]) -> Vec<Value> {
 			openai::replay_provider_items(message, "chatgpt")
 				.unwrap_or_else(|| openai::messages_to_input(std::slice::from_ref(message), None, false))
 		})
-		.map(|mut item| {
-			if item["role"] == "system" {
-				item["role"] = json!("developer");
-			}
-			if item["type"] == "function_call" {
-				item["namespace"] = json!(TOOL_NAMESPACE);
-			}
-			item
-		})
+		.map(normalize_input_item)
 		.collect()
 }
 
-/// Responses API error codes for a server-side fault or throttling: the stream
-/// counterparts of the HTTP 5xx and 429 that [`retry::is_retryable_status`]
-/// retries. Usage-limit codes are absent — an exhausted allowance does not
-/// clear on retry.
-const TRANSIENT_ERROR_CODES: [&str; 4] = [
+fn normalize_input_item(mut item: Value) -> Value {
+	if item["role"] == "system" {
+		item["role"] = json!("developer");
+	}
+	if item["type"] == "function_call" {
+		item["namespace"] = json!(TOOL_NAMESPACE);
+	}
+	item
+}
+
+/// Server faults, throttling and lost connection-local state can recover on a
+/// fresh socket. An exhausted plan allowance cannot recover by retrying.
+const TRANSIENT_ERROR_CODES: [&str; 6] = [
 	"server_error",
 	"server_is_overloaded",
 	"rate_limit_exceeded",
 	"slow_down",
+	"previous_response_not_found",
+	"websocket_connection_limit_reached",
 ];
 
 /// A stream failure a retry can clear. Every other terminal event is the
@@ -357,6 +197,8 @@ enum RetryableStreamError {
 	/// The stream closed before any terminal event.
 	#[error("ChatGPT stream ended without response.completed")]
 	CutOff,
+	#[error("ChatGPT WebSocket request timed out")]
+	Timeout,
 	/// A terminal event carrying one of [`TRANSIENT_ERROR_CODES`].
 	#[error("{0}")]
 	Transient(String),
@@ -390,52 +232,6 @@ fn with_usage_guidance(code: Option<&str>, message: String) -> anyhow::Error {
 		_ => return anyhow::Error::msg(message),
 	};
 	anyhow::Error::msg(format!("{guidance}\n{message}"))
-}
-
-/// Fold the buffered SSE body back into one Responses API response object.
-///
-/// Output items arrive in `response.output_item.done` events; the terminal
-/// `response.completed` event carries the response id and usage. Only a
-/// completed stream is a successful response.
-fn merge_stream(body: &str) -> Result<Value> {
-	let mut output = Vec::new();
-
-	for line in body.lines() {
-		let Some(data) = line.strip_prefix("data:") else {
-			continue;
-		};
-		let event: Value =
-			serde_json::from_str(data.trim()).with_context(|| format!("ChatGPT stream: malformed event: {}", data))?;
-
-		match event["type"].as_str() {
-			Some("response.output_item.done") => output.push(event["item"].clone()),
-			Some("response.completed") => {
-				let mut response = event["response"].clone();
-				response["output"] = Value::Array(output);
-				return Ok(response);
-			}
-			Some("response.failed") => {
-				let error = &event["response"]["error"];
-				return Err(terminal_error(error, format!("ChatGPT response failed: {}", error)));
-			}
-			Some("response.incomplete") => anyhow::bail!(
-				"ChatGPT response incomplete: {}",
-				event["response"]["incomplete_details"]
-			),
-			// The plan route nests the error object (`{"type":"error",
-			// "error":{"code":…}}`), unlike the flat `ResponseErrorEvent` of
-			// the API reference.
-			Some("error") => {
-				return Err(terminal_error(
-					&event["error"],
-					format!("ChatGPT stream error: {}", event),
-				));
-			}
-			_ => {}
-		}
-	}
-
-	Err(RetryableStreamError::CutOff.into())
 }
 
 #[cfg(test)]

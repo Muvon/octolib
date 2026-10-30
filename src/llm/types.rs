@@ -898,8 +898,8 @@ pub struct ChatCompletionParams {
 	pub max_retries: u32,
 	/// Base timeout for exponential backoff retry logic
 	pub retry_timeout: std::time::Duration,
-	/// Per-request HTTP timeout. `None` = no timeout (LLM may take minutes);
-	/// `Some(d)` = abort the HTTP request if it exceeds `d`.
+	/// Per-request timeout. `None` = no timeout (LLM may take minutes);
+	/// `Some(d)` = abort the HTTP request or WebSocket round trip if it exceeds `d`.
 	pub request_timeout: Option<std::time::Duration>,
 	/// Cancellation token for request abortion
 	pub cancellation_token: Option<tokio::sync::watch::Receiver<bool>>,
@@ -917,7 +917,8 @@ pub struct ChatCompletionParams {
 	pub use_long_cache: bool,
 	/// Explicit prompt-cache routing key (OpenAI `prompt_cache_key`). Optional hint
 	/// that pins requests sharing a long common prefix to the same cache, improving
-	/// hit rates. `None` = rely on automatic prefix-hash routing. OpenAI-only.
+	/// hit rates. ChatGPT also uses this key to reuse a session's WebSocket across
+	/// provider instances. `None` = automatic cache routing and a fresh ChatGPT socket.
 	pub prompt_cache_key: Option<String>,
 	/// Reasoning effort hint for thinking-capable models. `None` = provider default
 	/// (most providers omit the field; hybrid models stay non-thinking).
@@ -1005,7 +1006,7 @@ impl ChatCompletionParams {
 		self
 	}
 
-	/// Set per-request HTTP timeout. `None` disables (LLM may take minutes);
+	/// Set per-request timeout. `None` disables (LLM may take minutes);
 	/// `Some(d)` aborts the HTTP request if it exceeds `d`.
 	pub fn with_request_timeout(mut self, timeout: Option<std::time::Duration>) -> Self {
 		self.request_timeout = timeout;

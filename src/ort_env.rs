@@ -37,3 +37,54 @@ pub(crate) fn environment() -> Result<Environment> {
 		.cloned()
 		.map_err(|e| anyhow!("onnxruntime environment: {e}"))
 }
+
+/// CoreML's default writes a fresh temporary model per session. Immutable cache
+/// identities let independent processes reuse the compiled graph after restart.
+pub(crate) fn execution_providers(identity: &str) -> Result<Vec<ort::ep::ExecutionProviderDispatch>> {
+	#[cfg(target_os = "macos")]
+	{
+		use sha2::{Digest, Sha256};
+		let key = hex::encode(Sha256::digest(format!(
+			"coreml-v1:{}:{}:{identity}",
+			ort::info(),
+			std::env::consts::ARCH
+		)));
+		let root = crate::storage::get_model_cache_dir()?.with_file_name("coreml");
+		let path = root.join(key);
+		std::fs::create_dir_all(&path)?;
+		let path = path.to_str().ok_or_else(|| anyhow!("CoreML cache path is not UTF-8"))?;
+		Ok(vec![ort::ep::CoreML::default()
+			.with_model_cache_dir(path)
+			.build()
+			.error_on_failure()])
+	}
+	#[cfg(not(target_os = "macos"))]
+	{
+		let _ = identity;
+		Ok(Vec::new())
+	}
+}
+
+pub(crate) fn file_execution_providers(path: &std::path::Path) -> Result<Vec<ort::ep::ExecutionProviderDispatch>> {
+	#[cfg(target_os = "macos")]
+	{
+		use sha2::{Digest, Sha256};
+		use std::io::Read;
+		let mut file = std::fs::File::open(path)?;
+		let mut hash = Sha256::new();
+		let mut buffer = [0u8; 64 * 1024];
+		loop {
+			let count = file.read(&mut buffer)?;
+			if count == 0 {
+				break;
+			}
+			hash.update(&buffer[..count]);
+		}
+		execution_providers(&hex::encode(hash.finalize()))
+	}
+	#[cfg(not(target_os = "macos"))]
+	{
+		let _ = path;
+		execution_providers("")
+	}
+}

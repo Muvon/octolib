@@ -43,6 +43,9 @@ impl FastEmbedProvider {
 		let model = TextRerank::try_new(
 			RerankInitOptions::new(model_enum)
 				.with_environment(crate::ort_env::environment()?)
+				.with_execution_providers(crate::ort_env::execution_providers(&format!(
+					"reranker:{model_enum:?}"
+				))?)
 				.with_show_download_progress(false)
 				.with_cache_dir(cache_dir),
 		)

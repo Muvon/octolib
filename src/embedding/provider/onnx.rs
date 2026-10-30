@@ -188,6 +188,16 @@ impl OnnxProviderImpl {
 			None => Self::dimension_from_config(&config_path)?,
 		};
 
+		let providers = {
+			use sha2::{Digest, Sha256};
+			let mut hash = Sha256::new();
+			hash.update(&onnx_file);
+			if let Some((name, buffer)) = &external_data {
+				hash.update(name.as_bytes());
+				hash.update(buffer);
+			}
+			crate::ort_env::execution_providers(&hex::encode(hash.finalize()))?
+		};
 		let mut user_model = UserDefinedEmbeddingModel::new(onnx_file, tokenizer_files)
 			.with_pooling(pooling)
 			// Always None: fp32/fp16/static-int8 graphs are batch-invariant, and
@@ -198,6 +208,7 @@ impl OnnxProviderImpl {
 		}
 
 		let options = InitOptionsUserDefined::new()
+			.with_execution_providers(providers)
 			.with_environment(crate::ort_env::environment()?)
 			.with_max_length(MAX_SEQ_LEN);
 		let embedding = TextEmbedding::try_new_from_user_defined(user_model, options)

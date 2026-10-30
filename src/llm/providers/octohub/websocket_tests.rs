@@ -146,9 +146,15 @@ async fn frame(socket: &mut ServerSocket) -> ServerMessage {
 }
 
 async fn receive(socket: &mut ServerSocket) -> Value {
-	let message = frame(socket).await;
-	assert!(message.is_text(), "request must be one JSON text message");
-	serde_json::from_str(message.to_text().unwrap()).unwrap()
+	loop {
+		let message = frame(socket).await;
+		if matches!(message, ServerMessage::Ping(_)) {
+			socket.flush().await.unwrap();
+			continue;
+		}
+		assert!(message.is_text(), "request must be one JSON text message");
+		return serde_json::from_str(message.to_text().unwrap()).unwrap();
+	}
 }
 
 async fn send(socket: &mut ServerSocket, value: Value) {
@@ -1091,53 +1097,57 @@ async fn timed_out_queued_call_does_not_steal_or_evict_an_active_lease() {
 	peer.finish().await;
 }
 
-#[test]
-fn session_pool_reuses_existing_sessions_at_capacity_and_rejects_an_extra_active_session() {
-	assert_eq!(MAX_SESSIONS, 64);
-	assert_eq!(IDLE_TIMEOUT, Duration::from_secs(300));
+#[tokio::test]
+async fn idle_ping_and_close_reconnect_before_sending_new_work_with_no_retry_budget() {
 	assert_eq!(DEFAULT_REQUEST_TIMEOUT, Duration::from_secs(600));
-	assert_eq!(crate::http::CONNECT_TIMEOUT, Duration::from_secs(20));
-	let mut pool = SessionPool::default();
-	let now = Instant::now();
-	let sessions: Vec<Session> = (0..MAX_SESSIONS)
-		.map(|index| {
-			let mut key = [0; 32];
-			key[..8].copy_from_slice(&(index as u64).to_be_bytes());
-			pool.get(key, now).unwrap()
-		})
-		.collect();
-	assert!(Arc::ptr_eq(&sessions[0], &pool.get([0; 32], now).unwrap()));
-	assert!(pool.get([255; 32], now).is_err());
-	// Even an old session cannot be evicted while a caller owns it.
-	assert!(Arc::ptr_eq(
-		&sessions[0],
-		&pool.get([0; 32], now + IDLE_TIMEOUT * 2).unwrap()
-	));
-	assert!(pool.get([255; 32], now + IDLE_TIMEOUT * 2).is_err());
-	drop(sessions);
-	assert!(pool.get([255; 32], now + IDLE_TIMEOUT * 4).is_ok());
+	let (listener, url) = server().await;
+	let auth = headers("idle", "one");
+	let expected = auth.clone();
+	let (closed, observed) = oneshot::channel();
+	let peer = Peer::spawn(async move {
+		let mut socket = accept(&listener, &expected).await;
+		assert_eq!(receive(&mut socket).await, body("first"));
+		succeed(&mut socket, "first").await;
+		socket.send(ServerMessage::Ping(vec![4, 5].into())).await.unwrap();
+		assert_eq!(frame(&mut socket).await, ServerMessage::Pong(vec![4, 5].into()));
+		socket.close(None).await.unwrap();
+		assert!(matches!(frame(&mut socket).await, ServerMessage::Close(_)));
+		closed.send(()).unwrap();
+		let mut fresh = accept(&listener, &expected).await;
+		assert_eq!(receive(&mut fresh).await, body("second"));
+		succeed(&mut fresh, "second").await;
+	});
+	let mut request = params(Some("idle-close"));
+	let events = observe(&mut request);
+	assert_success(call(&request, &url, &auth, &body("first")).await.unwrap(), "first");
+	bounded(observed).await.unwrap();
+	assert_success(call(&request, &url, &auth, &body("second")).await.unwrap(), "second");
+	assert!(events.lock().unwrap().is_empty());
+	peer.finish().await;
 }
 
-#[test]
-fn session_pool_retains_an_unexpired_idle_session_and_reclaims_it_after_the_idle_timeout() {
-	let mut pool = SessionPool::default();
-	let now = Instant::now();
-	let session = pool.get([1; 32], now).unwrap();
-	let old = Arc::downgrade(&session);
-	drop(session);
-	let before_expiry = now + IDLE_TIMEOUT - Duration::from_nanos(1);
-	let same = pool.get([1; 32], before_expiry).unwrap();
-	assert!(Arc::ptr_eq(&same, &old.upgrade().unwrap()));
-	drop(same);
-	// get() refreshes idle time; expire relative to that last access.
-	let replacement = pool
-		.get([1; 32], before_expiry + IDLE_TIMEOUT + Duration::from_nanos(1))
+#[tokio::test]
+async fn rejected_upgrade_body_failure_keeps_operation_status_and_cause() {
+	use tokio::io::AsyncReadExt;
+	let (listener, url) = server().await;
+	let peer = Peer::spawn(async move {
+		let (mut stream, _) = listener.accept().await.unwrap();
+		let mut request = Vec::new();
+		while !request.ends_with(b"\r\n\r\n") {
+			request.push(stream.read_u8().await.unwrap());
+		}
+		stream
+			.write_all(b"HTTP/1.1 503 Unavailable\r\nContent-Length: 100\r\nConnection: close\r\n\r\n{")
+			.await
+			.unwrap();
+	});
+	let error = call(&params(None), &url, &headers("rejected", "one"), &body("first"))
+		.await
+		.err()
 		.unwrap();
-	assert!(old.upgrade().is_none());
-	assert!(Arc::ptr_eq(
-		&replacement,
-		&pool
-			.get([1; 32], before_expiry + IDLE_TIMEOUT + Duration::from_nanos(1))
-			.unwrap()
-	));
+	assert!(error
+		.to_string()
+		.contains("OctoHub WebSocket upgrade rejected (HTTP 503"));
+	assert!(error.is::<reqwest::Error>());
+	peer.finish().await;
 }

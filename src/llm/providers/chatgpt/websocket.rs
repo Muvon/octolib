@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::super::websocket_transport as transport;
 use super::{auth, normalize_input_item, request_headers, with_usage_guidance, ResponseEvents, RetryableStreamError};
 use crate::errors::ProviderError;
 use crate::llm::{providers::shared, retry, types::ChatCompletionParams};
 use anyhow::{Context, Result};
-use futures_util::{SinkExt, StreamExt};
 use reqwest::header::HeaderMap;
-use reqwest_websocket::{Message, RequestBuilderExt, WebSocket};
+use reqwest_websocket::{Message, RequestBuilderExt};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -27,61 +27,11 @@ use std::time::{Duration, Instant};
 use tokio::sync::Mutex as AsyncMutex;
 
 const RESPONSES_URL: &str = "https://api.openai.com/v1/responses";
-const MAX_SESSIONS: usize = 64;
-const IDLE_TIMEOUT: Duration = Duration::from_secs(300);
-const CONNECTION_LIFETIME: Duration = Duration::from_secs(55 * 60);
 
-type Session = Arc<AsyncMutex<Option<Connection>>>;
-
-// Callers recreate providers between turns. Only idle connections can be evicted;
-// active leases keep the slot unique until the request releases it.
+type Session = transport::Session<Option<Continuation>>;
+type Connection = transport::Connection<Option<Continuation>>;
+type SessionPool = transport::SessionPool<Option<Continuation>>;
 static SESSIONS: LazyLock<Mutex<SessionPool>> = LazyLock::new(|| Mutex::new(SessionPool::default()));
-
-#[derive(Default)]
-struct SessionPool {
-	entries: Vec<PoolEntry>,
-}
-
-struct PoolEntry {
-	key: [u8; 32],
-	session: Session,
-	used_at: Instant,
-}
-
-impl SessionPool {
-	fn get(&mut self, key: [u8; 32], now: Instant) -> Result<Session> {
-		self.entries
-			.retain(|entry| Arc::strong_count(&entry.session) > 1 || now.duration_since(entry.used_at) < IDLE_TIMEOUT);
-		if let Some(index) = self.entries.iter().position(|entry| entry.key == key) {
-			let mut entry = self.entries.remove(index);
-			entry.used_at = now;
-			let session = entry.session.clone();
-			self.entries.push(entry);
-			return Ok(session);
-		}
-		if self.entries.len() == MAX_SESSIONS {
-			let index = self
-				.entries
-				.iter()
-				.position(|entry| Arc::strong_count(&entry.session) == 1)
-				.context("All ChatGPT WebSocket sessions are busy")?;
-			self.entries.remove(index);
-		}
-		let session = Arc::new(AsyncMutex::new(None));
-		self.entries.push(PoolEntry {
-			key,
-			session: session.clone(),
-			used_at: now,
-		});
-		Ok(session)
-	}
-}
-
-struct Connection {
-	socket: WebSocket,
-	opened_at: Instant,
-	continuation: Option<Continuation>,
-}
 
 struct Continuation {
 	response_id: String,
@@ -212,7 +162,10 @@ pub(super) async fn complete(params: &ChatCompletionParams, full: Value) -> Resu
 
 fn is_retryable(error: &anyhow::Error) -> bool {
 	error.is::<RetryableStreamError>()
-		|| error.is::<super::super::streaming::StreamTimeout>()
+		|| matches!(
+			error.downcast_ref::<transport::ConnectionError>(),
+			Some(transport::ConnectionError::HeartbeatTimeout | transport::ConnectionError::WriteTimeout)
+		) || error.is::<super::super::streaming::StreamTimeout>()
 		|| matches!(
 			error.downcast_ref::<ProviderError>(),
 			Some(ProviderError::TimeoutError { .. })
@@ -256,19 +209,23 @@ async fn exchange(
 	let operation = async {
 		// Taking ownership before awaiting ensures cancellation or failure drops the
 		// socket instead of exposing this response's remaining events to the next call.
-		let mut connection = match slot.take() {
-			Some(connection) if connection.opened_at.elapsed() < CONNECTION_LIFETIME => connection,
-			_ => connect(url, token, headers).await?,
+		let connection = match slot.take() {
+			Some(idle) => idle.resume().await?,
+			None => None,
 		};
-		let request = match &connection.continuation {
+		let mut connection = match connection {
+			Some(connection) => connection,
+			None => connect(url, token, headers).await?,
+		};
+		let request = match &connection.state {
 			Some(previous) => previous.request(full)?,
 			None => full.clone(),
 		};
 		let message = Message::Text(serde_json::to_string(&request)?);
 		connection.socket.send(message).await?;
 		let response = read_response(&mut connection.socket, stream_timeout).await?;
-		connection.continuation = Some(Continuation::from_response(full, &response)?);
-		*slot = Some(connection);
+		connection.state = Some(Continuation::from_response(full, &response)?);
+		*slot = Some(connection.park());
 		Ok((request, response))
 	};
 	match timeout {
@@ -284,43 +241,53 @@ async fn exchange(
 struct Unauthorized;
 
 async fn connect(url: &str, token: &str, headers: &HeaderMap) -> Result<Connection> {
-	let response = crate::http::websocket_client()
-		.get(url)
-		.timeout(crate::http::CONNECT_TIMEOUT)
-		.bearer_auth(token)
-		.headers(headers.clone())
-		.upgrade()
-		.send()
-		.await
-		.context("Opening ChatGPT WebSocket connection")?;
-	if response.status() == reqwest::StatusCode::UNAUTHORIZED {
-		return Err(Unauthorized.into());
-	}
-	if response.status() != reqwest::StatusCode::SWITCHING_PROTOCOLS {
-		let status = response.status();
-		let headers = response.headers().clone();
-		let body = response.into_inner().text().await?;
-		let code = serde_json::from_str::<Value>(&body)
-			.ok()
-			.and_then(|body| body["error"]["code"].as_str().map(str::to_owned));
-		let message = format!("ChatGPT WebSocket upgrade failed: {status}: {body}");
-		if retry::is_retryable_status(status.as_u16())
-			&& !code
-				.as_deref()
-				.is_some_and(|code| code.starts_with("subscription_sharing_usage"))
-		{
-			return Err(retry::retryable_status_error(
-				&shared::CapturedResponse { status, headers, body },
-				message,
-			));
+	let setup = async {
+		let response = crate::http::websocket_client()
+			.get(url)
+			.timeout(crate::http::CONNECT_TIMEOUT)
+			.bearer_auth(token)
+			.headers(headers.clone())
+			.upgrade()
+			.send()
+			.await
+			.context("Opening ChatGPT WebSocket connection")?;
+		if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+			return Err(Unauthorized.into());
 		}
-		return Err(with_usage_guidance(code.as_deref(), message));
-	}
-	Ok(Connection {
-		socket: response.into_websocket().await?,
-		opened_at: Instant::now(),
-		continuation: None,
-	})
+		if response.status() != reqwest::StatusCode::SWITCHING_PROTOCOLS {
+			let status = response.status();
+			let headers = response.headers().clone();
+			let body = response.into_inner().text().await.with_context(|| {
+				format!("ChatGPT WebSocket upgrade rejected (HTTP {status}); failed to read error body")
+			})?;
+			let code = serde_json::from_str::<Value>(&body)
+				.ok()
+				.and_then(|body| body["error"]["code"].as_str().map(str::to_owned));
+			let message = format!("ChatGPT WebSocket upgrade failed: {status}: {body}");
+			if retry::is_retryable_status(status.as_u16())
+				&& !code
+					.as_deref()
+					.is_some_and(|code| code.starts_with("subscription_sharing_usage"))
+			{
+				return Err(retry::retryable_status_error(
+					&shared::CapturedResponse { status, headers, body },
+					message,
+				));
+			}
+			return Err(with_usage_guidance(code.as_deref(), message));
+		}
+		Ok(Connection::new(
+			response
+				.into_websocket()
+				.await
+				.context("Completing ChatGPT WebSocket upgrade")?,
+			"chatgpt",
+			None,
+		))
+	};
+	tokio::time::timeout(crate::http::CONNECT_TIMEOUT, setup)
+		.await
+		.map_err(|_| timeout_error(crate::http::CONNECT_TIMEOUT, "during connection setup"))?
 }
 
 fn timeout_error(timeout: Duration, phase: &str) -> anyhow::Error {
@@ -333,36 +300,29 @@ fn timeout_error(timeout: Duration, phase: &str) -> anyhow::Error {
 	))
 }
 
-async fn read_response(socket: &mut WebSocket, timeout: Option<Duration>) -> Result<Value> {
+async fn read_response(socket: &mut transport::Socket, timeout: Option<Duration>) -> Result<Value> {
 	let mut events = ResponseEvents::default();
 	let mut last_received = tokio::time::Instant::now();
 	loop {
 		let message = match timeout {
 			Some(timeout) => tokio::time::timeout_at(last_received + timeout, socket.next())
 				.await
-				.map_err(|_| super::super::streaming::StreamTimeout(timeout))?,
-			None => socket.next().await,
+				.map_err(|_| super::super::streaming::StreamTimeout(timeout))??,
+			None => socket.next().await?,
 		};
 		let Some(message) = message else {
 			break;
 		};
-		match message? {
-			Message::Text(text) => {
+		match message {
+			transport::Event::Text(text) => {
 				last_received = tokio::time::Instant::now();
 				let event = serde_json::from_str(&text).context("Malformed ChatGPT WebSocket event")?;
 				if let Some(response) = events.push(event)? {
 					return Ok(response);
 				}
 			}
-			Message::Ping(_) => match timeout {
-				Some(timeout) => tokio::time::timeout_at(last_received + timeout, socket.flush())
-					.await
-					.map_err(|_| super::super::streaming::StreamTimeout(timeout))??,
-				None => socket.flush().await?,
-			},
-			Message::Pong(_) => {}
-			Message::Close { .. } => break,
-			Message::Binary(_) => anyhow::bail!("ChatGPT WebSocket returned a binary event; expected JSON text"),
+			transport::Event::Close(_) => break,
+			transport::Event::Binary => anyhow::bail!("ChatGPT WebSocket returned a binary event; expected JSON text"),
 		}
 	}
 	Err(RetryableStreamError::CutOff.into())

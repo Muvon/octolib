@@ -511,6 +511,29 @@ Only explicit retryable server statuses use the configured retry policy and
 `Retry-After`/retry observer. A lost reply may already be paid work: the library
 never replays ambiguous requests or silently falls back to HTTP.
 
+### WebSocket connection lifecycle
+
+ChatGPT and OctoHub share the connection manager in
+`src/llm/providers/websocket_transport.rs`. It services server ping and close
+frames between turns as well as during responses, sends a ping every 30 seconds,
+and requires a matching pong within 10 seconds. Heartbeats measure connection
+health; they do not extend response inactivity or request deadlines. Socket writes
+are bounded to 20 seconds, subject to any shorter caller deadline.
+
+Before reusing a socket, the manager verifies its liveness with a ping/pong exchange.
+A dead idle socket is replaced before sending the next application request. This
+reconnection does not consume the request retry budget or replay previous work.
+ChatGPT drops connection-local continuation state when reconnecting and sends the
+full supplied history; OctoHub retains its existing no-replay policy for ambiguous
+in-flight failures.
+
+Each provider pool holds at most 64 sessions. Idle readers close their sockets after
+five minutes without a request, even when there are no further pool lookups, and
+connections rotate between requests after 55 minutes. Eviction and cancellation
+abort the owned idle reader; no detached task or response queue remains. New
+WebSocket providers can reuse this manager while defining their own handshake,
+response format, and retry policy.
+
 ### 🔐 OAuth Authentication
 
 The `chatgpt:<model>` provider uses Sign in with ChatGPT (`llm::providers::chatgpt::start_login`)
@@ -548,7 +571,7 @@ response messages; it defaults to `None` (disabled). WebSocket ping/pong frames 
 not reset this response inactivity limit. Stream activity never extends the total
 request deadline. Cancellation or timeout discards the in-flight WebSocket connection.
 
-Idle sessions are evicted on pool access, with at most 64 pooled sessions per process.
+ChatGPT uses the [shared WebSocket connection lifecycle](#websocket-connection-lifecycle) described above.
 
 Octolib supports OAuth authentication for ChatGPT subscriptions and Anthropic:
 

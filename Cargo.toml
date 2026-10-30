@@ -206,6 +206,7 @@ name = "reranker_comparison"
 required-features = ["reranker"]
 
 [dev-dependencies]
+tokio = { version = "1.54.1", features = ["test-util"] }
 tokio-tungstenite = { version = "0.27", default-features = false, features = ["handshake"] }
 # Examples encode local media inline regardless of which features are on.
 base64 = "0.22"

@@ -181,6 +181,17 @@ impl TransportErrorKind {
 }
 
 pub(crate) fn transport_error_kind(error: &anyhow::Error) -> Option<TransportErrorKind> {
+	#[cfg(feature = "websockets")]
+	if matches!(
+		error.downcast_ref::<super::websocket_transport::ConnectionError>(),
+		Some(
+			super::websocket_transport::ConnectionError::HeartbeatTimeout
+				| super::websocket_transport::ConnectionError::WriteTimeout
+		)
+	) {
+		return Some(TransportErrorKind::Timeout);
+	}
+
 	if error.is::<super::streaming::StreamTimeout>() {
 		return Some(TransportErrorKind::Timeout);
 	}

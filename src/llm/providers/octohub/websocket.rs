@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::super::websocket_transport as transport;
 use super::{auth_aware_error, shared};
 use crate::errors::ProviderError;
 use crate::llm::{retry, ChatCompletionParams};
 use anyhow::{Context, Result};
-use futures_util::{SinkExt, StreamExt};
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
-use reqwest_websocket::{Message, RequestBuilderExt, WebSocket};
+use reqwest_websocket::{Message, RequestBuilderExt};
 use serde::Deserialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -27,61 +27,15 @@ use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex as AsyncMutex;
 
-const MAX_SESSIONS: usize = 64;
-const IDLE_TIMEOUT: Duration = Duration::from_secs(300);
-const CONNECTION_LIFETIME: Duration = Duration::from_secs(55 * 60);
 const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(600);
 const MAX_REQUEST_BYTES: usize = 16 * 1024 * 1024;
 #[cfg(not(target_arch = "wasm32"))]
 const MAX_REPLY_BYTES: usize = 64 * 1024 * 1024;
 
-type Session = Arc<AsyncMutex<Option<Connection>>>;
+type Session = transport::Session<()>;
+type Connection = transport::Connection<()>;
+type SessionPool = transport::SessionPool<()>;
 static SESSIONS: LazyLock<Mutex<SessionPool>> = LazyLock::new(|| Mutex::new(SessionPool::default()));
-
-#[derive(Default)]
-struct SessionPool {
-	entries: Vec<PoolEntry>,
-}
-
-struct PoolEntry {
-	key: [u8; 32],
-	session: Session,
-	used_at: Instant,
-}
-
-impl SessionPool {
-	fn get(&mut self, key: [u8; 32], now: Instant) -> Result<Session> {
-		self.entries
-			.retain(|entry| Arc::strong_count(&entry.session) > 1 || now.duration_since(entry.used_at) < IDLE_TIMEOUT);
-		if let Some(index) = self.entries.iter().position(|entry| entry.key == key) {
-			let mut entry = self.entries.remove(index);
-			entry.used_at = now;
-			let session = entry.session.clone();
-			self.entries.push(entry);
-			return Ok(session);
-		}
-		if self.entries.len() == MAX_SESSIONS {
-			let index = self
-				.entries
-				.iter()
-				.position(|entry| Arc::strong_count(&entry.session) == 1)
-				.context("All OctoHub WebSocket sessions are busy")?;
-			self.entries.remove(index);
-		}
-		let session = Arc::new(AsyncMutex::new(None));
-		self.entries.push(PoolEntry {
-			key,
-			session: session.clone(),
-			used_at: now,
-		});
-		Ok(session)
-	}
-}
-
-struct Connection {
-	socket: WebSocket,
-	opened_at: Instant,
-}
 
 fn session_key(cache_key: Option<&str>, url: &str, token: &str, headers: &HeaderMap) -> Option<[u8; 32]> {
 	let session = cache_key?;
@@ -161,9 +115,13 @@ async fn exchange(
 	let mut slot = session.lock().await;
 	// The lease owns the socket until success. Cancellation, dropping the future,
 	// or any protocol/transport error leaves the slot empty, never a late reply.
-	let mut connection = match slot.take() {
-		Some(connection) if connection.opened_at.elapsed() < CONNECTION_LIFETIME => connection,
-		_ => connect(url, headers, per_call_key).await?,
+	let connection = match slot.take() {
+		Some(idle) => idle.resume().await?,
+		None => None,
+	};
+	let mut connection = match connection {
+		Some(connection) => connection,
+		None => connect(url, headers, per_call_key).await?,
 	};
 	connection.socket.send(Message::Text(text)).await?;
 	let response = read_response(&mut connection.socket).await?;
@@ -174,7 +132,7 @@ async fn exchange(
 		));
 	}
 	if response.status.is_success() {
-		*slot = Some(connection);
+		*slot = Some(connection.park());
 	}
 	Ok(response)
 }
@@ -198,7 +156,9 @@ async fn connect(url: &str, headers: &HeaderMap, per_call_key: bool) -> Result<C
 		if response.status() != reqwest::StatusCode::SWITCHING_PROTOCOLS {
 			let status = response.status();
 			let headers = response.headers().clone();
-			let body = response.into_inner().text().await?;
+			let body = response.into_inner().text().await.with_context(|| {
+				format!("OctoHub WebSocket upgrade rejected (HTTP {status}); failed to read error body")
+			})?;
 			let captured = shared::CapturedResponse { status, headers, body };
 			if retry::is_retryable_status(status.as_u16()) {
 				return Err(retry::retryable_status_error(
@@ -208,10 +168,14 @@ async fn connect(url: &str, headers: &HeaderMap, per_call_key: bool) -> Result<C
 			}
 			return Err(auth_aware_error(status.as_u16(), &captured.body, per_call_key));
 		}
-		Ok(Connection {
-			socket: response.into_websocket().await?,
-			opened_at: Instant::now(),
-		})
+		Ok(Connection::new(
+			response
+				.into_websocket()
+				.await
+				.context("Completing OctoHub WebSocket upgrade")?,
+			"octohub",
+			(),
+		))
 	};
 	tokio::time::timeout(crate::http::CONNECT_TIMEOUT, setup)
 		.await
@@ -253,21 +217,19 @@ fn parse_envelope(text: &str) -> Result<shared::CapturedResponse> {
 	})
 }
 
-async fn read_response(socket: &mut WebSocket) -> Result<shared::CapturedResponse> {
-	while let Some(message) = socket.next().await {
-		match message? {
-			Message::Text(text) => return parse_envelope(&text),
-			Message::Ping(_) => socket.flush().await?,
-			Message::Pong(_) => {}
-			Message::Close { code, .. } => anyhow::bail!(
-				"OctoHub WebSocket closed before its reply (code {code:?}); request outcome is unknown, not retried"
-			),
-			Message::Binary(_) => {
-				anyhow::bail!("OctoHub WebSocket returned binary data; expected a JSON text envelope")
-			}
+async fn read_response(socket: &mut transport::Socket) -> Result<shared::CapturedResponse> {
+	match socket.next().await? {
+		Some(transport::Event::Text(text)) => parse_envelope(&text),
+		Some(transport::Event::Close(code)) => anyhow::bail!(
+			"OctoHub WebSocket closed before its reply (code {code:?}); request outcome is unknown, not retried"
+		),
+		Some(transport::Event::Binary) => {
+			anyhow::bail!("OctoHub WebSocket returned binary data; expected a JSON text envelope")
+		}
+		None => {
+			anyhow::bail!("OctoHub WebSocket disconnected before its reply; request outcome is unknown, not retried")
 		}
 	}
-	anyhow::bail!("OctoHub WebSocket disconnected before its reply; request outcome is unknown, not retried")
 }
 
 #[cfg(test)]

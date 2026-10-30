@@ -470,7 +470,10 @@ async fn token_request<T: DeserializeOwned>(token_url: &str, form: &[(&str, &str
 
 async fn read_json<T: DeserializeOwned>(response: reqwest::Response, source: &str) -> Result<T> {
 	let status = response.status();
-	let body = response.text().await?;
+	let body = response
+		.text()
+		.await
+		.with_context(|| format!("Reading {source} response body (HTTP {status})"))?;
 	if !status.is_success() {
 		anyhow::bail!("{} error {}: {}", source, status, body);
 	}

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::*;
+use futures_util::{SinkExt, StreamExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_tungstenite::{accept_async, tungstenite::Message as ServerMessage, WebSocketStream};
 
@@ -30,12 +31,18 @@ async fn accept(listener: &TcpListener) -> ServerSocket {
 }
 
 async fn receive(socket: &mut ServerSocket) -> Value {
-	let message = tokio::time::timeout(Duration::from_secs(5), socket.next())
-		.await
-		.unwrap()
-		.unwrap()
-		.unwrap();
-	serde_json::from_str(message.to_text().unwrap()).unwrap()
+	loop {
+		let message = tokio::time::timeout(Duration::from_secs(5), socket.next())
+			.await
+			.unwrap()
+			.unwrap()
+			.unwrap();
+		if matches!(message, ServerMessage::Ping(_)) {
+			socket.flush().await.unwrap();
+			continue;
+		}
+		return serde_json::from_str(message.to_text().unwrap()).unwrap();
+	}
 }
 
 async fn finish(socket: &mut ServerSocket, id: &str, output: Value) {
@@ -298,21 +305,6 @@ fn session_key_isolates_credentials_models_headers_and_sessions() {
 }
 
 #[test]
-fn pool_reuses_active_sessions_and_never_evicts_them() {
-	let mut pool = SessionPool::default();
-	let now = Instant::now();
-	let sessions: Vec<_> = (0..MAX_SESSIONS)
-		.map(|index| pool.get(Sha256::digest(index.to_be_bytes()).into(), now).unwrap())
-		.collect();
-	let key = Sha256::digest(0usize.to_be_bytes()).into();
-	assert!(Arc::ptr_eq(&sessions[0], &pool.get(key, now + IDLE_TIMEOUT).unwrap()));
-	assert!(pool.get([255; 32], now).is_err());
-	drop(sessions);
-	pool.get([255; 32], now + IDLE_TIMEOUT * 2).unwrap();
-	assert_eq!(pool.entries.len(), 1);
-}
-
-#[test]
 fn output_events_are_ordered_and_incomplete_responses_fail() {
 	let mut events = ResponseEvents::default();
 	events
@@ -376,25 +368,6 @@ async fn timeout_drops_an_in_flight_socket() {
 	assert!(tokio::time::timeout(Duration::ZERO, pending).await.is_err());
 	assert!(session.try_lock().unwrap().is_none());
 	stop.send(()).unwrap();
-	peer.await.unwrap();
-}
-
-#[tokio::test]
-async fn expired_connections_reconnect_with_full_history() {
-	let (listener, url) = server().await;
-	let peer = tokio::spawn(async move {
-		let mut socket = accept(&listener).await;
-		receive(&mut socket).await;
-		finish(&mut socket, "resp_1", output()).await;
-		let mut next = accept(&listener).await;
-		assert!(receive(&mut next).await.get("previous_response_id").is_none());
-		finish(&mut next, "resp_2", json!([])).await;
-	});
-	let session = Arc::new(AsyncMutex::new(None));
-	let full = full_request(json!([{"role":"user", "content":"hi"}]));
-	request(&session, &full, &url).await.unwrap();
-	session.lock().await.as_mut().unwrap().opened_at = Instant::now() - CONNECTION_LIFETIME;
-	request(&session, &full, &url).await.unwrap();
 	peer.await.unwrap();
 }
 
@@ -717,5 +690,71 @@ async fn request_deadline_includes_websocket_handshake() {
 		Some(ProviderError::TimeoutError { .. })
 	));
 	assert!(session.try_lock().unwrap().is_none());
+	peer.await.unwrap();
+}
+
+#[tokio::test]
+async fn idle_ping_and_close_are_handled_and_next_turn_reconnects_with_full_history() {
+	let (listener, url) = server().await;
+	let (closed, observed) = tokio::sync::oneshot::channel();
+	let peer = tokio::spawn(async move {
+		let mut socket = accept(&listener).await;
+		receive(&mut socket).await;
+		finish(&mut socket, "first", output()).await;
+		socket.send(ServerMessage::Ping(vec![4, 5].into())).await.unwrap();
+		assert_eq!(
+			socket.next().await.unwrap().unwrap(),
+			ServerMessage::Pong(vec![4, 5].into())
+		);
+		socket.close(None).await.unwrap();
+		assert!(matches!(socket.next().await.unwrap().unwrap(), ServerMessage::Close(_)));
+		closed.send(()).unwrap();
+		let mut fresh = accept(&listener).await;
+		let request = receive(&mut fresh).await;
+		assert!(request.get("previous_response_id").is_none());
+		assert_eq!(request["input"].as_array().unwrap().len(), 3);
+		finish(&mut fresh, "reconnected", json!([])).await;
+	});
+	let session = Arc::new(AsyncMutex::new(None));
+	let mut full = full_request(json!([{"role":"user", "content":"hi"}]));
+	request(&session, &full, &url).await.unwrap();
+	tokio::time::timeout(Duration::from_secs(5), observed)
+		.await
+		.unwrap()
+		.unwrap();
+	full["input"]
+		.as_array_mut()
+		.unwrap()
+		.extend(output().as_array().unwrap().clone());
+	full["input"]
+		.as_array_mut()
+		.unwrap()
+		.push(json!({"role":"user", "content":"next"}));
+	assert_eq!(request(&session, &full, &url).await.unwrap().1["id"], "reconnected");
+	peer.await.unwrap();
+}
+
+#[tokio::test]
+async fn rejected_upgrade_body_failure_keeps_operation_status_and_cause() {
+	use tokio::io::{AsyncReadExt, AsyncWriteExt};
+	let (listener, url) = server().await;
+	let peer = tokio::spawn(async move {
+		let (mut stream, _) = listener.accept().await.unwrap();
+		let mut request = Vec::new();
+		while !request.ends_with(b"\r\n\r\n") {
+			request.push(stream.read_u8().await.unwrap());
+		}
+		stream
+			.write_all(b"HTTP/1.1 503 Unavailable\r\nContent-Length: 100\r\nConnection: close\r\n\r\n{")
+			.await
+			.unwrap();
+	});
+	let session = Arc::new(AsyncMutex::new(None));
+	let error = request(&session, &full_request(json!([])), &url).await.unwrap_err();
+	assert!(error
+		.to_string()
+		.contains("ChatGPT WebSocket upgrade rejected (HTTP 503"));
+	assert!(error.is::<reqwest::Error>());
+	assert!(session.lock().await.is_none());
 	peer.await.unwrap();
 }

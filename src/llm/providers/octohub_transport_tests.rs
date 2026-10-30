@@ -311,12 +311,18 @@ mod websocket_integration {
 	}
 
 	async fn receive(socket: &mut Socket) -> Value {
-		let frame = bounded(socket.next())
-			.await
-			.expect("request frame")
-			.expect("read frame");
-		assert!(frame.is_text(), "completion request must be one JSON text frame");
-		serde_json::from_str(frame.to_text().expect("text frame")).expect("request JSON")
+		loop {
+			let frame = bounded(socket.next())
+				.await
+				.expect("request frame")
+				.expect("read frame");
+			if matches!(frame, Frame::Ping(_)) {
+				socket.flush().await.expect("flush pong");
+				continue;
+			}
+			assert!(frame.is_text(), "completion request must be one JSON text frame");
+			return serde_json::from_str(frame.to_text().expect("text frame")).expect("request JSON");
+		}
 	}
 
 	async fn send(socket: &mut Socket, status: u16, headers: Value, body: Value) {

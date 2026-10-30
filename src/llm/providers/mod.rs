@@ -45,6 +45,8 @@ pub(crate) mod shared;
 mod streaming;
 pub mod tinker;
 pub mod together;
+#[cfg(feature = "websockets")]
+mod websocket_transport;
 pub mod webwright;
 pub mod xai;
 pub mod xiaomi;

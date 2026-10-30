@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.47.3] - 2026-10-30
+
+### 🔄 Other Changes
+
+1 maintenance, dependency, and tooling update not listed individually.
+
 ## [0.47.2] - 2026-10-29
 
 ### 📋 Release Summary

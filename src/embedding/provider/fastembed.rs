@@ -61,9 +61,11 @@ impl FastEmbedProviderImpl {
 		// Use system-wide cache for FastEmbed models
 		let cache_dir = crate::storage::get_model_cache_dir().context("Failed to get FastEmbed cache directory")?;
 
+		let providers = crate::ort_env::execution_providers(&format!("embedding:{model_enum:?}"))?;
 		let model = TextEmbedding::try_new(
 			TextInitOptions::new(model_enum)
 				.with_environment(crate::ort_env::environment()?)
+				.with_execution_providers(providers)
 				.with_show_download_progress(false)
 				.with_cache_dir(cache_dir),
 		)

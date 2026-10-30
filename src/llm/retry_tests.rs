@@ -424,6 +424,7 @@ async fn retry_logs_include_the_underlying_error_without_flattening_the_returned
 }
 
 #[tokio::test]
+#[serial_test::serial(retry_log)]
 async fn typed_provider_timeout_is_reported_as_a_timeout_to_the_observer() {
 	let (observer, events) = recording_observer();
 	let params = crate::llm::types::ChatCompletionParams::new(&[], "model", 0.0, 1.0, 0, 0)

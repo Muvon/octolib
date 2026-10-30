@@ -213,49 +213,6 @@ fn test_extract_thinking_think_tags() {
 }
 
 #[test]
-fn test_merge_sse_stream_content_and_usage() {
-	let body = "\
-data: {\"id\":\"abc\",\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\n\
-data: {\"choices\":[{\"delta\":{\"reasoning\":\"think \"}}]}\n\
-data: {\"choices\":[{\"delta\":{\"reasoning\":\"more\"}}]}\n\
-data: {\"choices\":[{\"delta\":{\"content\":\"Hello \"}}]}\n\
-data: {\"choices\":[{\"delta\":{\"content\":\"world\"},\"finish_reason\":\"stop\"}]}\n\
-data: {\"choices\":[],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5,\"total_tokens\":15,\"cached_tokens\":4}}\n\
-data: [DONE]\n";
-	let m = merge_sse_stream(body);
-	assert!(m.parsed_any);
-	assert_eq!(m.id.as_deref(), Some("abc"));
-	assert_eq!(m.content, "Hello world");
-	assert_eq!(m.reasoning, "think more");
-	assert_eq!(m.finish_reason.as_deref(), Some("stop"));
-	let u = m.usage.unwrap();
-	assert_eq!(u.prompt_tokens, Some(10));
-	assert_eq!(u.cached_tokens, Some(4));
-}
-
-#[test]
-fn test_merge_sse_stream_tool_call_fragments() {
-	// id+name arrive once; arguments stream as fragments and must concatenate.
-	let body = "\
-data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"ci\"}}]}}]}\n\
-data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"ty\\\":\\\"NYC\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\
-data: [DONE]\n";
-	let m = merge_sse_stream(body);
-	assert_eq!(m.tool_calls.len(), 1);
-	assert_eq!(m.tool_calls[0].id, "call_1");
-	assert_eq!(m.tool_calls[0].name, "get_weather");
-	assert_eq!(m.tool_calls[0].arguments, "{\"city\":\"NYC\"}");
-	assert_eq!(m.finish_reason.as_deref(), Some("tool_calls"));
-}
-
-#[test]
-fn test_merge_sse_stream_ignores_garbage() {
-	let m = merge_sse_stream(": keep-alive\n\ndata: not-json\n");
-	assert!(!m.parsed_any);
-	assert_eq!(m.content, "");
-}
-
-#[test]
 fn test_extract_thinking_none() {
 	let (thinking, content) = extract_thinking("plain answer", None);
 	assert!(thinking.is_none());

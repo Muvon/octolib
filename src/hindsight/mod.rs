@@ -29,8 +29,8 @@
 //! layout, the window and the Platt parameters, under `onnx/` in the
 //! Hugging Face repo or in any local directory.
 //!
-//! Everything runs on CPU through ONNX Runtime: roughly 30 ms to encode an
-//! event (once, when it happens) and a few milliseconds to score a boundary.
+//! Inference runs through ONNX Runtime. On macOS, compiled CoreML models are
+//! cached across loads; other platforms retain their execution-provider selection.
 //! No labelers, no network at inference.
 //!
 //! ```rust,no_run
@@ -55,7 +55,7 @@ mod tests;
 use anyhow::{anyhow, bail, Context, Result};
 use ort::session::{Session as OrtSession, SessionInputValue};
 use ort::value::Tensor;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -107,7 +107,7 @@ pub struct ModelConfig {
 }
 
 /// The calibrated verdict at one boundary.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Scores {
 	pub logit_correction: f32,
 	/// Probability that the next user turn is a correction of any class.
@@ -234,6 +234,8 @@ impl Hindsight {
 		let environment = crate::ort_env::environment()?;
 		let session = |name: &str| -> Result<OrtSession> {
 			OrtSession::builder(&environment)
+				.map_err(ort_error)?
+				.with_execution_providers(crate::ort_env::file_execution_providers(&dir.join(name))?)
 				.map_err(ort_error)?
 				.with_intra_threads(THREADS)
 				.map_err(ort_error)?

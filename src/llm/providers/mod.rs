@@ -42,6 +42,7 @@ mod openai_compat;
 pub mod opencode;
 pub mod openrouter;
 pub(crate) mod shared;
+mod streaming;
 pub mod tinker;
 pub mod together;
 pub mod webwright;

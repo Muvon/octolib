@@ -262,6 +262,7 @@ impl AiProvider for MinimaxProvider {
 
 		// Create the request body
 		let mut request_body = serde_json::json!({
+			"stream": true,
 			"model": params.model,
 			"messages": minimax_messages,
 		});
@@ -587,7 +588,13 @@ async fn execute_minimax_request(
 					.header("anthropic-version", "2023-06-01")
 					.json(&request_body);
 
-				let captured = shared::send_and_read(req, request_timeout, extra_headers.as_ref()).await?;
+				let captured = super::streaming::send_and_read(
+					req,
+					request_timeout,
+					extra_headers.as_ref(),
+					super::streaming::Format::Messages,
+				)
+				.await?;
 
 				// Return Err for retryable HTTP errors so the retry loop catches them
 				if retry::is_retryable_status(captured.status.as_u16()) {

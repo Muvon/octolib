@@ -408,7 +408,7 @@ impl AiProvider for ZaiProvider {
 			top_p,
 			// 0 = provider default: omit rather than send a literal zero cap.
 			max_tokens: (params.max_tokens > 0).then_some(params.max_tokens),
-			stream: Some(false),
+			stream: Some(true),
 			stop: None,
 			tools: params.tools.as_ref().map(|t| convert_tools(t)),
 			tool_choice: None,
@@ -565,7 +565,13 @@ async fn execute_zai_request(
 					.bearer_auth(&api_key)
 					.json(&request_body);
 
-				let captured = shared::send_and_read(req, request_timeout, extra_headers.as_ref()).await?;
+				let captured = super::streaming::send_and_read(
+					req,
+					request_timeout,
+					extra_headers.as_ref(),
+					super::streaming::Format::Chat,
+				)
+				.await?;
 
 				// Return Err for retryable HTTP errors so the retry loop catches them
 				if retry::is_retryable_status(captured.status.as_u16()) {

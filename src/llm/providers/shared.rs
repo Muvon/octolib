@@ -62,6 +62,7 @@ pub(crate) fn redact_text(text: &str, api_key: Option<&crate::llm::types::PerCal
 struct RedactedError {
 	message: String,
 	transport_error: Option<TransportErrorKind>,
+	terminal_stream_error: bool,
 }
 
 pub(crate) fn redact_error(error: anyhow::Error, api_key: Option<&crate::llm::types::PerCallApiKey>) -> anyhow::Error {
@@ -81,8 +82,16 @@ pub(crate) fn redact_error(error: anyhow::Error, api_key: Option<&crate::llm::ty
 	RedactedError {
 		message: redact_text(&message, Some(key)),
 		transport_error: transport_error_kind(&error),
+		terminal_stream_error: is_terminal_stream_error(&error),
 	}
 	.into()
+}
+
+pub(crate) fn is_terminal_stream_error(error: &anyhow::Error) -> bool {
+	error.is::<super::streaming::TerminalStreamError>()
+		|| error
+			.downcast_ref::<RedactedError>()
+			.is_some_and(|error| error.terminal_stream_error)
 }
 
 pub(super) fn parse_response<T: serde::de::DeserializeOwned>(
@@ -172,6 +181,9 @@ impl TransportErrorKind {
 }
 
 pub(crate) fn transport_error_kind(error: &anyhow::Error) -> Option<TransportErrorKind> {
+	if error.is::<super::streaming::IncompleteStream>() {
+		return Some(TransportErrorKind::Body);
+	}
 	if let Some(error) = error.downcast_ref::<RedactedError>() {
 		return error.transport_error;
 	}
@@ -197,9 +209,9 @@ pub(crate) fn transport_error_kind(error: &anyhow::Error) -> Option<TransportErr
 	}
 }
 
-/// A fully-buffered HTTP response: status, headers, and body read to completion.
+/// A complete HTTP response: status, headers, and a buffered or accumulated body.
 ///
-/// Produced by [`send_and_read`], which reads the body INSIDE the retried unit
+/// Produced by [`send_and_read`] or the SSE reader, which consume the body INSIDE the retried unit
 /// so that a mid-stream connection reset surfaces as a retryable error instead
 /// of escaping the retry loop. Callers inspect `status`/`headers` and parse
 /// `body` without any further `.await` on the (already consumed) connection.
@@ -248,8 +260,8 @@ pub(super) fn apply_extra_headers(
 /// failed connections. Status and headers are cloned before consuming the body.
 ///
 /// `extra_headers` ([`ChatCompletionParams::extra_headers`]) are folded in here
-/// — the one choke point every provider's chat path goes through — so the
-/// upsert semantics hold uniformly no matter which provider built the request.
+/// through [`apply_extra_headers`], also used by the SSE reader, so the upsert
+/// semantics hold uniformly no matter which provider built the request.
 ///
 /// [`ChatCompletionParams::extra_headers`]: crate::llm::types::ChatCompletionParams
 pub(super) async fn send_and_read(

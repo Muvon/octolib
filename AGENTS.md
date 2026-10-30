@@ -23,6 +23,7 @@ src/
 │   └── providers/
 │       ├── openai_compat.rs        → Shared OpenAI-compatible request/response layer; auto-passes reasoning_effort; also OpenAiCompatConfig, get_optional_api_key, get_api_url (internal, not pub)
 │       ├── shared.rs               → Shared HTTP client access, cache control helpers, tool call parsers
+│       ├── streaming.rs            → Internal SSE framing and Chat/Messages/Responses accumulation
 │       ├── openai.rs               → Native — PRICING table, Responses API, OAuth support
 │       ├── anthropic.rs            → Native — PRICING table, caching, thinking blocks, OAuth support
 │       ├── google_vertex.rs        → Vertex AI — service-account auth, delegates to openai_compat; shared Gemini PRICING table + model-cache helpers
@@ -84,6 +85,7 @@ files declare them with `#[cfg(test)]`, `#[path = "<name>_tests.rs"]`, and
 | Configure reasoning / thinking effort | `src/llm/types.rs` → `ReasoningEffort` enum; per-provider mapping inside each `chat_completion()` |
 | Tool call handling | `src/llm/strategies.rs` → `AnthropicStrategy` / `OpenAIStrategy` |
 | Shared HTTP / cache helpers | `src/llm/providers/shared.rs` |
+| Internal upstream streaming | `src/llm/providers/streaming.rs`; provider defaults in `openai_compat::configure_streaming` |
 | Model format parsing | `src/llm/factory.rs` → `ProviderFactory::parse_model()` |
 | Public API surface | `src/lib.rs` re-exports |
 | Model name normalization | `src/llm/utils.rs` → `normalize_model_name`, `sanitize_model_name` |
@@ -108,6 +110,98 @@ files declare them with `#[cfg(test)]`, `#[path = "<name>_tests.rs"]`, and
 - Every extracted or new `.rs` test file uses the standard 2026 copyright header.
 
 ## How Things Work
+
+### HTTP and internal streaming
+
+Reviewed against provider documentation on **2026-10-30**. Documentation support
+is not a live account/endpoint probe; custom base URLs and plan endpoints still
+need their own verification. Do not infer streaming support from a Cloudflare
+header or from the words "OpenAI compatible" alone.
+
+- Chat requests use the process-wide reqwest pool in `src/http.rs`: HTTP/1.1 or
+  negotiated HTTP/2, rustls, 20-second connect timeout, TCP keepalive, and a
+  15-second **idle pool** timeout. The idle pool timeout does not limit an active
+  response. Keep HTTP/2 PINGs disabled unless a specific host's policy warrants
+  them. Rebuild only for configuration changes, never after request errors.
+- Streaming is an **upstream transport detail**. `AiProvider::chat_completion`
+  still returns one accumulated `ProviderResponse`; OctoHub's public API and
+  `octohub:` adapter remain buffered. Internal SSE does not keep the separate
+  client-to-OctoHub HTTP response alive.
+- Supported paths send `stream: true`. `providers/streaming.rs` reads SSE
+  incrementally and assembles the normal response JSON for existing parsers.
+  Chat Completions uses indexed deltas and `[DONE]`; Messages uses content
+  blocks, cumulative usage, and `message_stop`; Responses uses the complete
+  `response.completed` or `response.incomplete` object. Preserve reasoning,
+  signatures, parallel tool arguments, cache tokens, IDs, costs and stop reasons.
+- A complete JSON response from a compatible endpoint is selected by its HTTP
+  Content-Type. Never recover from malformed SSE by trying JSON or resending
+  with streaming disabled. Reject malformed events, unfinished blocks/tools,
+  missing terminal events, and in-band errors; never return partial success.
+  Frames are bounded at 16 MiB and accumulated event data at 256 MiB per attempt.
+- Keep body reading and accumulation inside retry/cancellation boundaries.
+  Transport interruption and typed transient upstream errors may retry according
+  to caller settings; malformed streams and permanent upstream errors stop.
+  Preserve credential redaction. A configured request timeout covers connection,
+  headers and the entire body; `None` deliberately has no total deadline.
+- Request final usage only on endpoints that support the option. Usage updates
+  are snapshots, not counters to add. A `finish_reason` chunk can precede a
+  separate usage chunk: consume through `[DONE]`, including OpenRouter's repeated
+  finish reason on its accounting chunk.
+
+[Reqwest 0.12.28](https://docs.rs/reqwest/0.12.28/reqwest/struct.ClientBuilder.html)
+distinguishes total, read, connect and idle-pool timeouts.
+[Cloudflare's current limits](https://developers.cloudflare.com/fundamentals/reference/connection-limits/)
+list a 125-second origin proxy read timeout and 30-second write timeout. SSE
+helps only when the upstream actually emits timely data or heartbeat comments;
+TCP keepalive does not supply HTTP response bytes. This is not evidence that
+every provider is behind Cloudflare, nor a guarantee against slow time-to-first-byte.
+
+| Provider / current adapter | Default and provider evidence |
+|---|---|
+| OpenAI | Responses SSE; [terminal response events](https://developers.openai.com/api/reference/resources/responses/streaming-events) include full output and usage. |
+| xAI | Responses SSE; [streaming guide](https://docs.x.ai/developers/model-capabilities/text/streaming). Preserve encrypted reasoning and continuation IDs. |
+| Anthropic | Messages SSE; [streaming protocol](https://platform.claude.com/docs/en/build-with-claude/streaming), including cumulative usage, input JSON, thinking and signature deltas. |
+| MiniMax | Messages SSE on the existing Anthropic endpoint; [Anthropic compatibility](https://platform.minimax.io/docs/api-reference/text-anthropic-api). |
+| DeepSeek | Chat SSE with `stream_options.include_usage`; [Chat API](https://api-docs.deepseek.com/api/create-chat-completion). |
+| Moonshot/Kimi | Chat SSE with `stream_options.include_usage`; [Chat API](https://platform.kimi.ai/docs/api/chat). |
+| Z.ai | Chat SSE; [Chat API](https://docs.z.ai/api-reference/llm/chat-completion) documents `[DONE]`; do not add undocumented `stream_options`. |
+| OpenRouter | Chat SSE; final usage is automatic, existing `usage.include` retained; [comments, final usage and in-band errors](https://openrouter.ai/docs/api_reference/streaming). |
+| Together | Chat SSE with final usage; [Chat API](https://docs.together.ai/reference/chat-completions). Uses the common strict accumulator, not a lossy line parser. |
+| Alibaba | Chat SSE with requested usage; [streaming output](https://www.alibabacloud.com/help/en/model-studio/stream). |
+| Amazon Bedrock | The adapter uses **OpenAI Chat Completions**, not binary ConverseStream; [Bedrock Chat API](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-completions.html). Chat SSE with requested usage. |
+| BytePlus | Chat SSE with requested usage; [Chat API](https://docs.byteplus.com/en/docs/modelark/chat-api). |
+| NVIDIA | Chat SSE with requested usage; [NIM API](https://docs.api.nvidia.com/nim/reference/minimaxai-minimax-m3-1-flash-infer). Model-specific endpoints can differ. |
+| Google AI Studio | Chat SSE with requested usage; [OpenAI compatibility](https://ai.google.dev/gemini-api/docs/openai). |
+| Google Vertex | Chat SSE with requested usage on its OpenAI adapter; [OpenAI compatibility](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/call-gemini-using-openai-library). |
+| Groq | Chat SSE with requested usage; **`json_schema` stays non-streaming**, per [Structured Outputs limitations](https://console.groq.com/docs/structured-outputs); [Chat API](https://console.groq.com/docs/api-reference). |
+| Cerebras | Chat SSE without `stream_options`; **`json_object` stays non-streaming**, per [Chat API](https://inference-docs.cerebras.ai/api-reference/chat-completions). `json_schema` can stream. |
+| Fireworks | Chat SSE with requested usage; [Chat API](https://docs.fireworks.ai/api-reference/post-chatcompletions). |
+| Featherless | Chat SSE; final usage is automatic, including cost where billed per request; [completion protocol](https://featherless.ai/docs/completions). |
+| Inception | Chat SSE with requested usage; [Chat API](https://docs.inceptionlabs.ai/api-reference/chat/create-a-chat-completion). Do not enable the separate diffusion-preview mode. |
+| Meta | Chat SSE with requested usage; [streaming and usage recipe](https://dev.meta.ai/docs/cookbook/streaming-responses). |
+| Xiaomi | Chat SSE without undocumented `stream_options`; [Chat API](https://mimo.mi.com/docs/en-US/api/chat/openai-api) specifies streamed usage. |
+| Ollama | Chat SSE with requested usage on `/v1/chat/completions`; [OpenAI compatibility](https://docs.ollama.com/api/openai-compatibility). A native `/api/chat` URL override stays non-streaming because its protocol is NDJSON. |
+| Local | Same OpenAI Chat SSE contract as Ollama/other compatible local servers; native `/api/chat` overrides stay buffered. Custom servers must support the requested protocol. |
+| OpenCode Zen / Go | Chat SSE with requested usage; [inference API](https://opencode.ai/v2/docs/console/api/inference/) describes terminal usage and cost. Existing configured base URLs are retained. |
+| ChatGPT | Already defaults to HTTP/SSE with its own terminal-event/retry/session handling; optional WebSocket transport unchanged. |
+| Tinker | Buffered: [compatible-API docs](https://tinker-docs.thinkingmachines.ai/tinker/compatible-apis/openai/) did not establish a streaming contract in this review. |
+| Hetzner | Buffered: [experimental docs](https://experiments.hetzner.com/docs/inference) require JavaScript and did not yield a verifiable stream/usage contract. |
+| WebWright | Buffered: [public API overview](https://webwright.ai/about) establishes compatibility, but the linked quickstart could not be retrieved; stream/usage behavior remains unverified. |
+| OctoHub | Existing `/v1/responses` JSON contract in `octohub.rs`; unchanged. |
+| CLI backends | Subprocess transports, not these HTTP adapters; unchanged. |
+
+Embedding and reranking endpoints remain JSON requests with their own shared
+pools (10 idle connections per host, 30-second idle timeout, 10-second connect
+and 120-second total timeout). Media submission/polling uses the shared client;
+artifact downloads deliberately use a separate redirect-disabled pool.
+HuggingFace's direct config-download helper currently creates a separate client;
+it is model setup, not the per-completion request path.
+
+When adding a chat provider, register its streaming policy explicitly in
+`openai_compat::configure_streaming` or select its native stream format. Cite
+provider evidence, preserve documented feature exceptions, and test fragmented
+text/tools, usage, errors, truncation and cancellation with local HTTP fixtures.
+Do not add a generic retry-to-non-streaming fallback.
 
 ### Provider Shape: Native vs. Proxy
 

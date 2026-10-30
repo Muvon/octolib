@@ -142,6 +142,7 @@ struct MoonshotRequest {
 	reasoning_effort: Option<&'static str>,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	stream: Option<bool>,
+	stream_options: serde_json::Value,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	response_format: Option<serde_json::Value>,
 	#[serde(skip_serializing_if = "Option::is_none")]
@@ -666,7 +667,8 @@ impl AiProvider for MoonshotProvider {
 			max_tokens,
 			max_completion_tokens,
 			reasoning_effort: k3_reasoning_effort(&params.model, params.reasoning_effort),
-			stream: Some(false),
+			stream: Some(true),
+			stream_options: serde_json::json!({"include_usage": true}),
 			response_format: None,
 			tools: None,
 			tool_choice: None,
@@ -735,7 +737,13 @@ impl AiProvider for MoonshotProvider {
 						.header("Content-Type", "application/json")
 						.json(&request);
 
-					let captured = shared::send_and_read(req, request_timeout, extra_headers.as_ref()).await?;
+					let captured = super::streaming::send_and_read(
+						req,
+						request_timeout,
+						extra_headers.as_ref(),
+						super::streaming::Format::Chat,
+					)
+					.await?;
 
 					// Return Err for retryable HTTP errors so the retry loop catches them
 					if retry::is_retryable_status(captured.status.as_u16()) {

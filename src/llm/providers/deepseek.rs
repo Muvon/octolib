@@ -224,6 +224,7 @@ struct DeepSeekRequest {
 	max_tokens: Option<u32>,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	stream: Option<bool>,
+	stream_options: serde_json::Value,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	response_format: Option<serde_json::Value>,
 	#[serde(skip_serializing_if = "Option::is_none")]
@@ -428,7 +429,8 @@ fn build_request(params: &ChatCompletionParams) -> DeepSeekRequest {
 		messages,
 		// 0 = provider default: omit rather than send a literal zero cap.
 		max_tokens: (params.max_tokens > 0).then_some(params.max_tokens),
-		stream: Some(false),
+		stream: Some(true),
+		stream_options: serde_json::json!({"include_usage": true}),
 		response_format,
 		tools,
 		reasoning_effort: map_reasoning_effort(params.reasoning_effort),
@@ -532,7 +534,13 @@ impl AiProvider for DeepSeekProvider {
 						.header("Content-Type", "application/json")
 						.json(&request);
 
-					let captured = shared::send_and_read(req, request_timeout, extra_headers.as_ref()).await?;
+					let captured = super::streaming::send_and_read(
+						req,
+						request_timeout,
+						extra_headers.as_ref(),
+						super::streaming::Format::Chat,
+					)
+					.await?;
 
 					// Return Err for retryable HTTP errors so the retry loop catches them
 					if retry::is_retryable_status(captured.status.as_u16()) {

@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use super::*;
-use std::collections::HashMap;
 use std::time::Duration;
 
 fn temp_dir(tag: &str) -> PathBuf {

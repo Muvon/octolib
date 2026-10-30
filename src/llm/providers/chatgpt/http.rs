@@ -103,7 +103,6 @@ pub(super) async fn complete(params: &ChatCompletionParams, request_body: &Value
 					{
 						return Err(error)
 					}
-					// Credential failures need sign-in, not another refresh attempt.
 					Err(error) => return Ok(Err(error)),
 				};
 

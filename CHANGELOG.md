@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.48.0] - 2026-10-30
+
+### 📋 Release Summary
+
+ChatGPT now uses HTTP streaming by default and supports persistent WebSocket sessions. LLM responses can stream with separate request and stream timeouts, and OctoHub WebSocket transport is integrated, selectable, and reconciled with stream timeouts. WebSocket receive limits now match the hub, ChatGPT handles WebSocket inactivity timeouts, FastEmbed reuses execution provider configuration, and ONNX reuses cached CoreML compiled models.
+
+### 🚨 Breaking Changes
+
+- **chatgpt**: use HTTP streaming transport by default `2b7a7084`
+
+### ✨ New Features & Enhancements
+
+- **octohub**: reconcile websocket transport with stream timeouts `755f0cfc`
+- **octohub**: integrate websocket transport `093b7f78`
+- **llm**: separate request and stream timeouts `18e75511`
+- **llm**: support streaming LLM responses `e282f237`
+- **llm**: add selectable OctoHub WebSocket transport `e182a25d`
+- **chatgpt**: use persistent WebSocket sessions for ChatGPT `75146736`
+
+### 🔧 Improvements & Optimizations
+
+- **chatgpt**: remove auth import and error comment `68ca393c`
+- **fastembed**: reuse execution provider configuration `4007045f`
+- **onnx**: reuse cached CoreML compiled models `f9a69c22`
+
+### 🐛 Bug Fixes & Stability
+
+- **octohub**: match native websocket receive limits to hub `a8c89b85`
+- **chatgpt**: handle ChatGPT WebSocket inactivity timeouts `3432030e`
+
 ## [0.47.3] - 2026-10-30
 
 ### 🔄 Other Changes

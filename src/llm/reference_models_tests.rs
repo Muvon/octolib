@@ -149,6 +149,7 @@ fn reference_pricing_matches_first_party_provider_tables() {
 		"claude-opus-5-5",
 		"claude-opus-5",
 		"claude-sonnet-5",
+		"claude-sonnet-5-5",
 		"claude-opus-4-8",
 		"claude-haiku-4-5",
 	] {

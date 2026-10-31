@@ -374,9 +374,11 @@ impl AiProvider for OpenRouterProvider {
 
 		// Anthropic models (claude)
 		if normalized.starts_with("anthropic/") || normalized.contains("claude") {
-			// Delegate to Anthropic provider pricing
+			// Delegate to Anthropic provider pricing. OpenRouter spells versions
+			// with dots (`claude-sonnet-5.5`), Anthropic's table with dashes; a
+			// dotted id would substring-match the older `claude-sonnet-5` row.
 			let anthropic = crate::llm::providers::AnthropicProvider::new();
-			let pricing = anthropic.get_model_pricing(model)?;
+			let pricing = anthropic.get_model_pricing(&normalized.replace('.', "-"))?;
 			// Fast mode is a request option on the Claude API, but OpenRouter
 			// sells it as a separate `-fast` route. It doubles every rate:
 			// <https://platform.claude.com/docs/en/about-claude/pricing#fast-mode-pricing>

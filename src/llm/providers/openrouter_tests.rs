@@ -296,6 +296,25 @@ fn test_anthropic_fast_route_doubles_pricing() {
 }
 
 #[test]
+fn dotted_claude_versions_are_priced_as_their_own_model() {
+	use crate::llm::providers::AnthropicProvider;
+	let provider = OpenRouterProvider::new();
+	let anthropic = AnthropicProvider::new();
+	for (dotted, dashed) in [
+		("anthropic/claude-sonnet-5.5", "claude-sonnet-5-5"),
+		("anthropic/claude-opus-5.5", "claude-opus-5-5"),
+	] {
+		let routed = provider.get_model_pricing(dotted).unwrap();
+		let direct = anthropic.get_model_pricing(dashed).unwrap();
+		assert_eq!(routed.input_price_per_1m, direct.input_price_per_1m, "{dotted}");
+		assert_eq!(
+			routed.cache_read_price_per_1m, direct.cache_read_price_per_1m,
+			"{dotted}"
+		);
+	}
+}
+
+#[test]
 fn test_models_without_a_maker_table_price_from_the_reference_table() {
 	let provider = OpenRouterProvider::new();
 	let flash = provider

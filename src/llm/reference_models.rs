@@ -1317,6 +1317,13 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		pricing: pricing(5.00, 25.00, 6.25, 0.50),
 	},
 	ReferenceModelEntry {
+		// Cache hits are 0.05x input ($0.10), not the 0.1x of Claude Sonnet 5;
+		// listed first so the shorter pattern below does not match it.
+		pattern: "claude-sonnet-5-5",
+		capabilities: caps(true, false, true, 1_000_000),
+		pricing: pricing(2.00, 10.00, 2.50, 0.10),
+	},
+	ReferenceModelEntry {
 		pattern: "claude-sonnet-5",
 		capabilities: caps(true, false, true, 1_000_000),
 		pricing: pricing(2.00, 10.00, 2.50, 0.20),

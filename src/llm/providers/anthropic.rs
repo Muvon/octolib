@@ -832,9 +832,10 @@ enum AnthropicResponseContent {
 	Text { text: String },
 	#[serde(rename = "thinking")]
 	Thinking(#[serde(default)] serde_json::Value),
-	/// Opaque encrypted reasoning; contributes no text.
+	/// Opaque encrypted reasoning; contributes no text. Its raw block travels in
+	/// `output_items` for replay.
 	#[serde(rename = "redacted_thinking")]
-	RedactedThinking(#[serde(default)] serde_json::Value),
+	RedactedThinking,
 	#[serde(rename = "tool_use")]
 	ToolUse {
 		id: String,
@@ -1270,7 +1271,7 @@ async fn execute_anthropic_request(
 					thinking_parts.push(thinking_str.to_string());
 				}
 			}
-			AnthropicResponseContent::RedactedThinking(_) => {}
+			AnthropicResponseContent::RedactedThinking => {}
 			AnthropicResponseContent::ToolUse { id, name, input } => {
 				tool_calls.push(ToolCall {
 					id: id.clone(),

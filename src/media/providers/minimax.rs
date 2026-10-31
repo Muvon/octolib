@@ -29,6 +29,10 @@ const IMAGE_ENDPOINT: &str = "/v1/image_generation";
 const VIDEO_ENDPOINT: &str = "/v2/video_generation";
 const VIDEO_QUERY_ENDPOINT: &str = "/v2/query/video_generation";
 const SPEECH_ENDPOINT: &str = "/v1/t2a_v2";
+const FILE_UPLOAD_ENDPOINT: &str = "/v1/files/upload";
+const FILE_DELETE_ENDPOINT: &str = "/v1/files/delete";
+/// The file purpose the V2 video endpoint reads `mm_file://` inputs from.
+const VIDEO_INPUT_PURPOSE: &str = "video_generation_input";
 const DEFAULT_VOICE: &str = "English_expressive_narrator";
 const DEFAULT_VOICE_SENTINEL: &str = "default";
 const DEFAULT_VIDEO_DURATION_SECS: u32 = 5;
@@ -67,6 +71,42 @@ impl MinimaxMediaProvider {
 			Ok(base) => Ok(base.trim_end_matches('/').to_string()),
 			Err(std::env::VarError::NotPresent) => Ok(API_BASE.to_string()),
 			Err(error) => Err(MediaError::InvalidRequest(format!("invalid {API_BASE_ENV}: {error}"))),
+		}
+	}
+
+	/// Upload one video input to MiniMax's file store and return its file id.
+	async fn upload_video_input(&self, source: &MediaSource, options: &RequestOptions) -> MediaResult<u64> {
+		let (data, media_type) = shared::source_to_bytes(source, options.max_source_bytes)?;
+		// MiniMax types the file by its name; the part carries no Content-Type.
+		let file_name = format!(
+			"input.{}",
+			media_type.split_once('/').map_or("bin", |(_, subtype)| subtype)
+		);
+		let url = format!("{}{FILE_UPLOAD_ENDPOINT}", self.api_base()?);
+		let key = shared::api_key(API_KEY_ENV)?;
+		let response = shared::send(PROVIDER, options, || {
+			let file = reqwest::multipart::Part::bytes(data.clone()).file_name(file_name.clone());
+			let form = reqwest::multipart::Form::new()
+				.text("purpose", VIDEO_INPUT_PURPOSE)
+				.part("file", file);
+			crate::http::http_client().post(&url).bearer_auth(&key).multipart(form)
+		})
+		.await?;
+		parse_response(&response, true)?
+			.pointer("/file/file_id")
+			.and_then(Value::as_u64)
+			.ok_or_else(|| invalid_response("missing file.file_id"))
+	}
+
+	/// Delete an uploaded input. A failure does not fail the generation it fed:
+	/// the task already exists, and MiniMax drops the file after 7 days anyway.
+	async fn delete_video_input(&self, file_id: u64) {
+		let body = json!({"file_id": file_id, "purpose": VIDEO_INPUT_PURPOSE});
+		if let Err(error) = self
+			.post(FILE_DELETE_ENDPOINT, &body, &RequestOptions::default(), true)
+			.await
+		{
+			tracing::warn!(file_id, %error, "MiniMax video input was not deleted; it expires after 7 days");
 		}
 	}
 
@@ -325,14 +365,29 @@ impl VideoGenerationProvider for MinimaxMediaProvider {
 			aspect_ratio(request.geometry, "16:9", VIDEO_RATIOS)?
 		};
 		let mut content = vec![json!({"type":"text", "text":request.prompt})];
+		let mut uploaded = None;
 		if let Some(first) = request.first_frame.as_ref() {
-			let url = shared::source_to_data_or_uri(first, request.request_options.max_source_bytes)?;
+			let url = match first {
+				// Uploaded, never inlined: MiniMax caps the whole body at 64 MB and
+				// its file store exposes no download link.
+				MediaSource::Bytes { .. } | MediaSource::File { .. } => {
+					let file_id = self.upload_video_input(first, &request.request_options).await?;
+					uploaded = Some(file_id);
+					format!("mm_file://{file_id}")
+				}
+				_ => shared::source_to_data_or_uri(first, request.request_options.max_source_bytes)?,
+			};
 			content.push(json!({"type":"image_url", "image_url":{"url":url}, "role":"first_frame"}));
 		}
 		let body = json!({"model":request.model, "content":content, "resolution":resolution, "duration":duration as u32, "ratio":ratio});
-		let value = self
-			.post(VIDEO_ENDPOINT, &body, &request.request_options, false)
-			.await?;
+		let submitted = self.post(VIDEO_ENDPOINT, &body, &request.request_options, false).await;
+		// MiniMax reads the frame when the task is created (verified live
+		// 2026-10-31: deleted right after submit, the task still succeeded), so the
+		// user's image is removed now rather than kept for the 7-day file retention.
+		if let Some(file_id) = uploaded {
+			self.delete_video_input(file_id).await;
+		}
+		let value = submitted?;
 		let id = required_str(&value, "/task_id")?;
 		let handle = JobHandle {
 			provider: PROVIDER.to_string(),

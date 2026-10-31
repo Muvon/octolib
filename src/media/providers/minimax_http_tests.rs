@@ -38,6 +38,28 @@ fn video_request(model: &str, duration: f64) -> VideoGenerationRequest {
 	request
 }
 
+fn image_video_request(first_frame: MediaSource) -> VideoGenerationRequest {
+	let mut request = video_request("MiniMax-H3-Lite", 4.0);
+	request.mode = VideoGenerationMode::ImageToVideo;
+	request.first_frame = Some(first_frame);
+	request
+}
+
+fn png_frame() -> MediaSource {
+	MediaSource::Bytes {
+		data: b"image".to_vec(),
+		media_type: "image/png".to_string(),
+	}
+}
+
+fn upload_reply(file_id: u64) -> String {
+	json!({"file":{"file_id":file_id, "bytes":5, "filename":"input.png", "purpose":"video_generation_input"}, "base_resp":{"status_code":0,"status_msg":"success"}}).to_string()
+}
+
+fn delete_reply(file_id: u64) -> String {
+	json!({"file_id":file_id, "base_resp":{"status_code":0,"status_msg":"success"}}).to_string()
+}
+
 fn handle() -> JobHandle {
 	JobHandle {
 		provider: PROVIDER.to_string(),
@@ -169,23 +191,98 @@ async fn video_submit_and_poll_queued_running_succeeded() {
 
 #[tokio::test]
 #[serial_test::serial]
-async fn video_start_image_uses_v2_content_and_default_resolution() {
-	let (mock, _env) = start_mock(vec![(200, json!({"task_id":"task-1"}).to_string())]);
-	let mut request = video_request("MiniMax-H3-Lite", 4.0);
-	request.mode = VideoGenerationMode::ImageToVideo;
-	request.first_frame = Some(MediaSource::Bytes {
-		data: b"image".to_vec(),
-		media_type: "image/png".to_string(),
-	});
-	let submitted = MinimaxMediaProvider::new().submit_video(request).await.unwrap();
+async fn video_start_image_is_uploaded_referenced_and_deleted() {
+	let (mock, _env) = start_mock(vec![
+		(200, upload_reply(42)),
+		(200, json!({"task_id":"task-1"}).to_string()),
+		(200, delete_reply(42)),
+	]);
+	let submitted = MinimaxMediaProvider::new()
+		.submit_video(image_video_request(png_frame()))
+		.await
+		.unwrap();
 	assert_eq!(submitted.handle.unwrap().task, MediaTask::ImageToVideo);
-	let body: Value = serde_json::from_str(&mock.requests()[0].body).unwrap();
+
+	let requests = mock.requests();
+	assert_eq!(requests.len(), 3, "upload, create, delete");
+	assert_eq!(requests[0].path, "/v1/files/upload");
+	assert!(requests[0]
+		.body
+		.contains("name=\"purpose\"\r\n\r\nvideo_generation_input"));
+	assert!(requests[0].body.contains("filename=\"input.png\""));
+	assert!(
+		!requests[0].body.contains("base64"),
+		"the frame travels as a file, not inline"
+	);
+
+	assert_eq!(requests[1].path, "/v2/video_generation");
+	let body: Value = serde_json::from_str(&requests[1].body).unwrap();
 	assert_eq!(body["resolution"], "768P");
 	assert_eq!(body["ratio"], "adaptive");
 	assert_eq!(
 		body["content"][1],
-		json!({"type":"image_url", "image_url":{"url":"data:image/png;base64,aW1hZ2U="}, "role":"first_frame"})
+		json!({"type":"image_url", "image_url":{"url":"mm_file://42"}, "role":"first_frame"})
 	);
+
+	assert_eq!(requests[2].path, "/v1/files/delete");
+	let body: Value = serde_json::from_str(&requests[2].body).unwrap();
+	assert_eq!(body, json!({"file_id":42, "purpose":"video_generation_input"}));
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn a_refused_create_still_deletes_the_uploaded_frame() {
+	let (mock, _env) = start_mock(vec![
+		(200, upload_reply(7)),
+		(
+			400,
+			json!({"base_resp":{"status_code":2013,"status_msg":"invalid params"}}).to_string(),
+		),
+		(200, delete_reply(7)),
+	]);
+	assert!(MinimaxMediaProvider::new()
+		.submit_video(image_video_request(png_frame()))
+		.await
+		.is_err());
+	let requests = mock.requests();
+	assert_eq!(requests.len(), 3);
+	assert_eq!(requests[2].path, "/v1/files/delete");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn a_failed_delete_does_not_fail_the_created_task() {
+	let (_mock, _env) = start_mock(vec![
+		(200, upload_reply(7)),
+		(200, json!({"task_id":"task-1"}).to_string()),
+		(
+			200,
+			json!({"file_id":0,"base_resp":{"status_code":1000,"status_msg":"record not found"}}).to_string(),
+		),
+	]);
+	let submitted = MinimaxMediaProvider::new()
+		.submit_video(image_video_request(png_frame()))
+		.await
+		.expect("the task exists; a leftover file expires on its own");
+	assert_eq!(submitted.handle.unwrap().remote_id, "task-1");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn a_url_start_image_is_passed_through_without_upload() {
+	let (mock, _env) = start_mock(vec![(200, json!({"task_id":"task-1"}).to_string())]);
+	let url = "https://example.test/frame.png";
+	MinimaxMediaProvider::new()
+		.submit_video(image_video_request(MediaSource::Url {
+			url: url.to_string(),
+			media_type: None,
+		}))
+		.await
+		.unwrap();
+	let requests = mock.requests();
+	assert_eq!(requests.len(), 1, "no upload, no delete");
+	let body: Value = serde_json::from_str(&requests[0].body).unwrap();
+	assert_eq!(body["content"][1]["image_url"]["url"], url);
 }
 
 #[tokio::test]

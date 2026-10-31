@@ -457,6 +457,7 @@ mode only from a live probe:
 - **`supports_model()` for native providers** should use `is_model_in_pricing_table()` — this enforces that only known/priced models are accepted.
 - **ReasoningEffort is a hint, not a guarantee** — models without thinking support silently ignore it. Anthropic clamps budget_tokens below max_tokens.
 - **A finished media job always resolves** — when a provider reports a job finished, pass the parsed output through `shared::readable_output`: output with no readable media of the requested kind is the job's `Failed` outcome, not an `Err`. An `Err` from a poll leaves a caller's stored job live forever, re-polled (and failing) on every read.
+- **Input media goes to the provider's own store, privately, never inline when an upload exists** — `Bytes`/`File` sources are uploaded and passed by reference only after the request has passed every check (a refused request must not put the user's file anywhere). Lock and shorten what the provider allows: fal uploads with `initial_acl` `forbid` + 1 h expiry and passes a signed read link (a locked file passed as a plain URL fails the job); MiniMax V2 video uses `mm_file://{file_id}` and deletes the file right after the create call (MiniMax reads it at submit). Higgsfield only offers a public `public_url`. `source_to_data_or_uri` is for `Url` sources and for providers with no upload API (OpenRouter); Replicate (`/v1/files`, private, 24 h) and Runway (`runway://`, 24 h) still inline and should move to their upload APIs.
 
 ## Never
 

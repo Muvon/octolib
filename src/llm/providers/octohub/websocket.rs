@@ -91,9 +91,10 @@ pub(super) async fn complete(
 						response
 					})
 					.map_err(|error| shared::redact_error(error, per_call_key.as_ref()));
-				// Only an explicit server status is safe to retry. A lost reply may already be paid work.
+				// Only an explicit server status or a socket that never opened is safe to
+				// retry. A lost reply may already be paid work.
 				match result {
-					Err(error) if error.is::<retry::RetryableStatusError>() => Err(error),
+					Err(error) if error.is::<retry::RetryableStatusError>() || error.is::<NotSent>() => Err(error),
 					result => Ok(result),
 				}
 			})
@@ -137,6 +138,17 @@ async fn exchange(
 	Ok(response)
 }
 
+/// Context marking a failure before the socket opened: the request never left,
+/// so retrying cannot run or bill it twice.
+#[derive(Debug)]
+struct NotSent;
+
+impl std::fmt::Display for NotSent {
+	fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		formatter.write_str("Opening OctoHub WebSocket connection")
+	}
+}
+
 async fn connect(url: &str, headers: &HeaderMap, per_call_key: bool) -> Result<Connection> {
 	let setup = async {
 		let request = crate::http::websocket_client()
@@ -152,7 +164,7 @@ async fn connect(url: &str, headers: &HeaderMap, per_call_key: bool) -> Result<C
 				.max_frame_size(Some(MAX_REPLY_BYTES))
 				.max_message_size(Some(MAX_REPLY_BYTES)),
 		);
-		let response = request.send().await.context("Opening OctoHub WebSocket connection")?;
+		let response = request.send().await.context(NotSent)?;
 		if response.status() != reqwest::StatusCode::SWITCHING_PROTOCOLS {
 			let status = response.status();
 			let headers = response.headers().clone();
@@ -179,7 +191,7 @@ async fn connect(url: &str, headers: &HeaderMap, per_call_key: bool) -> Result<C
 	};
 	tokio::time::timeout(crate::http::CONNECT_TIMEOUT, setup)
 		.await
-		.map_err(|_| timeout_error(crate::http::CONNECT_TIMEOUT))?
+		.map_err(|_| timeout_error(crate::http::CONNECT_TIMEOUT).context(NotSent))?
 }
 
 fn timeout_error(timeout: Duration) -> anyhow::Error {

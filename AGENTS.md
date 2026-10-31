@@ -187,7 +187,7 @@ every provider is behind Cloudflare, nor a guarantee against slow time-to-first-
 | Tinker | Buffered: [compatible-API docs](https://tinker-docs.thinkingmachines.ai/tinker/compatible-apis/openai/) did not establish a streaming contract in this review. |
 | Hetzner | Buffered: [experimental docs](https://experiments.hetzner.com/docs/inference) require JavaScript and did not yield a verifiable stream/usage contract. |
 | WebWright | Buffered: [public API overview](https://webwright.ai/about) establishes compatibility, but the linked quickstart could not be retrieved; stream/usage behavior remains unverified. |
-| OctoHub | Existing `/v1/responses` JSON contract in `octohub.rs`; unchanged. |
+| OctoHub | Existing `/v1/completions` JSON contract in `octohub.rs`; unchanged. |
 | CLI backends | Subprocess transports, not these HTTP adapters; unchanged. |
 
 Embedding and reranking endpoints remain JSON requests with their own shared

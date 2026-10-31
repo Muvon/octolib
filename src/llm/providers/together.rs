@@ -380,7 +380,7 @@ struct TogetherMessage {
 struct TogetherResponse {
 	id: Option<String>,
 	choices: Vec<TogetherChoice>,
-	usage: TogetherUsage,
+	usage: Option<TogetherUsage>,
 }
 
 #[derive(Deserialize)]
@@ -625,7 +625,10 @@ async fn execute_together_request(
 				.collect::<Result<Vec<_>>>()
 		})
 		.transpose()?;
-	let usage_data = api_response.usage;
+	// Without a usage report nothing is known: leave usage and cost unset instead
+	// of reporting a zero-cost response.
+	let reported = api_response.usage.is_some();
+	let usage_data = api_response.usage.unwrap_or_default();
 	let prompt_tokens = usage_data.prompt_tokens.unwrap_or(0);
 	let output_tokens = usage_data.completion_tokens.unwrap_or(0);
 	let total_tokens = usage_data
@@ -642,6 +645,7 @@ async fn execute_together_request(
 	// the emitted thinking text — text Together billed inside completion_tokens.
 	let cost = request_body
 		.get("model")
+		.filter(|_| reported)
 		.and_then(|m| m.as_str())
 		.and_then(|model| {
 			together_model_pricing(model).or_else(|| crate::llm::reference_models::get_reference_pricing(model))
@@ -650,7 +654,7 @@ async fn execute_together_request(
 	let (visible_output_tokens, reasoning_tokens) =
 		TokenUsage::split_output(output_tokens, thinking.as_ref().map(|t| t.tokens).unwrap_or(0));
 
-	let usage = TokenUsage {
+	let usage = reported.then_some(TokenUsage {
 		input_tokens,
 		output_tokens: visible_output_tokens,
 		cache_write_tokens: 0,
@@ -659,7 +663,7 @@ async fn execute_together_request(
 		total_tokens,
 		cost,
 		request_time_ms: Some(request_time_ms),
-	};
+	});
 
 	// Reconstruct a normalized (non-streamed) chat-completion shape for the exchange log.
 	let mut response_json = serde_json::json!({
@@ -674,19 +678,19 @@ async fn execute_together_request(
 			},
 			"finish_reason": choice.finish_reason.clone(),
 		}],
-		"usage": {
+		"usage": reported.then(|| serde_json::json!({
 			"prompt_tokens": prompt_tokens,
 			"completion_tokens": output_tokens,
 			"total_tokens": total_tokens,
 			"cached_tokens": cache_read_tokens,
-		},
+		})),
 	});
 
 	if let Some(ref tc) = tool_calls {
 		shared::set_response_tool_calls(&mut response_json, tc, None);
 	}
 
-	let exchange = ProviderExchange::new(request_body, response_json, Some(usage), "together");
+	let exchange = ProviderExchange::new(request_body, response_json, usage, "together");
 	let structured_output = shared::parse_structured_output_from_text(&content);
 
 	Ok(ProviderResponse {

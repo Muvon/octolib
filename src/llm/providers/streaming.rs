@@ -56,7 +56,11 @@ fn protocol_error(error: anyhow::Error) -> anyhow::Error {
 }
 
 fn upstream_error(error: &Value) -> anyhow::Error {
-	let code = error.get("code").or_else(|| error.get("type"));
+	// OpenAI-style errors send `"code": null`; that must not mask `type`.
+	let code = error
+		.get("code")
+		.filter(|code| !code.is_null())
+		.or_else(|| error.get("type"));
 	let transient = code.is_some_and(|code| {
 		code.as_u64()
 			.is_some_and(|status| status == 429 || (500..600).contains(&status))
@@ -349,7 +353,9 @@ impl Accumulator {
 					"Stop for closed or unopened content block {index}"
 				);
 				let block = self.blocks.get_mut(&index).context("Stop for unopened content block")?;
-				if let Some(input) = self.inputs.remove(&index) {
+				// A tool without parameters streams only an empty `partial_json`; the
+				// `{}` from content_block_start already is its input.
+				if let Some(input) = self.inputs.remove(&index).filter(|input| !input.trim().is_empty()) {
 					block["input"] = serde_json::from_str(&input).context("Invalid streamed tool input JSON")?;
 				}
 			}
@@ -409,7 +415,7 @@ impl Accumulator {
 					"Chat stream is missing finish_reason"
 				);
 				ensure!(choice["finish_reason"] != "error", "Chat stream finished with an error");
-				validate_tools(&choice["message"])?;
+				validate_tools(&mut choice["message"])?;
 			}
 			self.response["choices"] = json!(choices);
 			self.response["object"] = json!("chat.completion");
@@ -506,28 +512,45 @@ fn merge_delta(target: &mut Value, delta: &Value) -> Result<()> {
 				}
 				target.sort_by_key(|item| item["index"].as_u64());
 			}
+			// Some servers repeat an empty id on continuation fragments.
+			"id" if value.as_str().is_some_and(str::is_empty) => {}
 			_ => merge_snapshot(&mut target[key], value),
 		}
 	}
 	Ok(())
 }
 
-fn validate_tools(message: &Value) -> Result<()> {
-	if let Some(calls) = message.get("tool_calls") {
-		for (expected, call) in calls.as_array().context("Invalid tool_calls")?.iter().enumerate() {
-			ensure!(index(call)? == expected as u64, "Missing tool call index {expected}");
-			ensure!(
-				call["id"].as_str().is_some_and(|id| !id.is_empty()),
-				"Streamed tool call is missing id"
-			);
-			ensure!(
-				call["function"]["name"].as_str().is_some_and(|name| !name.is_empty()),
-				"Streamed tool call is missing name"
-			);
-			let arguments = call["function"]["arguments"]
-				.as_str()
-				.context("Streamed tool call is missing arguments")?;
+fn validate_tools(message: &mut Value) -> Result<()> {
+	let Some(calls) = message.get_mut("tool_calls") else {
+		return Ok(());
+	};
+	for (expected, call) in calls
+		.as_array_mut()
+		.context("Invalid tool_calls")?
+		.iter_mut()
+		.enumerate()
+	{
+		ensure!(index(call)? == expected as u64, "Missing tool call index {expected}");
+		ensure!(
+			call["id"].as_str().is_some_and(|id| !id.is_empty()),
+			"Streamed tool call is missing id"
+		);
+		ensure!(
+			call["function"]["name"].as_str().is_some_and(|name| !name.is_empty()),
+			"Streamed tool call is missing name"
+		);
+		let arguments = match &call["function"]["arguments"] {
+			Value::Null => "",
+			Value::String(arguments) => arguments.as_str(),
+			_ => bail!("Streamed tool call arguments must be a string"),
+		};
+		// A tool without parameters streams no arguments or an empty string.
+		let empty = arguments.trim().is_empty();
+		if !empty {
 			serde_json::from_str::<Value>(arguments).context("Invalid streamed tool arguments JSON")?;
+		}
+		if empty {
+			call["function"]["arguments"] = json!("{}");
 		}
 	}
 	Ok(())

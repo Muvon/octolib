@@ -368,6 +368,22 @@ async fn complete_serializes_concurrent_requests_and_keeps_responses_with_their_
 	peer.finish().await;
 }
 
+#[tokio::test]
+async fn refused_connection_is_retried_because_nothing_was_sent() {
+	let (listener, url) = server().await;
+	drop(listener);
+	let mut request = params(None).with_max_retries(2).with_retry_timeout(Duration::ZERO);
+	let events = observe(&mut request);
+	let error = call(&request, &url, &headers("refused", "one"), &body("refused"))
+		.await
+		.err()
+		.unwrap();
+	assert!(
+		error.to_string().contains("Opening OctoHub WebSocket connection"),
+		"{error:#}"
+	);
+	assert_eq!(events.lock().unwrap().len(), 2, "each refused connect is retried");
+}
 #[derive(Clone, Copy, Debug)]
 enum Interruption {
 	Cancel,

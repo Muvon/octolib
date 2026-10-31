@@ -48,12 +48,28 @@ struct PoolEntry<T> {
 	used_at: PoolInstant,
 }
 
+impl<T> PoolEntry<T> {
+	/// A lease can outlast `IDLE_TIMEOUT`, so idle time runs from the moment the
+	/// socket was parked, never from checkout.
+	fn is_expired(&self, now: PoolInstant) -> bool {
+		if Arc::strong_count(&self.session) > 1 {
+			return false;
+		}
+		let idle_since = self
+			.session
+			.try_lock()
+			.ok()
+			.and_then(|slot| slot.as_ref().map(|idle| idle.parked_at))
+			.map_or(self.used_at, |parked_at| parked_at.max(self.used_at));
+		now.duration_since(idle_since) >= IDLE_TIMEOUT
+	}
+}
+
 impl<T> SessionPool<T> {
 	pub(super) fn get(&mut self, key: [u8; 32], now: PoolInstant) -> Result<Session<T>> {
 		// A waiting caller holds a lease too: evicting it would allow two sockets
 		// to execute concurrently for the same provider session.
-		self.entries
-			.retain(|entry| Arc::strong_count(&entry.session) > 1 || now.duration_since(entry.used_at) < IDLE_TIMEOUT);
+		self.entries.retain(|entry| !entry.is_expired(now));
 		if let Some(index) = self.entries.iter().position(|entry| entry.key == key) {
 			let mut entry = self.entries.remove(index);
 			entry.used_at = now;
@@ -250,7 +266,12 @@ impl<T: Send + 'static> Connection<T> {
 			}
 			Ok(self)
 		});
-		IdleConnection { resume, task, provider }
+		IdleConnection {
+			resume,
+			task,
+			provider,
+			parked_at: PoolInstant::now(),
+		}
 	}
 }
 
@@ -260,6 +281,7 @@ pub(super) struct IdleConnection<T> {
 	resume: Arc<Notify>,
 	task: JoinHandle<Result<Connection<T>>>,
 	provider: &'static str,
+	parked_at: PoolInstant,
 }
 
 impl<T> IdleConnection<T> {

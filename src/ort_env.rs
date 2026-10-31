@@ -60,6 +60,7 @@ pub(crate) fn execution_providers(identity: &str) -> Result<Vec<ort::ep::Executi
 	}
 }
 
+#[cfg(feature = "hindsight")]
 pub(crate) fn file_execution_providers(path: &std::path::Path) -> Result<Vec<ort::ep::ExecutionProviderDispatch>> {
 	#[cfg(target_os = "macos")]
 	{

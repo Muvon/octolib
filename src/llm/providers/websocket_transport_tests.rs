@@ -241,6 +241,20 @@ fn session_pool_retains_an_unexpired_idle_session_and_reclaims_it_after_the_idle
 }
 
 #[tokio::test]
+async fn session_pool_measures_idle_time_from_release_not_from_a_long_lease() {
+	let (connection, _peer) = pair().await;
+	let mut pool = SessionPool::<()>::default();
+	let released = PoolInstant::now();
+	let checkout = released.checked_sub(IDLE_TIMEOUT * 2).unwrap();
+	let session = pool.get([1; 32], checkout).unwrap();
+	let old = Arc::downgrade(&session);
+	*session.lock().await = Some(connection.park());
+	drop(session);
+	let same = pool.get([1; 32], released + Duration::from_secs(1)).unwrap();
+	assert!(Arc::ptr_eq(&same, &old.upgrade().unwrap()));
+}
+
+#[tokio::test]
 async fn checkout_detects_a_silent_dead_connection_before_sending_application_data() {
 	let (connection, mut peer) = pair().await;
 	let idle = connection.park();

@@ -179,6 +179,46 @@ fn messages_preserve_thinking_signature_tools_and_cache_usage() {
 }
 
 #[test]
+fn parameterless_tool_keeps_its_empty_input_object() {
+	let response = accumulate(
+		Format::Messages,
+		&[
+			json!({"type":"message_start","message":{"id":"m1","type":"message","role":"assistant","content":[]}}),
+			json!({"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"t1","name":"run","input":{}}}),
+			json!({"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":""}}),
+			json!({"type":"content_block_stop","index":0}),
+			json!({"type":"message_delta","delta":{"stop_reason":"tool_use"}}),
+			json!({"type":"message_stop"}),
+		],
+		false,
+	)
+	.unwrap();
+	assert_eq!(response["content"][0]["input"], json!({}));
+}
+
+#[test]
+fn chat_tool_without_arguments_becomes_an_empty_object_and_empty_ids_do_not_overwrite() {
+	let response = accumulate(
+		Format::Chat,
+		&[
+			json!({"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"a","type":"function","function":{"name":"run","arguments":""}}]}}]}),
+			json!({"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"","function":{}}]},"finish_reason":"tool_calls"}]}),
+		],
+		true,
+	)
+	.unwrap();
+	let call = &response["choices"][0]["message"]["tool_calls"][0];
+	assert_eq!(call["id"], "a");
+	assert_eq!(call["function"]["arguments"], "{}");
+}
+
+#[test]
+fn null_error_code_falls_back_to_the_error_type() {
+	let error = upstream_error(&json!({"code":null,"type":"server_error","message":"boom"}));
+	assert!(error.is::<TransientStreamError>());
+}
+
+#[test]
 fn responses_keep_terminal_output_usage_and_encrypted_reasoning() {
 	let response = json!({"id":"r1","status":"completed","output":[{"type":"reasoning","encrypted_content":"opaque"},{"type":"function_call","call_id":"c1","name":"f","arguments":"{}"}],"usage":{"input_tokens":10,"output_tokens":5}});
 	for event_type in ["response.completed", "response.incomplete"] {

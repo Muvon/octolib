@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.48.2] - 2026-10-31
+
+### 🔧 Improvements & Optimizations
+
+- **github-actions**: pin workflow actions to commit SHAs `9a43d185`
+
+### 🔄 Other Changes
+
+1 maintenance, dependency, and tooling update not listed individually.
+
 ## [0.48.1] - 2026-10-31
 
 ### 📋 Release Summary

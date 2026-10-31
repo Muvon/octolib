@@ -164,3 +164,29 @@ async fn submit_image_rejects_malformed_credentials_before_any_http_traffic() {
 	);
 	assert_eq!(mock.requests().len(), 0);
 }
+
+/// Prod 2026-10-31: image-to-video was posted to the face's text-to-video
+/// endpoint, which ignores `image_url`. It goes to the image-to-video route.
+#[tokio::test]
+#[serial_test::serial]
+async fn image_to_video_posts_the_image_to_video_route() {
+	let (mock, _env) = start_mock(vec![(200, r#"{"request_id":"req-9","status":"queued"}"#.to_string())]);
+	let mut request = VideoGenerationRequest::new("the octo smiles").with_model("kling-video/v3.0/std/text-to-video");
+	request.mode = VideoGenerationMode::ImageToVideo;
+	request.first_frame = Some(MediaSource::Url {
+		url: "https://example.test/frame.png".to_string(),
+		media_type: None,
+	});
+	let operation = HiggsfieldMediaProvider::new()
+		.submit_video(request)
+		.await
+		.expect("request submitted");
+	let requests = mock.requests();
+	assert_eq!(requests[0].path, "/kling-video/v3.0/std/image-to-video");
+	let body: Value = serde_json::from_str(&requests[0].body).expect("request json");
+	assert_eq!(body["image_url"], "https://example.test/frame.png");
+	assert_eq!(
+		operation.handle.expect("handle present").model,
+		"kling-video/v3.0/std/image-to-video"
+	);
+}

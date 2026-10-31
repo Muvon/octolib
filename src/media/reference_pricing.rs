@@ -162,62 +162,33 @@ const REFERENCE_MEDIA_MODELS: &[MediaPricingEntry] = &[
 	rule("fal", "ideogram/v4", fal_ideogram_v4),
 	// "Price: $0.035 per images".
 	rule("fal", "fal-ai/recraft/v4.1/text-to-image", |_| per_image(0.035)),
-	// Seedance's `duration` defaults to "auto": the model picks 4-15 s while it
-	// runs and fal's result does not say which, so it is priced at 15 s.
-	rule("fal", "bytedance/seedance-2.0/text-to-video", |body| {
-		body.video("720p", SEEDANCE_2_PER_SECOND, SEEDANCE_2_MAX_SECS, SEEDANCE_2_MAX_SECS)
-	}),
-	// "For every second of 720p video you generated, you will be charged
-	// $0.2419/second"; 480p (no figure) meters fewer pixels at the same
-	// "$0.0112 per 1,000 tokens", so 720p's rate bounds it.
-	rule("fal", "bytedance/seedance-2.0/fast/text-to-video", |body| {
-		body.video(
-			"720p",
-			&[("480p", 0.2419), ("720p", 0.2419)],
-			SEEDANCE_2_MAX_SECS,
-			SEEDANCE_2_MAX_SECS,
-		)
-	}),
-	// "roughly $0.0721/second for 480p and $0.1547/second for 720p".
-	rule("fal", "bytedance/seedance-2.0/mini/text-to-video", |body| {
-		body.video(
-			"720p",
-			&[("480p", 0.0721), ("720p", 0.1547)],
-			SEEDANCE_2_MAX_SECS,
-			SEEDANCE_2_MAX_SECS,
-		)
-	}),
-	// "For 480p, your request will cost roughly $0.2205 per second of generated
-	// video, for 720p ... roughly $0.4730 ..., and for 1080p, roughly $1.164".
-	rule("fal", "bytedance/seedance-2.5/text-to-video", |body| {
-		body.video(
-			"720p",
-			&[("480p", 0.2205), ("720p", 0.4730), ("1080p", 1.164)],
-			SEEDANCE_2_5_MAX_SECS,
-			SEEDANCE_2_5_MAX_SECS,
-		)
-	}),
-	// "For 5s video your request will cost $1.40. For every aditional second
-	// you will be charged $0.28": a flat $0.28 a second, 5 or 10 s.
-	rule("fal", "fal-ai/kling-video/v2/master/text-to-video", |body| {
-		per_second(0.28, body.seconds("duration", 5.0, 10.0))
-	}),
+	// Every fal and Higgsfield video model below prices its image-to-video route
+	// exactly like its text-to-video one (each pair read 2026-10-31), so both
+	// routes share one price — except Higgsfield Kling 3.0, priced on its own.
+	rule("fal", "bytedance/seedance-2.0/text-to-video", fal_seedance_2),
+	rule("fal", "bytedance/seedance-2.0/image-to-video", fal_seedance_2),
+	rule("fal", "bytedance/seedance-2.0/fast/text-to-video", fal_seedance_2_fast),
+	rule("fal", "bytedance/seedance-2.0/fast/image-to-video", fal_seedance_2_fast),
+	rule("fal", "bytedance/seedance-2.0/mini/text-to-video", fal_seedance_2_mini),
+	rule("fal", "bytedance/seedance-2.0/mini/image-to-video", fal_seedance_2_mini),
+	rule("fal", "bytedance/seedance-2.5/text-to-video", fal_seedance_2_5),
+	rule("fal", "bytedance/seedance-2.5/image-to-video", fal_seedance_2_5),
+	rule("fal", "fal-ai/kling-video/v2/master/text-to-video", fal_kling_2_master),
+	rule("fal", "fal-ai/kling-video/v2/master/image-to-video", fal_kling_2_master),
 	rule(
 		"fal",
 		"fal-ai/kling-video/v3/standard/text-to-video",
 		fal_kling_3_standard,
 	),
-	// "Video costs $0.05 per second at 480p, $0.06 per second at 768p, $0.13 per
-	// second at 2K and $0.16 per second at 4K"; 5-15 s.
-	rule("fal", "minimax/h3/text-to-video", |body| {
-		body.video(
-			"2K",
-			&[("480P", 0.05), ("768P", 0.06), ("2K", 0.13), ("4K", 0.16)],
-			5.0,
-			15.0,
-		)
-	}),
+	rule(
+		"fal",
+		"fal-ai/kling-video/v3/standard/image-to-video",
+		fal_kling_3_standard,
+	),
+	rule("fal", "minimax/h3/text-to-video", fal_h3),
+	rule("fal", "minimax/h3/image-to-video", fal_h3),
 	rule("fal", "minimax/h3-max/text-to-video", fal_h3_max),
+	rule("fal", "minimax/h3-max/image-to-video", fal_h3_max),
 	rule("fal", "fal-ai/elevenlabs/music", eleven_music),
 	// "$0.1 per 1000 characters"; `text` holds up to 5,000.
 	rule("fal", "fal-ai/minimax/speech-02-hd", |body| {
@@ -257,26 +228,31 @@ const REFERENCE_MEDIA_MODELS: &[MediaPricingEntry] = &[
 	rule("higgsfield", "ideogram/v4.0", |_| per_image(0.03)),
 	// "Images cost $0.035 each at 1k", its only resolution.
 	rule("higgsfield", "recraft/v4.1/text-to-image", |_| per_image(0.035)),
-	// "Billable video tokens = ceil(generated video seconds × output width ×
-	// output height × 24 fps / 1024)" at "480p/720p/1080p $0.014, 4K $0.008"
-	// per 1,000: the meter and rates of SEEDANCE_2_PER_SECOND. 4-15 s, default 5.
-	rule("higgsfield", "bytedance/seedance-2.0/text-to-video", |body| {
-		body.video("720p", SEEDANCE_2_PER_SECOND, 5.0, SEEDANCE_2_MAX_SECS)
-	}),
-	// "standard rates are $0.13 per second at 2K", its only resolution; 5-15 s.
-	rule("higgsfield", "minimax/h3/text-to-video", |body| {
-		body.video("2K", &[("2K", 0.13)], 5.0, 15.0)
-	}),
+	rule(
+		"higgsfield",
+		"bytedance/seedance-2.0/text-to-video",
+		higgsfield_seedance_2,
+	),
+	rule(
+		"higgsfield",
+		"bytedance/seedance-2.0/image-to-video",
+		higgsfield_seedance_2,
+	),
+	rule("higgsfield", "minimax/h3/text-to-video", higgsfield_h3),
+	rule("higgsfield", "minimax/h3/image-to-video", higgsfield_h3),
 	// "standard rates are $0.084 per second", one flat rate: the catalog's price range
 	// is a single value and no sound surcharge is published (read 2026-10-27); 3-15 s.
 	rule("higgsfield", "kling-video/v3.0/std/text-to-video", |body| {
 		per_second(0.084, body.seconds("duration", 5.0, 15.0))
 	}),
-	// "Priced per generated second by resolution: 480p $0.05, 720p $0.10, or
-	// 1080p $0.20"; 2-30 s.
-	rule("higgsfield", "alibaba/wan-3.0/text-to-video", |body| {
-		body.video("1080p", &[("480p", 0.05), ("720p", 0.10), ("1080p", 0.20)], 5.0, 30.0)
+	// "standard rates are $0.084 per second for 1 second clips and $0.126 per
+	// second for 3 or 15 second clips"; it takes 3-15 s, so every clip is $0.126
+	// (read 2026-10-31).
+	rule("higgsfield", "kling-video/v3.0/std/image-to-video", |body| {
+		per_second(0.126, body.seconds("duration", 5.0, 15.0))
 	}),
+	rule("higgsfield", "alibaba/wan-3.0/text-to-video", higgsfield_wan_3),
+	rule("higgsfield", "alibaba/wan-3.0/image-to-video", higgsfield_wan_3),
 	// ── OpenRouter FLUX.2, read 2026-10-27 at
 	// https://openrouter.ai/black-forest-labs/<model>. OpenRouter reports its
 	// own charge on the result; these price a response that omits it. ──
@@ -653,6 +629,80 @@ fn fal_h3_max(body: &Body) -> CostEstimate {
 		per_second_usd,
 		body.seconds("duration", 5.0, 15.0) + H3_MAX_OVERRUN_SECS,
 	)
+}
+
+// Seedance's `duration` defaults to "auto": the model picks 4-15 s while it
+// runs and fal's result does not say which, so it is priced at 15 s.
+fn fal_seedance_2(body: &Body) -> CostEstimate {
+	body.video("720p", SEEDANCE_2_PER_SECOND, SEEDANCE_2_MAX_SECS, SEEDANCE_2_MAX_SECS)
+}
+
+/// "For every second of 720p video you generated, you will be charged
+/// $0.2419/second"; 480p (no figure) meters fewer pixels at the same
+/// "$0.0112 per 1,000 tokens", so 720p's rate bounds it.
+fn fal_seedance_2_fast(body: &Body) -> CostEstimate {
+	body.video(
+		"720p",
+		&[("480p", 0.2419), ("720p", 0.2419)],
+		SEEDANCE_2_MAX_SECS,
+		SEEDANCE_2_MAX_SECS,
+	)
+}
+
+/// "roughly $0.0721/second for 480p and $0.1547/second for 720p".
+fn fal_seedance_2_mini(body: &Body) -> CostEstimate {
+	body.video(
+		"720p",
+		&[("480p", 0.0721), ("720p", 0.1547)],
+		SEEDANCE_2_MAX_SECS,
+		SEEDANCE_2_MAX_SECS,
+	)
+}
+
+/// "For 480p, your request will cost roughly $0.2205 per second of generated
+/// video, for 720p ... roughly $0.4730 ..., and for 1080p, roughly $1.164".
+fn fal_seedance_2_5(body: &Body) -> CostEstimate {
+	body.video(
+		"720p",
+		&[("480p", 0.2205), ("720p", 0.4730), ("1080p", 1.164)],
+		SEEDANCE_2_5_MAX_SECS,
+		SEEDANCE_2_5_MAX_SECS,
+	)
+}
+
+/// "For 5s video your request will cost $1.40. For every aditional second
+/// you will be charged $0.28": a flat $0.28 a second, 5 or 10 s.
+fn fal_kling_2_master(body: &Body) -> CostEstimate {
+	per_second(0.28, body.seconds("duration", 5.0, 10.0))
+}
+
+/// "Video costs $0.05 per second at 480p, $0.06 per second at 768p, $0.13 per
+/// second at 2K and $0.16 per second at 4K"; 5-15 s.
+fn fal_h3(body: &Body) -> CostEstimate {
+	body.video(
+		"2K",
+		&[("480P", 0.05), ("768P", 0.06), ("2K", 0.13), ("4K", 0.16)],
+		5.0,
+		15.0,
+	)
+}
+
+/// "Billable video tokens = ceil(generated video seconds × output width ×
+/// output height × 24 fps / 1024)" at "480p/720p/1080p $0.014, 4K $0.008"
+/// per 1,000: the meter and rates of SEEDANCE_2_PER_SECOND. 4-15 s, default 5.
+fn higgsfield_seedance_2(body: &Body) -> CostEstimate {
+	body.video("720p", SEEDANCE_2_PER_SECOND, 5.0, SEEDANCE_2_MAX_SECS)
+}
+
+/// "standard rates are $0.13 per second at 2K", its only resolution; 5-15 s.
+fn higgsfield_h3(body: &Body) -> CostEstimate {
+	body.video("2K", &[("2K", 0.13)], 5.0, 15.0)
+}
+
+/// "Priced per generated second by resolution: 480p $0.05, 720p $0.10, or
+/// 1080p $0.20"; 2-30 s.
+fn higgsfield_wan_3(body: &Body) -> CostEstimate {
+	body.video("1080p", &[("480p", 0.05), ("720p", 0.10), ("1080p", 0.20)], 5.0, 30.0)
 }
 
 /// "Your request will cost $0.6 per output audio minute. The audio will be

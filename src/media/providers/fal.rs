@@ -518,6 +518,10 @@ impl VideoGenerationProvider for FalMediaProvider {
 	}
 
 	async fn submit_video(&self, request: VideoGenerationRequest) -> MediaResult<Operation<VideoGenerationResult>> {
+		let request = VideoGenerationRequest {
+			model: shared::video_endpoint(&request.model, request.mode),
+			..request
+		};
 		validate_nonempty(&request.model, &request.prompt)?;
 		let mut options = parse_options(&request.provider_options)?;
 		let mut warnings = request_warnings(&request.request_options);
@@ -567,8 +571,9 @@ impl VideoGenerationProvider for FalMediaProvider {
 		ensure_endpoint_produces(&request.model, task).await?;
 		// Uploaded last: a request refused above never puts the user's media on fal.
 		if let Some(source) = request.first_frame.as_ref() {
+			let field = first_frame_field(&request.model, &options).await?;
 			let source = self.resolve_source(source, &request.request_options).await?;
-			insert_semantic(&mut options, "first_frame", "image_url", json!(source))?;
+			insert_semantic(&mut options, "first_frame", field, json!(source))?;
 		}
 		if let Some(source) = request.last_frame.as_ref() {
 			let source = self.resolve_source(source, &request.request_options).await?;
@@ -1070,6 +1075,20 @@ fn task_output(task: MediaTask) -> Modality {
 	}
 }
 
+/// The field this endpoint takes the first frame in. fal's image-to-video
+/// routes name it `image_url`, except Kling v3 Standard, which takes only
+/// `start_image_url` and refuses a request without it. A caller's `field_map`
+/// entry still wins (`insert_semantic` applies it).
+async fn first_frame_field(model: &str, options: &FalMediaOptions) -> MediaResult<&'static str> {
+	if options.field_map.contains_key("first_frame") || !fetch_field_schema(model, "image_url").await?.is_null() {
+		return Ok("image_url");
+	}
+	Ok(if fetch_field_schema(model, "start_image_url").await?.is_null() {
+		"image_url"
+	} else {
+		"start_image_url"
+	})
+}
 /// Read one input field's schema from the endpoint's public OpenAPI document.
 /// `Value::Null` means the endpoint does not declare the field.
 async fn fetch_field_schema(model: &str, field: &str) -> MediaResult<Value> {

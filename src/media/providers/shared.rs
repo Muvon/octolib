@@ -15,7 +15,7 @@
 use crate::media::errors::{MediaError, MediaResult};
 use crate::media::types::{
 	CostEstimate, FailureCategory, GenerationFailure, JobHandle, MediaSource, MediaTask, ProviderOptions,
-	RequestOptions, UsageUnit,
+	RequestOptions, UsageUnit, VideoGenerationMode,
 };
 use base64::Engine;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
@@ -550,6 +550,21 @@ fn classified_api_error(
 	}
 }
 
+const TEXT_TO_VIDEO_ROUTE: &str = "/text-to-video";
+const IMAGE_TO_VIDEO_ROUTE: &str = "/image-to-video";
+
+/// The endpoint a video request is submitted to. A media face names a model's
+/// text-to-video endpoint, and fal and Higgsfield serve image-to-video from the
+/// sibling `/image-to-video` route: the text-to-video route takes no first
+/// frame, so a frame sent there was dropped and the clip billed anyway (prod,
+/// 2026-10-31). Every other mode and endpoint is submitted as named.
+pub(crate) fn video_endpoint(model: &str, mode: VideoGenerationMode) -> String {
+	match (mode, model.strip_suffix(TEXT_TO_VIDEO_ROUTE)) {
+		(VideoGenerationMode::ImageToVideo, Some(stem)) => format!("{stem}{IMAGE_TO_VIDEO_ROUTE}"),
+		_ => model.to_string(),
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -645,6 +660,41 @@ mod tests {
 		));
 	}
 
+	#[test]
+	fn image_to_video_goes_to_the_sibling_image_to_video_route() {
+		assert_eq!(
+			video_endpoint(
+				"bytedance/seedance-2.0/fast/text-to-video",
+				VideoGenerationMode::ImageToVideo
+			),
+			"bytedance/seedance-2.0/fast/image-to-video"
+		);
+		assert_eq!(
+			video_endpoint("kling-video/v3.0/std/text-to-video", VideoGenerationMode::ImageToVideo),
+			"kling-video/v3.0/std/image-to-video"
+		);
+		assert_eq!(
+			video_endpoint(
+				"bytedance/seedance-2.0/fast/text-to-video",
+				VideoGenerationMode::TextToVideo
+			),
+			"bytedance/seedance-2.0/fast/text-to-video",
+			"text-to-video keeps its endpoint"
+		);
+		assert_eq!(
+			video_endpoint(
+				"bytedance/seedance-2.0/image-to-video",
+				VideoGenerationMode::ImageToVideo
+			),
+			"bytedance/seedance-2.0/image-to-video",
+			"an endpoint already named for the mode is kept"
+		);
+		assert_eq!(
+			video_endpoint("fal-ai/some-app", VideoGenerationMode::ImageToVideo),
+			"fal-ai/some-app",
+			"an endpoint without a text-to-video route is kept"
+		);
+	}
 	#[test]
 	fn rejects_oversized_inline_source_before_encoding() {
 		let source = MediaSource::Bytes {

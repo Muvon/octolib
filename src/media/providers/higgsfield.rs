@@ -389,6 +389,10 @@ impl VideoGenerationProvider for HiggsfieldMediaProvider {
 	}
 
 	async fn submit_video(&self, request: VideoGenerationRequest) -> MediaResult<Operation<VideoGenerationResult>> {
+		let request = VideoGenerationRequest {
+			model: shared::video_endpoint(&request.model, request.mode),
+			..request
+		};
 		validate_nonempty(&request.model, &request.prompt)?;
 		validate_video_mode(&request)?;
 		let mut options = parse_options(&request.provider_options)?;

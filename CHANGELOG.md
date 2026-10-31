@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.48.1] - 2026-10-31
+
+### 📋 Release Summary
+
+Provider edge cases and feature gating are fixed. WebSocket transport lifecycle handling is centralized.
+
+### 🔧 Improvements & Optimizations
+
+- **websocket**: centralize WebSocket transport lifecycle `2a486ad2`
+
+### 🐛 Bug Fixes & Stability
+
+- fix provider edge cases and feature gating `692584ae`
+
 ## [0.48.0] - 2026-10-30
 
 ### 📋 Release Summary

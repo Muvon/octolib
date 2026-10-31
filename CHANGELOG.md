@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.48.6] - 2026-10-31
+
+### 📋 Release Summary
+
+Dotted Claude model versions are now priced correctly.
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: price dotted Claude versions correctly `4fbedd33`
+
 ## [0.48.5] - 2026-10-31
 
 ### 📋 Release Summary

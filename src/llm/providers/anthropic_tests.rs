@@ -1196,3 +1196,46 @@ async fn chat_completion_does_not_loop_on_repeated_empty_turns() {
 	assert!(response.content.is_empty());
 	assert_eq!(mock.requests().len(), 2, "one retry, no more");
 }
+
+#[tokio::test]
+#[serial_test::serial]
+async fn cache_prewarm_sends_zero_max_tokens_without_streaming_and_returns_cache_usage() {
+	let body = r#"{"id":"warm","content":[],"usage":{"input_tokens":0,"output_tokens":0,"cache_read_input_tokens":900},"stop_reason":"end_turn"}"#;
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, body.to_string())]);
+	let _env = EnvGuard::new().set("ANTHROPIC_API_URL", mock.url.clone());
+
+	let params = ChatCompletionParams::new(&[Message::user("hi")], "claude-sonnet-4-6", 1.0, 1.0, 0, 10)
+		.with_api_key("mock-key".to_owned())
+		.with_cache_prewarm(true);
+	let response = AnthropicProvider::new()
+		.chat_completion(params)
+		.await
+		.expect("pre-warm completion");
+
+	assert!(response.content.is_empty());
+	assert_eq!(response.exchange.usage.expect("usage present").cache_read_tokens, 900);
+	let requests = mock.requests();
+	assert_eq!(requests.len(), 1, "empty pre-warm turn is not retried");
+	let req_body: serde_json::Value = serde_json::from_str(&requests[0].body).expect("request json");
+	assert_eq!(req_body["max_tokens"], 0);
+	assert_ne!(req_body["stream"], true);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn regular_requests_keep_streaming_and_the_effective_max_tokens() {
+	let body = r#"{"id":"mock","content":[{"type":"text","text":"ok"}],"usage":{"input_tokens":1,"output_tokens":1},"stop_reason":"end_turn"}"#;
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, body.to_string())]);
+	let _env = EnvGuard::new().set("ANTHROPIC_API_URL", mock.url.clone());
+
+	let params = ChatCompletionParams::new(&[Message::user("hi")], "claude-sonnet-4-6", 1.0, 1.0, 0, 0)
+		.with_api_key("mock-key".to_owned());
+	AnthropicProvider::new()
+		.chat_completion(params)
+		.await
+		.expect("mock completion");
+
+	let req_body: serde_json::Value = serde_json::from_str(&mock.requests()[0].body).expect("request json");
+	assert_eq!(req_body["max_tokens"], 128_000);
+	assert_eq!(req_body["stream"], true);
+}

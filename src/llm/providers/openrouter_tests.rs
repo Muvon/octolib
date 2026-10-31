@@ -531,6 +531,16 @@ fn ordinary_requests_keep_reasoning_and_tool_hints_without_strict_routing() {
 }
 
 #[test]
+fn cache_prewarm_requests_one_token_and_normal_requests_keep_their_cap() {
+	let mut params = strict_schema_params("example/model");
+	params.response_format = None;
+	assert_eq!(build_request_body(&params, None).unwrap()["max_tokens"], 10);
+
+	let prewarm = params.with_cache_prewarm(true);
+	assert_eq!(build_request_body(&prewarm, None).unwrap()["max_tokens"], 1);
+}
+
+#[test]
 fn catalog_parameter_support_distinguishes_missing_and_empty_lists() {
 	let catalog = serde_json::from_value::<CatalogResponse>(serde_json::json!({"data": [
 		{"id": "example/none", "supported_parameters": []},

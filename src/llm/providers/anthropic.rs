@@ -562,7 +562,8 @@ impl AiProvider for AnthropicProvider {
 
 		// Create the request body
 		let mut request_body = serde_json::json!({
-			"stream": true,
+			// Anthropic rejects `max_tokens: 0` combined with `stream: true`.
+			"stream": !params.cache_prewarm,
 			"model": params.model,
 			"messages": anthropic_messages,
 		});
@@ -574,9 +575,12 @@ impl AiProvider for AnthropicProvider {
 			&& THINKING_MODELS.iter().any(|p| params.model.contains(p));
 
 		// The Messages API requires max_tokens; 0 means "no limit", so send the
-		// model's output ceiling instead of omitting the field.
+		// model's output ceiling instead of omitting the field. A cache pre-warm
+		// sends the documented literal 0 (cache-only, no output); the thinking
+		// budget below still derives from the normal value so the cached prefix
+		// matches a regular request.
 		let max_tokens = effective_max_tokens(&params.model, params.max_tokens);
-		request_body["max_tokens"] = serde_json::json!(max_tokens);
+		request_body["max_tokens"] = serde_json::json!(if params.cache_prewarm { 0 } else { max_tokens });
 
 		// Add system message with cache control if needed
 		if system_cached {
@@ -706,6 +710,16 @@ impl AiProvider for AnthropicProvider {
 		// replayed thinking blocks are reconciled with it here.
 		apply_thinking_replay_policy(&mut request_body);
 
+		// Manual thinking needs `budget_tokens < max_tokens`, so the API rejects
+		// it with a pre-warm's `max_tokens: 0`, and dropping thinking would change
+		// the cached prefix. Fail before sending instead of billing a 400.
+		if params.cache_prewarm && request_body["thinking"]["type"] == "enabled" {
+			return Err(anyhow::anyhow!(
+				"Cache pre-warm is not supported with a manual thinking budget ({})",
+				params.model
+			));
+		}
+
 		// Check if any message uses extended cache TTL
 		let needs_extended_cache = params.messages.iter().any(|m| m.cache_ttl.is_some());
 
@@ -730,6 +744,12 @@ impl AiProvider for AnthropicProvider {
 		};
 
 		let mut response = send(request_body.clone()).await?;
+
+		// A pre-warm has empty content by design: no continuation retry and no
+		// schema validation, only the cache usage matters.
+		if params.cache_prewarm {
+			return Ok(response);
+		}
 
 		// Anthropic ("Handling stop reasons"): on an empty turn, add a continuation
 		// prompt in a new user message rather than retrying with the empty response.
@@ -1170,14 +1190,19 @@ async fn execute_anthropic_request(
 					.header("anthropic-beta", &beta_header)
 					.json(&request_body);
 
-				let captured = super::streaming::send_and_read(
-					req,
-					request_timeout,
-					stream_timeout,
-					extra_headers.as_ref(),
-					super::streaming::Format::Messages,
-				)
-				.await?;
+				// Pre-warm requests are non-streaming (no `stream: true`), so read plain JSON.
+				let captured = if request_body["stream"] == true {
+					super::streaming::send_and_read(
+						req,
+						request_timeout,
+						stream_timeout,
+						extra_headers.as_ref(),
+						super::streaming::Format::Messages,
+					)
+					.await?
+				} else {
+					shared::send_and_read(req, request_timeout, extra_headers.as_ref()).await?
+				};
 
 				// Return Err for retryable HTTP errors so the retry loop catches them
 				if retry::is_retryable_status(captured.status.as_u16()) {

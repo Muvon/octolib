@@ -952,6 +952,10 @@ pub struct ChatCompletionParams {
 	/// Enable long-lived cache (provider-specific: pre-GPT-5.6 OpenAI "24h"
 	/// retention, Anthropic 1h TTL). GPT-5.6 has only a fixed 30m minimum TTL.
 	pub use_long_cache: bool,
+	/// Cache pre-warm request: refresh the provider's prompt-cache TTL without
+	/// generating output. Anthropic gets `max_tokens: 0` (non-streaming); OpenRouter
+	/// gets `max_tokens: 1`. Other providers ignore it.
+	pub cache_prewarm: bool,
 	/// Explicit prompt-cache routing key (OpenAI `prompt_cache_key`). Optional hint
 	/// that pins requests sharing a long common prefix to the same cache, improving
 	/// hit rates. ChatGPT and OctoHub WebSocket modes also use this key to reuse a session's socket across
@@ -992,6 +996,7 @@ impl ChatCompletionParams {
 			response_format: None,
 			previous_id: None,
 			use_long_cache: false,
+			cache_prewarm: false,
 			prompt_cache_key: None,
 			reasoning_effort: None,
 			extra_headers: None,
@@ -1045,6 +1050,12 @@ impl ChatCompletionParams {
 	/// Enable long-lived cache for this request
 	pub fn with_long_cache(mut self, enabled: bool) -> Self {
 		self.use_long_cache = enabled;
+		self
+	}
+
+	/// Mark this request as a cache pre-warm (keepalive) that generates no output
+	pub fn with_cache_prewarm(mut self, enabled: bool) -> Self {
+		self.cache_prewarm = enabled;
 		self
 	}
 

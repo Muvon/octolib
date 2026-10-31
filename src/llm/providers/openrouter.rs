@@ -46,6 +46,9 @@ impl OpenRouterProvider {
 
 const DEFAULT_REPETITION_PENALTY: f64 = 1.1;
 
+/// Cheapest valid completion size; OpenRouter has no zero-output primitive for cache pre-warm.
+const CACHE_PREWARM_MAX_TOKENS: u32 = 1;
+
 const OPENROUTER_API_KEY_ENV: &str = "OPENROUTER_API_KEY";
 const OPENROUTER_API_URL_ENV: &str = "OPENROUTER_API_URL";
 const OPENROUTER_API_URL: &str = "https://openrouter.ai/api/v1/chat/completions";
@@ -494,8 +497,11 @@ fn build_request_body(params: &ChatCompletionParams, catalog: Option<&[CatalogMo
 		request_body["top_k"] = serde_json::json!(top_k);
 	}
 
-	// Add max_tokens if specified (0 means don't include it in request)
-	if params.max_tokens > 0 {
+	// Add max_tokens if specified (0 means don't include it in request). OpenRouter has
+	// no zero-output primitive, so a cache pre-warm asks for the cheapest valid completion.
+	if params.cache_prewarm {
+		request_body["max_tokens"] = serde_json::json!(CACHE_PREWARM_MAX_TOKENS);
+	} else if params.max_tokens > 0 {
 		request_body["max_tokens"] = serde_json::json!(params.max_tokens);
 	}
 

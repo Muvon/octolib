@@ -832,3 +832,367 @@ async fn chat_completion_via_mock_http_surfaces_http_error() {
 		"unexpected error: {err}"
 	);
 }
+
+/// Content blocks of one assistant turn as Anthropic returns them: signed and
+/// redacted thinking first, then text and a tool call.
+fn thinking_turn_blocks() -> serde_json::Value {
+	serde_json::json!([
+		{"type": "thinking", "thinking": "plan", "signature": "sig-1"},
+		{"type": "redacted_thinking", "data": "opaque"},
+		{"type": "text", "text": "checking"},
+		{"type": "tool_use", "id": "toolu_a", "name": "first", "input": {"q": 1}}
+	])
+}
+
+fn assistant_with_items(provider: &str, items: serde_json::Value, tool_ids: &[&str]) -> Message {
+	let mut message = Message::assistant("checking");
+	message.provider_items = Some(serde_json::json!({"provider": provider, "items": items}));
+	if !tool_ids.is_empty() {
+		message.tool_calls = Some(serde_json::Value::Array(
+			tool_ids
+				.iter()
+				.map(|id| serde_json::json!({"id": id, "name": "first", "arguments": {"q": 1}, "meta": null}))
+				.collect(),
+		));
+	}
+	message
+}
+
+fn request_with_thinking(thinking: Option<serde_json::Value>, messages: &[Message]) -> serde_json::Value {
+	let mut body = serde_json::json!({"messages": convert_messages(messages)});
+	if let Some(thinking) = thinking {
+		body["thinking"] = thinking;
+	}
+	body
+}
+
+fn block_types(message: &serde_json::Value) -> Vec<&str> {
+	message["content"]
+		.as_array()
+		.unwrap()
+		.iter()
+		.map(|block| block["type"].as_str().unwrap())
+		.collect()
+}
+
+#[test]
+fn output_items_are_set_only_when_thinking_is_present() {
+	let mut with_thinking = serde_json::json!({"content": thinking_turn_blocks()});
+	set_response_output_items(&mut with_thinking);
+	assert_eq!(with_thinking["output_items"]["provider"], PROVIDER_NAME);
+	assert_eq!(with_thinking["output_items"]["items"], thinking_turn_blocks());
+
+	let mut redacted_only = serde_json::json!({"content": [{"type": "redacted_thinking", "data": "x"}]});
+	set_response_output_items(&mut redacted_only);
+	assert!(redacted_only.get("output_items").is_some());
+
+	let mut plain = serde_json::json!({"content": [{"type": "text", "text": "hi"}]});
+	set_response_output_items(&mut plain);
+	assert!(plain.get("output_items").is_none());
+}
+
+#[test]
+fn thinking_blocks_replay_verbatim_in_original_order() {
+	let messages = vec![
+		Message::user("go"),
+		assistant_with_items(PROVIDER_NAME, thinking_turn_blocks(), &["toolu_a"]),
+	];
+	let converted = serde_json::to_value(convert_messages(&messages)).unwrap();
+
+	assert_eq!(converted[1]["role"], "assistant");
+	// Signature, redacted payload and block order all survive untouched.
+	assert_eq!(converted[1]["content"], thinking_turn_blocks());
+}
+
+#[test]
+fn replay_falls_back_to_stored_fields_on_provider_or_tool_id_mismatch() {
+	let other_provider = assistant_with_items("openai", thinking_turn_blocks(), &["toolu_a"]);
+	let other_tool_id = assistant_with_items(PROVIDER_NAME, thinking_turn_blocks(), &["toolu_b"]);
+	let missing_tool_calls = assistant_with_items(PROVIDER_NAME, thinking_turn_blocks(), &[]);
+
+	for (message, expected_tool_id) in [
+		(other_provider, Some("toolu_a")),
+		(other_tool_id, Some("toolu_b")),
+		(missing_tool_calls, None),
+	] {
+		let converted = serde_json::to_value(convert_messages(&[message])).unwrap();
+		let blocks = converted[0]["content"].as_array().unwrap();
+		assert!(
+			blocks.iter().all(|block| !is_thinking_block(block)),
+			"reconstructed content has no thinking: {blocks:?}"
+		);
+		assert_eq!(blocks[0]["type"], "text");
+		assert_eq!(blocks.get(1).and_then(|block| block["id"].as_str()), expected_tool_id);
+	}
+}
+
+#[test]
+fn replayed_cache_control_lands_on_the_last_text_block() {
+	let items = serde_json::json!([
+		{"type": "thinking", "thinking": "plan", "signature": "sig-1"},
+		{"type": "text", "text": "first"},
+		{"type": "tool_use", "id": "toolu_a", "name": "first", "input": {}},
+		{"type": "text", "text": "last"}
+	]);
+
+	let mut cached = assistant_with_items(PROVIDER_NAME, items.clone(), &["toolu_a"]);
+	cached.cached = true;
+	cached.cache_ttl = Some("1h".to_string());
+	let converted = serde_json::to_value(convert_messages(&[cached])).unwrap();
+	let blocks = &converted[0]["content"];
+	assert_eq!(
+		blocks[3]["cache_control"],
+		serde_json::json!({"type": "ephemeral", "ttl": "1h"})
+	);
+	for untouched in [0, 1, 2] {
+		assert!(blocks[untouched].get("cache_control").is_none(), "block {untouched}");
+	}
+
+	let uncached = assistant_with_items(PROVIDER_NAME, items, &["toolu_a"]);
+	let converted = serde_json::to_value(convert_messages(&[uncached])).unwrap();
+	assert!(converted[0]["content"][3].get("cache_control").is_none());
+}
+
+#[test]
+fn block_binding_is_sent_on_every_adaptive_or_enabled_request() {
+	let history = [
+		Message::user("go"),
+		assistant_with_items(PROVIDER_NAME, thinking_turn_blocks(), &["toolu_a"]),
+	];
+
+	for thinking in [
+		serde_json::json!({"type": "adaptive"}),
+		serde_json::json!({"type": "enabled", "budget_tokens": 2048}),
+	] {
+		let mut body = request_with_thinking(Some(thinking), &history);
+		apply_thinking_replay_policy(&mut body);
+		assert_eq!(
+			body["thinking"]["block_binding"],
+			serde_json::json!({"prefix_mismatch_behavior": "drop_block"})
+		);
+		assert_eq!(block_types(&body["messages"][1]).len(), 4, "thinking blocks kept");
+		assert!(build_beta_header(false, &body).contains(THINKING_BINDING_BETA));
+	}
+
+	// Nothing replayed yet (turn one): still bound, so the thinking config, which
+	// is part of the cached prompt, does not change on turn two.
+	let mut no_replay = request_with_thinking(
+		Some(serde_json::json!({"type": "adaptive"})),
+		&[Message::user("go"), Message::assistant("hi")],
+	);
+	apply_thinking_replay_policy(&mut no_replay);
+	assert_eq!(
+		no_replay["thinking"]["block_binding"],
+		serde_json::json!({"prefix_mismatch_behavior": "drop_block"})
+	);
+	assert!(build_beta_header(false, &no_replay).contains(THINKING_BINDING_BETA));
+}
+
+#[test]
+fn thinking_blocks_are_stripped_unless_thinking_binds() {
+	let thinking_only = assistant_with_items(
+		PROVIDER_NAME,
+		serde_json::json!([{"type": "thinking", "thinking": "x", "signature": "s"}]),
+		&[],
+	);
+	let history = [
+		Message::user("go"),
+		assistant_with_items(PROVIDER_NAME, thinking_turn_blocks(), &["toolu_a"]),
+		thinking_only,
+	];
+
+	for thinking in [
+		Some(serde_json::json!({"type": "disabled"})),
+		Some(serde_json::json!({"type": "between_tools"})),
+		None,
+	] {
+		let mut body = request_with_thinking(thinking, &history);
+		apply_thinking_replay_policy(&mut body);
+
+		// Text and tool_use stay; the message that was only thinking is gone.
+		let messages = body["messages"].as_array().unwrap();
+		assert_eq!(messages.len(), 2, "{body}");
+		assert_eq!(block_types(&messages[1]), ["text", "tool_use"]);
+		assert!(body["thinking"].get("block_binding").is_none());
+		assert!(!build_beta_header(false, &body).contains(THINKING_BINDING_BETA));
+	}
+}
+
+#[test]
+fn beta_header_lists_only_the_betas_the_request_uses() {
+	let plain = serde_json::json!({});
+	assert_eq!(build_beta_header(false, &plain), "prompt-caching-2024-07-31");
+	assert_eq!(
+		build_beta_header(true, &plain),
+		"prompt-caching-2024-07-31,extended-cache-ttl-2025-04-11"
+	);
+
+	let bound = serde_json::json!({"thinking": {"type": "adaptive", "block_binding": {"prefix_mismatch_behavior": "drop_block"}}});
+	assert_eq!(
+		build_beta_header(true, &bound),
+		"prompt-caching-2024-07-31,extended-cache-ttl-2025-04-11,thinking-binding-controls-2026-08-01"
+	);
+}
+
+fn turn(
+	content: &str,
+	tool_calls: Option<Vec<ToolCall>>,
+	structured_output: Option<serde_json::Value>,
+	finish_reason: Option<&str>,
+) -> ProviderResponse {
+	ProviderResponse {
+		content: content.to_string(),
+		thinking: None,
+		exchange: ProviderExchange::new(serde_json::json!({}), serde_json::json!({}), None, PROVIDER_NAME),
+		tool_calls,
+		finish_reason: finish_reason.map(str::to_string),
+		structured_output,
+		id: None,
+	}
+}
+
+#[test]
+fn empty_turn_detection() {
+	let call = ToolCall {
+		id: "toolu_a".to_string(),
+		name: "first".to_string(),
+		arguments: serde_json::json!({}),
+	};
+
+	for reason in ["end_turn", "tool_use"] {
+		assert!(is_empty_turn(&turn("", None, None, Some(reason))), "{reason}");
+		assert!(
+			is_empty_turn(&turn(" \n", None, None, Some(reason))),
+			"{reason} whitespace"
+		);
+		assert!(
+			!is_empty_turn(&turn("text", None, None, Some(reason))),
+			"{reason} with text"
+		);
+		assert!(
+			!is_empty_turn(&turn("", Some(vec![call.clone()]), None, Some(reason))),
+			"{reason} with tool calls"
+		);
+		assert!(
+			!is_empty_turn(&turn("", None, Some(serde_json::json!({"a": 1})), Some(reason))),
+			"{reason} with structured output"
+		);
+	}
+	for reason in [Some("max_tokens"), Some("length"), Some("refusal"), None] {
+		assert!(!is_empty_turn(&turn("", None, None, reason)), "{reason:?}");
+	}
+}
+
+#[test]
+fn add_usage_sums_every_counter_and_both_optionals() {
+	let usage = |scale: u64, cost: Option<f64>, request_time_ms: Option<u64>| TokenUsage {
+		input_tokens: scale,
+		cache_read_tokens: 2 * scale,
+		cache_write_tokens: 3 * scale,
+		output_tokens: 4 * scale,
+		reasoning_tokens: 5 * scale,
+		total_tokens: 15 * scale,
+		cost,
+		request_time_ms,
+	};
+
+	let mut total = usage(10, Some(0.5), Some(200));
+	add_usage(&mut total, &usage(1, Some(0.25), Some(100)));
+	assert_eq!(
+		(
+			total.input_tokens,
+			total.cache_read_tokens,
+			total.cache_write_tokens,
+			total.output_tokens,
+			total.reasoning_tokens,
+			total.total_tokens
+		),
+		(11, 22, 33, 44, 55, 165)
+	);
+	assert_eq!(total.cost, Some(0.75));
+	assert_eq!(total.request_time_ms, Some(300));
+
+	// One side unknown keeps the other; both unknown stays unknown.
+	let mut total = usage(1, None, None);
+	add_usage(&mut total, &usage(1, Some(0.25), Some(100)));
+	assert_eq!((total.cost, total.request_time_ms), (Some(0.25), Some(100)));
+	let mut total = usage(1, Some(0.25), Some(100));
+	add_usage(&mut total, &usage(1, None, None));
+	assert_eq!((total.cost, total.request_time_ms), (Some(0.25), Some(100)));
+	let mut total = usage(1, None, None);
+	add_usage(&mut total, &usage(1, None, None));
+	assert_eq!((total.cost, total.request_time_ms), (None, None));
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn chat_completion_keeps_thinking_blocks_verbatim_and_skips_redacted_text() {
+	let body = r#"{"id":"mock-anthropic","content":[{"type":"thinking","thinking":"plan","signature":"sig-1"},{"type":"redacted_thinking","data":"opaque"},{"type":"text","text":"answer"}],"usage":{"input_tokens":10,"output_tokens":5},"stop_reason":"end_turn"}"#;
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, body.to_string())]);
+	let _env = EnvGuard::new().set("ANTHROPIC_API_URL", mock.url.clone());
+
+	let params = ChatCompletionParams::new(&[Message::user("hi")], "claude-sonnet-4-6", 1.0, 1.0, 0, 10)
+		.with_api_key("mock-key".to_owned());
+	let response = AnthropicProvider::new()
+		.chat_completion(params)
+		.await
+		.expect("mock completion");
+
+	assert_eq!(response.content, "answer");
+	assert_eq!(response.thinking.expect("thinking text").content, "plan");
+	let items = &response.exchange.response["output_items"];
+	assert_eq!(items["provider"], PROVIDER_NAME);
+	assert_eq!(items["items"][0]["signature"], "sig-1");
+	assert_eq!(items["items"][1]["type"], "redacted_thinking");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn chat_completion_continues_an_empty_turn_once_and_bills_both_calls() {
+	let empty = r#"{"id":"first","content":[{"type":"thinking","thinking":"This part of the response was interrupted before it finished.","signature":"s"}],"usage":{"input_tokens":10,"output_tokens":5},"stop_reason":"tool_use"}"#;
+	let answered = r#"{"id":"second","content":[{"type":"text","text":"done"}],"usage":{"input_tokens":20,"output_tokens":7},"stop_reason":"end_turn"}"#;
+	let mock =
+		crate::test_support::mock_http::MockHttp::start(vec![(200, empty.to_string()), (200, answered.to_string())]);
+	let _env = EnvGuard::new().set("ANTHROPIC_API_URL", mock.url.clone());
+
+	let params = ChatCompletionParams::new(&[Message::user("hi")], "claude-sonnet-4-6", 1.0, 1.0, 0, 10)
+		.with_api_key("mock-key".to_owned());
+	let response = AnthropicProvider::new()
+		.chat_completion(params)
+		.await
+		.expect("mock completion");
+
+	assert_eq!(response.content, "done");
+	let requests = mock.requests();
+	assert_eq!(requests.len(), 2);
+	let first: serde_json::Value = serde_json::from_str(&requests[0].body).unwrap();
+	let second: serde_json::Value = serde_json::from_str(&requests[1].body).unwrap();
+	assert_eq!(first["messages"].as_array().unwrap().len(), 1);
+	assert_eq!(
+		second["messages"][1],
+		serde_json::json!({"role": "user", "content": CONTINUATION_PROMPT})
+	);
+
+	let usage = response.exchange.usage.expect("usage present");
+	assert_eq!(usage.input_tokens, 30);
+	assert_eq!(usage.output_tokens + usage.reasoning_tokens, 12);
+	assert_eq!(usage.total_tokens, 42);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn chat_completion_does_not_loop_on_repeated_empty_turns() {
+	let empty = r#"{"id":"empty","content":[],"usage":{"input_tokens":10,"output_tokens":1},"stop_reason":"end_turn"}"#;
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, empty.to_string())]);
+	let _env = EnvGuard::new().set("ANTHROPIC_API_URL", mock.url.clone());
+
+	let params = ChatCompletionParams::new(&[Message::user("hi")], "claude-sonnet-4-6", 1.0, 1.0, 0, 10)
+		.with_api_key("mock-key".to_owned());
+	let response = AnthropicProvider::new()
+		.chat_completion(params)
+		.await
+		.expect("mock completion");
+
+	assert!(response.content.is_empty());
+	assert_eq!(mock.requests().len(), 2, "one retry, no more");
+}

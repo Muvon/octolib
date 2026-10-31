@@ -421,11 +421,25 @@ const ANTHROPIC_OAUTH_TOKEN_ENV: &str = "ANTHROPIC_OAUTH_ACCESS_TOKEN";
 const ANTHROPIC_API_URL_ENV: &str = "ANTHROPIC_API_URL";
 const ANTHROPIC_API_URL: &str = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_API_VERSION: &str = "2026-10-21";
+const PROVIDER_NAME: &str = "anthropic";
+const PROMPT_CACHING_BETA: &str = "prompt-caching-2024-07-31";
+const EXTENDED_CACHE_TTL_BETA: &str = "extended-cache-ttl-2025-04-11";
+const THINKING_BINDING_BETA: &str = "thinking-binding-controls-2026-08-01";
+/// Block kinds that carry a `signature` Anthropic verifies when they come back.
+const THINKING_BLOCK_TYPES: [&str; 2] = ["thinking", "redacted_thinking"];
+/// `thinking.type` values for which `thinking.block_binding` is accepted; on
+/// `disabled` and `between_tools` it is a 400 (Sonnet/Haiku 5.5).
+const BLOCK_BINDING_THINKING_TYPES: [&str; 2] = ["adaptive", "enabled"];
+/// Stop reasons Anthropic returns with an empty turn (thinking only, or nothing)
+/// when generation was interrupted.
+const EMPTY_TURN_STOP_REASONS: [&str; 2] = ["end_turn", "tool_use"];
+/// Sample continuation message from Anthropic's "Handling stop reasons" doc.
+const CONTINUATION_PROMPT: &str = "Please continue";
 
 #[async_trait::async_trait]
 impl AiProvider for AnthropicProvider {
 	fn name(&self) -> &str {
-		"anthropic"
+		PROVIDER_NAME
 	}
 
 	fn supports_model(&self, model: &str) -> bool {
@@ -688,27 +702,56 @@ impl AiProvider for AnthropicProvider {
 			});
 		}
 
+		// convert_messages runs before the thinking config is decided, so the
+		// replayed thinking blocks are reconciled with it here.
+		apply_thinking_replay_policy(&mut request_body);
+
 		// Check if any message uses extended cache TTL
 		let needs_extended_cache = params.messages.iter().any(|m| m.cache_ttl.is_some());
 
 		// Execute the request with retry logic
 		let api_url = env::var(ANTHROPIC_API_URL_ENV).unwrap_or_else(|_| ANTHROPIC_API_URL.to_string());
 
-		let response = execute_anthropic_request(
-			auth_headers,
-			api_url,
-			request_body,
-			params.max_retries,
-			params.retry_timeout,
-			params.request_timeout,
-			params.stream_timeout,
-			params.cancellation_token.as_ref(),
-			needs_extended_cache,
-			params.extra_headers.clone(),
-			params.api_key.as_ref(),
-			params.retry_observer.as_ref(),
-		)
-		.await?;
+		let send = |body: serde_json::Value| {
+			execute_anthropic_request(
+				auth_headers.clone(),
+				api_url.clone(),
+				body,
+				params.max_retries,
+				params.retry_timeout,
+				params.request_timeout,
+				params.stream_timeout,
+				params.cancellation_token.as_ref(),
+				needs_extended_cache,
+				params.extra_headers.clone(),
+				params.api_key.as_ref(),
+				params.retry_observer.as_ref(),
+			)
+		};
+
+		let mut response = send(request_body.clone()).await?;
+
+		// Anthropic ("Handling stop reasons"): on an empty turn, add a continuation
+		// prompt in a new user message rather than retrying with the empty response.
+		// Once only; a second empty turn goes back to the caller as is.
+		if is_empty_turn(&response) {
+			tracing::warn!(
+				finish_reason = ?response.finish_reason,
+				"Empty Anthropic turn; retrying once with a continuation prompt"
+			);
+			request_body["messages"]
+				.as_array_mut()
+				.expect("messages are built as an array")
+				.push(serde_json::json!({"role": "user", "content": CONTINUATION_PROMPT}));
+			let mut continued = send(request_body).await?;
+			// Both calls were billed.
+			if let (Some(total), Some(first_call)) =
+				(continued.exchange.usage.as_mut(), response.exchange.usage.as_ref())
+			{
+				add_usage(total, first_call);
+			}
+			response = continued;
+		}
 
 		// The bounds moved out of the sent schema are held here, against the
 		// caller's original.
@@ -716,7 +759,7 @@ impl AiProvider for AnthropicProvider {
 			Some(schema) => crate::llm::schema_enforcement::validate_response(
 				response,
 				&schema,
-				"anthropic",
+				PROVIDER_NAME,
 				params.api_key.as_ref(),
 			),
 			None => Ok(response),
@@ -759,6 +802,10 @@ enum AnthropicContent {
 		name: String,
 		input: serde_json::Value,
 	},
+	/// A captured content block sent back exactly as Anthropic returned it
+	/// (thinking blocks must keep their `signature`). Must stay last.
+	#[serde(untagged)]
+	Raw(serde_json::Value),
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -785,6 +832,9 @@ enum AnthropicResponseContent {
 	Text { text: String },
 	#[serde(rename = "thinking")]
 	Thinking(#[serde(default)] serde_json::Value),
+	/// Opaque encrypted reasoning; contributes no text.
+	#[serde(rename = "redacted_thinking")]
+	RedactedThinking(#[serde(default)] serde_json::Value),
 	#[serde(rename = "tool_use")]
 	ToolUse {
 		id: String,
@@ -834,6 +884,17 @@ fn convert_messages(messages: &[Message]) -> Vec<AnthropicMessage> {
 			continue;
 		}
 
+		if message.role == "assistant" {
+			if let Some(content) = replayed_assistant_content(message) {
+				result.push(AnthropicMessage {
+					role: message.role.clone(),
+					content,
+				});
+				index += 1;
+				continue;
+			}
+		}
+
 		match message.role.as_str() {
 			"tool" => {
 				let mut content = Vec::new();
@@ -879,7 +940,7 @@ fn convert_messages(messages: &[Message]) -> Vec<AnthropicMessage> {
 				}
 
 				// Add tool_use blocks from stored tool_calls in unified GenericToolCall format
-				for call in shared::parse_generic_tool_calls_lossy(message.tool_calls.as_ref(), "anthropic") {
+				for call in shared::parse_generic_tool_calls_lossy(message.tool_calls.as_ref(), PROVIDER_NAME) {
 					content.push(AnthropicContent::ToolUse {
 						id: call.id,
 						name: call.name,
@@ -943,6 +1004,133 @@ fn append_regular_content(message: &Message, content: &mut Vec<AnthropicContent>
 	}
 }
 
+fn is_thinking_block(block: &serde_json::Value) -> bool {
+	THINKING_BLOCK_TYPES.iter().any(|kind| block["type"] == *kind)
+}
+
+/// Keep the response's content blocks verbatim when they include thinking:
+/// Anthropic wants returned thinking blocks back unchanged and in order, which
+/// the parsed thinking text alone cannot reproduce (the `signature` is lost).
+fn set_response_output_items(response_json: &mut serde_json::Value) {
+	let has_thinking = response_json["content"]
+		.as_array()
+		.is_some_and(|blocks| blocks.iter().any(is_thinking_block));
+	if has_thinking {
+		response_json["output_items"] = serde_json::json!({
+			"provider": PROVIDER_NAME,
+			"items": response_json["content"].clone(),
+		});
+	}
+}
+
+/// The assistant message's captured content blocks, ready to send back as they
+/// came. They only stand for the message while they come from this provider and
+/// their `tool_use` blocks are exactly its tool calls; otherwise the caller
+/// rebuilds the content from the stored fields.
+fn replayed_assistant_content(message: &Message) -> Option<Vec<AnthropicContent>> {
+	let captured = message.provider_items.as_ref()?;
+	if captured["provider"] != PROVIDER_NAME {
+		return None;
+	}
+	let items = captured["items"].as_array()?;
+	let calls = match message.tool_calls.as_ref() {
+		Some(tool_calls) => shared::parse_generic_tool_calls_strict(tool_calls, PROVIDER_NAME).ok()?,
+		None => Vec::new(),
+	};
+	let mut message_call_ids: Vec<&str> = calls.iter().map(|call| call.id.as_str()).collect();
+	let mut item_call_ids: Vec<&str> = items
+		.iter()
+		.filter(|item| item["type"] == "tool_use")
+		.map(|item| item["id"].as_str().unwrap_or_default())
+		.collect();
+	message_call_ids.sort_unstable();
+	item_call_ids.sort_unstable();
+	if item_call_ids != message_call_ids {
+		return None;
+	}
+
+	let mut items = items.clone();
+	if let Some(cache_control) = shared::maybe_cache_control_with_ttl(message.cached, message.cache_ttl.as_deref()) {
+		// Anthropic rejects cache_control on thinking blocks, so the breakpoint
+		// goes on the last text block, where the reconstructed message has it.
+		if let Some(text) = items.iter_mut().rev().find(|item| item["type"] == "text") {
+			text["cache_control"] = cache_control;
+		}
+	}
+	Some(items.into_iter().map(AnthropicContent::Raw).collect())
+}
+
+/// Reconcile replayed thinking blocks with the thinking config of the request.
+///
+/// With adaptive/enabled thinking, ask Anthropic to drop a returned block that
+/// no longer matches: accounts created on/after 2026-08-31 get a 400 when a
+/// returned block fails the prefix check (tools or earlier messages changed)
+/// unless `drop_block` is set. With any other thinking mode `block_binding` is
+/// a 400, so the blocks are removed instead, which the docs allow.
+fn apply_thinking_replay_policy(request_body: &mut serde_json::Value) {
+	let binds = request_body["thinking"]["type"]
+		.as_str()
+		.is_some_and(|kind| BLOCK_BINDING_THINKING_TYPES.contains(&kind));
+	if binds {
+		// Set on every request, not only those that replay thinking: the thinking
+		// config is rendered into the prompt, so adding it from turn two on would
+		// start a new cache prefix ("Thinking and prompt caching").
+		request_body["thinking"]["block_binding"] = serde_json::json!({"prefix_mismatch_behavior": "drop_block"});
+		return;
+	}
+	// A message left with no blocks is invalid, so it goes too.
+	request_body["messages"]
+		.as_array_mut()
+		.expect("messages are built as an array")
+		.retain_mut(|message| {
+			let blocks = message["content"]
+				.as_array_mut()
+				.expect("message content is built as an array");
+			let before = blocks.len();
+			blocks.retain(|block| !is_thinking_block(block));
+			blocks.len() == before || !blocks.is_empty()
+		});
+}
+
+/// An assistant turn that produced nothing to act on: no text, tool call or
+/// structured output, and a stop reason that says it was not cut by the
+/// output limit.
+fn is_empty_turn(response: &ProviderResponse) -> bool {
+	response.content.trim().is_empty()
+		&& response.tool_calls.is_none()
+		&& response.structured_output.is_none()
+		&& response
+			.finish_reason
+			.as_deref()
+			.is_some_and(|reason| EMPTY_TURN_STOP_REASONS.contains(&reason))
+}
+
+/// Fold an earlier call's usage into the call that replaced it.
+fn add_usage(total: &mut TokenUsage, earlier: &TokenUsage) {
+	total.input_tokens += earlier.input_tokens;
+	total.cache_read_tokens += earlier.cache_read_tokens;
+	total.cache_write_tokens += earlier.cache_write_tokens;
+	total.output_tokens += earlier.output_tokens;
+	total.reasoning_tokens += earlier.reasoning_tokens;
+	total.total_tokens += earlier.total_tokens;
+	total.cost = [total.cost, earlier.cost].into_iter().flatten().reduce(|a, b| a + b);
+	total.request_time_ms = [total.request_time_ms, earlier.request_time_ms]
+		.into_iter()
+		.flatten()
+		.reduce(|a, b| a + b);
+}
+
+fn build_beta_header(extended_cache_ttl: bool, request_body: &serde_json::Value) -> String {
+	let mut betas = vec![PROMPT_CACHING_BETA];
+	if extended_cache_ttl {
+		betas.push(EXTENDED_CACHE_TTL_BETA);
+	}
+	if request_body["thinking"].get("block_binding").is_some() {
+		betas.push(THINKING_BINDING_BETA);
+	}
+	betas.join(",")
+}
+
 // Execute a single Anthropic HTTP request with smart retry delay calculation
 #[allow(clippy::too_many_arguments)]
 async fn execute_anthropic_request(
@@ -961,12 +1149,8 @@ async fn execute_anthropic_request(
 ) -> Result<ProviderResponse> {
 	let start_time = std::time::Instant::now();
 
-	// Build beta header: always include prompt-caching, add extended-cache-ttl when needed
-	let beta_header = if extended_cache_ttl {
-		"prompt-caching-2024-07-31,extended-cache-ttl-2025-04-11"
-	} else {
-		"prompt-caching-2024-07-31"
-	};
+	// Prompt caching is always on; the other betas ride only the requests that use them
+	let beta_header = build_beta_header(extended_cache_ttl, &request_body);
 
 	let response = retry::retry_provider_request(
 		|| {
@@ -1086,6 +1270,7 @@ async fn execute_anthropic_request(
 					thinking_parts.push(thinking_str.to_string());
 				}
 			}
+			AnthropicResponseContent::RedactedThinking(_) => {}
 			AnthropicResponseContent::ToolUse { id, name, input } => {
 				tool_calls.push(ToolCall {
 					id: id.clone(),
@@ -1175,15 +1360,16 @@ async fn execute_anthropic_request(
 
 	// Store tool_calls in unified GenericToolCall format for conversation history
 	shared::set_response_tool_calls(&mut response_json, &tool_calls, None);
+	set_response_output_items(&mut response_json);
 
 	let exchange = if rate_limit_headers.is_empty() {
-		ProviderExchange::new(request_body, response_json, Some(usage), "anthropic")
+		ProviderExchange::new(request_body, response_json, Some(usage), PROVIDER_NAME)
 	} else {
 		ProviderExchange::with_rate_limit_headers(
 			request_body,
 			response_json,
 			Some(usage),
-			"anthropic",
+			PROVIDER_NAME,
 			rate_limit_headers,
 		)
 	};

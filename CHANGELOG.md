@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.48.5] - 2026-10-31
+
+### 📋 Release Summary
+
+OctoHub and LLM requests now support cache prewarming. The refused-connection retry test was stabilized.
+
+### ✨ New Features & Enhancements
+
+- **octohub**: support OctoHub cache prewarming `29867fd3`
+- **llm**: support cache pre-warm requests `2cf79874`
+
+### 🔧 Improvements & Optimizations
+
+- **octohub**: stabilize refused connection retry test `32cea9b2`
+
 ## [0.48.4] - 2026-10-31
 
 ### 📋 Release Summary

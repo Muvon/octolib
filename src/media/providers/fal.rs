@@ -28,6 +28,15 @@ const PROVIDER: &str = "fal";
 const API_KEY_ENV: &str = "FAL_API_KEY";
 const API_BASE_ENV: &str = "FAL_API_URL";
 const API_BASE: &str = "https://queue.fal.run";
+/// fal's upload API. Data URIs are not recommended for files above a few KB,
+/// so input media goes to the fal CDN and the model receives its URL.
+const STORAGE_BASE_ENV: &str = "FAL_STORAGE_URL";
+const STORAGE_BASE: &str = "https://rest.fal.ai";
+const STORAGE_TYPE: &str = "fal-cdn-v3";
+const LIFECYCLE_HEADER: &str = "X-Fal-Object-Lifecycle-Preference";
+/// An input only has to outlive its queued job; fal deletes it after this, so a
+/// user's photo is not kept on the CDN beyond the generation that needed it.
+const INPUT_TTL_SECS: u64 = 3_600;
 const OPENAPI_URL_ENV: &str = "FAL_OPENAPI_URL";
 const OPENAPI_URL: &str = "https://fal.ai/api/openapi/queue/openapi.json";
 const SCHEMA_REF_PREFIX: &str = "#/components/schemas/";
@@ -86,6 +95,13 @@ impl FalMediaProvider {
 	fn api_base(&self) -> String {
 		std::env::var(API_BASE_ENV)
 			.unwrap_or_else(|_| API_BASE.to_string())
+			.trim_end_matches('/')
+			.to_string()
+	}
+
+	fn storage_base(&self) -> String {
+		std::env::var(STORAGE_BASE_ENV)
+			.unwrap_or_else(|_| STORAGE_BASE.to_string())
 			.trim_end_matches('/')
 			.to_string()
 	}
@@ -248,6 +264,113 @@ impl FalMediaProvider {
 		.await?;
 		shared::require_success(PROVIDER, &response)
 	}
+
+	/// Inline and local media go through fal's CDN upload first; URLs pass
+	/// through unchanged.
+	async fn resolve_source(&self, source: &MediaSource, request_options: &RequestOptions) -> MediaResult<String> {
+		match source {
+			MediaSource::Bytes { .. } | MediaSource::File { .. } => {
+				let (data, media_type) = shared::source_to_bytes(source, request_options.max_source_bytes)?;
+				self.upload(data, &media_type, request_options).await
+			}
+			_ => shared::source_to_data_or_uri(source, request_options.max_source_bytes),
+		}
+	}
+
+	async fn upload(&self, data: Vec<u8>, media_type: &str, request_options: &RequestOptions) -> MediaResult<String> {
+		let key = self.key()?;
+		let url = format!("{}/storage/upload/initiate", self.storage_base());
+		// fal documents no idempotency key; the queue submit reports one on its own.
+		let mut transport = request_options.clone();
+		transport.idempotency_key = None;
+		let extension = media_type
+			.split_once('/')
+			.map_or(media_type, |(_, subtype)| subtype)
+			.split(['+', ';'])
+			.next()
+			.unwrap_or_default();
+		let body = json!({"file_name": format!("input.{extension}"), "content_type": media_type});
+		// Inputs are user content: the stored object answers 403 to everyone (fal's
+		// CDN default is public to anyone holding the link); the model reads it
+		// through the signed link minted below. A forbid object passed as a plain
+		// URL fails the job with file_download_error (verified live 2026-10-31).
+		let lifecycle = json!({
+			"initial_acl": {"default": "forbid", "rules": []},
+			"expiration_duration_seconds": INPUT_TTL_SECS,
+		})
+		.to_string();
+		let response = shared::send_idempotent(PROVIDER, &transport, || {
+			crate::http::http_client()
+				.post(&url)
+				.query(&[("storage_type", STORAGE_TYPE)])
+				.header("Authorization", format!("Key {key}"))
+				.header(LIFECYCLE_HEADER, &lifecycle)
+				.json(&body)
+		})
+		.await?;
+		let ticket = shared::parse_json(PROVIDER, &response)?;
+		let field = |name: &str| {
+			ticket
+				.get(name)
+				.and_then(Value::as_str)
+				.ok_or_else(|| MediaError::InvalidResponse {
+					provider: PROVIDER.to_string(),
+					message: format!("upload response is missing {name}"),
+				})
+		};
+		let upload_url = field("upload_url")?;
+		let file_url = field("file_url")?;
+		shared::validate_https_url(upload_url, "fal upload_url")?;
+		shared::validate_https_url(file_url, "fal file_url")?;
+		// Caller headers belong to the fal API, not the storage bucket.
+		transport.extra_headers = None;
+		let response = shared::send_idempotent(PROVIDER, &transport, || {
+			crate::http::http_client()
+				.put(upload_url)
+				.header("Content-Type", media_type)
+				.body(data.clone())
+		})
+		.await?;
+		shared::require_success(PROVIDER, &response)?;
+		self.signed_read_url(file_url, &transport).await
+	}
+
+	/// A read-only link to one locked input, valid only as long as the input
+	/// itself: fal signs with a CDN token, not with the API key.
+	async fn signed_read_url(&self, file_url: &str, transport: &RequestOptions) -> MediaResult<String> {
+		let key = self.key()?;
+		let token_url = format!("{}/storage/auth/token", self.storage_base());
+		let response = shared::send_idempotent(PROVIDER, transport, || {
+			crate::http::http_client()
+				.post(&token_url)
+				.query(&[("storage_type", STORAGE_TYPE)])
+				.header("Authorization", format!("Key {key}"))
+				.json(&json!({}))
+		})
+		.await?;
+		let token = shared::parse_json(PROVIDER, &response)?
+			.get("token")
+			.and_then(Value::as_str)
+			.map(str::to_string)
+			.ok_or_else(|| MediaError::InvalidResponse {
+				provider: PROVIDER.to_string(),
+				message: "CDN token response is missing token".to_string(),
+			})?;
+		let sign_url = format!("{file_url}/sign");
+		let body = json!({"duration": INPUT_TTL_SECS, "scope": ["read"]});
+		let response = shared::send_idempotent(PROVIDER, transport, || {
+			crate::http::http_client()
+				.post(&sign_url)
+				.header("Authorization", format!("Bearer {token}"))
+				.json(&body)
+		})
+		.await?;
+		shared::require_success(PROVIDER, &response)?;
+		// fal answers with the bare URL as the body, not JSON.
+		let signed = String::from_utf8_lossy(&response.body).trim().to_string();
+		shared::validate_https_url(&signed, "fal signed url")?;
+		Ok(signed)
+	}
 }
 
 #[async_trait::async_trait]
@@ -267,22 +390,6 @@ impl ImageGenerationProvider for FalMediaProvider {
 		let mut options = parse_options(&request.provider_options)?;
 		let warnings = request_warnings(&request.request_options);
 		insert_semantic(&mut options, "prompt", "prompt", json!(request.prompt))?;
-		if !request.source_images.is_empty() {
-			let sources = request
-				.source_images
-				.iter()
-				.map(|source| shared::source_to_data_or_uri(source, request.request_options.max_source_bytes))
-				.collect::<MediaResult<Vec<_>>>()?;
-			if sources.len() == 1 {
-				insert_semantic(&mut options, "source_image", "image_url", json!(sources[0]))?;
-			} else {
-				insert_semantic(&mut options, "source_images", "image_urls", json!(sources))?;
-			}
-		}
-		if let Some(mask) = request.mask.as_ref() {
-			let mask = shared::source_to_data_or_uri(mask, request.request_options.max_source_bytes)?;
-			insert_semantic(&mut options, "mask", "mask_url", json!(mask))?;
-		}
 		if let Some(count) = request.count {
 			insert_semantic(&mut options, "count", "num_images", json!(count))?;
 		}
@@ -310,6 +417,22 @@ impl ImageGenerationProvider for FalMediaProvider {
 		}
 		let task = task_for_image_mode(request.mode);
 		ensure_endpoint_produces(&request.model, task).await?;
+		// Uploaded last: a request refused above never puts the user's image on fal.
+		if !request.source_images.is_empty() {
+			let mut sources = Vec::with_capacity(request.source_images.len());
+			for source in &request.source_images {
+				sources.push(self.resolve_source(source, &request.request_options).await?);
+			}
+			if sources.len() == 1 {
+				insert_semantic(&mut options, "source_image", "image_url", json!(sources[0]))?;
+			} else {
+				insert_semantic(&mut options, "source_images", "image_urls", json!(sources))?;
+			}
+		}
+		if let Some(mask) = request.mask.as_ref() {
+			let mask = self.resolve_source(mask, &request.request_options).await?;
+			insert_semantic(&mut options, "mask", "mask_url", json!(mask))?;
+		}
 		let value = self
 			.submit_queue(
 				&request.model,
@@ -399,26 +522,6 @@ impl VideoGenerationProvider for FalMediaProvider {
 		let mut options = parse_options(&request.provider_options)?;
 		let mut warnings = request_warnings(&request.request_options);
 		insert_semantic(&mut options, "prompt", "prompt", json!(request.prompt))?;
-		if let Some(source) = request.first_frame.as_ref() {
-			let source = shared::source_to_data_or_uri(source, request.request_options.max_source_bytes)?;
-			insert_semantic(&mut options, "first_frame", "image_url", json!(source))?;
-		}
-		if let Some(source) = request.last_frame.as_ref() {
-			let source = shared::source_to_data_or_uri(source, request.request_options.max_source_bytes)?;
-			insert_semantic(&mut options, "last_frame", "end_image_url", json!(source))?;
-		}
-		if !request.reference_images.is_empty() {
-			let sources = request
-				.reference_images
-				.iter()
-				.map(|source| shared::source_to_data_or_uri(source, request.request_options.max_source_bytes))
-				.collect::<MediaResult<Vec<_>>>()?;
-			insert_semantic(&mut options, "reference_images", "reference_image_urls", json!(sources))?;
-		}
-		if let Some(source) = request.source_video.as_ref() {
-			let source = shared::source_to_data_or_uri(source, request.request_options.max_source_bytes)?;
-			insert_semantic(&mut options, "source_video", "video_url", json!(source))?;
-		}
 		if let Some(count) = request.count {
 			insert_semantic(&mut options, "count", "num_videos", json!(count))?;
 		}
@@ -462,6 +565,26 @@ impl VideoGenerationProvider for FalMediaProvider {
 		let task = task_for_video_mode(request.mode);
 		validate_video_mode(&request)?;
 		ensure_endpoint_produces(&request.model, task).await?;
+		// Uploaded last: a request refused above never puts the user's media on fal.
+		if let Some(source) = request.first_frame.as_ref() {
+			let source = self.resolve_source(source, &request.request_options).await?;
+			insert_semantic(&mut options, "first_frame", "image_url", json!(source))?;
+		}
+		if let Some(source) = request.last_frame.as_ref() {
+			let source = self.resolve_source(source, &request.request_options).await?;
+			insert_semantic(&mut options, "last_frame", "end_image_url", json!(source))?;
+		}
+		if !request.reference_images.is_empty() {
+			let mut sources = Vec::with_capacity(request.reference_images.len());
+			for source in &request.reference_images {
+				sources.push(self.resolve_source(source, &request.request_options).await?);
+			}
+			insert_semantic(&mut options, "reference_images", "reference_image_urls", json!(sources))?;
+		}
+		if let Some(source) = request.source_video.as_ref() {
+			let source = self.resolve_source(source, &request.request_options).await?;
+			insert_semantic(&mut options, "source_video", "video_url", json!(source))?;
+		}
 		let value = self
 			.submit_queue(
 				&request.model,
@@ -656,8 +779,6 @@ impl TranscriptionProvider for FalMediaProvider {
 		validate_model(&request.model)?;
 		let mut options = parse_options(&request.provider_options)?;
 		let warnings = request_warnings(&request.request_options);
-		let audio = shared::source_to_data_or_uri(&request.audio, request.request_options.max_source_bytes)?;
-		insert_semantic(&mut options, "audio", "audio_url", json!(audio))?;
 		if let Some(language) = request.language.as_ref() {
 			insert_semantic(&mut options, "language", "language", json!(language))?;
 		}
@@ -673,6 +794,9 @@ impl TranscriptionProvider for FalMediaProvider {
 			)?;
 		}
 		ensure_endpoint_produces(&request.model, MediaTask::SpeechToText).await?;
+		// Uploaded last: a request refused above never puts the user's audio on fal.
+		let audio = self.resolve_source(&request.audio, &request.request_options).await?;
+		insert_semantic(&mut options, "audio", "audio_url", json!(audio))?;
 		let value = self
 			.submit_queue(
 				&request.model,

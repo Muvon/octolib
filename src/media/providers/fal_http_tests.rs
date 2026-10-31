@@ -562,3 +562,127 @@ async fn video_duration_schema_is_fetched_once_per_model() {
 	let methods: Vec<String> = mock.requests().into_iter().map(|request| request.method).collect();
 	assert_eq!(methods, ["GET", "POST", "POST"]);
 }
+
+const I2V_MODEL: &str = "fal-ai/test-i2v";
+
+/// The queue, catalog and storage mocks for an image-to-video submit. The
+/// catalog answer is cached per endpoint, so a test needing another category
+/// needs its own model id.
+fn start_with_storage(model: &str, category: &str, storage_replies: Vec<(u16, String)>) -> (MockHttp, MockHttp, Scope) {
+	let queue = MockHttp::start(vec![(200, QUEUED.to_string())]);
+	let catalog = MockHttp::start(vec![listing(model, category)]);
+	let storage = MockHttp::start(storage_replies);
+	let env = EnvGuard::new()
+		.set(API_BASE_ENV, queue.base_url())
+		.set(OPENAPI_URL_ENV, format!("{}/openapi.json", queue.base_url()))
+		.set(MODELS_URL_ENV, catalog.base_url())
+		.set(STORAGE_BASE_ENV, storage.base_url())
+		.set(API_KEY_ENV, "mock-key");
+	(queue, storage, Scope { _env: env, catalog })
+}
+
+fn i2v_request(model: &str, first_frame: MediaSource) -> VideoGenerationRequest {
+	let mut request = VideoGenerationRequest::new("the octo smiles").with_model(model);
+	request.mode = VideoGenerationMode::ImageToVideo;
+	request.first_frame = Some(first_frame);
+	request
+}
+
+fn png_frame() -> MediaSource {
+	MediaSource::Bytes {
+		data: b"\x89PNG\r\n\x1a\nframe".to_vec(),
+		media_type: "image/png".to_string(),
+	}
+}
+
+/// A user's frame goes to fal's CDN locked to this account and deleted after an
+/// hour (fal's default is public to anyone with the link), and an upload target
+/// that is not HTTPS is refused before any bytes leave or anything is queued.
+#[tokio::test]
+#[serial_test::serial]
+async fn an_inline_frame_is_uploaded_private_and_short_lived() {
+	let ticket = json!({"upload_url": "http://storage.test/put", "file_url": "https://v3b.fal.media/files/in.png"});
+	let (queue, storage, _scope) = start_with_storage(I2V_MODEL, "image-to-video", vec![(200, ticket.to_string())]);
+
+	let error = FalMediaProvider::new()
+		.submit_video(i2v_request(I2V_MODEL, png_frame()))
+		.await
+		.expect_err("a plain-http upload target is refused");
+	assert!(
+		matches!(error, MediaError::InvalidRequest(_)),
+		"unexpected error: {error}"
+	);
+
+	let requests = storage.requests();
+	assert_eq!(
+		requests.len(),
+		1,
+		"the initiate call only, no PUT to a non-https target"
+	);
+	let initiate = &requests[0];
+	assert_eq!(initiate.method, "POST");
+	assert_eq!(initiate.path, "/storage/upload/initiate?storage_type=fal-cdn-v3");
+	assert_eq!(initiate.header("authorization"), Some("Key mock-key"));
+	let lifecycle: Value =
+		serde_json::from_str(initiate.header(LIFECYCLE_HEADER).expect("lifecycle header")).expect("lifecycle json");
+	assert_eq!(
+		lifecycle,
+		json!({"initial_acl": {"default": "forbid", "rules": []}, "expiration_duration_seconds": 3600})
+	);
+	let body: Value = serde_json::from_str(&initiate.body).expect("initiate json");
+	assert_eq!(body, json!({"file_name": "input.png", "content_type": "image/png"}));
+	assert!(
+		queue.requests().is_empty(),
+		"nothing is queued without the uploaded frame"
+	);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn a_failed_upload_queues_nothing() {
+	let (queue, storage, _scope) = start_with_storage(
+		I2V_MODEL,
+		"image-to-video",
+		vec![(500, r#"{"detail":"storage down"}"#.to_string())],
+	);
+	FalMediaProvider::new()
+		.submit_video(i2v_request(I2V_MODEL, png_frame()))
+		.await
+		.expect_err("the upload failed");
+	assert_eq!(storage.requests()[0].method, "POST");
+	assert!(queue.requests().is_empty(), "no generation without its input");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn a_url_frame_is_passed_through_without_upload() {
+	let (queue, storage, _scope) = start_with_storage(I2V_MODEL, "image-to-video", vec![(500, String::new())]);
+	let url = "https://example.test/frame.png";
+	FalMediaProvider::new()
+		.submit_video(i2v_request(
+			I2V_MODEL,
+			MediaSource::Url {
+				url: url.to_string(),
+				media_type: None,
+			},
+		))
+		.await
+		.expect("queued");
+	assert!(storage.requests().is_empty(), "a URL is never re-uploaded");
+	let body: Value = serde_json::from_str(&queue.requests()[0].body).expect("submit json");
+	assert_eq!(body["image_url"], url);
+}
+
+/// A request refused before submit must not have put the user's image on fal.
+#[tokio::test]
+#[serial_test::serial]
+async fn a_refused_request_uploads_nothing() {
+	let model = "fal-ai/test-i2v-refused";
+	let (queue, storage, _scope) = start_with_storage(model, "text-to-audio", vec![(500, String::new())]);
+	FalMediaProvider::new()
+		.submit_video(i2v_request(model, png_frame()))
+		.await
+		.expect_err("an audio endpoint is not a video route");
+	assert!(storage.requests().is_empty(), "validated before any upload");
+	assert!(queue.requests().is_empty());
+}

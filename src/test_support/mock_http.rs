@@ -36,6 +36,19 @@ pub struct RecordedRequest {
 	pub method: String,
 	pub path: String,
 	pub body: String,
+	/// Header names lowercased, in arrival order.
+	pub headers: Vec<(String, String)>,
+}
+
+impl RecordedRequest {
+	/// The first value of a header, by case-insensitive name.
+	pub fn header(&self, name: &str) -> Option<&str> {
+		let name = name.to_ascii_lowercase();
+		self.headers
+			.iter()
+			.find(|(key, _)| *key == name)
+			.map(|(_, value)| value.as_str())
+	}
 }
 
 impl MockHttp {
@@ -92,6 +105,7 @@ fn handle_connection(
 	reader.read_line(&mut request_line)?;
 
 	let mut content_length = 0usize;
+	let mut headers = Vec::new();
 	loop {
 		let mut line = String::new();
 		if reader.read_line(&mut line)? == 0 {
@@ -101,8 +115,12 @@ fn handle_connection(
 		if trimmed.is_empty() {
 			break;
 		}
-		if let Some(value) = trimmed.to_ascii_lowercase().strip_prefix("content-length:") {
-			content_length = value.trim().parse().unwrap_or(0);
+		if let Some((name, value)) = trimmed.split_once(':') {
+			let name = name.trim().to_ascii_lowercase();
+			if name == "content-length" {
+				content_length = value.trim().parse().unwrap_or(0);
+			}
+			headers.push((name, value.trim().to_string()));
 		}
 	}
 
@@ -119,6 +137,7 @@ fn handle_connection(
 			method,
 			path,
 			body: String::from_utf8_lossy(&body).to_string(),
+			headers,
 		});
 	}
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.48.3] - 2026-10-31
+
+### 📋 Release Summary
+
+Fal media uploads now use a more secure process, and requests are validated before processing.
+
+### 🐛 Bug Fixes & Stability
+
+- **fal**: secure fal media uploads and validate requests first `b8811b83`
+
 ## [0.48.2] - 2026-10-31
 
 ### 🔧 Improvements & Optimizations

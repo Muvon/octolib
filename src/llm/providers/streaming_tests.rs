@@ -458,11 +458,12 @@ async fn timeout_and_cancellation_cover_the_stream_body() {
 			socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\nD\r\n: heartbeat\n\n\r\n").await.unwrap();
 			started.send(()).unwrap();
 			let mut byte = [0];
-			assert_eq!(
-				socket.read(&mut byte).await.unwrap(),
-				0,
-				"aborted request must close the body"
-			);
+			// An aborted client reads as EOF on Linux but as a reset on macOS.
+			let closed = match socket.read(&mut byte).await {
+				Ok(count) => count == 0,
+				Err(error) => error.kind() == std::io::ErrorKind::ConnectionReset,
+			};
+			assert!(closed, "aborted request must close the body");
 		});
 		let (sender, token) = watch::channel(false);
 		let client = tokio::spawn(async move {

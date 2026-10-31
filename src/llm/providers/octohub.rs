@@ -22,7 +22,7 @@
 use super::shared;
 use crate::llm::reference_models::proxy_route_enforces_response_schema;
 use crate::llm::retry;
-use crate::llm::traits::AiProvider;
+use crate::llm::traits::{AiProvider, KeepalivePolicy};
 use crate::llm::types::{
 	ChatCompletionParams, Message, OctoHubTransport, ProviderExchange, ProviderResponse, SamplingSupport,
 	ThinkingBlock, TokenUsage, ToolCall,
@@ -168,6 +168,18 @@ impl AiProvider for OctoHubProvider {
 		true
 	}
 
+	// Same TTLs and margin as Anthropic: the client's `cache_control` markers pass
+	// through unchanged, so a hub lane that caches does so on those TTLs. Whether
+	// the lane serving this chain can be pre-warmed is the server's call: it
+	// answers a lane without a keepalive policy with an empty, zero-read reply and
+	// no upstream call, which ends the caller's keepalive as a cache miss.
+	fn keepalive_policy(&self, _model: &str, use_long_cache: bool) -> Option<KeepalivePolicy> {
+		let ttl_secs = if use_long_cache { 3600 } else { 300 };
+		Some(KeepalivePolicy {
+			interval: std::time::Duration::from_secs(ttl_secs * 9 / 10),
+		})
+	}
+
 	fn supports_vision(&self, _model: &str) -> bool {
 		true
 	}
@@ -233,6 +245,12 @@ impl AiProvider for OctoHubProvider {
 
 		if params.max_tokens > 0 {
 			request_body["max_output_tokens"] = serde_json::json!(params.max_tokens);
+		}
+
+		// The rest of the body stays as a real request would send it (including
+		// max_output_tokens, which sizes the thinking budget) so the prefix matches.
+		if params.cache_prewarm {
+			request_body["cache_prewarm"] = serde_json::json!(true);
 		}
 
 		// OctoHub re-runs the request through this same library server-side, so we

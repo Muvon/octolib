@@ -130,6 +130,9 @@ pub trait AiProvider: Send + Sync {
 	///   5m default, 1h opt-in. Returns `Some`.
 	/// - **OpenRouter** ✓ — passes `cache_control` through to upstream, working only
 	///   for Anthropic/Claude routes. Returns `Some` when model is Claude-family.
+	/// - **Octohub** ✓ — passes `cache_control` and `cache_prewarm` through to the
+	///   lane serving the chain; the server pre-warms only lanes whose provider
+	///   has a policy and answers the rest with a zero-read reply. Returns `Some`.
 	/// - **OpenAI** ✗ — GPT-5.6 supports explicit write breakpoints, but exposes
 	///   no client-controlled refresh/keepalive primitive. A duplicate request
 	///   can incur another cache-write charge rather than extending a TTL. `None`.
@@ -144,7 +147,7 @@ pub trait AiProvider: Send + Sync {
 	/// - **DeepSeek / Groq / Moonshot Kimi K2** ✗ — automatic disk/prefix caching
 	///   with no client-controllable refresh primitive. `None`.
 	/// - **Cloudflare / Together / Fireworks / Cerebras / Nvidia / BytePlus /
-	///   Alibaba / Minimax / Featherless / Hetzner / OpenCode Zen & Go / Octohub /
+	///   Alibaba / Minimax / Featherless / Hetzner / OpenCode Zen & Go /
 	///   Local / Ollama / Zai / CLI providers** ✗
 	///   — no caching primitive worth pinging. `None`.
 	fn keepalive_policy(&self, _model: &str, _use_long_cache: bool) -> Option<KeepalivePolicy> {

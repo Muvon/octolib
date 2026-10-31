@@ -161,6 +161,38 @@ async fn chat_completion_via_mock_http_sends_tools_reasoning_and_schema() {
 
 #[tokio::test]
 #[serial_test::serial]
+async fn cache_prewarm_is_flagged_and_keeps_the_real_request_shape() {
+	let body = octohub_body(
+		json!([]),
+		json!({"input_tokens": 0, "output_tokens": 0, "total_tokens": 900, "cache_read_tokens": 900}),
+	);
+	let mock = MockHttp::start(vec![(200, body.clone()), (200, body)]);
+	let _env = EnvGuard::new().set("OCTOHUB_API_URL", mock.base_url());
+
+	let provider = OctoHubProvider::new();
+	let params = || {
+		ChatCompletionParams::new(&[Message::user("hello")], "claude-sonnet-5-5", 0.5, 0.9, 0, 64)
+			.with_api_key("mock-key".to_owned())
+	};
+	provider.chat_completion(params()).await.expect("real request");
+	let response = provider
+		.chat_completion(params().with_cache_prewarm(true))
+		.await
+		.expect("prewarm request");
+	assert_eq!(response.exchange.usage.expect("usage").cache_read_tokens, 900);
+
+	let requests = mock.requests();
+	let mut real: serde_json::Value = serde_json::from_str(&requests[0].body).expect("real json");
+	let prewarm: serde_json::Value = serde_json::from_str(&requests[1].body).expect("prewarm json");
+	assert!(real.get("cache_prewarm").is_none());
+	assert_eq!(prewarm["cache_prewarm"], true);
+	// Everything else matches the real request, so the cached prefix does too.
+	real["cache_prewarm"] = json!(true);
+	assert_eq!(real, prewarm);
+}
+
+#[tokio::test]
+#[serial_test::serial]
 async fn chat_completion_via_mock_http_surfaces_auth_aware_error() {
 	let mock = MockHttp::start(vec![(401, r#"{"error":{"message":"invalid key"}}"#.to_string())]);
 	let _env = EnvGuard::new().set("OCTOHUB_API_URL", mock.base_url());

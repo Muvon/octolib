@@ -954,7 +954,8 @@ pub struct ChatCompletionParams {
 	pub use_long_cache: bool,
 	/// Cache pre-warm request: refresh the provider's prompt-cache TTL without
 	/// generating output. Anthropic gets `max_tokens: 0` (non-streaming); OpenRouter
-	/// gets `max_tokens: 1`. Other providers ignore it.
+	/// gets `max_tokens: 1`; OctoHub forwards it as `cache_prewarm: true`. Other
+	/// providers ignore it.
 	pub cache_prewarm: bool,
 	/// Explicit prompt-cache routing key (OpenAI `prompt_cache_key`). Optional hint
 	/// that pins requests sharing a long common prefix to the same cache, improving

@@ -70,6 +70,17 @@ fn test_capabilities() {
 }
 
 #[test]
+fn keepalive_policy_pings_at_nine_tenths_of_the_marker_ttl() {
+	let provider = OctoHubProvider::new();
+	let short = provider
+		.keepalive_policy("claude-sonnet-5-5", false)
+		.expect("5m policy");
+	assert_eq!(short.interval, std::time::Duration::from_secs(270));
+	let long = provider.keepalive_policy("claude-sonnet-5-5", true).expect("1h policy");
+	assert_eq!(long.interval, std::time::Duration::from_secs(3240));
+}
+
+#[test]
 fn test_extract_instructions_single() {
 	let messages = vec![Message::system("You are helpful."), Message::user("Hello")];
 	let instr = extract_instructions(&messages).unwrap();

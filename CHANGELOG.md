@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.48.4] - 2026-10-31
+
+### 📋 Release Summary
+
+Anthropic requests can now preserve thinking blocks across requests. Image-to-video requests are routed correctly, and inline media is uploaded through MiniMax storage.
+
+### ✨ New Features & Enhancements
+
+- **anthropic**: preserve thinking blocks across requests `1e32d6f7`
+
+### 🐛 Bug Fixes & Stability
+
+- **media**: route image-to-video requests correctly `36e3afa4`
+- **minimax**: upload inline media through MiniMax storage `e522c710`
+
 ## [0.48.3] - 2026-10-31
 
 ### 📋 Release Summary

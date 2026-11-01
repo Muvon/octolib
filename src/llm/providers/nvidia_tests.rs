@@ -18,6 +18,7 @@ use super::*;
 fn test_supports_model() {
 	let provider = NvidiaProvider::new();
 	assert!(provider.supports_model("nvidia/llama-3.1-nemotron-ultra-253b-v1"));
+	assert!(provider.supports_model("nvidia/nemotron-3.5-bolt-e4b"));
 	assert!(provider.supports_model("deepseek-ai/deepseek-v3.2"));
 	assert!(provider.supports_model("minimaxai/minimax-m2.1"));
 	assert!(provider.supports_model("meta/llama-3.1-405b-instruct"));

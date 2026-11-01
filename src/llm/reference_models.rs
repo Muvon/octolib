@@ -525,6 +525,13 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		pricing: pricing(0.08, 0.20, 0.08, 0.04),
 	},
 	ReferenceModelEntry {
+		// NVIDIA Nemotron 3.5 Bolt E4B (GA Oct 23, 2026) on the NVIDIA API;
+		// needs-confirmation: reference-baseline rate (nemotron-3.5-lightning tier)
+		pattern: "nemotron-3.5-bolt",
+		capabilities: caps(false, false, true, 262_144),
+		pricing: pricing(0.08, 0.20, 0.08, 0.04),
+	},
+	ReferenceModelEntry {
 		// NVIDIA Nemotron 3 Nano 30B A3B on OpenRouter: 262K-context text
 		// model. Sits after every more specific Nemotron row.
 		pattern: "nemotron-3-nano-30b-a3b",

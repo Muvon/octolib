@@ -210,6 +210,65 @@ fn deepseek_v4p1_flash_1017_spot_snapshot_uses_fireworks_rates() {
 }
 
 #[test]
+fn november_serverless_models_use_fireworks_pricing_and_context() {
+	let provider = FireworksProvider::new();
+
+	// Muse Spark Open: nvfp4 row precedes the base id (substring lookups)
+	for model in [
+		"accounts/fireworks/models/muse-spark-open-nvfp4",
+		"accounts/fireworks/models/muse-spark-open",
+	] {
+		let muse = provider.get_model_pricing(model).unwrap();
+		assert_eq!(muse.input_price_per_1m, 1.25, "{model}");
+		assert_eq!(muse.cache_read_price_per_1m, 0.15, "{model}");
+		assert_eq!(muse.output_price_per_1m, 4.25, "{model}");
+	}
+
+	// Nemotron 3 Ultra bf16 shares the nvfp4 route's rate and context
+	let nemotron = provider
+		.get_model_pricing("accounts/fireworks/models/nemotron-3-ultra-bf16")
+		.unwrap();
+	assert_eq!(nemotron.input_price_per_1m, 0.60);
+	assert_eq!(nemotron.cache_read_price_per_1m, 0.12);
+	assert_eq!(nemotron.output_price_per_1m, 2.40);
+	assert_eq!(
+		provider.get_max_input_tokens("accounts/fireworks/models/nemotron-3-ultra-bf16"),
+		262_144
+	);
+
+	// Nemotron 3.5 Super VL 120B A12B: both quantizations, 262K context
+	for model in [
+		"accounts/fireworks/models/nvidia-nemotron-3p5-super-vl-120b-a12b-nvfp4",
+		"accounts/fireworks/models/nvidia-nemotron-3p5-super-vl-120b-a12b-bf16",
+	] {
+		let vl = provider.get_model_pricing(model).unwrap();
+		assert_eq!(vl.input_price_per_1m, 0.15, "{model}");
+		assert_eq!(vl.cache_read_price_per_1m, 0.02, "{model}");
+		assert_eq!(vl.output_price_per_1m, 0.50, "{model}");
+		assert_eq!(provider.get_max_input_tokens(model), 262_144, "{model}");
+	}
+
+	let qwen_max = provider
+		.get_model_pricing("accounts/fireworks/models/qwen3p7-max")
+		.unwrap();
+	assert_eq!(qwen_max.input_price_per_1m, 0.40);
+	assert_eq!(qwen_max.cache_read_price_per_1m, 0.08);
+	assert_eq!(qwen_max.output_price_per_1m, 1.60);
+
+	// MiniMax M3.1 Flash p-form id precedes the minimax-m3 substring row
+	let minimax = provider
+		.get_model_pricing("accounts/fireworks/models/minimax-m3p1-flash")
+		.unwrap();
+	assert_eq!(minimax.input_price_per_1m, 0.15);
+	assert_eq!(minimax.cache_read_price_per_1m, 0.015);
+	assert_eq!(minimax.output_price_per_1m, 0.60);
+	assert_eq!(
+		provider.get_max_input_tokens("accounts/fireworks/models/minimax-m3p1-flash"),
+		512_000
+	);
+}
+
+#[test]
 fn retired_routes_leave_fireworks_table() {
 	for model in [
 		"accounts/fireworks/models/qwen3p7-plus",

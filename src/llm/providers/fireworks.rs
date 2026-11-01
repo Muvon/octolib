@@ -80,6 +80,9 @@ const PRICING: &[PricingTuple] = &[
 	("kimi-k3-fast", 4.50, 22.50, 4.50, 0.45),
 	("kimi-k3-us", 4.50, 22.50, 4.50, 0.45),
 	("kimi-k3", 3.00, 15.00, 3.00, 0.30),
+	// needs-confirmation: reference-baseline rate (minimax-m3.1-flash family);
+	// precedes minimax-m3 because lookups are substring matches
+	("minimax-m3p1-flash", 0.15, 0.60, 0.15, 0.015),
 	("minimax-m3", 0.30, 1.20, 0.30, 0.06),
 	("glm-5p3-flash-us", 0.225, 0.75, 0.225, 0.045),
 	("glm-5p3-flash", 0.15, 0.50, 0.15, 0.03),
@@ -90,6 +93,16 @@ const PRICING: &[PricingTuple] = &[
 	("gpt-oss-120b", 0.15, 0.60, 0.15, 0.015),
 	("nemotron-lightning-3p5-30b-a3b", 0.05, 0.20, 0.05, 0.01),
 	("nemotron-3-ultra-nvfp4", 0.60, 2.40, 0.60, 0.12),
+	// needs-confirmation: reference-baseline rate (muse-spark-open family)
+	("muse-spark-open-nvfp4", 1.25, 4.25, 1.25, 0.15),
+	("muse-spark-open", 1.25, 4.25, 1.25, 0.15),
+	// needs-confirmation: reference-baseline rate (nemotron-3-ultra-nvfp4 sibling)
+	("nemotron-3-ultra-bf16", 0.60, 2.40, 0.60, 0.12),
+	// needs-confirmation: reference-baseline rate (nemotron-3.5-super-vl family)
+	("nvidia-nemotron-3p5-super-vl-120b-a12b-nvfp4", 0.15, 0.50, 0.15, 0.02),
+	("nvidia-nemotron-3p5-super-vl-120b-a12b-bf16", 0.15, 0.50, 0.15, 0.02),
+	// needs-confirmation: reference-baseline rate (qwen3p7-plus sibling)
+	("qwen3p7-max", 0.40, 1.60, 0.40, 0.08),
 ];
 
 fn fireworks_model_pricing(model: &str) -> Option<crate::llm::types::ModelPricing> {
@@ -136,6 +149,8 @@ impl AiProvider for FireworksProvider {
 			|| normalized.contains("kimi-k2p6")
 			|| normalized.contains("nemotron-lightning-3p5-30b-a3b")
 			|| normalized.contains("nemotron-3-ultra-nvfp4")
+			|| normalized.contains("nemotron-3-ultra-bf16")
+			|| normalized.contains("nvidia-nemotron-3p5-super-vl-120b-a12b")
 		{
 			262_144
 		} else if normalized.contains("gpt-oss-120b") || normalized.contains("muse-glimmer-30b") {

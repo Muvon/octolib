@@ -63,6 +63,7 @@ const INCEPTION_API_URL: &str = "https://api.inceptionlabs.ai/v1/chat/completion
 /// (`GET /v1/models` reports `context_length`).
 const MODELS: &[(&str, usize)] = &[
 	("mercury-3", 1_000_000),
+	("mercury-voice", 128_000),
 	("mercury-2.5", 260_000),
 	("mercury-2", 128_000),
 ];
@@ -74,6 +75,8 @@ const MODELS: &[(&str, usize)] = &[
 const PRICING: &[PricingTuple] = &[
 	// Mercury 3 at 50% launch discount (no end date): regular $0.20 / $0.02 / $0.70
 	("mercury-3", 0.10, 0.35, 0.10, 0.01),
+	// Mercury Voice at 50% launch discount (no end date): regular $0.40 / $0.04 / $1.50
+	("mercury-voice", 0.20, 0.75, 0.20, 0.02),
 	("mercury-2.5", 0.20, 0.75, 0.20, 0.02),
 	("mercury-2", 0.25, 0.75, 0.25, 0.025),
 ];

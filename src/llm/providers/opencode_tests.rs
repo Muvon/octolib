@@ -20,6 +20,9 @@ fn test_supports_model() {
 	assert!(zen.supports_model("claude-opus-5"));
 	assert!(zen.supports_model("gpt-5.5"));
 	assert!(zen.supports_model("deepseek-v4-flash-free"));
+	assert!(zen.supports_model("deepseek-v4.1-flash-free"));
+	assert!(zen.supports_model("beam-free"));
+	assert!(zen.supports_model("flint-40b-free"));
 	assert!(!zen.supports_model(""));
 
 	let go = OpenCodeGoProvider::new();

@@ -40,6 +40,9 @@ pub(crate) fn environment() -> Result<Environment> {
 
 /// CoreML's default writes a fresh temporary model per session. Immutable cache
 /// identities let independent processes reuse the compiled graph after restart.
+/// The GPU unit runs graphs through MPSGraph, which leaks its context and
+/// prints "Context leak detected" straight to stderr; the Neural Engine and
+/// CPU keep the CoreML speedup without that path.
 pub(crate) fn execution_providers(identity: &str) -> Result<Vec<ort::ep::ExecutionProviderDispatch>> {
 	#[cfg(target_os = "macos")]
 	{
@@ -49,6 +52,7 @@ pub(crate) fn execution_providers(identity: &str) -> Result<Vec<ort::ep::Executi
 		std::fs::create_dir_all(&path)?;
 		let path = path.to_str().ok_or_else(|| anyhow!("CoreML cache path is not UTF-8"))?;
 		Ok(vec![ort::ep::CoreML::default()
+			.with_compute_units(ort::ep::coreml::ComputeUnits::CPUAndNeuralEngine)
 			.with_model_cache_dir(path)
 			.build()
 			.error_on_failure()])
@@ -91,7 +95,8 @@ pub(crate) fn memory_execution_providers(
 #[cfg(any(target_os = "macos", test))]
 fn cache_key(identity: &str, runtime: &str, arch: &str) -> String {
 	use sha2::{Digest, Sha256};
-	hex::encode(Sha256::digest(format!("coreml-v1:{runtime}:{arch}:{identity}")))
+	// v2: compiled models depend on the compute units, which v1 left at ALL.
+	hex::encode(Sha256::digest(format!("coreml-v2:{runtime}:{arch}:{identity}")))
 }
 
 #[cfg(any(target_os = "macos", test))]

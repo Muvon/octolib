@@ -74,7 +74,7 @@ impl EvaluationProvider for OctoHubEvaluationProvider {
 	async fn evaluate(&self, request: EvaluationRequest) -> EvaluationResult<EvaluationResponse> {
 		if request.uses_images() {
 			return Err(EvaluationError::InvalidRequest(
-				"images and box questions are only supported on the typesafe provider".to_string(),
+				"images and box questions are only supported on the typesafe and openrouter providers".to_string(),
 			));
 		}
 		request.validate()?;

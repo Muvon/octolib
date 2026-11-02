@@ -217,6 +217,8 @@ pub enum Answer {
 		bounds: BoundingBox,
 		confidence: f64,
 	},
+	/// The model declined this question; the other answers still stand.
+	Refusal,
 }
 
 /// Edges as fractions from 0 to 1, with the origin at the image's top-left.

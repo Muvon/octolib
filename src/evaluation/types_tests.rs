@@ -110,6 +110,10 @@ fn answers_parse_from_the_live_response_shape() {
 		}
 		other => panic!("unexpected {other:?}"),
 	}
+	assert_eq!(
+		serde_json::from_value::<Answer>(json!({"type": "refusal"})).unwrap(),
+		Answer::Refusal
+	);
 }
 
 #[test]

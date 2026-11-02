@@ -69,7 +69,7 @@ async fn images_and_box_questions_are_rejected_before_sending() {
 		assert!(matches!(
 			provider.evaluate(request).await,
 			Err(EvaluationError::InvalidRequest(message))
-				if message == "images and box questions are only supported on the typesafe provider"
+				if message == "images and box questions are only supported on the typesafe and openrouter providers"
 		));
 	}
 }

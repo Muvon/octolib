@@ -13,7 +13,10 @@
 // limitations under the License.
 
 use super::errors::{EvaluationError, EvaluationResult};
-use super::providers::{CloudflareEvaluationProvider, OctoHubEvaluationProvider, TypeSafeEvaluationProvider};
+use super::providers::{
+	CloudflareEvaluationProvider, OctoHubEvaluationProvider, OpenAiEvaluationProvider, OpenRouterEvaluationProvider,
+	TypeSafeEvaluationProvider,
+};
 use super::traits::EvaluationProvider;
 
 pub struct EvaluationProviderFactory;
@@ -36,6 +39,8 @@ impl EvaluationProviderFactory {
 		match name.to_ascii_lowercase().as_str() {
 			"cloudflare" => Ok(Box::new(CloudflareEvaluationProvider::new())),
 			"octohub" => Ok(Box::new(OctoHubEvaluationProvider::new())),
+			"openai" => Ok(Box::new(OpenAiEvaluationProvider::new())),
+			"openrouter" => Ok(Box::new(OpenRouterEvaluationProvider::new())),
 			"typesafe" => Ok(Box::new(TypeSafeEvaluationProvider::new())),
 			other => Err(EvaluationError::UnsupportedProvider(other.to_string())),
 		}
@@ -54,7 +59,7 @@ impl EvaluationProviderFactory {
 	}
 
 	pub fn supported_providers() -> &'static [&'static str] {
-		&["cloudflare", "octohub", "typesafe"]
+		&["cloudflare", "octohub", "openai", "openrouter", "typesafe"]
 	}
 }
 
@@ -75,13 +80,26 @@ mod tests {
 		let (provider, model) = EvaluationProviderFactory::get_provider_for_model("octohub:jev").unwrap();
 		assert_eq!(provider.name(), "octohub");
 		assert_eq!(model, "jev");
+
+		let (provider, model) = EvaluationProviderFactory::get_provider_for_model("openai:gpt-6-luna").unwrap();
+		assert_eq!(provider.name(), "openai");
+		assert_eq!(model, "gpt-6-luna");
+
+		let (provider, model) =
+			EvaluationProviderFactory::get_provider_for_model("openrouter:openai/gpt-6-luna-decisions").unwrap();
+		assert_eq!(provider.name(), "openrouter");
+		assert_eq!(model, "openai/gpt-6-luna-decisions");
 	}
 
 	#[test]
 	fn rejects_unknown_providers_models_and_malformed_ids() {
 		assert!(matches!(
-			EvaluationProviderFactory::get_provider_for_model("openai:jev-latest"),
+			EvaluationProviderFactory::get_provider_for_model("unknown:jev-latest"),
 			Err(EvaluationError::UnsupportedProvider(_))
+		));
+		assert!(matches!(
+			EvaluationProviderFactory::get_provider_for_model("openai:jev-latest"),
+			Err(EvaluationError::UnsupportedModel { .. })
 		));
 		assert!(matches!(
 			EvaluationProviderFactory::get_provider_for_model("cloudflare:@cf/zai-org/glm-5.3"),

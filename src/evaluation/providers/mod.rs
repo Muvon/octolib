@@ -14,9 +14,13 @@
 
 pub mod cloudflare;
 pub mod octohub;
+pub mod openai;
+pub mod openrouter;
 pub(crate) mod shared;
 pub mod typesafe;
 
 pub use cloudflare::CloudflareEvaluationProvider;
 pub use octohub::OctoHubEvaluationProvider;
+pub use openai::OpenAiEvaluationProvider;
+pub use openrouter::OpenRouterEvaluationProvider;
 pub use typesafe::TypeSafeEvaluationProvider;

@@ -25,7 +25,10 @@
 //! (`typesafe:jev-latest`), through Cloudflare AI Gateway unified billing
 //! (`cloudflare:typesafe/jev`), or through an OctoHub proxy that maps its
 //! own aliases (`octohub:jev`). All speak the same payload; only the
-//! envelope differs.
+//! envelope differs. OpenRouter's Decisions router serves the same payload
+//! for every maker's decision model (`openrouter:openai/gpt-6-luna-decisions`).
+//! OpenAI's own Decisions API (`openai:gpt-6-luna`) has a different wire
+//! format and is mapped onto these types.
 
 pub mod errors;
 pub mod factory;
@@ -36,7 +39,10 @@ pub mod types;
 
 pub use errors::{EvaluationError, EvaluationResult};
 pub use factory::EvaluationProviderFactory;
-pub use providers::{CloudflareEvaluationProvider, OctoHubEvaluationProvider, TypeSafeEvaluationProvider};
+pub use providers::{
+	CloudflareEvaluationProvider, OctoHubEvaluationProvider, OpenAiEvaluationProvider, OpenRouterEvaluationProvider,
+	TypeSafeEvaluationProvider,
+};
 pub use traits::EvaluationProvider;
 pub use types::{
 	Answer, BoundingBox, EvaluationImageFormat, EvaluationPricing, EvaluationRequest, EvaluationResponse,

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 pub mod cloudflare;
+pub mod inception;
 pub mod octohub;
 pub mod openai;
 pub mod openrouter;
@@ -20,6 +21,7 @@ pub(crate) mod shared;
 pub mod typesafe;
 
 pub use cloudflare::CloudflareEvaluationProvider;
+pub use inception::InceptionEvaluationProvider;
 pub use octohub::OctoHubEvaluationProvider;
 pub use openai::OpenAiEvaluationProvider;
 pub use openrouter::OpenRouterEvaluationProvider;

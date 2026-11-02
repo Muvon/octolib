@@ -46,7 +46,7 @@ Capability modules are on by default; `websockets` is opt-in. Pick only what you
 | `embeddings` | `octolib::embedding` | `tiktoken-rs` |
 | `reranker` | `octolib::reranker` | — |
 | `media` | `octolib::media` — image, video, speech, transcription | `base64` |
-| `evaluation` | structured evaluation (TypeSafe Jev, Cloudflare AI Gateway, OpenRouter Decisions, OpenAI Decisions) | `base64` |
+| `evaluation` | structured evaluation (TypeSafe Jev, Cloudflare AI Gateway and Clef, Inception Mercury Decide, OpenRouter Decisions, OpenAI Decisions) | `base64` |
 | `fastembed` | local embedding backend (implies `embeddings`) | `fastembed` |
 | `huggingface` | local embedding backend (implies `embeddings`) | `candle`, `tokenizers`, `hf-hub` |
 
@@ -157,7 +157,7 @@ async fn triage() -> octolib::EvaluationResult<()> {
 
 Jev bills input tokens only ($0.042 per 1M, output free) and has a 32k context, so trim the state to what the questions need. The response's `model` field reports the versioned model that answered.
 
-The same request runs on other decision models: `openrouter:<maker>/<model>` (e.g. `openrouter:perplexity/pplx-decider-v1.2`; `OPENROUTER_API_KEY`, cost taken from OpenRouter's response) or OpenAI's own Decisions API, `openai:gpt-6-luna` (`OPENAI_API_KEY`). OpenAI's wire format has no `box` questions and no yes/no criteria, takes plain-string instructions, choice descriptions and levels only, and reads images only as top-level `state` array items; anything else is rejected before sending. A question OpenAI declines comes back as `Answer::Refusal`.
+The same request runs on other decision models: Cloudflare's Clef on Workers AI (`cloudflare:@cf/cloudflare/clef`, `clef-flash`, `clef-omni`; $0.24 / $0.038 / $0.15 per 1M input tokens), Inception's `inception:mercury-decide` (`INCEPTION_API_KEY`, $0.02 per 1M input tokens), `openrouter:<maker>/<model>` (e.g. `openrouter:perplexity/pplx-decider-v1.2`; `OPENROUTER_API_KEY`, cost taken from OpenRouter's response) or OpenAI's own Decisions API, `openai:gpt-6-luna` (`OPENAI_API_KEY`). OpenAI's wire format has no `box` questions and no yes/no criteria, takes plain-string instructions, choice descriptions and levels only, and reads images only as top-level `state` array items; anything else is rejected before sending. A question OpenAI declines comes back as `Answer::Refusal`.
 
 Use an image reference in the state and ask for a bounding box:
 
@@ -178,7 +178,7 @@ async fn locate(image: Vec<u8>) -> EvaluationResult<()> {
 
 Image limits are checked before sending (PNG/JPEG still images, at most 16 MiB each, sides 256–1568 px, and 78,400–2,458,624 total pixels, all inclusive); images are never resized, padded or rotated for the caller.
 
-TypeSafe flags images and box questions as not production-ready. The `typesafe` and `openrouter` providers send them; `openai` sends top-level state images only, and `cloudflare` and `octohub` reject both.
+TypeSafe flags images and box questions as not production-ready. The `typesafe` and `openrouter` providers send them; `openai` sends top-level state images only, and `cloudflare`, `inception` and `octohub` reject both.
 
 ### 📋 Structured Output
 

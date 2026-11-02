@@ -14,8 +14,8 @@
 
 use super::errors::{EvaluationError, EvaluationResult};
 use super::providers::{
-	CloudflareEvaluationProvider, OctoHubEvaluationProvider, OpenAiEvaluationProvider, OpenRouterEvaluationProvider,
-	TypeSafeEvaluationProvider,
+	CloudflareEvaluationProvider, InceptionEvaluationProvider, OctoHubEvaluationProvider, OpenAiEvaluationProvider,
+	OpenRouterEvaluationProvider, TypeSafeEvaluationProvider,
 };
 use super::traits::EvaluationProvider;
 
@@ -38,6 +38,7 @@ impl EvaluationProviderFactory {
 	pub fn create_provider(name: &str) -> EvaluationResult<Box<dyn EvaluationProvider>> {
 		match name.to_ascii_lowercase().as_str() {
 			"cloudflare" => Ok(Box::new(CloudflareEvaluationProvider::new())),
+			"inception" => Ok(Box::new(InceptionEvaluationProvider::new())),
 			"octohub" => Ok(Box::new(OctoHubEvaluationProvider::new())),
 			"openai" => Ok(Box::new(OpenAiEvaluationProvider::new())),
 			"openrouter" => Ok(Box::new(OpenRouterEvaluationProvider::new())),
@@ -59,7 +60,7 @@ impl EvaluationProviderFactory {
 	}
 
 	pub fn supported_providers() -> &'static [&'static str] {
-		&["cloudflare", "octohub", "openai", "openrouter", "typesafe"]
+		&["cloudflare", "inception", "octohub", "openai", "openrouter", "typesafe"]
 	}
 }
 
@@ -76,6 +77,15 @@ mod tests {
 		let (provider, model) = EvaluationProviderFactory::get_provider_for_model("cloudflare:typesafe/jev").unwrap();
 		assert_eq!(provider.name(), "cloudflare");
 		assert_eq!(model, "typesafe/jev");
+
+		let (provider, model) =
+			EvaluationProviderFactory::get_provider_for_model("cloudflare:@cf/cloudflare/clef").unwrap();
+		assert_eq!(provider.name(), "cloudflare");
+		assert_eq!(model, "@cf/cloudflare/clef");
+
+		let (provider, model) = EvaluationProviderFactory::get_provider_for_model("inception:mercury-decide").unwrap();
+		assert_eq!(provider.name(), "inception");
+		assert_eq!(model, "mercury-decide");
 
 		let (provider, model) = EvaluationProviderFactory::get_provider_for_model("octohub:jev").unwrap();
 		assert_eq!(provider.name(), "octohub");

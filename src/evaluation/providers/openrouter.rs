@@ -20,10 +20,12 @@
 //! `{type: "image", format, data_base64}`. The answer is the usual
 //! `{model, answers, usage{input_tokens, output_tokens, cost}}` payload, with
 //! `usage.cost` as OpenRouter priced the call. Any model id is accepted here;
-//! OpenRouter decides what it serves. Features a model does not support are
-//! rejected upstream with HTTP 400 (verified live, Nov 2026): for example box
-//! questions on OpenAI models, and, on OpenAI, images only as top-level state
-//! items.
+//! OpenRouter decides what it serves. `MODELS` lists the published input rates
+//! of the decision models we route here (output is free on every one), so
+//! callers can show a price before the first call. Features a model does not
+//! support are rejected upstream with HTTP 400 (verified live, Nov 2026): for
+//! example box questions on OpenAI models, and, on OpenAI, images only as
+//! top-level state items.
 //!
 //! Configuration:
 //! - `OPENROUTER_API_KEY`: required
@@ -42,6 +44,19 @@ const PROVIDER: &str = "openrouter";
 const API_KEY_ENV: &str = "OPENROUTER_API_KEY";
 const API_URL_ENV: &str = "OPENROUTER_EVALUATION_API_URL";
 const DEFAULT_URL: &str = "https://openrouter.ai/api/alpha/decisions";
+
+/// Input USD per 1M tokens as OpenRouter lists them
+/// (`/api/v1/models?output_modalities=decisions`, checked 2026-11-02).
+const MODELS: &[(&str, f64)] = &[
+	("openai/gpt-6-luna-decisions", 0.10),
+	("perplexity/pplx-decider-v1.2", 0.02),
+	("perplexity/pplx-decider-flash-v1.2", 0.01),
+	("liquid/d1.1", 0.02),
+	("liquid/d1-ultra", 0.042),
+	("upstage/solar-decide", 0.05),
+	("nace-ai/drex-max", 0.06),
+	("microsoft/microsoft-decision-1", 0.042),
+];
 
 #[derive(Debug, Clone, Default)]
 pub struct OpenRouterEvaluationProvider;
@@ -92,9 +107,16 @@ impl EvaluationProvider for OpenRouterEvaluationProvider {
 		!model.trim().is_empty()
 	}
 
-	/// OpenRouter prices the call itself and reports it in `usage.cost`.
-	fn get_model_pricing(&self, _model: &str) -> Option<EvaluationPricing> {
-		None
+	/// The listed rate of a known model; OpenRouter's `usage.cost` stays the charge.
+	fn get_model_pricing(&self, model: &str) -> Option<EvaluationPricing> {
+		let model = model.trim();
+		MODELS
+			.iter()
+			.find(|(id, _)| id.eq_ignore_ascii_case(model))
+			.map(|&(_, input_price_per_1m)| EvaluationPricing {
+				input_price_per_1m,
+				output_price_per_1m: 0.0,
+			})
 	}
 
 	async fn evaluate(&self, request: EvaluationRequest) -> EvaluationResult<EvaluationResponse> {

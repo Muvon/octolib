@@ -63,11 +63,17 @@ fn body_encodes_image_assets_as_base64() {
 }
 
 #[test]
-fn any_model_is_accepted_and_pricing_is_left_to_openrouter() {
+fn any_model_is_accepted_and_known_models_carry_their_listed_rate() {
 	let provider = OpenRouterEvaluationProvider::new();
 	assert!(provider.supports_model("openai/gpt-6-luna-decisions"));
+	assert!(provider.supports_model("someone/new-decider"));
 	assert!(!provider.supports_model("  "));
-	assert!(provider.get_model_pricing("openai/gpt-6-luna-decisions").is_none());
+	let pricing = provider
+		.get_model_pricing(" Perplexity/pplx-decider-flash-v1.2 ")
+		.expect("listed model");
+	assert_eq!(pricing.input_price_per_1m, 0.01);
+	assert_eq!(pricing.output_price_per_1m, 0.0);
+	assert!(provider.get_model_pricing("someone/new-decider").is_none());
 }
 
 #[test]

@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.49.0] - 2026-11-02
+
+### 📋 Release Summary
+
+OpenRouter now reports listed pricing for known models, and evaluations support Inception, Cloudflare, OpenAI, and OpenRouter. CoreML execution no longer uses the GPU.
+
+### ✨ New Features & Enhancements
+
+- **openrouter**: report listed pricing for known models `3870b082`
+- **evaluation**: support Inception and Cloudflare evaluation models `727289fa`
+- **evaluation**: support OpenAI and OpenRouter evaluation `0db6f12d`
+
+### 🐛 Bug Fixes & Stability
+
+- **coreml**: exclude GPU from CoreML execution `4f92550e`
+
 ## [0.48.6] - 2026-10-31
 
 ### 📋 Release Summary

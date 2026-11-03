@@ -24,6 +24,7 @@ use crate::llm::types::{
 use crate::llm::utils::{get_model_pricing, is_model_in_pricing_table, normalize_model_name, PricingTuple};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::env;
 
 /// Anthropic pricing constants (per 1M tokens in USD)
@@ -435,6 +436,23 @@ const BLOCK_BINDING_THINKING_TYPES: [&str; 2] = ["adaptive", "enabled"];
 const EMPTY_TURN_STOP_REASONS: [&str; 2] = ["end_turn", "tool_use"];
 /// Sample continuation message from Anthropic's "Handling stop reasons" doc.
 const CONTINUATION_PROMPT: &str = "Please continue";
+const MESSAGE_THREADS_BETA: &str = "message-threads-2026-08-12";
+/// Prefix of a response id the API stored in a message thread; the conversation
+/// fingerprint and the raw message id follow it, separated by a colon.
+const THREAD_ID_PREFIX: &str = "anthropic_thread:";
+/// Thread errors after which the full conversation in a new thread succeeds.
+const THREAD_REPLAY_CODES: [&str; 4] = [
+	"thread_not_found",
+	"thread_already_continued",
+	"thread_continue_in_flight",
+	"thread_fingerprint_mismatch",
+];
+/// The request uses a feature or organization setting threads don't support.
+const THREAD_UNSUPPORTED_CODE: &str = "thread_unsupported_request";
+/// Fields a thread keeps from its create request; a continue request that sends
+/// either one is a 400.
+const THREAD_CREATE_ONLY_FIELDS: [&str; 2] = ["system", "tools"];
+const REFUSAL_STOP_REASON: &str = "refusal";
 
 #[async_trait::async_trait]
 impl AiProvider for AnthropicProvider {
@@ -545,6 +563,25 @@ impl AiProvider for AnthropicProvider {
 	}
 
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
+		let api_url = env::var(ANTHROPIC_API_URL_ENV).unwrap_or_else(|_| ANTHROPIC_API_URL.to_string());
+		// Only Anthropic's own endpoint is known to keep threads: a compatible
+		// proxy that ignored `thread` would answer a continue request without the
+		// earlier conversation. A pre-warm only refreshes the cache.
+		let use_threads = api_url == ANTHROPIC_API_URL && !params.cache_prewarm;
+		self.complete(params, api_url, use_threads).await
+	}
+}
+
+impl AnthropicProvider {
+	/// One Messages API turn. With `use_threads` the conversation rides a message
+	/// thread: only the messages after the last stored turn are sent, and the full
+	/// conversation goes out again whenever the API can't continue the thread.
+	async fn complete(
+		&self,
+		params: ChatCompletionParams,
+		api_url: String,
+		use_threads: bool,
+	) -> Result<ProviderResponse> {
 		let auth_headers = self.auth_headers(&params)?;
 
 		// Convert messages to Anthropic format
@@ -724,8 +761,6 @@ impl AiProvider for AnthropicProvider {
 		let needs_extended_cache = params.messages.iter().any(|m| m.cache_ttl.is_some());
 
 		// Execute the request with retry logic
-		let api_url = env::var(ANTHROPIC_API_URL_ENV).unwrap_or_else(|_| ANTHROPIC_API_URL.to_string());
-
 		let send = |body: serde_json::Value| {
 			execute_anthropic_request(
 				auth_headers.clone(),
@@ -743,7 +778,46 @@ impl AiProvider for AnthropicProvider {
 			)
 		};
 
-		let mut response = send(request_body.clone()).await?;
+		// Continue the thread when the API stored the last turn of this very
+		// conversation; otherwise, or when it can't continue, start a new thread
+		// with the full conversation. A request threads don't support goes out as
+		// it did before threads.
+		let mut threaded = use_threads;
+		let mut response = None;
+		if threaded {
+			if let Some((message_id, new_messages)) =
+				thread_continuation(&params.messages, &system_message, &request_body["tools"])
+			{
+				match send(continue_thread_body(&request_body, message_id, new_messages)).await {
+					Ok(continued) => response = Some(continued),
+					Err(err) => match thread_failure(&err) {
+						Some(ThreadFailure::Replay) => {
+							tracing::debug!(error = %err, "Anthropic thread can't be continued; starting a new one")
+						}
+						Some(ThreadFailure::Unsupported) => threaded = false,
+						None => return Err(err),
+					},
+				}
+			}
+		}
+		if threaded && response.is_none() {
+			let mut body = request_body.clone();
+			body["thread"] = serde_json::json!({"type": "create"});
+			match send(body).await {
+				Ok(created) => response = Some(created),
+				Err(err) if matches!(thread_failure(&err), Some(ThreadFailure::Unsupported)) => threaded = false,
+				Err(err) => return Err(err),
+			}
+		}
+		let mut response = match response {
+			Some(response) => response,
+			None => send(request_body.clone()).await?,
+		};
+
+		// A refused turn may already sit in the thread and can't be taken out, so
+		// the next turn starts a new thread without it.
+		let mut thread_fingerprint = (threaded && response.finish_reason.as_deref() != Some(REFUSAL_STOP_REASON))
+			.then(|| conversation_fingerprint(&system_message, &request_body["tools"], &params.messages));
 
 		// A pre-warm has empty content by design: no continuation retry and no
 		// schema validation, only the cache usage matters.
@@ -771,6 +845,12 @@ impl AiProvider for AnthropicProvider {
 				add_usage(total, first_call);
 			}
 			response = continued;
+			// The retry is a plain request, so there is no thread to continue.
+			thread_fingerprint = None;
+		}
+
+		if let Some(fingerprint) = thread_fingerprint {
+			response.id = response.id.map(|id| format!("{THREAD_ID_PREFIX}{fingerprint}:{id}"));
 		}
 
 		// The bounds moved out of the sent schema are held here, against the
@@ -1141,6 +1221,103 @@ fn add_usage(total: &mut TokenUsage, earlier: &TokenUsage) {
 		.reduce(|a, b| a + b);
 }
 
+/// Hash of what a continue request leaves out, so a turn continues only the
+/// thread that holds exactly this conversation. Cache breakpoints are left out:
+/// callers move them between turns, and a thread keeps the ones it was sent.
+fn conversation_fingerprint(system: &str, tools: &serde_json::Value, messages: &[Message]) -> String {
+	let mut conversation = serde_json::json!({
+		"system": system,
+		"tools": tools,
+		"messages": convert_messages(messages),
+	});
+	strip_cache_control(&mut conversation);
+	format!("{:x}", Sha256::digest(conversation.to_string()))
+}
+
+fn strip_cache_control(value: &mut serde_json::Value) {
+	match value {
+		serde_json::Value::Object(fields) => {
+			fields.remove("cache_control");
+			fields.values_mut().for_each(strip_cache_control);
+		}
+		serde_json::Value::Array(items) => items.iter_mut().for_each(strip_cache_control),
+		_ => {}
+	}
+}
+
+/// The stored turn a request can continue from, and the messages after it. The
+/// last assistant turn must carry a thread id made for the conversation before
+/// it, and there must be something new to send.
+fn thread_continuation<'a>(
+	messages: &'a [Message],
+	system: &str,
+	tools: &serde_json::Value,
+) -> Option<(&'a str, Vec<AnthropicMessage>)> {
+	let anchor = messages.iter().rposition(|m| m.role == "assistant")?;
+	let (fingerprint, message_id) = messages[anchor]
+		.id
+		.as_deref()?
+		.strip_prefix(THREAD_ID_PREFIX)?
+		.split_once(':')?;
+	let new_messages = convert_messages(&messages[anchor + 1..]);
+	(!new_messages.is_empty() && fingerprint == conversation_fingerprint(system, tools, &messages[..anchor]))
+		.then_some((message_id, new_messages))
+}
+
+/// The full request reduced to a continue request: the fixed fields stay, the
+/// thread already holds `system`, `tools` and the earlier messages.
+fn continue_thread_body(
+	full_body: &serde_json::Value,
+	message_id: &str,
+	new_messages: Vec<AnthropicMessage>,
+) -> serde_json::Value {
+	let mut body: serde_json::Map<String, serde_json::Value> = full_body
+		.as_object()
+		.into_iter()
+		.flatten()
+		.filter(|(field, _)| field.as_str() != "messages" && !THREAD_CREATE_ONLY_FIELDS.contains(&field.as_str()))
+		.map(|(field, value)| (field.clone(), value.clone()))
+		.collect();
+	body.insert("messages".to_string(), serde_json::json!(new_messages));
+	body.insert(
+		"thread".to_string(),
+		serde_json::json!({"type": "continue", "previous_message_id": message_id}),
+	);
+	body.into()
+}
+
+/// A request the API refused for its `thread` before the model ran: no tokens
+/// were used and the thread is unchanged.
+#[derive(Debug, thiserror::Error)]
+#[error("{message}")]
+struct ThreadRejected {
+	code: String,
+	message: String,
+}
+
+enum ThreadFailure {
+	/// The API can't continue the thread; the full conversation starts a new one.
+	Replay,
+	/// Threads aren't available for this request; it goes out without one.
+	Unsupported,
+}
+
+fn thread_failure(err: &anyhow::Error) -> Option<ThreadFailure> {
+	let code = err.downcast_ref::<ThreadRejected>()?.code.as_str();
+	if THREAD_REPLAY_CODES.contains(&code) {
+		Some(ThreadFailure::Replay)
+	} else if code == THREAD_UNSUPPORTED_CODE {
+		Some(ThreadFailure::Unsupported)
+	} else {
+		None
+	}
+}
+
+fn thread_error_code(body: &str) -> Option<String> {
+	let body: serde_json::Value = serde_json::from_str(body).ok()?;
+	body["error"]["details"]["error_code"].as_str().map(str::to_string)
+}
+
 fn build_beta_header(extended_cache_ttl: bool, request_body: &serde_json::Value) -> String {
 	let mut betas = vec![PROMPT_CACHING_BETA];
 	if extended_cache_ttl {
@@ -1148,6 +1325,9 @@ fn build_beta_header(extended_cache_ttl: bool, request_body: &serde_json::Value)
 	}
 	if request_body["thinking"].get("block_binding").is_some() {
 		betas.push(THINKING_BINDING_BETA);
+	}
+	if request_body.get("thread").is_some() {
+		betas.push(MESSAGE_THREADS_BETA);
 	}
 	betas.join(",")
 }
@@ -1271,11 +1451,16 @@ async fn execute_anthropic_request(
 	}
 
 	if !response.status.is_success() {
-		return Err(anyhow::anyhow!(
-			"Anthropic API error {}: {}",
-			response.status,
-			response.body
-		));
+		let message = format!("Anthropic API error {}: {}", response.status, response.body);
+		return Err(
+			match request_body
+				.get("thread")
+				.and_then(|_| thread_error_code(&response.body))
+			{
+				Some(code) => ThreadRejected { code, message }.into(),
+				None => anyhow::anyhow!(message),
+			},
+		);
 	}
 
 	let anthropic_response: AnthropicResponse = shared::parse_response(&response.body, per_call_api_key)?;

@@ -1239,3 +1239,233 @@ async fn regular_requests_keep_streaming_and_the_effective_max_tokens() {
 	assert_eq!(req_body["max_tokens"], 128_000);
 	assert_eq!(req_body["stream"], true);
 }
+
+fn text_reply(id: &str, stop_reason: &str) -> String {
+	format!(
+		r#"{{"id":"{id}","content":[{{"type":"text","text":"reply"}}],"usage":{{"input_tokens":1,"output_tokens":1}},"stop_reason":"{stop_reason}"}}"#
+	)
+}
+
+fn thread_error(status: u16, code: &str) -> (u16, String) {
+	(
+		status,
+		format!(
+			r#"{{"type":"error","error":{{"type":"invalid_request_error","message":"thread","details":{{"error_code":"{code}"}}}}}}"#
+		),
+	)
+}
+
+fn thread_params(messages: &[Message]) -> ChatCompletionParams {
+	let tool = crate::llm::types::FunctionDefinition {
+		name: "lookup".to_string(),
+		description: "Look something up".to_string(),
+		parameters: serde_json::json!({"type": "object", "properties": {}}),
+		cache_control: None,
+	};
+	let mut params =
+		ChatCompletionParams::new(messages, "claude-opus-5-5", 1.0, 1.0, 0, 100).with_api_key("mock-key".to_owned());
+	params.tools = Some(vec![tool]);
+	params
+}
+
+async fn complete_threaded(url: &str, messages: &[Message]) -> Result<ProviderResponse> {
+	AnthropicProvider::new()
+		.complete(thread_params(messages), url.to_string(), true)
+		.await
+}
+
+fn request_json(mock: &crate::test_support::mock_http::MockHttp, index: usize) -> serde_json::Value {
+	serde_json::from_str(&mock.requests()[index].body).expect("request json")
+}
+
+fn first_turn() -> Vec<Message> {
+	vec![Message::system("Be brief."), Message::user("hi")]
+}
+
+/// The conversation after `first` answered [`first_turn`], with one new message.
+fn second_turn(first: &ProviderResponse) -> Vec<Message> {
+	let mut assistant = Message::assistant(&first.content);
+	assistant.id = first.id.clone();
+	let mut messages = first_turn();
+	messages.extend([assistant, Message::user("and now?")]);
+	messages
+}
+
+#[tokio::test]
+async fn thread_is_created_then_continued_with_only_the_new_messages() {
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![
+		(200, text_reply("msg_1", "end_turn")),
+		(200, text_reply("msg_2", "end_turn")),
+	]);
+
+	let first = complete_threaded(&mock.url, &first_turn()).await.expect("first turn");
+	let first_id = first.id.clone().expect("response id");
+	assert!(first_id.starts_with(THREAD_ID_PREFIX) && first_id.ends_with(":msg_1"));
+
+	let create = request_json(&mock, 0);
+	assert_eq!(create["thread"], serde_json::json!({"type": "create"}));
+	assert_eq!(create["system"], "Be brief.");
+	assert_eq!(create["tools"][0]["name"], "lookup");
+	assert!(mock.requests()[0]
+		.header("anthropic-beta")
+		.is_some_and(|betas| betas.contains(MESSAGE_THREADS_BETA)));
+
+	let second = complete_threaded(&mock.url, &second_turn(&first))
+		.await
+		.expect("second turn");
+	assert!(second.id.expect("response id").ends_with(":msg_2"));
+
+	let continued = request_json(&mock, 1);
+	assert_eq!(
+		continued["thread"],
+		serde_json::json!({"type": "continue", "previous_message_id": "msg_1"})
+	);
+	assert_eq!(
+		continued["messages"],
+		serde_json::json!([{"role": "user", "content": [{"type": "text", "text": "and now?"}]}])
+	);
+	assert!(continued.get("system").is_none() && continued.get("tools").is_none());
+	// Fixed fields go out on every request of the thread.
+	assert_eq!(continued["tool_choice"], create["tool_choice"]);
+	assert_eq!(continued["model"], create["model"]);
+}
+
+#[tokio::test]
+async fn edited_history_or_moved_cache_marker_decide_whether_a_thread_continues() {
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![
+		(200, text_reply("msg_1", "end_turn")),
+		(200, text_reply("msg_2", "end_turn")),
+		(200, text_reply("msg_3", "end_turn")),
+	]);
+	let first = complete_threaded(&mock.url, &first_turn()).await.expect("first turn");
+
+	// An earlier message changed: the thread holds the old one, so start anew.
+	let mut edited = second_turn(&first);
+	edited[1].content = "hello".to_string();
+	complete_threaded(&mock.url, &edited).await.expect("edited turn");
+	let create = request_json(&mock, 1);
+	assert_eq!(create["thread"]["type"], "create");
+	assert_eq!(create["messages"].as_array().expect("messages").len(), 3);
+
+	// Only a cache marker moved: the conversation is the same, so continue.
+	let mut marked = second_turn(&first);
+	marked[1].cached = true;
+	complete_threaded(&mock.url, &marked).await.expect("marked turn");
+	assert_eq!(request_json(&mock, 2)["thread"]["type"], "continue");
+}
+
+#[tokio::test]
+async fn changed_tools_start_a_new_thread() {
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![
+		(200, text_reply("msg_1", "end_turn")),
+		(200, text_reply("msg_2", "end_turn")),
+	]);
+	let first = complete_threaded(&mock.url, &first_turn()).await.expect("first turn");
+
+	let mut params = thread_params(&second_turn(&first));
+	params.tools = None;
+	AnthropicProvider::new()
+		.complete(params, mock.url.clone(), true)
+		.await
+		.expect("second turn");
+	let create = request_json(&mock, 1);
+	assert_eq!(create["thread"]["type"], "create");
+	assert!(create.get("tools").is_none());
+}
+
+#[tokio::test]
+async fn a_thread_the_api_cannot_continue_is_replayed_in_full() {
+	for code in THREAD_REPLAY_CODES {
+		let mock = crate::test_support::mock_http::MockHttp::start(vec![
+			(200, text_reply("msg_1", "end_turn")),
+			thread_error(if code == "thread_not_found" { 404 } else { 400 }, code),
+			(200, text_reply("msg_2", "end_turn")),
+		]);
+		let first = complete_threaded(&mock.url, &first_turn()).await.expect("first turn");
+
+		let second = complete_threaded(&mock.url, &second_turn(&first))
+			.await
+			.expect("replayed turn");
+		assert!(second.id.expect("response id").ends_with(":msg_2"), "{code}");
+
+		assert_eq!(request_json(&mock, 1)["thread"]["type"], "continue", "{code}");
+		let replay = request_json(&mock, 2);
+		assert_eq!(replay["thread"], serde_json::json!({"type": "create"}), "{code}");
+		assert_eq!(replay["messages"].as_array().expect("messages").len(), 3, "{code}");
+		assert_eq!(replay["system"], "Be brief.", "{code}");
+	}
+}
+
+#[tokio::test]
+async fn unsupported_threads_fall_back_to_the_plain_request() {
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![
+		thread_error(400, THREAD_UNSUPPORTED_CODE),
+		(200, text_reply("msg_1", "end_turn")),
+	]);
+	let response = complete_threaded(&mock.url, &first_turn())
+		.await
+		.expect("plain request");
+	assert_eq!(response.id.as_deref(), Some("msg_1"), "nothing to continue");
+
+	let plain = request_json(&mock, 1);
+	assert!(plain.get("thread").is_none());
+	assert!(!mock.requests()[1]
+		.header("anthropic-beta")
+		.is_some_and(|betas| betas.contains(MESSAGE_THREADS_BETA)));
+}
+
+#[tokio::test]
+async fn other_errors_of_a_continue_request_surface_unchanged() {
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![
+		(200, text_reply("msg_1", "end_turn")),
+		(
+			400,
+			r#"{"type":"error","error":{"type":"invalid_request_error","message":"bad request"}}"#.to_string(),
+		),
+	]);
+	let first = complete_threaded(&mock.url, &first_turn()).await.expect("first turn");
+	let err = complete_threaded(&mock.url, &second_turn(&first))
+		.await
+		.expect_err("error surfaces");
+	assert!(err.to_string().contains("Anthropic API error 400"));
+	assert_eq!(mock.requests().len(), 2, "no replay");
+}
+
+#[tokio::test]
+async fn a_refused_turn_is_not_continued() {
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, text_reply("msg_1", "refusal"))]);
+	let response = complete_threaded(&mock.url, &first_turn()).await.expect("refusal");
+	assert_eq!(response.id.as_deref(), Some("msg_1"));
+}
+
+#[tokio::test]
+async fn the_empty_turn_retry_stays_a_plain_request() {
+	let empty = r#"{"id":"msg_1","content":[],"usage":{"input_tokens":1,"output_tokens":1},"stop_reason":"end_turn"}"#;
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![
+		(200, empty.to_string()),
+		(200, text_reply("msg_2", "end_turn")),
+	]);
+	let response = complete_threaded(&mock.url, &first_turn())
+		.await
+		.expect("continued turn");
+	assert_eq!(response.id.as_deref(), Some("msg_2"));
+	let retry = request_json(&mock, 1);
+	assert!(retry.get("thread").is_none());
+	assert_eq!(
+		retry["messages"][1],
+		serde_json::json!({"role": "user", "content": CONTINUATION_PROMPT})
+	);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn a_custom_endpoint_gets_no_thread() {
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, text_reply("msg_1", "end_turn"))]);
+	let _env = EnvGuard::new().set("ANTHROPIC_API_URL", mock.url.clone());
+	let response = AnthropicProvider::new()
+		.chat_completion(thread_params(&first_turn()))
+		.await
+		.expect("completion");
+	assert_eq!(response.id.as_deref(), Some("msg_1"));
+	assert!(request_json(&mock, 0).get("thread").is_none());
+}

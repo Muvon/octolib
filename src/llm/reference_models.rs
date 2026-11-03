@@ -525,11 +525,12 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		pricing: pricing(0.08, 0.20, 0.08, 0.04),
 	},
 	ReferenceModelEntry {
-		// NVIDIA Nemotron 3.5 Bolt E4B (GA Oct 23, 2026) on the NVIDIA API;
-		// needs-confirmation: reference-baseline rate (nemotron-3.5-lightning tier)
+		// NVIDIA Nemotron 3.5 Bolt E4B (GA Oct 23, 2026): text model, 64K context
+		// on the NVIDIA API (build.nvidia.com). Trial API only, no published
+		// rate, so no baseline price.
 		pattern: "nemotron-3.5-bolt",
-		capabilities: caps(false, false, true, 262_144),
-		pricing: pricing(0.08, 0.20, 0.08, 0.04),
+		capabilities: caps(false, false, true, 65_536),
+		pricing: None,
 	},
 	ReferenceModelEntry {
 		// NVIDIA Nemotron 3 Nano 30B A3B on OpenRouter: 262K-context text
@@ -625,6 +626,14 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		pattern: "mercury-3",
 		capabilities: caps(false, false, true, 1_000_000),
 		pricing: pricing(0.10, 0.35, 0.10, 0.01),
+	},
+	ReferenceModelEntry {
+		// Inception Mercury Voice (Nov 2026): enterprise voice-agent diffusion
+		// LLM, 128K context. Official 50% launch rate; regular is
+		// $0.40 / $1.50 / $0.04.
+		pattern: "mercury-voice",
+		capabilities: caps(false, false, true, 128_000),
+		pricing: pricing(0.20, 0.75, 0.20, 0.02),
 	},
 	ReferenceModelEntry {
 		// Inception Mercury 2.5 (Sep 2026): diffusion LLM, 260K context.

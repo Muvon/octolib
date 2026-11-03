@@ -63,7 +63,8 @@ const FIREWORKS_API_KEY_ENV: &str = "FIREWORKS_API_KEY";
 const FIREWORKS_API_URL_ENV: &str = "FIREWORKS_API_URL";
 const FIREWORKS_API_URL: &str = "https://api.fireworks.ai/inference/v1/chat/completions";
 
-/// Fireworks Standard serverless prices per 1M tokens, verified Oct 2, 2026.
+/// Fireworks Standard serverless prices per 1M tokens, verified Oct 2, 2026
+/// (`muse-spark-open`, `minimax-m3p1-flash`: Nov 3, 2026).
 /// Models whose page shows "Serverless Not supported" have no row: on-demand
 /// deployments bill per GPU-hour. Router ids share their base model's prefix,
 /// so they must precede it.
@@ -80,8 +81,7 @@ const PRICING: &[PricingTuple] = &[
 	("kimi-k3-fast", 4.50, 22.50, 4.50, 0.45),
 	("kimi-k3-us", 4.50, 22.50, 4.50, 0.45),
 	("kimi-k3", 3.00, 15.00, 3.00, 0.30),
-	// needs-confirmation: reference-baseline rate (minimax-m3.1-flash family);
-	// precedes minimax-m3 because lookups are substring matches
+	// Precedes minimax-m3 because lookups are substring matches.
 	("minimax-m3p1-flash", 0.15, 0.60, 0.15, 0.015),
 	("minimax-m3", 0.30, 1.20, 0.30, 0.06),
 	("glm-5p3-flash-us", 0.225, 0.75, 0.225, 0.045),
@@ -93,16 +93,7 @@ const PRICING: &[PricingTuple] = &[
 	("gpt-oss-120b", 0.15, 0.60, 0.15, 0.015),
 	("nemotron-lightning-3p5-30b-a3b", 0.05, 0.20, 0.05, 0.01),
 	("nemotron-3-ultra-nvfp4", 0.60, 2.40, 0.60, 0.12),
-	// needs-confirmation: reference-baseline rate (muse-spark-open family)
-	("muse-spark-open-nvfp4", 1.25, 4.25, 1.25, 0.15),
 	("muse-spark-open", 1.25, 4.25, 1.25, 0.15),
-	// needs-confirmation: reference-baseline rate (nemotron-3-ultra-nvfp4 sibling)
-	("nemotron-3-ultra-bf16", 0.60, 2.40, 0.60, 0.12),
-	// needs-confirmation: reference-baseline rate (nemotron-3.5-super-vl family)
-	("nvidia-nemotron-3p5-super-vl-120b-a12b-nvfp4", 0.15, 0.50, 0.15, 0.02),
-	("nvidia-nemotron-3p5-super-vl-120b-a12b-bf16", 0.15, 0.50, 0.15, 0.02),
-	// needs-confirmation: reference-baseline rate (qwen3p7-plus sibling)
-	("qwen3p7-max", 0.40, 1.60, 0.40, 0.08),
 ];
 
 fn fireworks_model_pricing(model: &str) -> Option<crate::llm::types::ModelPricing> {
@@ -149,21 +140,21 @@ impl AiProvider for FireworksProvider {
 			|| normalized.contains("kimi-k2p6")
 			|| normalized.contains("nemotron-lightning-3p5-30b-a3b")
 			|| normalized.contains("nemotron-3-ultra-nvfp4")
-			|| normalized.contains("nemotron-3-ultra-bf16")
-			|| normalized.contains("nvidia-nemotron-3p5-super-vl-120b-a12b")
 		{
 			262_144
 		} else if normalized.contains("gpt-oss-120b") || normalized.contains("muse-glimmer-30b") {
 			131_072
-		} else if normalized.contains("minimax-m3") {
-			512_000
 		} else if normalized.contains("kimi-k3")
 			|| normalized.contains("glm-5p3")
 			|| normalized.contains("glm-5p2")
 			|| normalized.contains("deepseek-v4")
 			|| normalized.contains("inkling")
+			|| normalized.contains("muse-spark-open")
+			|| normalized.contains("minimax-m3p1-flash")
 		{
 			1_040_000
+		} else if normalized.contains("minimax-m3") {
+			512_000
 		} else {
 			crate::llm::reference_models::get_reference_capabilities(model)
 				.map(|caps| caps.max_input_tokens)

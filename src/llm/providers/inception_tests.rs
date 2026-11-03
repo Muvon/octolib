@@ -71,10 +71,16 @@ fn test_pricing() {
 	assert_eq!(pricing.output_price_per_1m, 0.35);
 	assert_eq!(pricing.cache_read_price_per_1m, 0.01);
 
+	// Mercury Voice launch pricing (50% off): $0.20 in / $0.75 out / $0.02 cached.
+	// Routers price it through the reference table, which must agree.
 	let pricing = provider.get_model_pricing("mercury-voice").unwrap();
 	assert_eq!(pricing.input_price_per_1m, 0.20);
 	assert_eq!(pricing.output_price_per_1m, 0.75);
 	assert_eq!(pricing.cache_read_price_per_1m, 0.02);
+	let reference = crate::llm::reference_models::get_reference_pricing("inception/mercury-voice").unwrap();
+	assert_eq!(reference.input_price_per_1m, 0.20);
+	assert_eq!(reference.output_price_per_1m, 0.75);
+	assert_eq!(reference.cache_read_price_per_1m, 0.02);
 
 	// Mercury 2.5 launch discount ended: $0.20 in / $0.75 out / $0.02 cached
 	let pricing = provider.get_model_pricing("mercury-2.5").unwrap();

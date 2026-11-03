@@ -16,8 +16,8 @@
 //!
 //! `POST {base}/v1/systemone` with `{state, model, questions}` returns
 //! `{model, answers, usage}`. Models are the `jev-*` family: `jev-latest`
-//! and `jev-preview` are moving aliases. `jev-1.14.0` is the preview version;
-//! `jev-latest` still points to `jev-1.13.0`. The response's `model` reports
+//! and `jev-preview` are moving aliases; both point to `jev-1.14.0` (models
+//! page, Nov 2026). The response's `model` reports
 //! which version answered.
 //!
 //! Pricing (models page, Sep 2026): $0.042 per 1M input tokens, output free.

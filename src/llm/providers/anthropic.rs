@@ -757,9 +757,6 @@ impl AnthropicProvider {
 			));
 		}
 
-		// Check if any message uses extended cache TTL
-		let needs_extended_cache = params.messages.iter().any(|m| m.cache_ttl.is_some());
-
 		// Execute the request with retry logic
 		let send = |body: serde_json::Value| {
 			execute_anthropic_request(
@@ -771,7 +768,6 @@ impl AnthropicProvider {
 				params.request_timeout,
 				params.stream_timeout,
 				params.cancellation_token.as_ref(),
-				needs_extended_cache,
 				params.extra_headers.clone(),
 				params.api_key.as_ref(),
 				params.retry_observer.as_ref(),
@@ -1318,11 +1314,10 @@ fn thread_error_code(body: &str) -> Option<String> {
 	body["error"]["details"]["error_code"].as_str().map(str::to_string)
 }
 
-fn build_beta_header(extended_cache_ttl: bool, request_body: &serde_json::Value) -> String {
-	let mut betas = vec![PROMPT_CACHING_BETA];
-	if extended_cache_ttl {
-		betas.push(EXTENDED_CACHE_TTL_BETA);
-	}
+fn build_beta_header(request_body: &serde_json::Value) -> String {
+	// The 1h cache TTL beta goes on every request, used or not: a thread fixes the
+	// set of betas, so one that came and went with a 1h marker would end it.
+	let mut betas = vec![PROMPT_CACHING_BETA, EXTENDED_CACHE_TTL_BETA];
 	if request_body["thinking"].get("block_binding").is_some() {
 		betas.push(THINKING_BINDING_BETA);
 	}
@@ -1343,15 +1338,14 @@ async fn execute_anthropic_request(
 	request_timeout: Option<std::time::Duration>,
 	stream_timeout: Option<std::time::Duration>,
 	cancellation_token: Option<&tokio::sync::watch::Receiver<bool>>,
-	extended_cache_ttl: bool,
 	extra_headers: Option<std::collections::HashMap<String, String>>,
 	per_call_api_key: Option<&crate::llm::types::PerCallApiKey>,
 	retry_observer: Option<&crate::llm::retry::RetryObserver>,
 ) -> Result<ProviderResponse> {
 	let start_time = std::time::Instant::now();
 
-	// Prompt caching is always on; the other betas ride only the requests that use them
-	let beta_header = build_beta_header(extended_cache_ttl, &request_body);
+	// The other betas ride only the requests that use them
+	let beta_header = build_beta_header(&request_body);
 
 	let response = retry::retry_provider_request(
 		|| {

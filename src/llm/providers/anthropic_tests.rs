@@ -971,7 +971,7 @@ fn block_binding_is_sent_on_every_adaptive_or_enabled_request() {
 			serde_json::json!({"prefix_mismatch_behavior": "drop_block"})
 		);
 		assert_eq!(block_types(&body["messages"][1]).len(), 4, "thinking blocks kept");
-		assert!(build_beta_header(false, &body).contains(THINKING_BINDING_BETA));
+		assert!(build_beta_header(&body).contains(THINKING_BINDING_BETA));
 	}
 
 	// Nothing replayed yet (turn one): still bound, so the thinking config, which
@@ -985,7 +985,7 @@ fn block_binding_is_sent_on_every_adaptive_or_enabled_request() {
 		no_replay["thinking"]["block_binding"],
 		serde_json::json!({"prefix_mismatch_behavior": "drop_block"})
 	);
-	assert!(build_beta_header(false, &no_replay).contains(THINKING_BINDING_BETA));
+	assert!(build_beta_header(&no_replay).contains(THINKING_BINDING_BETA));
 }
 
 #[test]
@@ -1014,23 +1014,28 @@ fn thinking_blocks_are_stripped_unless_thinking_binds() {
 		assert_eq!(messages.len(), 2, "{body}");
 		assert_eq!(block_types(&messages[1]), ["text", "tool_use"]);
 		assert!(body["thinking"].get("block_binding").is_none());
-		assert!(!build_beta_header(false, &body).contains(THINKING_BINDING_BETA));
+		assert!(!build_beta_header(&body).contains(THINKING_BINDING_BETA));
 	}
 }
 
 #[test]
-fn beta_header_lists_only_the_betas_the_request_uses() {
+fn beta_header_keeps_cache_betas_fixed_and_adds_the_ones_the_request_uses() {
 	let plain = serde_json::json!({});
-	assert_eq!(build_beta_header(false, &plain), "prompt-caching-2024-07-31");
 	assert_eq!(
-		build_beta_header(true, &plain),
+		build_beta_header(&plain),
 		"prompt-caching-2024-07-31,extended-cache-ttl-2025-04-11"
 	);
 
 	let bound = serde_json::json!({"thinking": {"type": "adaptive", "block_binding": {"prefix_mismatch_behavior": "drop_block"}}});
 	assert_eq!(
-		build_beta_header(true, &bound),
+		build_beta_header(&bound),
 		"prompt-caching-2024-07-31,extended-cache-ttl-2025-04-11,thinking-binding-controls-2026-08-01"
+	);
+
+	let threaded = serde_json::json!({"thread": {"type": "create"}});
+	assert_eq!(
+		build_beta_header(&threaded),
+		"prompt-caching-2024-07-31,extended-cache-ttl-2025-04-11,message-threads-2026-08-12"
 	);
 }
 
@@ -1468,4 +1473,28 @@ async fn a_custom_endpoint_gets_no_thread() {
 		.expect("completion");
 	assert_eq!(response.id.as_deref(), Some("msg_1"));
 	assert!(request_json(&mock, 0).get("thread").is_none());
+}
+
+#[tokio::test]
+async fn a_1h_marker_coming_or_going_keeps_the_thread() {
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![
+		(200, text_reply("msg_1", "end_turn")),
+		(200, text_reply("msg_2", "end_turn")),
+	]);
+	let mut opening = first_turn();
+	opening[1].cached = true;
+	opening[1].cache_ttl = Some("1h".to_string());
+	let first = complete_threaded(&mock.url, &opening).await.expect("first turn");
+
+	// The caller evicted the 1h marker; the thread must still continue.
+	complete_threaded(&mock.url, &second_turn(&first))
+		.await
+		.expect("second turn");
+	let requests = mock.requests();
+	assert_eq!(request_json(&mock, 1)["thread"]["type"], "continue");
+	assert_eq!(
+		requests[0].header("anthropic-beta"),
+		requests[1].header("anthropic-beta"),
+		"a thread fixes the beta set"
+	);
 }

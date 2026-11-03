@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.50.0] - 2026-11-03
+
+### 📋 Release Summary
+
+Anthropic message threads can continue across messages, with cache beta headers kept fixed for threads. Model pricing entries were corrected for Bolt and Mercury Voice, unverified Fireworks rates were removed, and the model catalog was updated for Inception, NVIDIA, Fireworks, and OpenCode.
+
+### ✨ New Features & Enhancements
+
+- **anthropic**: support message thread continuation `faaaa053`
+
+### 🔧 Improvements & Optimizations
+
+- **typesafe**: refresh model alias version notes `81859264`
+
+### 🐛 Bug Fixes & Stability
+
+- **models**: drop unverified Fireworks rates, correct Bolt and Mercury Voice rows `d7c984e5`
+- **anthropic**: keep cache beta headers fixed for threads `19f4e543`
+
+### 🔄 Other Changes
+
+1 maintenance, dependency, and tooling update not listed individually.
+
 ## [0.49.0] - 2026-11-02
 
 ### 📋 Release Summary

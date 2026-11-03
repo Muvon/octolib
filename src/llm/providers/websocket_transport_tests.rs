@@ -154,7 +154,10 @@ async fn idle_expiry_closes_without_another_pool_lookup_and_lifetime_still_rotat
 		loop {
 			match frame(&mut peer).await {
 				Frame::Ping(_) => peer.flush().await.unwrap(),
-				Frame::Close(_) => break,
+				Frame::Close(_) => {
+					peer.flush().await.unwrap();
+					break;
+				}
 				other => panic!("expected heartbeat or expiry close, got {other:?}"),
 			}
 		}

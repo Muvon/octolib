@@ -29,6 +29,7 @@ const CONNECTION_LIFETIME: Duration = Duration::from_secs(55 * 60);
 const PING_INTERVAL: Duration = Duration::from_secs(30);
 const PONG_TIMEOUT: Duration = Duration::from_secs(10);
 const WRITE_TIMEOUT: Duration = Duration::from_secs(20);
+const CLOSE_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub(super) type Session<T> = Arc<Mutex<Option<IdleConnection<T>>>>;
 
@@ -137,6 +138,26 @@ impl Socket {
 		tokio::time::timeout(WRITE_TIMEOUT, self.inner.send(message))
 			.await
 			.map_err(|_| ConnectionError::WriteTimeout)??;
+		Ok(())
+	}
+
+	/// Dropping a socket with unread inbound bytes resets the TCP connection on
+	/// Windows, so the peer never sees the Close frame. Wait for its close reply
+	/// (or the stream end) before the socket goes away.
+	async fn close(&mut self) -> Result<()> {
+		self.send(Message::Close {
+			code: reqwest_websocket::CloseCode::Normal,
+			reason: String::new(),
+		})
+		.await?;
+		let _ = tokio::time::timeout(CLOSE_TIMEOUT, async {
+			while let Some(Ok(message)) = self.inner.next().await {
+				if matches!(message, Message::Close { .. }) {
+					break;
+				}
+			}
+		})
+		.await;
 		Ok(())
 	}
 
@@ -249,7 +270,7 @@ impl<T: Send + 'static> Connection<T> {
 			tokio::select! {
 				biased;
 				_ = tokio::time::sleep_until(deadline) => {
-					self.socket.send(Message::Close { code: reqwest_websocket::CloseCode::Normal, reason: String::new() }).await?;
+					self.socket.close().await?;
 					return Err(ConnectionError::Expired.into());
 				}
 				_ = resumed.notified() => {

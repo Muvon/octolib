@@ -143,3 +143,15 @@ fn test_sampling_params() {
 		SamplingSupport::ALL
 	);
 }
+
+#[test]
+fn argon_defaults_to_a_supported_vertex_location() {
+	assert_eq!(default_vertex_location("gemini-4-argon"), "global");
+	assert_eq!(default_vertex_location("google/gemini-4-argon"), "global");
+	assert_eq!(default_vertex_location("gemini-2.5-pro"), "us-central1");
+	assert_eq!(
+		default_vertex_api_url("project", "global"),
+		"https://aiplatform.googleapis.com/v1/projects/project/locations/global/endpoints/openapi/chat/completions"
+	);
+	assert!(default_vertex_api_url("project", "eu").contains("/locations/eu/"));
+}

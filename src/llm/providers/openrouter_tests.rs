@@ -681,3 +681,63 @@ async fn chat_completion_via_mock_http_surfaces_http_error() {
 		"unexpected error: {err}"
 	);
 }
+
+#[tokio::test]
+#[serial_test::serial]
+async fn argon_encrypted_reasoning_is_replayed_without_becoming_display_text() {
+	use crate::llm::tool_calls::ProviderToolCalls;
+	use serde_json::json;
+	let details = json!([{"type":"reasoning.encrypted","data":"opaque-signed-state","id":"r1","index":0}]);
+	for with_tool in [false, true] {
+		let mut message = json!({"role":"assistant","content":"ready","reasoning_details":details});
+		if with_tool {
+			message["tool_calls"] =
+				json!([{"id":"call_1","type":"function","function":{"name":"lookup","arguments":"{}"}}]);
+		}
+		let body = json!({"id":"argon-test","choices":[{"index":0,"message":message,"finish_reason":if with_tool {"tool_calls"} else {"stop"}}],
+			"usage":{"prompt_tokens":100,"completion_tokens":10,"total_tokens":110,"completion_tokens_details":{"reasoning_tokens":0},"cost":0.0003}});
+		let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, body.to_string())]);
+		let _env = EnvGuard::new().set("OPENROUTER_API_URL", mock.url.clone());
+		let params = ChatCompletionParams::new(&[], "google/gemini-4-argon", 1.0, 1.0, 0, 100)
+			.with_api_key("mock-key".to_owned());
+		let response = OpenRouterProvider::new().chat_completion(params).await.unwrap();
+		assert!(response.thinking.is_none());
+		assert_eq!(response.content, "ready");
+		assert_eq!(response.exchange.usage.as_ref().unwrap().reasoning_tokens, 0);
+		let mut history = Message::assistant(&response.content);
+		history.provider_items = response.exchange.response.get("output_items").cloned();
+		if with_tool {
+			let calls = ProviderToolCalls::extract_from_exchange(&response.exchange)
+				.unwrap()
+				.unwrap()
+				.to_generic_tool_calls();
+			history.tool_calls = Some(serde_json::to_value(calls).unwrap());
+		}
+		let replay = serde_json::to_value(convert_messages(&[history.clone()]).unwrap()).unwrap();
+		assert_eq!(replay[0]["reasoning_details"], details);
+		if !with_tool {
+			history.provider_items.as_mut().unwrap()["provider"] = json!("another-provider");
+			let replay = serde_json::to_value(convert_messages(&[history]).unwrap()).unwrap();
+			assert!(replay[0].get("reasoning_details").is_none());
+		}
+	}
+}
+
+#[test]
+fn argon_catalog_maps_all_efforts_to_its_supported_levels() {
+	let catalog: Vec<CatalogModel> = serde_json::from_value(serde_json::json!([{
+		"id":"google/gemini-4-argon", "reasoning":{"mandatory":true,"supported_efforts":["high","medium","low"],"default_effort":"medium"}
+	}])).unwrap();
+	for (effort, expected) in [
+		(ReasoningEffort::None, "low"),
+		(ReasoningEffort::Low, "low"),
+		(ReasoningEffort::Medium, "medium"),
+		(ReasoningEffort::High, "high"),
+		(ReasoningEffort::XHigh, "high"),
+		(ReasoningEffort::Max, "high"),
+	] {
+		let mut body = serde_json::json!({});
+		apply_reasoning_effort(&mut body, Some(&catalog), "google/gemini-4-argon", effort);
+		assert_eq!(body, serde_json::json!({"reasoning_effort":expected}));
+	}
+}

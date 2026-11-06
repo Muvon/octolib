@@ -959,3 +959,142 @@ fn streaming_defaults_and_documented_exceptions() {
 		assert!(request.get("stream").is_none());
 	}
 }
+
+#[test]
+fn google_argon_thinking_levels_and_summary_request() {
+	for provider in ["google-studio", "google-vertex"] {
+		for (effort, expected) in [
+			(Effort::None, "low"),
+			(Effort::Low, "low"),
+			(Effort::Medium, "medium"),
+			(Effort::High, "high"),
+			(Effort::XHigh, "high"),
+			(Effort::Max, "high"),
+		] {
+			let mut body = serde_json::json!({});
+			apply_reasoning_effort(&mut body, provider, "gemini-4-argon", Some(effort));
+			assert_eq!(
+				body["extra_body"]["google"]["thinking_config"],
+				serde_json::json!({
+					"thinking_level": expected, "include_thoughts": true
+				})
+			);
+			assert_eq!(body["extra_body"]["google"]["thought_tag_marker"], "think");
+			assert!(body.get("reasoning_effort").is_none());
+		}
+		let mut body = serde_json::json!({});
+		apply_reasoning_effort(&mut body, provider, "gemini-4-argon", None);
+		assert_eq!(
+			body["extra_body"]["google"]["thinking_config"],
+			serde_json::json!({"include_thoughts":true})
+		);
+	}
+	let mut body = serde_json::json!({});
+	apply_reasoning_effort(&mut body, "google-studio", "gemini-2.5-flash", Some(Effort::High));
+	assert_eq!(body, serde_json::json!({"reasoning_effort":"high"}));
+}
+
+#[test]
+fn google_thought_tags_preserve_answer_and_truncation() {
+	let (answer, thinking) =
+		extract_google_thoughts("<think>first</think><think>second</think> answer\n", Some("stop")).unwrap();
+	assert_eq!(answer, " answer\n");
+	assert_eq!(thinking.unwrap().content, "first\n\nsecond");
+	let (answer, thinking) = extract_google_thoughts("<think>unfinished", Some("length")).unwrap();
+	assert!(answer.is_empty());
+	assert_eq!(thinking.unwrap().content, "unfinished");
+	assert!(extract_google_thoughts("<think>unfinished", Some("stop")).is_err());
+	let (answer, thinking) = extract_google_thoughts("plain", Some("stop")).unwrap();
+	assert_eq!(answer, "plain");
+	assert!(thinking.is_none());
+}
+
+#[tokio::test]
+async fn google_argon_stream_round_trips_tools_text_signatures_and_usage() {
+	use crate::test_support::mock_http::MockHttp;
+	use serde_json::json;
+	for provider in ["google-studio", "google-vertex"] {
+		let events = [
+			json!({"choices":[{"index":0,"delta":{"content":"<thi"}}]}),
+			json!({"choices":[{"index":0,"delta":{"content":"nk>inspect</think>ready", "extra_content":{"google":{"thought_signature":"text-signature"}},"tool_calls":[
+				{"index":0,"id":"call_a","type":"function","function":{"name":"lookup","arguments":"{\"key\":"},"extra_content":{"google":{"thought_signature":"tool-signature"}}},
+				{"index":1,"id":"call_b","type":"function","function":{"name":"lookup","arguments":"{\"key\":\"b\"}"}}
+			]}}]}),
+			json!({"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"a\"}"}}]},"finish_reason":"tool_calls"}]}),
+			json!({"choices":[],"usage":{"prompt_tokens":100,"completion_tokens":50,"total_tokens":150,"prompt_tokens_details":{"cached_tokens":20},"completion_tokens_details":{"reasoning_tokens":40}}}),
+		];
+		let mut wire = events
+			.iter()
+			.map(|event| format!("data: {event}\n\n"))
+			.collect::<String>();
+		wire.push_str("data: [DONE]\n\n");
+		let mock = MockHttp::start(vec![(200, wire)]);
+		let mut params = ChatCompletionParams::new(&[], "gemini-4-argon", 0.5, 0.5, 10, 100);
+		params.reasoning_effort = Some(Effort::Max);
+		params.max_retries = 0;
+		let response = chat_completion_with_sampling(
+			OpenAiCompatConfig {
+				provider_name: provider,
+				usage_fallback_cost: None,
+				use_response_cost: true,
+				enforces_response_schema: true,
+				supports_required_tool_choice: false,
+				supports_parallel_tool_calls: true,
+			},
+			SamplingSupport::NONE,
+			"mock-key".to_owned(),
+			mock.url.clone(),
+			params,
+		)
+		.await
+		.unwrap();
+		assert_eq!(response.content, "ready");
+		assert_eq!(response.thinking.as_ref().unwrap().content, "inspect");
+		assert_eq!(response.thinking.as_ref().unwrap().tokens, 40);
+		let usage = response.exchange.usage.as_ref().unwrap();
+		assert_eq!(
+			(
+				usage.input_tokens,
+				usage.cache_read_tokens,
+				usage.output_tokens,
+				usage.reasoning_tokens
+			),
+			(80, 20, 10, 40)
+		);
+		assert_eq!(usage.billable_output_tokens(), 50);
+		let calls = crate::llm::tool_calls::ProviderToolCalls::extract_from_exchange(&response.exchange)
+			.unwrap()
+			.unwrap()
+			.to_generic_tool_calls();
+		assert_eq!(calls[0].arguments, json!({"key":"a"}));
+		let mut history = Message::assistant(&response.content);
+		history.tool_calls = Some(serde_json::to_value(calls).unwrap());
+		history.provider_items = response.exchange.response.get("output_items").cloned();
+		let replay = serde_json::to_value(convert_messages(&[history.clone()], provider, "gemini-4-argon")).unwrap();
+		assert_eq!(
+			replay[0]["tool_calls"][0]["extra_content"]["google"]["thought_signature"],
+			"tool-signature"
+		);
+		assert!(replay[0]["tool_calls"][1].get("extra_content").is_none());
+		assert_eq!(
+			replay[0]["extra_content"]["google"]["thought_signature"],
+			"text-signature"
+		);
+		history.tool_calls = None;
+		let replay = serde_json::to_value(convert_messages(&[history.clone()], provider, "gemini-4-argon")).unwrap();
+		assert_eq!(
+			replay[0]["extra_content"]["google"]["thought_signature"],
+			"text-signature"
+		);
+		let other = serde_json::to_value(convert_messages(&[history], "local", "test")).unwrap();
+		assert!(other[0].get("extra_content").is_none());
+		let request: serde_json::Value = serde_json::from_str(&mock.requests()[0].body).unwrap();
+		assert_eq!(request["stream_options"]["include_usage"], true);
+		assert_eq!(
+			request["extra_body"]["google"]["thinking_config"]["thinking_level"],
+			"high"
+		);
+		assert!(request.get("temperature").is_none());
+		assert!(request.get("top_p").is_none());
+	}
+}

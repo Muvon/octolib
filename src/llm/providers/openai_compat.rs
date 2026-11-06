@@ -456,6 +456,25 @@ fn apply_reasoning_effort(
 ) {
 	use crate::llm::types::ReasoningEffort;
 
+	if is_google_argon(provider_name, model) {
+		// Google requires thinking_level, not a numeric thinking_budget, for Argon.
+		// Explicit no-thinking selects its lowest level; omission keeps the default.
+		// https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/migrate/openai/overview
+		let mut thinking_config = serde_json::json!({ "include_thoughts": true });
+		if let Some(effort) = effort {
+			let level = match effort {
+				ReasoningEffort::None | ReasoningEffort::Low => "low",
+				ReasoningEffort::Medium => "medium",
+				ReasoningEffort::High | ReasoningEffort::XHigh | ReasoningEffort::Max => "high",
+			};
+			thinking_config["thinking_level"] = serde_json::json!(level);
+		}
+		request_body["extra_body"] = serde_json::json!({
+			"google": { "thinking_config": thinking_config, "thought_tag_marker": "think" }
+		});
+		return;
+	}
+
 	// Xiaomi MiMo has no effort ladder (deep-thinking page, Oct 2026):
 	// `thinking.type` is its only reasoning switch, on by default.
 	if provider_name.eq_ignore_ascii_case("xiaomi") {
@@ -592,6 +611,8 @@ fn apply_response_format(
 #[derive(Serialize, Deserialize, Debug)]
 struct OpenAiCompatMessage {
 	role: String,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	extra_content: Option<serde_json::Value>,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	content: Option<serde_json::Value>,
 	#[serde(skip_serializing_if = "Option::is_none")]
@@ -733,10 +754,17 @@ fn convert_messages(messages: &[Message], provider_name: &str, model: &str) -> V
 		|| provider_name.eq_ignore_ascii_case("xiaomi");
 
 	for (msg_idx, message) in messages.iter().enumerate() {
+		let extra_content = message
+			.provider_items
+			.as_ref()
+			.filter(|items| items["provider"] == provider_name && message.role == "assistant")
+			.and_then(|items| items["items"][0].get("extra_content"))
+			.cloned();
 		match message.role.as_str() {
 			"tool" => {
 				result.push(OpenAiCompatMessage {
 					role: message.role.clone(),
+					extra_content,
 					content: Some(serde_json::json!(message.content)),
 					tool_calls: None,
 					tool_call_id: message.tool_call_id.clone(),
@@ -775,6 +803,7 @@ fn convert_messages(messages: &[Message], provider_name: &str, model: &str) -> V
 
 				result.push(OpenAiCompatMessage {
 					role: "assistant".to_string(),
+					extra_content,
 					content,
 					tool_calls,
 					tool_call_id: None,
@@ -841,6 +870,7 @@ fn convert_messages(messages: &[Message], provider_name: &str, model: &str) -> V
 
 				result.push(OpenAiCompatMessage {
 					role: message.role.clone(),
+					extra_content,
 					content,
 					tool_calls: None,
 					tool_call_id: None,
@@ -879,23 +909,46 @@ fn extract_thinking(message: &OpenAiCompatResponseMessage) -> Option<ThinkingBlo
 		});
 	}
 
-	message.reasoning_details.as_ref().map(|details| {
-		let content = details
-			.as_array()
-			.and_then(|items| {
-				let texts = items
-					.iter()
-					.filter_map(|item| item.get("text").and_then(serde_json::Value::as_str))
-					.collect::<Vec<_>>();
-				(!texts.is_empty()).then(|| texts.join("\n\n"))
-			})
-			.unwrap_or_else(|| details.to_string());
-
-		ThinkingBlock {
+	message.reasoning_details.as_ref().and_then(|details| {
+		let texts = details
+			.as_array()?
+			.iter()
+			.filter_map(|item| item.get("text").and_then(serde_json::Value::as_str))
+			.collect::<Vec<_>>();
+		let content = texts.join("\n\n");
+		(!texts.is_empty()).then_some(ThinkingBlock {
 			tokens: (content.len() / 4) as u64,
 			content,
-		}
+		})
 	})
+}
+
+fn is_google_argon(provider_name: &str, model: &str) -> bool {
+	(provider_name.eq_ignore_ascii_case("google-studio") || provider_name.eq_ignore_ascii_case("google-vertex"))
+		&& crate::llm::utils::contains_ignore_ascii_case(model, "gemini-4-argon")
+}
+
+fn extract_google_thoughts(content: &str, finish_reason: Option<&str>) -> Result<(String, Option<ThinkingBlock>)> {
+	let mut remaining = content;
+	let mut answer = String::new();
+	let mut thoughts = Vec::new();
+	while let Some((before, after)) = remaining.split_once("<think>") {
+		answer.push_str(before);
+		if let Some((thought, rest)) = after.split_once("</think>") {
+			thoughts.push(thought);
+			remaining = rest;
+		} else {
+			anyhow::ensure!(
+				finish_reason == Some("length"),
+				"Google response contains an unclosed thought tag"
+			);
+			thoughts.push(after);
+			remaining = "";
+		}
+	}
+	answer.push_str(remaining);
+	let thinking = (!thoughts.is_empty()).then(|| ThinkingBlock::new(&thoughts.join("\n\n")));
+	Ok((answer, thinking))
 }
 
 pub(super) fn build_http_request(
@@ -992,7 +1045,12 @@ async fn execute_request(
 	let content = message.content.clone().unwrap_or_default();
 
 	let reasoning_details = &message.reasoning_details;
-	let thinking = extract_thinking(&message);
+	let (content, mut thinking) = if is_google_argon(config.provider_name, &params.model) {
+		let (content, tagged_thinking) = extract_google_thoughts(&content, finish_reason.as_deref())?;
+		(content, tagged_thinking.or_else(|| extract_thinking(&message)))
+	} else {
+		(content, extract_thinking(&message))
+	};
 
 	// Per-call extra_content (Gemini thought signatures), filtered the same way
 	// as the conversion below so indexes stay aligned with `tool_calls`.
@@ -1100,8 +1158,21 @@ async fn execute_request(
 	} else {
 		None
 	};
+	if is_google_argon(config.provider_name, &params.model) {
+		if let (Some(thinking), Some(usage)) = (&mut thinking, &usage) {
+			thinking.tokens = usage.reasoning_tokens;
+		}
+	}
 
 	let mut response_json: serde_json::Value = shared::parse_response(&response.body, params.api_key.as_ref())?;
+	if is_google_argon(config.provider_name, &params.model) {
+		// Text turns can carry signatures too. Preserve them through the same
+		// output_items -> Message.provider_items contract as native providers.
+		response_json["output_items"] = serde_json::json!({
+			"provider": config.provider_name,
+			"items": [response_json["choices"][0]["message"]]
+		});
+	}
 	if let Some(ref tc) = tool_calls {
 		let reasoning_meta = if config.provider_name.eq_ignore_ascii_case("local") {
 			reasoning_details.as_ref().map(|rd| {

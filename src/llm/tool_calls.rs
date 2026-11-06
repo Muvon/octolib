@@ -113,6 +113,10 @@ impl ProviderToolCalls {
 		// Check for standard format first
 		if let Some(tool_calls_data) = exchange.response.get("tool_calls") {
 			if let Ok(parsed_calls) = serde_json::from_value::<Vec<GenericToolCall>>(tool_calls_data.clone()) {
+				// The OpenAI-shaped variants cannot carry signed reasoning metadata.
+				if parsed_calls.iter().any(|call| call.meta.is_some()) {
+					return Ok(Some(ProviderToolCalls::Generic { calls: parsed_calls }));
+				}
 				let openai_calls: Vec<OpenAIToolCall> = parsed_calls
 					.into_iter()
 					.map(|call| OpenAIToolCall {

@@ -18,7 +18,8 @@ thinking switched off wherever the provider has a switch:
 | Alibaba Model Studio (DeepSeek V4, GLM, Qwen3) | `enable_thinking: false`, no `reasoning_effort` |
 | DeepSeek (native) | `thinking: {"type": "disabled"}` |
 | Z.AI | `thinking: {"type": "disabled"}` (omitted for GLM-5.3, which rejects it) |
-| OpenRouter | `reasoning: {"enabled": false}` |
+| OpenRouter | `reasoning: {"enabled": false}` for optional reasoning; the catalog's lowest effort for mandatory reasoning |
+| Google Studio / Vertex, Gemini 4 Argon | `extra_body.google.thinking_config.thinking_level: "low"` (thinking cannot be disabled) |
 | OpenAI Responses (gpt-5.x) | `reasoning: {"effort": "none"}`; the o-series floors to `"low"` |
 | OctoHub | `reasoning_effort: "none"`, mapped server-side by this same library |
 | Cloudflare Workers AI | `reasoning_effort: "none"` only when the catalog lists it as a level |
@@ -102,6 +103,34 @@ println!("Response: {}", response.content);
 ```
 
 ## Provider Support
+
+### Gemini 4 Argon
+
+Google Studio and Vertex use Google's supported OpenAI-compatible endpoint.
+Argon accepts low, medium and high thinking levels; Octolib maps XHigh and Max
+to high, explicit None to low, and an unset effort to the model default (medium).
+Thought summaries are requested with `include_thoughts` and `thought_tag_marker`;
+Octolib separates the tagged summaries from the answer. Encrypted signatures are
+replay state and are never presented as readable thinking.
+
+When storing assistant history, preserve both the generic tool calls returned by
+`ProviderToolCalls::extract_from_exchange(...).to_generic_tool_calls()` and
+`response.exchange.response["output_items"]` as `Message.provider_items` when
+present. The latter retains signatures on text-only turns as well as tool turns,
+including OpenRouter's `reasoning_details`. Saving only `response.content` or
+the plain `response.tool_calls` loses this state.
+
+Argon's 1,048,576-token context is shared by input and output, including thinking.
+A low output cap can be exhausted before an answer or tool call is produced;
+`finish_reason: "length"` remains visible to the caller. Google's long-decode
+continuation protocol requires GenerateContent and is **not supported by these
+OpenAI-compatible adapters**. Vertex defaults Argon to the global location;
+explicit URL and location overrides still take precedence.
+
+Sources, reviewed November 6, 2026:
+[Argon guide](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/guides/gemini-4-argon),
+[Google compatibility parameters](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/migrate/openai/overview),
+[thought markers](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/migrate/openai/examples).
 
 ### xAI
 

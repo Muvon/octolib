@@ -138,6 +138,16 @@ fn default_vertex_api_url(project: &str, location: &str) -> String {
 		.replace("{location}", location)
 }
 
+fn default_vertex_location(model: &str) -> &'static str {
+	// Argon is served in global/us/eu, not the legacy us-central1 region.
+	// https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/4-argon
+	if normalize_model_name(model).contains("gemini-4-argon") {
+		"global"
+	} else {
+		"us-central1"
+	}
+}
+
 // --- Lazy model discovery ---
 
 /// Cached model from the API (shared with the google-studio provider)
@@ -459,7 +469,7 @@ impl AiProvider for GoogleVertexProvider {
 			let location = env::var(GOOGLE_VERTEX_LOCATION_ENV)
 				.ok()
 				.filter(|s| !s.trim().is_empty())
-				.unwrap_or_else(|| "us-central1".to_string());
+				.unwrap_or_else(|| default_vertex_location(&params.model).to_string());
 			default_vertex_api_url(&project, &location)
 		};
 
@@ -470,7 +480,8 @@ impl AiProvider for GoogleVertexProvider {
 			.get_or_try_init(|| async move { fetch_available_models(&token, &url, None).await })
 			.await;
 
-		chat_completion_with_sampling(
+		let model = params.model.clone();
+		let mut response = chat_completion_with_sampling(
 			OpenAiCompatConfig {
 				provider_name: "google-vertex",
 				usage_fallback_cost: None,
@@ -484,7 +495,20 @@ impl AiProvider for GoogleVertexProvider {
 			api_url,
 			params,
 		)
-		.await
+		.await?;
+
+		if let Some(usage) = &mut response.exchange.usage {
+			if usage.cost.is_none() {
+				usage.cost = calculate_usage_cost(
+					&model,
+					usage.input_tokens,
+					usage.cache_write_tokens,
+					usage.cache_read_tokens,
+					usage.billable_output_tokens(),
+				);
+			}
+		}
+		Ok(response)
 	}
 }
 

@@ -430,3 +430,16 @@ fn test_invalid_json_arguments() {
 	let result = tool_calls.to_tool_calls();
 	assert!(result.is_err());
 }
+
+#[test]
+fn signed_tool_metadata_survives_public_history_conversion() {
+	for provider in ["openrouter", "google-studio", "google-vertex"] {
+		let calls = json!([{"id":"call_1","name":"lookup","arguments":{"key":"demo"},"meta":{
+			"reasoning_details":[{"type":"reasoning.encrypted","data":"signed-state","index":0}],
+			"extra_content":{"google":{"thought_signature":"signed-state"}}
+		}}]);
+		let exchange = exchange_with_tool_calls(provider, calls.clone());
+		let extracted = ProviderToolCalls::extract_from_exchange(&exchange).unwrap().unwrap();
+		assert_eq!(serde_json::to_value(extracted.to_generic_tool_calls()).unwrap(), calls);
+	}
+}

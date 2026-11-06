@@ -839,7 +839,12 @@ fn convert_messages(messages: &[Message]) -> Result<Vec<OpenRouterMessage>, Tool
 					tool_call_id: None,
 					name: None,
 					tool_calls: None,
-					reasoning_details: None,
+					reasoning_details: message
+						.provider_items
+						.as_ref()
+						.filter(|items| items["provider"] == "openrouter" && message.role == "assistant")
+						.and_then(|items| items["items"][0].get("reasoning_details"))
+						.cloned(),
 				});
 			}
 		}
@@ -958,15 +963,12 @@ async fn execute_openrouter_request(
 						Some(texts)
 					}
 				})
-				.map(|texts| texts.join("\n\n"))
-				.unwrap_or_else(|| rd.to_string());
+				.map(|texts| texts.join("\n\n"));
 
-			// Estimate reasoning tokens from content length (4 chars per token)
-			let estimated = (thinking_text.len() / 4) as u64;
-
-			Some(ThinkingBlock {
-				content: thinking_text,
-				tokens: estimated,
+			// Encrypted signatures are replay state, not displayable reasoning.
+			thinking_text.map(|content| ThinkingBlock {
+				tokens: (content.len() / 4) as u64,
+				content,
 			})
 		}
 		None => None,
@@ -1044,6 +1046,12 @@ async fn execute_openrouter_request(
 
 	// Create response JSON and store tool_calls in unified format
 	let mut response_json: serde_json::Value = shared::parse_response(&response.body, per_call_api_key)?;
+	if reasoning_details.is_some() {
+		response_json["output_items"] = serde_json::json!({
+			"provider": "openrouter",
+			"items": [response_json["choices"][0]["message"]]
+		});
+	}
 
 	// Store tool_calls in unified GenericToolCall format for conversation history
 	// Extract reasoning_details from response for Gemini thought signatures

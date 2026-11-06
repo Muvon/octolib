@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.50.1] - 2026-11-06
+
+### 📋 Release Summary
+
+Reasoning metadata is preserved across provider conversions, and WebSocket sockets wait for a close reply before expiring.
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: preserve reasoning metadata across provider conversions `fce10e94`
+- **websocket**: wait for close reply before expiring socket `dfe724c0`
+
 ## [0.50.0] - 2026-11-03
 
 ### 📋 Release Summary

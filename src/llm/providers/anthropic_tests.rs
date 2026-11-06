@@ -965,7 +965,7 @@ fn block_binding_is_sent_on_every_adaptive_or_enabled_request() {
 		serde_json::json!({"type": "enabled", "budget_tokens": 2048}),
 	] {
 		let mut body = request_with_thinking(Some(thinking), &history);
-		apply_thinking_replay_policy(&mut body);
+		apply_thinking_replay_policy(&mut body, true);
 		assert_eq!(
 			body["thinking"]["block_binding"],
 			serde_json::json!({"prefix_mismatch_behavior": "drop_block"})
@@ -980,12 +980,33 @@ fn block_binding_is_sent_on_every_adaptive_or_enabled_request() {
 		Some(serde_json::json!({"type": "adaptive"})),
 		&[Message::user("go"), Message::assistant("hi")],
 	);
-	apply_thinking_replay_policy(&mut no_replay);
+	apply_thinking_replay_policy(&mut no_replay, true);
 	assert_eq!(
 		no_replay["thinking"]["block_binding"],
 		serde_json::json!({"prefix_mismatch_behavior": "drop_block"})
 	);
 	assert!(build_beta_header(&no_replay).contains(THINKING_BINDING_BETA));
+}
+
+#[test]
+fn block_binding_is_omitted_for_a_custom_api_url() {
+	let history = [
+		Message::user("go"),
+		assistant_with_items(PROVIDER_NAME, thinking_turn_blocks(), &["toolu_a"]),
+	];
+
+	for thinking in [
+		serde_json::json!({"type": "adaptive"}),
+		serde_json::json!({"type": "enabled", "budget_tokens": 2048}),
+	] {
+		let mut body = request_with_thinking(Some(thinking), &history);
+		apply_thinking_replay_policy(&mut body, false);
+		// A gateway rejects the field, but the thinking blocks must still be
+		// replayed: adaptive/enabled thinking needs them back during tool use.
+		assert!(body["thinking"].get("block_binding").is_none(), "{body}");
+		assert_eq!(block_types(&body["messages"][1]).len(), 4, "thinking blocks kept");
+		assert!(!build_beta_header(&body).contains(THINKING_BINDING_BETA));
+	}
 }
 
 #[test]
@@ -1007,7 +1028,7 @@ fn thinking_blocks_are_stripped_unless_thinking_binds() {
 		None,
 	] {
 		let mut body = request_with_thinking(thinking, &history);
-		apply_thinking_replay_policy(&mut body);
+		apply_thinking_replay_policy(&mut body, true);
 
 		// Text and tool_use stay; the message that was only thinking is gone.
 		let messages = body["messages"].as_array().unwrap();

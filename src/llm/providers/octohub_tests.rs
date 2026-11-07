@@ -81,6 +81,19 @@ fn keepalive_policy_pings_at_nine_tenths_of_the_marker_ttl() {
 }
 
 #[test]
+fn cache_lifetime_is_the_ttl_of_the_passed_through_markers() {
+	let provider = OctoHubProvider::new();
+	assert_eq!(
+		provider.cache_lifetime("any-lane-model", false),
+		Some(std::time::Duration::from_secs(300))
+	);
+	assert_eq!(
+		provider.cache_lifetime("any-lane-model", true),
+		Some(std::time::Duration::from_secs(3600))
+	);
+}
+
+#[test]
 fn test_extract_instructions_single() {
 	let messages = vec![Message::system("You are helpful."), Message::user("Hello")];
 	let instr = extract_instructions(&messages).unwrap();

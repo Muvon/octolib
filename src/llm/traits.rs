@@ -181,15 +181,14 @@ pub trait AiProvider: Send + Sync {
 	///
 	/// - **Anthropic, OpenRouter Claude routes** — documented TTL, reset on every
 	///   read: 5m, or 1h with `use_long_cache`.
+	/// - **OctoHub** — the TTL of the `cache_control` markers it passes to the lane.
 	/// - **Ollama** — the `keep_alive` octolib sends: 5m or 1h.
 	/// - **Moonshot** — documented 5m, reset on every hit; octolib sends no TTL option.
 	/// - **OpenAI GPT-5.6 and later** — documented "Minimum lifetime 30 minutes".
 	/// - **Z.ai, Xiaomi** — measured: 60m idle still hit; the true limit is unknown.
 	/// - **Everyone else** — `None`: docs state only "typically" figures or upper
 	///   bounds (OpenAI before 5.6, Groq, DeepSeek, Together, Fireworks, Vertex),
-	///   nothing at all, or misses appear within seconds (MiniMax). OctoHub reports
-	///   the lifetime of the lane serving a request in
-	///   [`crate::llm::types::ProviderExchange::cache_lifetime`] instead.
+	///   nothing at all, or misses appear within seconds (MiniMax).
 	fn cache_lifetime(&self, _model: &str, _use_long_cache: bool) -> Option<Duration> {
 		None
 	}

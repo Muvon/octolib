@@ -81,8 +81,6 @@ async fn chat_completion_via_mock_http_parses_text_reasoning_and_usage() {
 	assert_eq!(usage.reasoning_tokens, 10);
 	assert_eq!(usage.cost, Some(0.0125));
 	assert_eq!(response.id.as_deref(), Some("resp_mock"));
-	// Servers that predate the field report no lane cache lifetime.
-	assert_eq!(response.exchange.cache_lifetime, None);
 
 	let requests = mock.requests();
 	let request: serde_json::Value = serde_json::from_str(&requests[0].body).expect("request json");
@@ -228,30 +226,4 @@ async fn chat_completion_via_mock_http_retries_server_errors_then_surfaces_them(
 		"unexpected error: {err}"
 	);
 	assert_eq!(mock.requests().len(), 2, "one attempt plus one retry");
-}
-
-#[tokio::test]
-#[serial_test::serial]
-async fn chat_completion_via_mock_http_reports_the_lane_cache_lifetime() {
-	let body = json!({
-		"id": "resp_mock",
-		"output": [{"type": "message", "content": [{"type": "output_text", "text": "ok"}]}],
-		"usage": {"input_tokens": 10, "output_tokens": 1, "total_tokens": 11},
-		"cache_lifetime_secs": 300
-	})
-	.to_string();
-	let mock = MockHttp::start(vec![(200, body)]);
-	let _env = EnvGuard::new().set("OCTOHUB_API_URL", mock.base_url());
-
-	let params = ChatCompletionParams::new(&[Message::user("hello")], "gpt-4o", 0.5, 0.9, 50, 100)
-		.with_api_key("mock-key".to_owned());
-	let response = OctoHubProvider::new()
-		.chat_completion(params)
-		.await
-		.expect("mock completion");
-
-	assert_eq!(
-		response.exchange.cache_lifetime,
-		Some(std::time::Duration::from_secs(300))
-	);
 }

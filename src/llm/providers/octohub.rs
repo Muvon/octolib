@@ -168,15 +168,19 @@ impl AiProvider for OctoHubProvider {
 		true
 	}
 
-	// Same TTLs and margin as Anthropic: the client's `cache_control` markers pass
-	// through unchanged, so a hub lane that caches does so on those TTLs. Whether
-	// the lane serving this chain can be pre-warmed is the server's call: it
-	// answers a lane without a keepalive policy with an empty, zero-read reply and
-	// no upstream call, which ends the caller's keepalive as a cache miss.
-	fn keepalive_policy(&self, _model: &str, use_long_cache: bool) -> Option<KeepalivePolicy> {
-		Some(KeepalivePolicy::before_expiry(
-			crate::llm::config::CacheTTL::from_long_cache_flag(use_long_cache).to_duration(),
-		))
+	// Whether the lane serving this chain can be pre-warmed is the server's call:
+	// it answers a lane without a keepalive policy with an empty, zero-read reply
+	// and no upstream call, which ends the caller's keepalive as a cache miss.
+	fn keepalive_policy(&self, model: &str, use_long_cache: bool) -> Option<KeepalivePolicy> {
+		self.cache_lifetime(model, use_long_cache)
+			.map(KeepalivePolicy::before_expiry)
+	}
+
+	/// The client's `cache_control` markers pass through to the lane unchanged,
+	/// so a hub lane that caches does so on their TTL: 5m, or 1h with
+	/// `use_long_cache`.
+	fn cache_lifetime(&self, _model: &str, use_long_cache: bool) -> Option<std::time::Duration> {
+		Some(crate::llm::config::CacheTTL::from_long_cache_flag(use_long_cache).to_duration())
 	}
 
 	fn supports_vision(&self, _model: &str) -> bool {
@@ -463,8 +467,7 @@ impl AiProvider for OctoHubProvider {
 			shared::set_response_tool_calls(&mut response_json, tc, None);
 		}
 
-		let mut exchange = ProviderExchange::new(request_body, response_json, Some(token_usage), "octohub");
-		exchange.cache_lifetime = api_response.cache_lifetime_secs.map(std::time::Duration::from_secs);
+		let exchange = ProviderExchange::new(request_body, response_json, Some(token_usage), "octohub");
 
 		// OctoHub ≥ v0.2.0 mirrors `structured_output` from the upstream
 		// ProviderResponse on the wire — prefer it when present, since the
@@ -736,11 +739,6 @@ struct OctoHubResponse {
 	/// `content_filter`, …). Surfaced by OctoHub since v0.2.0.
 	#[serde(default)]
 	finish_reason: Option<String>,
-	/// Prompt-cache lifetime of the upstream lane that served this request,
-	/// from that provider's octolib `cache_lifetime`. Absent when unknown or
-	/// from servers that predate the field.
-	#[serde(default)]
-	cache_lifetime_secs: Option<u64>,
 }
 
 #[derive(Deserialize, Debug)]

@@ -546,11 +546,6 @@ pub struct ProviderExchange {
 	pub usage: Option<TokenUsage>,
 	pub provider: String, // Which provider was used
 	pub rate_limit_headers: Option<std::collections::HashMap<String, String>>, // Rate limit headers from API response
-	/// Prompt-cache lifetime reported by the serving endpoint, for proxies whose
-	/// upstream is chosen per request (OctoHub). Takes precedence over
-	/// [`crate::llm::traits::AiProvider::cache_lifetime`] when set.
-	#[serde(default, skip_serializing_if = "Option::is_none")]
-	pub cache_lifetime: Option<std::time::Duration>,
 }
 
 impl ProviderExchange {
@@ -567,7 +562,6 @@ impl ProviderExchange {
 			usage,
 			provider: provider.to_string(),
 			rate_limit_headers: None,
-			cache_lifetime: None,
 		}
 	}
 
@@ -586,7 +580,6 @@ impl ProviderExchange {
 			usage,
 			provider: provider.to_string(),
 			rate_limit_headers: Some(rate_limit_headers),
-			cache_lifetime: None,
 		}
 	}
 }

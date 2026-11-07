@@ -889,7 +889,6 @@ impl AiProvider for MoonshotProvider {
 			usage: token_usage.clone(),
 			provider: self.name().to_string(),
 			rate_limit_headers: None,
-			cache_lifetime: None,
 		};
 
 		// Try to parse structured output if requested

@@ -107,7 +107,14 @@ impl AiProvider for XiaomiProvider {
 
 	fn supports_caching(&self, _model: &str) -> bool {
 		// Automatic prompt cache; hits are billed at the cache-hit rate and
-		// reported via `prompt_tokens_details.cached_tokens`
+		// reported via `prompt_tokens_details.cached_tokens`. No fixed TTL:
+		// entries are evicted by LRU when storage fills
+		// (https://mimo.mi.com/static/docs/news/latest/updqate.md). Measured
+		// 2026-11-07 on mimo-v2.6-pro (Token Plan, Singapore): unique ~11k-token
+		// prompts re-sent once after an idle delay hit in full on 30 of 32 calls,
+		// with delays from 5s to 60m; one miss at 3m and one partial hit at 8m
+		// whose twins hit. The cache outlives 60m of silence; the upper bound is
+		// not measured.
 		true
 	}
 

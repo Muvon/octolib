@@ -321,8 +321,13 @@ impl AiProvider for ZaiProvider {
 		true
 	}
 
+	/// Automatic prefix cache; the docs state no TTL ("reasonable time limits").
+	/// Measured 2026-11-07 on glm-5.3 (coding plan endpoint): unique ~8k-token
+	/// prompts re-sent once after an idle delay hit in full on 54 of 54 calls,
+	/// with delays from 5s to 60m. The cache outlives 60m of silence; the upper
+	/// bound is not measured.
 	fn supports_caching(&self, _model: &str) -> bool {
-		true // Z.ai supports prompt caching
+		true
 	}
 
 	fn supports_vision(&self, model: &str) -> bool {

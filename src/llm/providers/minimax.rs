@@ -191,8 +191,13 @@ impl AiProvider for MinimaxProvider {
 		env::var(MINIMAX_API_KEY_ENV).map_err(|_| crate::errors::missing_api_key("minimax", MINIMAX_API_KEY_ENV).into())
 	}
 
+	/// Automatic prefix cache for prompts of 512+ tokens; the docs state no TTL.
+	/// Measured 2026-11-07 on MiniMax-M3 (default Anthropic endpoint): unique
+	/// ~6.9k-token prompts re-sent once after an idle delay hit on only 8 of 14
+	/// calls, misses from 5s on and hits up to 6m, so hits depend on routing and
+	/// no expiry time can be read off. Do not count on a hit after any gap.
 	fn supports_caching(&self, _model: &str) -> bool {
-		true // MiniMax supports prompt caching
+		true
 	}
 
 	fn supports_vision(&self, model: &str) -> bool {

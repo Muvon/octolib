@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.51.1] - 2026-11-07
+
+### 📋 Release Summary
+
+Provider cache lifetimes are now measured and reported, with examples probing retention across models and stopping after repeated cache misses. Inkling-2-Small metadata is supported. Nemotron effort mapping, Tinker caching, and Alibaba cache lifetimes—including Qwen3.8-Max’s 30-minute lifetime and DeepSeek’s corrected lifetime—are updated.
+
+### ✨ New Features & Enhancements
+
+- **llm**: report measured provider cache lifetimes `5b15abc5`
+- **llm**: support Inkling-2-Small metadata `faf3b060`
+- **examples**: probe mercury-3 cache lifetime `0435d5d0`
+- **examples**: signal stop after repeated cache misses `57b7892f`
+- **examples**: probe prompt-cache retention across models `cddb477c`
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: map Nemotron effort and expose Tinker caching `2fea1cfd`
+- **alibaba**: set qwen3.8-max cache lifetime to 30m `c5344c86`
+- **alibaba**: correct DeepSeek cache lifetime `6c8877f8`
+- **llm**: use measured cache lifetimes for providers `b13f3c57`
+
+### 📚 Documentation & Examples
+
+- document live cache-lifetime measurement `fca3e6db`
+
 ## [0.51.0] - 2026-11-07
 
 ### 📋 Release Summary

@@ -3,5 +3,4 @@
 #
 # Use release-local with native CPU tuning:
 #   RUSTFLAGS="-C target-cpu=native" cargo build --profile release-local --features metal   (macOS)
-#   RUSTFLAGS="-C target-cpu=native" cargo build --profile release-local --features mkl     (Intel + MKL)
 #   RUSTFLAGS="-C target-cpu=native" cargo build --profile release-local --features cuda    (NVIDIA)

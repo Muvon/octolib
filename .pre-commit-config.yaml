@@ -14,7 +14,7 @@ repos:
         args: ['--all', '--']
 
       # Run cargo clippy for linting
-      # Note: cuda/cudnn/mkl excluded — hardware-specific, require native toolchains
+      # Note: cuda/cudnn excluded — hardware-specific, require native toolchains
       - id: clippy
         name: cargo clippy
         description: Lint Rust code with cargo clippy
@@ -24,7 +24,7 @@ repos:
         args: ['--all-targets', '--features', 'fastembed,huggingface,metal,accelerate', '--', '-D', 'warnings']
 
       # Check that code compiles
-      # Note: cuda/cudnn/mkl excluded — hardware-specific, require native toolchains
+      # Note: cuda/cudnn excluded — hardware-specific, require native toolchains
       - id: cargo-check
         name: cargo check
         description: Check that Rust code compiles

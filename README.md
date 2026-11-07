@@ -55,7 +55,7 @@ Capability modules are on by default; `websockets` is opt-in. Pick only what you
 octolib = { version = "<latest>", default-features = false, features = ["llm"] }
 ```
 
-`octolib::errors`, `octolib::storage`, `octolib::utils` and `set_user_agent` are always available. Hardware acceleration features include `metal`, `cuda`, `cudnn`, `mkl`, and `accelerate`. Local backends compile Metal support on macOS through target-specific dependencies in this crate; Apple dependencies are not built on other platforms. The `metal` feature selects Metal for HuggingFace inference on macOS and is a no-op elsewhere; without it, HuggingFace uses CPU. `--no-default-features` omits local backends unless explicitly enabled. No separate helper package is required.
+`octolib::errors`, `octolib::storage`, `octolib::utils` and `set_user_agent` are always available. Hardware acceleration features include `metal`, `cuda`, `cudnn`, and `accelerate`. Local backends compile Metal support on macOS through target-specific dependencies in this crate; Apple dependencies are not built on other platforms. The `metal` feature selects Metal for HuggingFace inference on macOS and is a no-op elsewhere; without it, HuggingFace uses CPU. `--no-default-features` omits local backends unless explicitly enabled. No separate helper package is required.
 
 ## 🚀 Quick Start
 

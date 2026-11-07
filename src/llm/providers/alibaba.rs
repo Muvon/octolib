@@ -155,11 +155,16 @@ const QWEN_PLUS_LONG_CONTEXT_THRESHOLD: u64 = 256_000;
 // octolib does not send. Measured 2026-11-07 on the Token Plan endpoint
 // (token-plan.ap-southeast-1): unique 3.5k-12k-token prompts re-sent once after an idle
 // delay, two samples per delay.
-// - glm-5.3, qwen3.8-flash, deepseek-v4.1-flash: every sample hit up to 10m. At 15m
-//   qwen3.8-flash missed both and glm-5.3 one of two; deepseek-v4.1-flash still hit at 30m.
-// - qwen3.7-plus: hits at 30s and 45s, 3 of 4 at 60s, none from 65s to 30m.
-const MEASURED_CACHE_MODELS: &[&str] = &["glm-5.3", "qwen3.8-flash", "deepseek-v4.1-flash"];
-const MEASURED_CACHE_LIFETIME: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+// - deepseek-v4.1-flash: every sample hit up to 30m, both missed at 45m and 60m.
+// - glm-5.3, qwen3.8-flash: every sample hit up to 10m. At 15m qwen3.8-flash missed both
+//   and glm-5.3 one of two; later hits on qwen3.8-flash (30m, one at 60m) came after
+//   misses, so they are routing, not a longer lifetime.
+// - qwen3.7-plus: hits at 30s and 45s, 3 of 4 at 60s, none from 65s to 60m.
+const MEASURED_CACHE_LIFETIMES: &[(&str, std::time::Duration)] = &[
+	("deepseek-v4.1-flash", std::time::Duration::from_secs(30 * 60)),
+	("glm-5.3", std::time::Duration::from_secs(10 * 60)),
+	("qwen3.8-flash", std::time::Duration::from_secs(10 * 60)),
+];
 // About a minute is too short for a keepalive or an idle compaction to pay off.
 const SHORT_CACHE_MODELS: &[&str] = &["qwen3.7-plus"];
 // Assumed for models not measured yet.
@@ -212,20 +217,19 @@ impl AiProvider for AlibabaProvider {
 		true
 	}
 
-	/// See `MEASURED_CACHE_MODELS` for the evidence.
+	/// See `MEASURED_CACHE_LIFETIMES` for the evidence.
 	fn cache_lifetime(&self, model: &str, _use_long_cache: bool) -> Option<std::time::Duration> {
-		let matches = |patterns: &[&str]| {
-			patterns
-				.iter()
-				.any(|pattern| contains_ignore_ascii_case(model, pattern))
-		};
-		if matches(SHORT_CACHE_MODELS) {
-			None
-		} else if matches(MEASURED_CACHE_MODELS) {
-			Some(MEASURED_CACHE_LIFETIME)
-		} else {
-			Some(UNMEASURED_CACHE_LIFETIME)
+		if SHORT_CACHE_MODELS
+			.iter()
+			.any(|pattern| contains_ignore_ascii_case(model, pattern))
+		{
+			return None;
 		}
+		let measured = MEASURED_CACHE_LIFETIMES
+			.iter()
+			.find(|(pattern, _)| contains_ignore_ascii_case(model, pattern))
+			.map(|(_, lifetime)| *lifetime);
+		Some(measured.unwrap_or(UNMEASURED_CACHE_LIFETIME))
 	}
 
 	/// GLM reads every prior turn's reasoning back (see

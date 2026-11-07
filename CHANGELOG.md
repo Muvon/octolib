@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.52.0] - 2026-11-07
+
+### 📋 Release Summary
+
+LLM providers now expose model-list endpoints and offline setup metadata.
+
+### ✨ New Features & Enhancements
+
+- **llm**: expose provider model-list endpoints `ba9401bc`
+- **llm**: expose offline provider setup metadata `14999163`
+
 ## [0.51.1] - 2026-11-07
 
 ### 📋 Release Summary

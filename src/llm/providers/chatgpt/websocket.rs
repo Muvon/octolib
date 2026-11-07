@@ -369,7 +369,11 @@ fn timeout_error(timeout: Duration, phase: &str) -> anyhow::Error {
 	))
 }
 
-async fn read_response(socket: &mut transport::Socket, timeout: Option<Duration>, stream: &mut StreamLog) -> Result<Value> {
+async fn read_response(
+	socket: &mut transport::Socket,
+	timeout: Option<Duration>,
+	stream: &mut StreamLog,
+) -> Result<Value> {
 	let mut events = ResponseEvents::default();
 	let mut last_received = tokio::time::Instant::now();
 	loop {

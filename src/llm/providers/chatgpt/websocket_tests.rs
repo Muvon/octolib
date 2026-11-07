@@ -333,7 +333,10 @@ fn stream_log_reports_connection_events_and_the_last_event() {
 	assert_eq!(stream.to_string(), "request not sent");
 	stream.start(true, true);
 	let report = stream.to_string();
-	assert!(report.starts_with("continued request on a reused connection"), "{report}");
+	assert!(
+		report.starts_with("continued request on a reused connection"),
+		"{report}"
+	);
 	assert!(report.ends_with(", no events"), "{report}");
 	stream.record("response.output_text.delta");
 	stream.record("response.output_text.delta");

@@ -128,6 +128,14 @@ name = "inception_chat"
 required-features = ["llm"]
 
 [[example]]
+name = "isoquant_chat"
+required-features = ["llm"]
+
+[[example]]
+name = "reflection_chat"
+required-features = ["llm"]
+
+[[example]]
 name = "xiaomi_chat"
 required-features = ["llm"]
 

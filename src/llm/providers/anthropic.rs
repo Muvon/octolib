@@ -490,16 +490,14 @@ impl AiProvider for AnthropicProvider {
 		true
 	}
 
-	fn keepalive_policy(&self, _model: &str, use_long_cache: bool) -> Option<KeepalivePolicy> {
-		// Match the cache_ttl that to_octolib_params applies to system/tool blocks:
-		//   use_long_cache = true  → 1h cache → ping every 54m
-		//   use_long_cache = false → 5m cache → ping every 4m30s
-		// 90% of TTL leaves a 10% margin for network latency and scheduler jitter.
-		let ttl_secs = if use_long_cache { 3600 } else { 300 };
-		let interval_secs = ttl_secs * 9 / 10;
-		Some(KeepalivePolicy {
-			interval: std::time::Duration::from_secs(interval_secs),
-		})
+	fn keepalive_policy(&self, model: &str, use_long_cache: bool) -> Option<KeepalivePolicy> {
+		self.cache_lifetime(model, use_long_cache)
+			.map(KeepalivePolicy::before_expiry)
+	}
+
+	/// Matches the cache_ttl that to_octolib_params applies to system/tool blocks.
+	fn cache_lifetime(&self, _model: &str, use_long_cache: bool) -> Option<std::time::Duration> {
+		Some(crate::llm::config::CacheTTL::from_long_cache_flag(use_long_cache).to_duration())
 	}
 
 	fn supports_vision(&self, model: &str) -> bool {

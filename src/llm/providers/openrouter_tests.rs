@@ -741,3 +741,14 @@ fn argon_catalog_maps_all_efforts_to_its_supported_levels() {
 		assert_eq!(body, serde_json::json!({"reasoning_effort":expected}));
 	}
 }
+
+#[test]
+fn cache_lifetime_is_known_only_on_claude_routes() {
+	let provider = OpenRouterProvider::new();
+	assert_eq!(
+		provider.cache_lifetime("anthropic/claude-sonnet-5-5", true),
+		Some(std::time::Duration::from_secs(3600))
+	);
+	assert_eq!(provider.cache_lifetime("openai/gpt-6-luna", false), None);
+	assert!(provider.keepalive_policy("openai/gpt-6-luna", false).is_none());
+}

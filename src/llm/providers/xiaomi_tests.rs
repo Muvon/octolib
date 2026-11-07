@@ -76,3 +76,12 @@ fn test_pricing() {
 	// Unknown models are not priced (strict catalogue)
 	assert!(provider.get_model_pricing("mimo-v9").is_none());
 }
+
+#[test]
+fn cache_lifetime_is_the_measured_hour() {
+	let provider = XiaomiProvider::new();
+	assert_eq!(
+		provider.cache_lifetime("mimo-v2.6-pro", false),
+		Some(std::time::Duration::from_secs(3600))
+	);
+}

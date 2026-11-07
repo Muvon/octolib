@@ -1498,3 +1498,16 @@ async fn a_1h_marker_coming_or_going_keeps_the_thread() {
 		"a thread fixes the beta set"
 	);
 }
+
+#[test]
+fn cache_lifetime_follows_the_marker_ttl_and_sets_the_keepalive_interval() {
+	let provider = AnthropicProvider::new();
+	let short = std::time::Duration::from_secs(300);
+	let long = std::time::Duration::from_secs(3600);
+	assert_eq!(provider.cache_lifetime("claude-sonnet-5-5", false), Some(short));
+	assert_eq!(provider.cache_lifetime("claude-sonnet-5-5", true), Some(long));
+	let ping = provider
+		.keepalive_policy("claude-sonnet-5-5", false)
+		.expect("5m policy");
+	assert_eq!(ping.interval, std::time::Duration::from_secs(270));
+}

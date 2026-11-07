@@ -118,6 +118,11 @@ impl AiProvider for XiaomiProvider {
 		true
 	}
 
+	/// The idle gap measured to still hit; see `supports_caching`.
+	fn cache_lifetime(&self, _model: &str, _use_long_cache: bool) -> Option<std::time::Duration> {
+		Some(crate::llm::config::CacheTTL::long().to_duration())
+	}
+
 	fn supports_structured_output(&self, _model: &str) -> bool {
 		true
 	}

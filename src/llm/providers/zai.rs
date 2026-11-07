@@ -330,6 +330,11 @@ impl AiProvider for ZaiProvider {
 		true
 	}
 
+	/// The idle gap measured to still hit; see `supports_caching`.
+	fn cache_lifetime(&self, _model: &str, _use_long_cache: bool) -> Option<std::time::Duration> {
+		Some(crate::llm::config::CacheTTL::long().to_duration())
+	}
+
 	fn supports_vision(&self, model: &str) -> bool {
 		let normalized = normalize_model_name(model);
 		normalized.contains("glm-5.3-flash") // GLM-5.3-Flash / FlashX, natively multimodal

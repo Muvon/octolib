@@ -115,12 +115,14 @@ impl AiProvider for OllamaProvider {
 		true
 	}
 
-	fn keepalive_policy(&self, _model: &str, use_long_cache: bool) -> Option<KeepalivePolicy> {
-		// 90% of the `keep_alive` sent with each request leaves a 10% margin for
-		// network latency and scheduler jitter.
-		Some(KeepalivePolicy {
-			interval: CacheTTL::from_long_cache_flag(use_long_cache).to_duration() * 9 / 10,
-		})
+	fn keepalive_policy(&self, model: &str, use_long_cache: bool) -> Option<KeepalivePolicy> {
+		self.cache_lifetime(model, use_long_cache)
+			.map(KeepalivePolicy::before_expiry)
+	}
+
+	/// The `keep_alive` sent with each request.
+	fn cache_lifetime(&self, _model: &str, use_long_cache: bool) -> Option<std::time::Duration> {
+		Some(CacheTTL::from_long_cache_flag(use_long_cache).to_duration())
 	}
 
 	fn supports_video(&self, _model: &str) -> bool {

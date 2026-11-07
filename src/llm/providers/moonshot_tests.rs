@@ -593,3 +593,13 @@ async fn chat_completion_via_mock_http_returns_content_and_usage() {
 	let req_body: serde_json::Value = serde_json::from_str(&requests[0].body).expect("request json");
 	assert_eq!(req_body["model"], "kimi-k3");
 }
+
+#[test]
+fn cache_lifetime_is_the_documented_five_minutes_on_caching_models() {
+	let provider = MoonshotProvider::new();
+	assert_eq!(
+		provider.cache_lifetime("kimi-k3", true),
+		Some(std::time::Duration::from_secs(300))
+	);
+	assert_eq!(provider.cache_lifetime("moonshot-v1-8k", false), None);
+}

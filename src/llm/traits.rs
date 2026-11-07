@@ -37,6 +37,19 @@ pub struct KeepalivePolicy {
 	pub interval: Duration,
 }
 
+/// Share of a cache lifetime held back before the ping, for network latency
+/// and scheduler jitter: one tenth.
+const PING_MARGIN_DIVISOR: u32 = 10;
+
+impl KeepalivePolicy {
+	/// Ping one tenth of `lifetime` before the cache would expire.
+	pub fn before_expiry(lifetime: Duration) -> Self {
+		Self {
+			interval: lifetime - lifetime / PING_MARGIN_DIVISOR,
+		}
+	}
+}
+
 /// Trait that all AI providers must implement
 #[async_trait::async_trait]
 pub trait AiProvider: Send + Sync {
@@ -157,6 +170,29 @@ pub trait AiProvider: Send + Sync {
 		None
 	}
 
+	/// How long an idle prompt cache for `model` is known to survive: the time
+	/// since its last read or write after which a request may no longer hit it.
+	/// A lower bound, not a deadline — the entry may outlive it. `None` when no
+	/// lifetime is known; callers then make no timing assumption.
+	///
+	/// `use_long_cache` selects the longer TTL on providers that offer one.
+	///
+	/// # Per-provider sources (checked 2026-11-07)
+	///
+	/// - **Anthropic, OpenRouter Claude routes** — documented TTL, reset on every
+	///   read: 5m, or 1h with `use_long_cache`.
+	/// - **Ollama** — the `keep_alive` octolib sends: 5m or 1h.
+	/// - **Moonshot** — documented 5m, reset on every hit; octolib sends no TTL option.
+	/// - **OpenAI GPT-5.6 and later** — documented "Minimum lifetime 30 minutes".
+	/// - **Z.ai, Xiaomi** — measured: 60m idle still hit; the true limit is unknown.
+	/// - **Everyone else** — `None`: docs state only "typically" figures or upper
+	///   bounds (OpenAI before 5.6, Groq, DeepSeek, Together, Fireworks, Vertex),
+	///   nothing at all, or misses appear within seconds (MiniMax). OctoHub reports
+	///   the lifetime of the lane serving a request in
+	///   [`crate::llm::types::ProviderExchange::cache_lifetime`] instead.
+	fn cache_lifetime(&self, _model: &str, _use_long_cache: bool) -> Option<Duration> {
+		None
+	}
 	/// Get maximum input tokens for a model (actual context window size)
 	/// This is what we can send to the API - the provider handles output limits internally
 	fn get_max_input_tokens(&self, model: &str) -> usize {

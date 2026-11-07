@@ -1204,3 +1204,12 @@ fn tool_images_use_responses_output_blocks_in_replay_and_continuation() {
 	let input = messages_to_input(&[text], None, true);
 	assert_eq!(input[0]["output"], "body");
 }
+
+#[test]
+fn cache_lifetime_is_the_documented_minimum_from_gpt_5_6_on() {
+	let provider = OpenAiProvider::new();
+	let minimum = Some(std::time::Duration::from_secs(1800));
+	assert_eq!(provider.cache_lifetime("gpt-6-luna", false), minimum);
+	assert_eq!(provider.cache_lifetime("gpt-5.6-sol", true), minimum);
+	assert_eq!(provider.cache_lifetime("gpt-5.1", false), None);
+}

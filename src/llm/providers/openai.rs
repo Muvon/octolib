@@ -609,6 +609,16 @@ impl AiProvider for OpenAiProvider {
 				|| model_lower.contains("o4"))
 	}
 
+	/// GPT-5.6 and later: "Minimum lifetime 30 minutes", and a read refreshes it
+	/// (https://developers.openai.com/api/docs/guides/prompt-caching). Earlier
+	/// models only "typically remain active for around 5 to 10 minutes", which
+	/// is no guarantee.
+	fn cache_lifetime(&self, model: &str, _use_long_cache: bool) -> Option<std::time::Duration> {
+		const GPT_5_6_MINIMUM_CACHE_LIFETIME: std::time::Duration = std::time::Duration::from_secs(30 * 60);
+		(self.supports_caching(model) && is_gpt_5_6_or_later(&normalize_model_name(model)))
+			.then_some(GPT_5_6_MINIMUM_CACHE_LIFETIME)
+	}
+
 	fn supports_vision(&self, model: &str) -> bool {
 		// OpenAI vision-capable models (case-insensitive)
 		let normalized = normalize_model_name(model);

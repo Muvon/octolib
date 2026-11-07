@@ -303,19 +303,18 @@ impl AiProvider for OpenRouterProvider {
 	}
 
 	fn keepalive_policy(&self, model: &str, use_long_cache: bool) -> Option<KeepalivePolicy> {
+		self.cache_lifetime(model, use_long_cache)
+			.map(KeepalivePolicy::before_expiry)
+	}
+
+	fn cache_lifetime(&self, model: &str, use_long_cache: bool) -> Option<std::time::Duration> {
 		// OpenRouter passes `cache_control` straight through to Anthropic
 		// upstream for Claude routes, so the same refresh-on-read TTL semantics
-		// apply (5m default / 1h with extended-cache-ttl beta). We deliberately
-		// do not enable keepalive for non-Anthropic OpenRouter routes — other
-		// upstreams' cache mechanics are not pingable through OR's API.
+		// apply (5m default / 1h with extended-cache-ttl beta). Other upstreams'
+		// cache lifetimes are not observable through OR's API.
 		let normalized = normalize_model_name(model);
-		if !(normalized.starts_with("anthropic") || normalized.starts_with("claude")) {
-			return None;
-		}
-		let ttl_secs = if use_long_cache { 3600 } else { 300 };
-		Some(KeepalivePolicy {
-			interval: std::time::Duration::from_secs(ttl_secs * 9 / 10),
-		})
+		(normalized.starts_with("anthropic") || normalized.starts_with("claude"))
+			.then(|| crate::llm::config::CacheTTL::from_long_cache_flag(use_long_cache).to_duration())
 	}
 
 	fn supports_vision(&self, model: &str) -> bool {

@@ -414,3 +414,12 @@ async fn chat_completion_via_mock_http_surfaces_http_error() {
 	let err = provider.chat_completion(params).await.expect_err("http error surfaces");
 	assert!(err.to_string().contains("Z.ai API error"), "unexpected error: {err}");
 }
+
+#[test]
+fn cache_lifetime_is_the_measured_hour() {
+	let provider = ZaiProvider::new();
+	assert_eq!(
+		provider.cache_lifetime("glm-5.3", false),
+		Some(std::time::Duration::from_secs(3600))
+	);
+}

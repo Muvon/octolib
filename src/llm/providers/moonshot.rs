@@ -577,6 +577,14 @@ impl AiProvider for MoonshotProvider {
 		contains_ignore_ascii_case(model, "kimi-k2") || contains_ignore_ascii_case(model, "kimi-k3")
 	}
 
+	/// "valid for 5 minutes, and each hit resets the validity to 5 minutes"
+	/// (https://platform.kimi.ai/docs/guide/context-caching.md). The 1h option
+	/// needs `prompt_cache_options.ttl`, which octolib does not send.
+	fn cache_lifetime(&self, model: &str, _use_long_cache: bool) -> Option<std::time::Duration> {
+		self.supports_caching(model)
+			.then(|| crate::llm::config::CacheTTL::short().to_duration())
+	}
+
 	fn supports_vision(&self, model: &str) -> bool {
 		// Kimi K2.6, K2.7 and K3 support vision/multimodal
 		contains_ignore_ascii_case(model, "kimi-k2.6")
@@ -881,6 +889,7 @@ impl AiProvider for MoonshotProvider {
 			usage: token_usage.clone(),
 			provider: self.name().to_string(),
 			rate_limit_headers: None,
+			cache_lifetime: None,
 		};
 
 		// Try to parse structured output if requested

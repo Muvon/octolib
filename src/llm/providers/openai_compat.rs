@@ -430,7 +430,7 @@ async fn chat_completion_raw(
 fn configure_streaming(provider: &str, api_url: &str, request: &mut serde_json::Value) -> Result<()> {
 	let include_usage = match provider {
 		"alibaba" | "amazon" | "byteplus" | "fireworks" | "google-studio" | "google-vertex" | "groq" | "inception"
-		| "local" | "nvidia" | "ollama" | "opencode-zen" | "opencode-go" | "meta" => true,
+		| "isoquant" | "local" | "nvidia" | "ollama" | "opencode-zen" | "opencode-go" | "meta" => true,
 		"cerebras" | "cloudflare" | "featherless" | "xiaomi" => false,
 		// No verified streaming contract for these endpoints yet.
 		"tinker" | "webwright" | "hetzner" => return Ok(()),
@@ -485,6 +485,17 @@ fn apply_reasoning_effort(
 				"enabled"
 			};
 			request_body["thinking"] = serde_json::json!({ "type": thinking_type });
+		}
+		return;
+	}
+
+	// Isoquant lists each model's levels in its catalog and answers 400 to any
+	// other, so the generic ladder below cannot reach it.
+	if provider_name.eq_ignore_ascii_case("isoquant") {
+		if let Some(value) =
+			effort.and_then(|effort| crate::llm::providers::isoquant::reasoning_effort_value(model, effort))
+		{
+			request_body["reasoning_effort"] = serde_json::json!(value);
 		}
 		return;
 	}
@@ -749,9 +760,11 @@ fn convert_messages(messages: &[Message], provider_name: &str, model: &str) -> V
 	};
 	// Xiaomi MiMo returns 400 when a thinking-mode tool-call turn comes back
 	// without its `reasoning_content`, and recommends replaying every turn's.
+	// Isoquant's tool-calling guide asks to preserve returned reasoning.
 	let replays_reasoning_content = (provider_name.eq_ignore_ascii_case("alibaba")
 		&& crate::llm::providers::alibaba::preserves_historical_thinking(model))
-		|| provider_name.eq_ignore_ascii_case("xiaomi");
+		|| provider_name.eq_ignore_ascii_case("xiaomi")
+		|| provider_name.eq_ignore_ascii_case("isoquant");
 
 	for (msg_idx, message) in messages.iter().enumerate() {
 		let extra_content = message

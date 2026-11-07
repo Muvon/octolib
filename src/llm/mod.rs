@@ -52,6 +52,6 @@ pub use providers::set_user_agent;
 pub use providers::{
 	AlibabaProvider, AmazonBedrockProvider, AnthropicProvider, BytePlusProvider, CerebrasProvider, CliProvider,
 	CloudflareWorkersAiProvider, DeepSeekProvider, FireworksProvider, GoogleStudioProvider, GoogleVertexProvider,
-	GroqProvider, LocalProvider, MetaProvider, MinimaxProvider, MoonshotProvider, OctoHubProvider, OllamaProvider,
-	OpenAiProvider, OpenRouterProvider, TogetherProvider, WebWrightProvider, XaiProvider, ZaiProvider,
+	GroqProvider, IsoquantProvider, LocalProvider, MetaProvider, MinimaxProvider, MoonshotProvider, OctoHubProvider,
+	OllamaProvider, OpenAiProvider, OpenRouterProvider, TogetherProvider, WebWrightProvider, XaiProvider, ZaiProvider,
 };

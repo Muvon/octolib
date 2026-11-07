@@ -17,6 +17,7 @@
 | NVIDIA NIM | ✅ Full Support | 100+ Hosted Models, Tools, Structured Output, Reference Pricing |
 | Together AI | ✅ Full Support | Multi-Provider Proxy, Vision, Tools, Structured Output |
 | Cerebras | ✅ Full Support | Fast Inference, Structured Output |
+| Isoquant | ✅ Supported | Models Read From Its Catalog, Vision, Tools, Structured Output, Caching, Zero Data Retention |
 | OctoHub | ✅ Supported | Local AI Serving |
 | Google Vertex AI | ✅ Supported | Enterprise AI Integration |
 | Google AI Studio | ✅ Supported | Gemini API, API-Key Auth |

@@ -919,6 +919,7 @@ fn streaming_defaults_and_documented_exceptions() {
 		"google-vertex",
 		"groq",
 		"inception",
+		"isoquant",
 		"local",
 		"nvidia",
 		"ollama",

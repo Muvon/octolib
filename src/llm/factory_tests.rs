@@ -74,6 +74,7 @@ fn test_supported_providers() {
 	assert!(providers.contains(&"moonshot"));
 	assert!(providers.contains(&"groq"));
 	assert!(providers.contains(&"inception"));
+	assert!(providers.contains(&"isoquant"));
 	assert!(providers.contains(&"meta"));
 	assert!(providers.contains(&"xai"));
 	assert!(providers.contains(&"xiaomi"));
@@ -111,6 +112,7 @@ fn test_create_provider() {
 	assert!(ProviderFactory::create_provider("nvidia").is_ok());
 	assert!(ProviderFactory::create_provider("groq").is_ok());
 	assert!(ProviderFactory::create_provider("inception").is_ok());
+	assert!(ProviderFactory::create_provider("isoquant").is_ok());
 	assert!(ProviderFactory::create_provider("xai").is_ok());
 	assert!(ProviderFactory::create_provider("xiaomi").is_ok());
 	assert!(ProviderFactory::create_provider("meta").is_ok());

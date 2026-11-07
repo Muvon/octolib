@@ -124,6 +124,8 @@ impl MoonshotProvider {
 const MOONSHOT_API_KEY_ENV: &str = "MOONSHOT_API_KEY";
 const MOONSHOT_API_URL_ENV: &str = "MOONSHOT_API_URL";
 const MOONSHOT_API_URL: &str = "https://api.moonshot.ai/v1/chat/completions";
+/// See `cache_lifetime` for the measurement.
+const MEASURED_CACHE_LIFETIME: std::time::Duration = std::time::Duration::from_secs(4 * 60);
 
 // Moonshot API request/response structures (OpenAI-compatible)
 #[derive(Serialize, Debug, Clone)]
@@ -577,12 +579,15 @@ impl AiProvider for MoonshotProvider {
 		contains_ignore_ascii_case(model, "kimi-k2") || contains_ignore_ascii_case(model, "kimi-k3")
 	}
 
-	/// "valid for 5 minutes, and each hit resets the validity to 5 minutes"
-	/// (<https://platform.kimi.ai/docs/guide/context-caching.md>). The 1h option
-	/// needs `prompt_cache_options.ttl`, which octolib does not send.
+	/// The docs say "valid for 5 minutes, and each hit resets the validity to 5 minutes"
+	/// (<https://platform.kimi.ai/docs/guide/context-caching.md>), but the cache dies
+	/// earlier. Measured 2026-11-07 on api.moonshot.ai: unique ~3.5k-token prompts re-sent
+	/// once after an idle delay, two samples per delay. kimi-k3.1-pro, kimi-k3, kimi-k2.7-code
+	/// and kimi-k2.6 hit on every sample at 1m, 3m and 4m. At 5m only kimi-k2.7-code still
+	/// hit, and from 6m every sample missed. The 1h option needs
+	/// `prompt_cache_options.ttl`, which octolib does not send.
 	fn cache_lifetime(&self, model: &str, _use_long_cache: bool) -> Option<std::time::Duration> {
-		self.supports_caching(model)
-			.then(|| crate::llm::config::CacheTTL::short().to_duration())
+		self.supports_caching(model).then_some(MEASURED_CACHE_LIFETIME)
 	}
 
 	fn supports_vision(&self, model: &str) -> bool {

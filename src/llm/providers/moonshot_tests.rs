@@ -595,11 +595,11 @@ async fn chat_completion_via_mock_http_returns_content_and_usage() {
 }
 
 #[test]
-fn cache_lifetime_is_the_documented_five_minutes_on_caching_models() {
+fn cache_lifetime_is_the_measured_four_minutes_on_caching_models() {
 	let provider = MoonshotProvider::new();
 	assert_eq!(
 		provider.cache_lifetime("kimi-k3", true),
-		Some(std::time::Duration::from_secs(300))
+		Some(std::time::Duration::from_secs(240))
 	);
 	assert_eq!(provider.cache_lifetime("moonshot-v1-8k", false), None);
 }

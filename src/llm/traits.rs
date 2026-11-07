@@ -183,7 +183,9 @@ pub trait AiProvider: Send + Sync {
 	///   read: 5m, or 1h with `use_long_cache`.
 	/// - **OctoHub** — the TTL of the `cache_control` markers it passes to the lane.
 	/// - **Ollama** — the `keep_alive` octolib sends: 5m or 1h.
-	/// - **Moonshot** — documented 5m, reset on every hit; octolib sends no TTL option.
+	/// - **Moonshot** — measured 4m: docs say 5m, but most Kimi models missed at 5m.
+	/// - **Alibaba** — measured 10m on glm-5.3, qwen3.8-flash and deepseek-v4.1-flash;
+	///   `None` on qwen3.7-plus (about 60s); an assumed 15m on unmeasured models.
 	/// - **OpenAI GPT-5.6 and later** — documented "Minimum lifetime 30 minutes".
 	/// - **Z.ai, Xiaomi** — measured: 60m idle still hit; the true limit is unknown.
 	/// - **Everyone else** — `None`: docs state only "typically" figures or upper

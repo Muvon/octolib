@@ -149,6 +149,22 @@ const PRICING: &[PricingTuple] = &[
 
 const QWEN_PLUS_LONG_CONTEXT_THRESHOLD: u64 = 256_000;
 
+// Implicit context cache lifetimes. Model Studio gives the implicit cache "no fixed
+// validity period" (<https://www.alibabacloud.com/help/en/model-studio/context-cache>);
+// its documented 5-minute validity covers only the explicit `cache_control` cache, which
+// octolib does not send. Measured 2026-11-07 on the Token Plan endpoint
+// (token-plan.ap-southeast-1): unique 3.5k-12k-token prompts re-sent once after an idle
+// delay, two samples per delay.
+// - glm-5.3, qwen3.8-flash, deepseek-v4.1-flash: every sample hit up to 10m. At 15m
+//   qwen3.8-flash missed both and glm-5.3 one of two; deepseek-v4.1-flash still hit at 30m.
+// - qwen3.7-plus: hits at 30s and 45s, 3 of 4 at 60s, none from 65s to 30m.
+const MEASURED_CACHE_MODELS: &[&str] = &["glm-5.3", "qwen3.8-flash", "deepseek-v4.1-flash"];
+const MEASURED_CACHE_LIFETIME: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+// About a minute is too short for a keepalive or an idle compaction to pay off.
+const SHORT_CACHE_MODELS: &[&str] = &["qwen3.7-plus"];
+// Assumed for models not measured yet.
+const UNMEASURED_CACHE_LIFETIME: std::time::Duration = std::time::Duration::from_secs(15 * 60);
+
 fn calculate_local_usage_cost(
 	model: &str,
 	input_tokens: u64,
@@ -194,6 +210,22 @@ impl AiProvider for AlibabaProvider {
 
 	fn supports_caching(&self, _model: &str) -> bool {
 		true
+	}
+
+	/// See `MEASURED_CACHE_MODELS` for the evidence.
+	fn cache_lifetime(&self, model: &str, _use_long_cache: bool) -> Option<std::time::Duration> {
+		let matches = |patterns: &[&str]| {
+			patterns
+				.iter()
+				.any(|pattern| contains_ignore_ascii_case(model, pattern))
+		};
+		if matches(SHORT_CACHE_MODELS) {
+			None
+		} else if matches(MEASURED_CACHE_MODELS) {
+			Some(MEASURED_CACHE_LIFETIME)
+		} else {
+			Some(UNMEASURED_CACHE_LIFETIME)
+		}
 	}
 
 	/// GLM reads every prior turn's reasoning back (see

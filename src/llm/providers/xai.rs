@@ -33,7 +33,7 @@ use serde::Deserialize;
 use serde_json::{json, Map, Value};
 use std::env;
 
-const XAI_API_KEY_ENV: &str = "XAI_API_KEY";
+pub(crate) const XAI_API_KEY_ENV: &str = "XAI_API_KEY";
 const XAI_API_URL_ENV: &str = "XAI_API_URL";
 const XAI_API_URL: &str = "https://api.x.ai/v1/responses";
 const XAI_RESPONSE_ID_PREFIX: &str = "xai_response:";
@@ -43,7 +43,7 @@ const REASONING_META_KEY: &str = "xai_reasoning_items";
 
 /// Current language-model pricing per 1M tokens, verified July 31, 2026.
 /// Format: (model, uncached input, output, cache write, cached input).
-const PRICING: &[PricingTuple] = &[
+pub(crate) const PRICING: &[PricingTuple] = &[
 	("grok-4.20-multi-agent-0309", 1.25, 2.50, 1.25, 0.20),
 	("grok-4.20-0309-non-reasoning", 1.25, 2.50, 1.25, 0.20),
 	("grok-4.20-0309-reasoning", 1.25, 2.50, 1.25, 0.20),

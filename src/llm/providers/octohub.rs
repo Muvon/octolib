@@ -30,7 +30,7 @@ use crate::llm::types::{
 use anyhow::Result;
 use serde::Deserialize;
 
-const OCTOHUB_API_KEY_ENV: &str = "OCTOHUB_API_KEY";
+pub(crate) const OCTOHUB_API_KEY_ENV: &str = "OCTOHUB_API_KEY";
 const OCTOHUB_API_URL_ENV: &str = "OCTOHUB_API_URL";
 const OCTOHUB_DEFAULT_BASE_URL: &str = "https://hub.octomind.run";
 

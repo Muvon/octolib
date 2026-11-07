@@ -52,7 +52,7 @@ impl AmazonBedrockProvider {
 	}
 }
 
-const AWS_BEARER_TOKEN_BEDROCK_ENV: &str = "AWS_BEARER_TOKEN_BEDROCK";
+pub(crate) const AWS_BEARER_TOKEN_BEDROCK_ENV: &str = "AWS_BEARER_TOKEN_BEDROCK";
 const AWS_BEDROCK_REGION_ENV: &str = "AWS_BEDROCK_REGION";
 const AWS_BEDROCK_API_URL_ENV: &str = "AWS_BEDROCK_API_URL";
 
@@ -72,19 +72,19 @@ const PRICING: &[PricingTuple] = &[
 	("xai.grok-4.7", 2.20, 6.60, 2.20, 0.55),
 	("global.xai.grok-4.6", 2.00, 6.00, 2.00, 0.50),
 	("xai.grok-4.6", 2.20, 6.60, 2.20, 0.55),
-	("qwen.qwen3-235b-a22b-2507", 0.22, 0.88, 0.22, 0.22),
-	("qwen.qwen3-32b", 0.15, 0.60, 0.15, 0.15),
-	("qwen.qwen3-coder-480b-a35b", 0.45, 1.80, 0.45, 0.45),
+	(QWEN3_235B_PATTERN, 0.22, 0.88, 0.22, 0.22),
+	(QWEN3_32B_PATTERN, 0.15, 0.60, 0.15, 0.15),
+	(QWEN3_CODER_PATTERN, 0.45, 1.80, 0.45, 0.45),
 	("qwen.qwen3-coder-next", 0.50, 1.20, 0.50, 0.50),
-	("qwen.qwen3-next-80b-a3b", 0.15, 1.20, 0.15, 0.15),
-	("openai.gpt-oss-120b", 0.15, 0.60, 0.15, 0.15),
-	("openai.gpt-oss-20b", 0.07, 0.30, 0.07, 0.07),
+	(QWEN3_NEXT_PATTERN, 0.15, 1.20, 0.15, 0.15),
+	(GPT_OSS_120B_PATTERN, 0.15, 0.60, 0.15, 0.15),
+	(GPT_OSS_20B_PATTERN, 0.07, 0.30, 0.07, 0.07),
 	("deepseek.v3.2", 0.62, 1.85, 0.62, 0.62),
 	// DeepSeek V3.1: `deepseek.v3.1` on the Mantle endpoint, `deepseek.v3-v1:0`
 	// on bedrock-runtime.
 	("deepseek.v3.1", 0.58, 1.68, 0.58, 0.58),
-	("deepseek.v3-v1", 0.58, 1.68, 0.58, 0.58),
-	("deepseek.r1", 1.35, 5.40, 1.35, 1.35),
+	(DEEPSEEK_V3_PATTERN, 0.58, 1.68, 0.58, 0.58),
+	(DEEPSEEK_R1_PATTERN, 1.35, 5.40, 1.35, 1.35),
 	// GLM 5.3: cache write is the 30-minute rate; the bare row carries the US CRIS rate.
 	("global.zai.glm-5.3", 1.68, 5.28, 2.10, 0.312),
 	("zai.glm-5.3", 1.848, 5.808, 2.31, 0.3432),
@@ -94,6 +94,32 @@ const PRICING: &[PricingTuple] = &[
 	("google.gemma-4-26b-a4b", 0.13, 0.40, 0.13, 0.13),
 	("google.gemma-4-e2b", 0.04, 0.08, 0.04, 0.04),
 ];
+
+const QWEN3_235B_PATTERN: &str = "qwen.qwen3-235b-a22b-2507";
+const QWEN3_32B_PATTERN: &str = "qwen.qwen3-32b";
+const QWEN3_CODER_PATTERN: &str = "qwen.qwen3-coder-480b-a35b";
+const QWEN3_NEXT_PATTERN: &str = "qwen.qwen3-next-80b-a3b";
+const GPT_OSS_120B_PATTERN: &str = "openai.gpt-oss-120b";
+const GPT_OSS_20B_PATTERN: &str = "openai.gpt-oss-20b";
+const DEEPSEEK_V3_PATTERN: &str = "deepseek.v3-v1";
+const DEEPSEEK_R1_PATTERN: &str = "deepseek.r1";
+
+pub(crate) fn setup_models() -> impl Iterator<Item = &'static str> {
+	// These prefixes require a version or instruction suffix on Bedrock.
+	PRICING.iter().map(|row| row.0).filter(|model| {
+		!matches!(
+			*model,
+			QWEN3_235B_PATTERN
+				| QWEN3_32B_PATTERN
+				| QWEN3_CODER_PATTERN
+				| QWEN3_NEXT_PATTERN
+				| GPT_OSS_120B_PATTERN
+				| GPT_OSS_20B_PATTERN
+				| DEEPSEEK_V3_PATTERN
+				| DEEPSEEK_R1_PATTERN
+		)
+	})
+}
 
 fn default_bedrock_api_url() -> String {
 	let region = std::env::var(AWS_BEDROCK_REGION_ENV).unwrap_or_else(|_| "us-east-1".to_string());

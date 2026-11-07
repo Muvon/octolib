@@ -59,7 +59,7 @@ impl FireworksProvider {
 	}
 }
 
-const FIREWORKS_API_KEY_ENV: &str = "FIREWORKS_API_KEY";
+pub(crate) const FIREWORKS_API_KEY_ENV: &str = "FIREWORKS_API_KEY";
 const FIREWORKS_API_URL_ENV: &str = "FIREWORKS_API_URL";
 const FIREWORKS_API_URL: &str = "https://api.fireworks.ai/inference/v1/chat/completions";
 

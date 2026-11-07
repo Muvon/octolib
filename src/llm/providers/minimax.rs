@@ -30,7 +30,7 @@ use std::env;
 /// MiniMax pricing constants (per 1M tokens in USD)
 /// Source: https://platform.minimax.io/docs/guides/pricing-paygo (verified Sep 22, 2026)
 /// Format: (model, input, output, cache_write, cache_read)
-const PRICING: &[PricingTuple] = &[
+pub(crate) const PRICING: &[PricingTuple] = &[
 	// MiniMax M3.1 Flash Preview: Token Plan / MiniMax Code only, no pay-as-you-go
 	// rate published (verified Oct 5, 2026), so requests carry no per-token cost.
 	// Superseded by the GA ID below; must precede it (substring match, first wins).
@@ -168,7 +168,7 @@ impl MinimaxProvider {
 }
 
 // Constants
-const MINIMAX_API_KEY_ENV: &str = "MINIMAX_API_KEY";
+pub(crate) const MINIMAX_API_KEY_ENV: &str = "MINIMAX_API_KEY";
 const MINIMAX_API_URL_ENV: &str = "MINIMAX_API_URL";
 const MINIMAX_API_URL: &str = "https://api.minimax.io/anthropic/v1/messages";
 

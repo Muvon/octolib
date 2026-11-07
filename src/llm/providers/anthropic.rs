@@ -31,7 +31,7 @@ use std::env;
 /// Model IDs sourced from Anthropic model docs / models API.
 /// Prices sourced from Anthropic pricing docs (verified Sep 22, 2026).
 /// Format: (model, input, output, cache_write, cache_read)
-const PRICING: &[PricingTuple] = &[
+pub(crate) const PRICING: &[PricingTuple] = &[
 	// Mythos-class (Fable/Mythos 5.1): $10/$50, cache write 1.25x, but cache
 	// read is 0.025x ($0.25); Opus 5.5 below is the other model off 0.1x.
 	// Must precede the 5 entries: lookup is a first-match substring scan.
@@ -417,7 +417,7 @@ impl AnthropicProvider {
 }
 
 // Constants
-const ANTHROPIC_API_KEY_ENV: &str = "ANTHROPIC_API_KEY";
+pub(crate) const ANTHROPIC_API_KEY_ENV: &str = "ANTHROPIC_API_KEY";
 const ANTHROPIC_OAUTH_TOKEN_ENV: &str = "ANTHROPIC_OAUTH_ACCESS_TOKEN";
 const ANTHROPIC_API_URL_ENV: &str = "ANTHROPIC_API_URL";
 const ANTHROPIC_API_URL: &str = "https://api.anthropic.com/v1/messages";

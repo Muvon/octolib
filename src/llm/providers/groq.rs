@@ -52,7 +52,7 @@ impl GroqProvider {
 	}
 }
 
-const GROQ_API_KEY_ENV: &str = "GROQ_API_KEY";
+pub(crate) const GROQ_API_KEY_ENV: &str = "GROQ_API_KEY";
 const GROQ_API_URL_ENV: &str = "GROQ_API_URL";
 const GROQ_API_URL: &str = "https://api.groq.com/openai/v1/chat/completions";
 
@@ -60,7 +60,7 @@ const GROQ_API_URL: &str = "https://api.groq.com/openai/v1/chat/completions";
 // Source: https://console.groq.com/docs/models and the per-model pages under it
 // Format: (model, input, output, cache_write, cache_read)
 // cache_write priced at input rate (Groq does not bill a separate write fee)
-const PRICING: &[PricingTuple] = &[
+pub(crate) const PRICING: &[PricingTuple] = &[
 	// GPT-OSS — cached input billed at 50% of input
 	("openai/gpt-oss-120b", 0.15, 0.60, 0.15, 0.075),
 	("openai/gpt-oss-20b", 0.075, 0.30, 0.075, 0.0375),

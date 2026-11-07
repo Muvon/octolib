@@ -79,10 +79,20 @@ const PRICING: &[PricingTuple] = &[
 	// general kimi-k2.7 entry since that pattern is a substring of this name)
 	("kimi-k2.7-code-highspeed", 1.90, 8.00, 1.90, 0.38),
 	// Kimi K2.7 Code (multimodal coding flagship, covers kimi-k2.7-code)
-	("kimi-k2.7", 0.95, 4.00, 0.95, 0.19),
+	(KIMI_K2_7_PATTERN, 0.95, 4.00, 0.95, 0.19),
 	// Kimi K2.6 (multimodal)
 	("kimi-k2.6", 0.95, 4.00, 0.95, 0.16),
 ];
+
+const KIMI_K2_7_PATTERN: &str = "kimi-k2.7";
+
+pub(crate) fn setup_models() -> impl Iterator<Item = &'static str> {
+	// The K2.7 row prices the full -code ID; the prefix itself is not callable.
+	PRICING
+		.iter()
+		.map(|row| row.0)
+		.filter(|model| *model != KIMI_K2_7_PATTERN)
+}
 
 /// Get pricing tuple for a specific model (case-insensitive)
 fn get_pricing_tuple(model: &str) -> Option<(f64, f64, f64, f64)> {
@@ -121,7 +131,7 @@ impl MoonshotProvider {
 	}
 }
 
-const MOONSHOT_API_KEY_ENV: &str = "MOONSHOT_API_KEY";
+pub(crate) const MOONSHOT_API_KEY_ENV: &str = "MOONSHOT_API_KEY";
 const MOONSHOT_API_URL_ENV: &str = "MOONSHOT_API_URL";
 const MOONSHOT_API_URL: &str = "https://api.moonshot.ai/v1/chat/completions";
 /// See `cache_lifetime` for the measurement.

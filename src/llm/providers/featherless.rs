@@ -55,7 +55,7 @@ impl FeatherlessProvider {
 	}
 }
 
-const FEATHERLESS_API_KEY_ENV: &str = "FEATHERLESS_API_KEY";
+pub(crate) const FEATHERLESS_API_KEY_ENV: &str = "FEATHERLESS_API_KEY";
 const FEATHERLESS_API_URL_ENV: &str = "FEATHERLESS_API_URL";
 const FEATHERLESS_API_URL: &str = "https://api.featherless.ai/v1/chat/completions";
 
@@ -107,11 +107,22 @@ const PRICING: &[PricingTuple] = &[
 	// QAT builds carry a model-specific price above their class rate.
 	("google/gemma-4-31B-it-qat-q4_0-unquantized", 0.48, 1.44, 0.48, 0.48),
 	("google/gemma-4-26B-A4B-it-qat-q4_0-unquantized", 0.40, 0.80, 0.40, 0.40),
-	("google/gemma-4-31B", 0.12, 0.36, 0.12, 0.10),
-	("google/gemma-4-26B", 0.07, 0.34, 0.07, 0.05),
+	(GEMMA_4_31B_PATTERN, 0.12, 0.36, 0.12, 0.10),
+	(GEMMA_4_26B_PATTERN, 0.07, 0.34, 0.07, 0.05),
 	("openai/gpt-oss-120b", 0.15, 0.60, 0.15, 0.02),
 	("openai/gpt-oss-20b", 0.04, 0.15, 0.04, 0.04),
 ];
+
+const GEMMA_4_31B_PATTERN: &str = "google/gemma-4-31B";
+const GEMMA_4_26B_PATTERN: &str = "google/gemma-4-26B";
+
+pub(crate) fn setup_models() -> impl Iterator<Item = &'static str> {
+	// Class prices omit the build suffix required by the model ID.
+	PRICING
+		.iter()
+		.map(|row| row.0)
+		.filter(|model| !matches!(*model, GEMMA_4_31B_PATTERN | GEMMA_4_26B_PATTERN))
+}
 
 fn featherless_model_pricing(model: &str) -> Option<crate::llm::types::ModelPricing> {
 	let (input, output, cache_write, cache_read) = get_model_pricing(model, PRICING)?;

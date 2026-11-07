@@ -47,7 +47,7 @@ impl LocalProvider {
 	}
 }
 
-const LOCAL_API_KEY_ENV: &str = "LOCAL_API_KEY";
+pub(crate) const LOCAL_API_KEY_ENV: &str = "LOCAL_API_KEY";
 const LOCAL_API_URL_ENV: &str = "LOCAL_API_URL";
 const LOCAL_API_URL: &str = "http://localhost:11434/v1/chat/completions";
 

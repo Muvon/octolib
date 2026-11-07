@@ -51,13 +51,13 @@ impl HetznerProvider {
 	}
 }
 
-const HETZNER_API_KEY_ENV: &str = "HETZNER_API_KEY";
+pub(crate) const HETZNER_API_KEY_ENV: &str = "HETZNER_API_KEY";
 const HETZNER_API_URL_ENV: &str = "HETZNER_API_URL";
 const HETZNER_API_URL: &str = "https://inference.hetzner.com/api/v1/chat/completions";
 
 /// (model id, vision, max input tokens) — from the Hetzner models table and
 /// `GET /v1/models` (`max_model_len`).
-const MODELS: &[(&str, bool, usize)] = &[
+pub(crate) const MODELS: &[(&str, bool, usize)] = &[
 	("Qwen3.8-27B", true, 262_144),
 	("Qwen/Qwen3.6-35B-A3B-FP8", true, 262_144),
 ];

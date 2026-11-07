@@ -33,7 +33,7 @@ pub mod utils;
 
 // Re-export main types and traits for easy access
 pub use config::{CacheConfig, CacheTTL, CacheType};
-pub use factory::ProviderFactory;
+pub use factory::{ProviderFactory, ProviderSetupInfo};
 pub use reference_models::{ModelCapabilities, ModelProperties};
 pub use retry::{RetryEvent, RetryObserver};
 pub use schema_enforcement::chat_completion_enforced;

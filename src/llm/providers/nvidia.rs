@@ -48,7 +48,7 @@ impl NvidiaProvider {
 	}
 }
 
-const NVIDIA_API_KEY_ENV: &str = "NVIDIA_API_KEY";
+pub(crate) const NVIDIA_API_KEY_ENV: &str = "NVIDIA_API_KEY";
 const NVIDIA_API_URL_ENV: &str = "NVIDIA_API_URL";
 const NVIDIA_API_URL: &str = "https://integrate.api.nvidia.com/v1/chat/completions";
 

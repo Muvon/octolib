@@ -46,13 +46,13 @@ impl CerebrasProvider {
 	}
 }
 
-const CEREBRAS_API_KEY_ENV: &str = "CEREBRAS_API_KEY";
+pub(crate) const CEREBRAS_API_KEY_ENV: &str = "CEREBRAS_API_KEY";
 const CEREBRAS_API_URL_ENV: &str = "CEREBRAS_API_URL";
 const CEREBRAS_API_URL: &str = "https://api.cerebras.ai/v1/chat/completions";
 
 /// Cerebras supported model IDs (Sep 2026 docs)
 /// Source: https://inference-docs.cerebras.ai/models/overview
-const SUPPORTED_MODELS: &[&str] = &[
+pub(crate) const SUPPORTED_MODELS: &[&str] = &[
 	// Shared-tier production models
 	"gpt-oss-120b",
 	"qwen-3.8-27b",

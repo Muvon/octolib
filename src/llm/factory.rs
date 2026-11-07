@@ -25,6 +25,43 @@ use crate::llm::providers::{
 use crate::llm::traits::AiProvider;
 use anyhow::Result;
 
+/// Offline metadata for configuring a provider and selecting a model.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProviderSetupInfo {
+	/// Provider ID, as returned by [`ProviderFactory::supported_providers`].
+	pub name: &'static str,
+	/// Primary API key variable, including optional keys for local, Ollama and OctoHub.
+	/// `None` means authentication uses login or a credentials file instead.
+	pub api_key_env: Option<&'static str>,
+	/// Environment variables required in addition to api_key_env;
+	/// alternatives and vars with defaults are not listed.
+	pub extra_env: &'static [&'static str],
+	/// Callable IDs from local model/pricing tables, in table order without duplicates.
+	/// Empty when only pricing patterns or a remote catalog are available.
+	pub models: Vec<String>,
+}
+
+impl ProviderSetupInfo {
+	fn new(
+		name: &'static str,
+		api_key_env: Option<&'static str>,
+		extra_env: &'static [&'static str],
+		models: impl IntoIterator<Item = &'static str>,
+	) -> Self {
+		let mut seen = std::collections::HashSet::new();
+		Self {
+			name,
+			api_key_env,
+			extra_env,
+			models: models
+				.into_iter()
+				.filter(|model| seen.insert(*model))
+				.map(str::to_string)
+				.collect(),
+		}
+	}
+}
+
 /// Provider factory to create the appropriate provider based on model string
 pub struct ProviderFactory;
 
@@ -155,6 +192,175 @@ impl ProviderFactory {
 			"zai",
 			"byteplus",
 			"cli",
+		]
+	}
+
+	/// Get offline setup metadata for every supported provider except CLI backends.
+	/// Does not read credentials, perform login, or fetch remote model catalogs.
+	pub fn provider_setup_info() -> Vec<ProviderSetupInfo> {
+		use crate::llm::providers::{
+			alibaba, amazon, anthropic, byteplus, cerebras, cloudflare, deepseek, featherless, fireworks,
+			google_studio, google_vertex, groq, hetzner, inception, isoquant, local, meta, minimax, moonshot, nvidia,
+			octohub, ollama, openai, opencode, openrouter, reflection, tinker, together, webwright, xai, xiaomi, zai,
+		};
+
+		vec![
+			ProviderSetupInfo::new("openrouter", Some(openrouter::OPENROUTER_API_KEY_ENV), &[], []),
+			ProviderSetupInfo::new(
+				"openai",
+				Some(openai::OPENAI_API_KEY_ENV),
+				&[],
+				openai::PRICING.iter().map(|row| row.0),
+			),
+			ProviderSetupInfo::new("chatgpt", None, &[], []),
+			ProviderSetupInfo::new(
+				"cerebras",
+				Some(cerebras::CEREBRAS_API_KEY_ENV),
+				&[],
+				cerebras::SUPPORTED_MODELS.iter().copied(),
+			),
+			ProviderSetupInfo::new("local", Some(local::LOCAL_API_KEY_ENV), &[], []),
+			ProviderSetupInfo::new(
+				"ollama",
+				Some(ollama::OLLAMA_API_KEY_ENV),
+				&[],
+				ollama::PRICING.iter().map(|row| row.0),
+			),
+			ProviderSetupInfo::new(
+				"anthropic",
+				Some(anthropic::ANTHROPIC_API_KEY_ENV),
+				&[],
+				anthropic::PRICING.iter().map(|row| row.0),
+			),
+			ProviderSetupInfo::new("google-vertex", None, &[], google_vertex::setup_models()),
+			ProviderSetupInfo::new(
+				"google-studio",
+				Some(google_studio::GOOGLE_STUDIO_API_KEY_ENV),
+				&[],
+				google_vertex::setup_models(),
+			),
+			ProviderSetupInfo::new(
+				"groq",
+				Some(groq::GROQ_API_KEY_ENV),
+				&[],
+				groq::PRICING.iter().map(|row| row.0),
+			),
+			ProviderSetupInfo::new(
+				"alibaba",
+				Some(alibaba::ALIBABA_API_KEY_ENV),
+				&[],
+				alibaba::PRICING.iter().map(|row| row.0),
+			),
+			ProviderSetupInfo::new(
+				"amazon",
+				Some(amazon::AWS_BEARER_TOKEN_BEDROCK_ENV),
+				&[],
+				amazon::setup_models(),
+			),
+			ProviderSetupInfo::new(
+				"cloudflare",
+				Some(cloudflare::CLOUDFLARE_API_KEY_ENV),
+				&[cloudflare::CLOUDFLARE_ACCOUNT_ID_ENV],
+				cloudflare::PRICING.iter().map(|row| row.0),
+			),
+			ProviderSetupInfo::new(
+				"deepseek",
+				Some(deepseek::DEEPSEEK_API_KEY_ENV),
+				&[],
+				deepseek::PRICING_PEAK.iter().map(|row| row.0),
+			),
+			ProviderSetupInfo::new(
+				"featherless",
+				Some(featherless::FEATHERLESS_API_KEY_ENV),
+				&[],
+				featherless::setup_models(),
+			),
+			// Fireworks pricing rows are path suffix patterns, not callable route IDs.
+			ProviderSetupInfo::new("fireworks", Some(fireworks::FIREWORKS_API_KEY_ENV), &[], []),
+			ProviderSetupInfo::new(
+				"hetzner",
+				Some(hetzner::HETZNER_API_KEY_ENV),
+				&[],
+				hetzner::MODELS.iter().map(|row| row.0),
+			),
+			ProviderSetupInfo::new(
+				"inception",
+				Some(inception::INCEPTION_API_KEY_ENV),
+				&[],
+				inception::MODELS.iter().map(|row| row.0),
+			),
+			ProviderSetupInfo::new(
+				"isoquant",
+				Some(isoquant::ISOQUANT_API_KEY_ENV),
+				&[],
+				isoquant::KNOWN_MODELS.iter().map(|row| row.0),
+			),
+			ProviderSetupInfo::new(
+				"meta",
+				Some(meta::META_API_KEY_ENV),
+				&[],
+				meta::PRICING.iter().map(|row| row.0),
+			),
+			ProviderSetupInfo::new(
+				"minimax",
+				Some(minimax::MINIMAX_API_KEY_ENV),
+				&[],
+				minimax::PRICING.iter().map(|row| row.0),
+			),
+			ProviderSetupInfo::new(
+				"moonshot",
+				Some(moonshot::MOONSHOT_API_KEY_ENV),
+				&[],
+				moonshot::setup_models(),
+			),
+			ProviderSetupInfo::new("nvidia", Some(nvidia::NVIDIA_API_KEY_ENV), &[], []),
+			ProviderSetupInfo::new("octohub", Some(octohub::OCTOHUB_API_KEY_ENV), &[], []),
+			ProviderSetupInfo::new("opencode-zen", Some(opencode::OPENCODE_API_KEY_ENV), &[], []),
+			ProviderSetupInfo::new("opencode-go", Some(opencode::OPENCODE_API_KEY_ENV), &[], []),
+			ProviderSetupInfo::new(
+				"reflection",
+				Some(reflection::REFLECTION_API_KEY_ENV),
+				&[],
+				reflection::MODELS.iter().map(|row| row.0),
+			),
+			// Tinker pricing keys are case-normalized patterns; requests preserve model ID case.
+			ProviderSetupInfo::new("tinker", Some(tinker::TINKER_API_KEY_ENV), &[], []),
+			ProviderSetupInfo::new(
+				"together",
+				Some(together::TOGETHER_API_KEY_ENV),
+				&[],
+				together::PRICING.iter().map(|row| row.0),
+			),
+			ProviderSetupInfo::new(
+				"webwright",
+				Some(webwright::WEBWRIGHT_API_KEY_ENV),
+				&[],
+				webwright::MODELS.iter().map(|row| row.0),
+			),
+			ProviderSetupInfo::new(
+				"xai",
+				Some(xai::XAI_API_KEY_ENV),
+				&[],
+				xai::PRICING.iter().map(|row| row.0),
+			),
+			ProviderSetupInfo::new(
+				"xiaomi",
+				Some(xiaomi::XIAOMI_API_KEY_ENV),
+				&[],
+				xiaomi::MODELS.iter().map(|row| row.0),
+			),
+			ProviderSetupInfo::new(
+				"zai",
+				Some(zai::ZAI_API_KEY_ENV),
+				&[],
+				zai::PRICING.iter().map(|row| row.0),
+			),
+			ProviderSetupInfo::new(
+				"byteplus",
+				Some(byteplus::BYTEPLUS_API_KEY_ENV),
+				&[],
+				byteplus::setup_models(),
+			),
 		]
 	}
 

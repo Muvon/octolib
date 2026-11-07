@@ -30,7 +30,7 @@ use std::env;
 /// Source: https://developers.openai.com/api/docs/pricing (verified Sep 22, 2026)
 /// Format: (model, input, output, cache_write, cache_read)
 /// Note: For models without caching, cache_write = input and cache_read = input
-const PRICING: &[PricingTuple] = &[
+pub(crate) const PRICING: &[PricingTuple] = &[
 	// GPT-6 family. Cache writes cost 1.25x uncached input; cache reads 0.1x
 	// (0.05x for gpt-6.1-sol and gpt-6.1-terra).
 	// gpt-6.1-sol verified Sep 30, 2026 against the official pricing page above.
@@ -550,7 +550,7 @@ impl OpenAiProvider {
 	}
 }
 
-const OPENAI_API_KEY_ENV: &str = "OPENAI_API_KEY";
+pub(crate) const OPENAI_API_KEY_ENV: &str = "OPENAI_API_KEY";
 const OPENAI_OAUTH_ACCESS_TOKEN_ENV: &str = "OPENAI_OAUTH_ACCESS_TOKEN";
 const OPENAI_OAUTH_ACCOUNT_ID_ENV: &str = "OPENAI_OAUTH_ACCOUNT_ID";
 const OPENAI_API_URL_ENV: &str = "OPENAI_API_URL";

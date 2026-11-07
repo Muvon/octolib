@@ -260,8 +260,8 @@ impl CloudflareWorkersAiProvider {
 	}
 }
 
-const CLOUDFLARE_API_KEY_ENV: &str = "CLOUDFLARE_API_KEY";
-const CLOUDFLARE_ACCOUNT_ID_ENV: &str = "CLOUDFLARE_ACCOUNT_ID";
+pub(crate) const CLOUDFLARE_API_KEY_ENV: &str = "CLOUDFLARE_API_KEY";
+pub(crate) const CLOUDFLARE_ACCOUNT_ID_ENV: &str = "CLOUDFLARE_ACCOUNT_ID";
 const CLOUDFLARE_API_URL_ENV: &str = "CLOUDFLARE_API_URL";
 
 /// Cloudflare Workers AI text-generation prices per 1M tokens, verified
@@ -270,7 +270,7 @@ const CLOUDFLARE_API_URL_ENV: &str = "CLOUDFLARE_API_URL";
 /// rate; models without a cached rate bill hits at the input rate.
 /// Longer IDs precede the IDs they contain because lookup is a substring match.
 /// Format: (model ID, input, output, cache write, cached input).
-const PRICING: &[PricingTuple] = &[
+pub(crate) const PRICING: &[PricingTuple] = &[
 	("@cf/meta/llama-3.2-1b-instruct", 0.027, 0.201, 0.027, 0.027),
 	("@cf/meta/llama-3.2-3b-instruct", 0.0509, 0.335, 0.0509, 0.0509),
 	("@cf/meta/llama-3.2-11b-vision-instruct", 0.0485, 0.676, 0.0485, 0.0485),

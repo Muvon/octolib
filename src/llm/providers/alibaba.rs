@@ -54,7 +54,7 @@ impl AlibabaProvider {
 	}
 }
 
-const ALIBABA_API_KEY_ENV: &str = "ALIBABA_API_KEY";
+pub(crate) const ALIBABA_API_KEY_ENV: &str = "ALIBABA_API_KEY";
 const ALIBABA_API_URL_ENV: &str = "ALIBABA_API_URL";
 const ALIBABA_API_URL: &str = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions";
 
@@ -70,7 +70,7 @@ const ALIBABA_API_URL: &str = "https://dashscope-intl.aliyuncs.com/compatible-mo
 // Tiered models are priced at their lowest tier; longer prompts bill up to 4x more.
 // Busy/idle models are priced at the busy rate (idle is half). Hybrid-thinking
 // open-weight models are priced at the non-thinking output rate.
-const PRICING: &[PricingTuple] = &[
+pub(crate) const PRICING: &[PricingTuple] = &[
 	// The 0902 snapshot is listed at the moving alias's rates.
 	("qwen3.8-max-0902", 2.00, 6.00, 2.00, 0.25),
 	("qwen3.8-max", 2.00, 6.00, 2.00, 0.25),

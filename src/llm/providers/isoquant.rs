@@ -47,7 +47,7 @@ use std::sync::LazyLock;
 use std::time::Duration;
 use tokio::sync::OnceCell;
 
-const ISOQUANT_API_KEY_ENV: &str = "ISOQUANT_API_KEY";
+pub(crate) const ISOQUANT_API_KEY_ENV: &str = "ISOQUANT_API_KEY";
 const ISOQUANT_API_URL_ENV: &str = "ISOQUANT_API_URL";
 const ISOQUANT_API_URL: &str = "https://api.isoquant.ai/v1/chat/completions";
 const CHAT_COMPLETIONS_PATH: &str = "/chat/completions";
@@ -76,7 +76,7 @@ const EFFORT_LADDER: &[(ReasoningEffort, &str)] = &[
 /// reasoning levels), prices per 1M tokens. Isoquant publishes no cache-write
 /// price, so writes bill at the input rate. GLM-5.3 has no `none` level: the
 /// host answers 400, and a request for no reasoning runs at `low`.
-const KNOWN_MODELS: &[(&str, f64, f64, f64, &[&str])] = &[
+pub(crate) const KNOWN_MODELS: &[(&str, f64, f64, f64, &[&str])] = &[
 	(
 		"deepseek-v4.1-flash-1017-fast",
 		0.035,

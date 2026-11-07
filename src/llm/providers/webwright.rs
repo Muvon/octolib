@@ -52,13 +52,13 @@ impl WebWrightProvider {
 	}
 }
 
-const WEBWRIGHT_API_KEY_ENV: &str = "WEBWRIGHT_API_KEY";
+pub(crate) const WEBWRIGHT_API_KEY_ENV: &str = "WEBWRIGHT_API_KEY";
 const WEBWRIGHT_API_URL_ENV: &str = "WEBWRIGHT_API_URL";
 const WEBWRIGHT_API_URL: &str = "https://webwright.ai/v1/chat/completions";
 
 /// (model id, max input tokens) — WebWright's `GET /v1/models` lists both chat
 /// models; https://webwright.ai/models gives each a 200,000-token window.
-const MODELS: &[(&str, usize)] = &[("wren-r1", 200_000), ("wren-r1-fast", 200_000)];
+pub(crate) const MODELS: &[(&str, usize)] = &[("wren-r1", 200_000), ("wren-r1-fast", 200_000)];
 
 // WebWright pricing (per 1M tokens in USD), Oct 2026
 // Source: https://webwright.ai/pricing and https://webwright.ai/models

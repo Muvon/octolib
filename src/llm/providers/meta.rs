@@ -54,7 +54,7 @@ impl MetaProvider {
 	}
 }
 
-const META_API_KEY_ENV: &str = "META_API_KEY";
+pub(crate) const META_API_KEY_ENV: &str = "META_API_KEY";
 const MODEL_API_KEY_ENV: &str = "MODEL_API_KEY";
 const META_API_URL_ENV: &str = "META_API_URL";
 const META_API_URL: &str = "https://api.meta.ai/v1/chat/completions";
@@ -66,7 +66,7 @@ const META_API_URL: &str = "https://api.meta.ai/v1/chat/completions";
 // discounted cached-input rate. The -contributor variants trade lower rates
 // for permission to train on prompts/completions. Contributor patterns must
 // stay before their base versions because matching is substring-based.
-const PRICING: &[PricingTuple] = &[
+pub(crate) const PRICING: &[PricingTuple] = &[
 	("muse-wonder-1.0", 4.00, 20.00, 4.00, 0.20),
 	// Contributor tier (1.3 / 1.2): $0.10 in / $0.20 out / $0.002 cached
 	("muse-spark-1.3-contributor", 0.10, 0.20, 0.10, 0.002),

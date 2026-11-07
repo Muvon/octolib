@@ -49,7 +49,7 @@ const DEFAULT_REPETITION_PENALTY: f64 = 1.1;
 /// Cheapest valid completion size; OpenRouter has no zero-output primitive for cache pre-warm.
 const CACHE_PREWARM_MAX_TOKENS: u32 = 1;
 
-const OPENROUTER_API_KEY_ENV: &str = "OPENROUTER_API_KEY";
+pub(crate) const OPENROUTER_API_KEY_ENV: &str = "OPENROUTER_API_KEY";
 const OPENROUTER_API_URL_ENV: &str = "OPENROUTER_API_URL";
 const OPENROUTER_API_URL: &str = "https://openrouter.ai/api/v1/chat/completions";
 

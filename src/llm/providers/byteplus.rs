@@ -52,7 +52,7 @@ impl BytePlusProvider {
 	}
 }
 
-const BYTEPLUS_API_KEY_ENV: &str = "BYTEPLUS_API_KEY";
+pub(crate) const BYTEPLUS_API_KEY_ENV: &str = "BYTEPLUS_API_KEY";
 const BYTEPLUS_API_URL_ENV: &str = "BYTEPLUS_API_URL";
 const BYTEPLUS_API_URL: &str = "https://ark.ap-southeast.bytepluses.com/api/v3/chat/completions";
 
@@ -69,10 +69,10 @@ const PRICING: &[PricingTuple] = &[
 	("seed-2-0-lite", 0.25, 2.00, 0.25, 0.05),
 	("seed-2-0-mini", 0.10, 0.40, 0.10, 0.02),
 	// Coding Plan aliases
-	("dola-seed-2.0-pro", 0.50, 3.00, 0.50, 0.10),
-	("dola-seed-2.0-lite", 0.25, 2.00, 0.25, 0.05),
-	("dola-seed-2.0-code", 0.50, 3.00, 0.50, 0.10),
-	("bytedance-seed-code", 0.50, 3.00, 0.50, 0.10),
+	(DOLA_SEED_PRO, 0.50, 3.00, 0.50, 0.10),
+	(DOLA_SEED_LITE, 0.25, 2.00, 0.25, 0.05),
+	(DOLA_SEED_CODE, 0.50, 3.00, 0.50, 0.10),
+	(BYTEDANCE_SEED_CODE, 0.50, 3.00, 0.50, 0.10),
 	// Third-party models hosted on BytePlus (BytePlus-specific pricing).
 	// The DeepSeek V4 rows cover both the `-260425` preview IDs and the GA
 	// snapshots (`-ga-260731`, `-ga-260813`), which share one rate card.
@@ -83,9 +83,25 @@ const PRICING: &[PricingTuple] = &[
 	("deepseek-v4-1-flash", 0.30, 1.20, 0.30, 0.006),
 	("deepseek-v4-pro", 1.32, 3.96, 1.32, 0.044),
 	("deepseek-v4-flash", 0.44, 1.32, 0.44, 0.014),
-	("glm-5-3-flash-260828", 0.15, 0.50, 0.15, 0.03),
+	(GLM_5_3_FLASH, 0.15, 0.50, 0.15, 0.03),
 	("glm-5-2", 1.40, 4.40, 1.40, 0.26),
 ];
+
+const DOLA_SEED_PRO: &str = "dola-seed-2.0-pro";
+const DOLA_SEED_LITE: &str = "dola-seed-2.0-lite";
+const DOLA_SEED_CODE: &str = "dola-seed-2.0-code";
+const BYTEDANCE_SEED_CODE: &str = "bytedance-seed-code";
+const GLM_5_3_FLASH: &str = "glm-5-3-flash-260828";
+
+pub(crate) fn setup_models() -> impl Iterator<Item = &'static str> {
+	// Other rows are family prefixes whose callable IDs require snapshot suffixes.
+	PRICING.iter().map(|row| row.0).filter(|model| {
+		matches!(
+			*model,
+			DOLA_SEED_PRO | DOLA_SEED_LITE | DOLA_SEED_CODE | BYTEDANCE_SEED_CODE | GLM_5_3_FLASH
+		)
+	})
+}
 
 const SEED_2_LONG_CONTEXT_THRESHOLD: u64 = 128_000;
 

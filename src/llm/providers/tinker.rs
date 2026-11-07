@@ -65,7 +65,7 @@ impl TinkerProvider {
 	}
 }
 
-const TINKER_API_KEY_ENV: &str = "TINKER_API_KEY";
+pub(crate) const TINKER_API_KEY_ENV: &str = "TINKER_API_KEY";
 const TINKER_API_URL_ENV: &str = "TINKER_API_URL";
 const TINKER_API_URL: &str = "https://tinker.thinkingmachines.dev/services/tinker-prod/oai/api/v1/chat/completions";
 

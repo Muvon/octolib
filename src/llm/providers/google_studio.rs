@@ -48,7 +48,7 @@ impl GoogleStudioProvider {
 	}
 }
 
-const GOOGLE_STUDIO_API_KEY_ENV: &str = "GOOGLE_STUDIO_API_KEY";
+pub(crate) const GOOGLE_STUDIO_API_KEY_ENV: &str = "GOOGLE_STUDIO_API_KEY";
 const GOOGLE_STUDIO_API_URL_ENV: &str = "GOOGLE_STUDIO_API_URL";
 const GOOGLE_STUDIO_API_URL: &str = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
 

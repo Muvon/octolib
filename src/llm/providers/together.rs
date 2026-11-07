@@ -29,7 +29,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::env;
 
-const TOGETHER_API_KEY_ENV: &str = "TOGETHER_API_KEY";
+pub(crate) const TOGETHER_API_KEY_ENV: &str = "TOGETHER_API_KEY";
 const TOGETHER_API_URL_ENV: &str = "TOGETHER_API_URL";
 const TOGETHER_API_URL: &str = "https://api.together.xyz/v1/chat/completions";
 
@@ -38,7 +38,7 @@ const TOGETHER_API_URL: &str = "https://api.together.xyz/v1/chat/completions";
 /// Qwen3.8-2.4T-A95B; the pricing page's cached rates are used here.
 /// Format: (model pattern, input, output, cache write, cached input).
 /// Models without a listed cache discount use the normal input rate.
-const PRICING: &[PricingTuple] = &[
+pub(crate) const PRICING: &[PricingTuple] = &[
 	("Qwen/Qwen3.8-2.4T-A95B", 2.00, 6.00, 2.00, 0.25),
 	("Qwen/Qwen3.8-Flash", 0.09, 0.28, 0.09, 0.09),
 	("Qwen/Qwen3.7-Max", 1.50, 4.50, 1.50, 0.30),

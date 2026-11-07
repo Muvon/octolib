@@ -74,7 +74,7 @@ use std::env;
 /// Z.ai pricing constants (per 1M tokens in USD)
 /// Source: https://docs.z.ai/guides/overview/pricing (verified Sep 22, 2026)
 /// Format: (model, input, output, cache_write, cache_read)
-const PRICING: &[PricingTuple] = &[
+pub(crate) const PRICING: &[PricingTuple] = &[
 	// GLM-5.3-FlashX-Legal — the legal-tuned FlashX variant, listed at the
 	// same rates; must precede glm-5.3-flashx since that pattern is a
 	// substring of this name
@@ -181,7 +181,7 @@ impl ZaiProvider {
 }
 
 // Constants
-const ZAI_API_KEY_ENV: &str = "ZAI_API_KEY";
+pub(crate) const ZAI_API_KEY_ENV: &str = "ZAI_API_KEY";
 const ZAI_API_URL_ENV: &str = "ZAI_API_URL";
 const ZAI_API_URL: &str = "https://api.z.ai/api/paas/v4/chat/completions";
 // Z.ai API request/response structures

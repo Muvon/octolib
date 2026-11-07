@@ -75,20 +75,35 @@ pub(super) const PRICING: &[PricingTuple] = &[
 	("gemini-3.5-flash", 1.50, 9.00, 1.50, 0.15),
 	// Gemini Omni Flash (gemini-omni-1.1-flash, gemini-omni-flash-preview): text
 	// output rate; video output bills $17.50. No context caching rate published.
-	("gemini-omni", 1.50, 9.00, 1.50, 1.50),
+	(GEMINI_OMNI_PATTERN, 1.50, 9.00, 1.50, 1.50),
 	// Gemini Robotics-ER 2 (preview + streaming preview) — introductory pricing
 	// through Dec 31, 2026; standard rates from Jan 1, 2027: input $2.00,
 	// output $10.00, cache read $0.20
-	("gemini-robotics-er-2", 1.00, 5.00, 1.00, 0.10),
+	(GEMINI_ROBOTICS_PATTERN, 1.00, 5.00, 1.00, 0.10),
 	// Gemini 3.x series
-	("gemini-3.1-pro", 2.00, 12.00, 2.00, 0.20),
+	(GEMINI_3_1_PRO_PATTERN, 2.00, 12.00, 2.00, 0.20),
 	("gemini-3.1-flash-lite", 0.25, 1.50, 0.25, 0.025),
-	("gemini-3-flash", 0.50, 3.00, 0.50, 0.05),
+	(GEMINI_3_FLASH_PATTERN, 0.50, 3.00, 0.50, 0.05),
 	// Gemini 2.5 series
 	("gemini-2.5-flash-lite", 0.10, 0.40, 0.10, 0.01),
 	("gemini-2.5-flash", 0.30, 2.50, 0.30, 0.03),
 	("gemini-2.5-pro", 1.25, 10.00, 1.25, 0.125),
 ];
+
+// Preview/family prefixes price multiple IDs but cannot be offered as model IDs.
+const GEMINI_OMNI_PATTERN: &str = "gemini-omni";
+const GEMINI_ROBOTICS_PATTERN: &str = "gemini-robotics-er-2";
+const GEMINI_3_1_PRO_PATTERN: &str = "gemini-3.1-pro";
+const GEMINI_3_FLASH_PATTERN: &str = "gemini-3-flash";
+
+pub(crate) fn setup_models() -> impl Iterator<Item = &'static str> {
+	PRICING.iter().map(|row| row.0).filter(|model| {
+		!matches!(
+			*model,
+			GEMINI_OMNI_PATTERN | GEMINI_ROBOTICS_PATTERN | GEMINI_3_1_PRO_PATTERN | GEMINI_3_FLASH_PATTERN
+		)
+	})
+}
 
 /// Gemini Pro models bill a long-context tier above this many input tokens:
 /// 2x input and cache rates, 1.5x output, applied to the whole request. Flash

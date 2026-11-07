@@ -57,13 +57,13 @@ impl XiaomiProvider {
 	}
 }
 
-const XIAOMI_API_KEY_ENV: &str = "XIAOMI_API_KEY";
+pub(crate) const XIAOMI_API_KEY_ENV: &str = "XIAOMI_API_KEY";
 const XIAOMI_API_URL_ENV: &str = "XIAOMI_API_URL";
 const XIAOMI_API_URL: &str = "https://api.xiaomimimo.com/v1/chat/completions";
 
 /// (model id, max input tokens) — every text model has a 1M context window
 /// and 128K max output (models page, Oct 2026).
-const MODELS: &[(&str, usize)] = &[
+pub(crate) const MODELS: &[(&str, usize)] = &[
 	("mimo-v2.6-pro-ultraspeed", 1_048_576),
 	("mimo-v2.6-pro", 1_048_576),
 	("mimo-v2.6-flash", 1_048_576),

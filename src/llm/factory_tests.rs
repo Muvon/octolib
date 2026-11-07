@@ -15,6 +15,139 @@
 use super::*;
 
 #[test]
+fn test_provider_setup_covers_supported_providers_once() {
+	let setup = ProviderFactory::provider_setup_info();
+	let expected: Vec<_> = ProviderFactory::supported_providers()
+		.into_iter()
+		.filter(|name| *name != "cli")
+		.collect();
+	let names: Vec<_> = setup.iter().map(|info| info.name).collect();
+	assert_eq!(names, expected);
+	assert_eq!(
+		names.iter().collect::<std::collections::HashSet<_>>().len(),
+		names.len()
+	);
+}
+
+#[test]
+fn test_provider_setup_credentials() {
+	let setup = ProviderFactory::provider_setup_info();
+	let info = |name| setup.iter().find(|info| info.name == name).unwrap();
+	assert_eq!(info("openrouter").api_key_env, Some("OPENROUTER_API_KEY"));
+	assert_eq!(info("cloudflare").api_key_env, Some("CLOUDFLARE_API_KEY"));
+	assert_eq!(info("cloudflare").extra_env, &["CLOUDFLARE_ACCOUNT_ID"]);
+	assert_eq!(info("amazon").api_key_env, Some("AWS_BEARER_TOKEN_BEDROCK"));
+	assert!(info("amazon").extra_env.is_empty());
+	assert_eq!(info("meta").api_key_env, Some("META_API_KEY"));
+	assert!(info("meta").extra_env.is_empty());
+	assert_eq!(info("google-vertex").api_key_env, None);
+	assert!(info("google-vertex").extra_env.is_empty());
+	assert_eq!(info("chatgpt").api_key_env, None);
+	assert!(info("chatgpt").extra_env.is_empty());
+	assert_eq!(info("local").api_key_env, Some("LOCAL_API_KEY"));
+	assert_eq!(info("ollama").api_key_env, Some("OLLAMA_API_KEY"));
+	assert_eq!(info("octohub").api_key_env, Some("OCTOHUB_API_KEY"));
+	assert_eq!(info("opencode-zen").api_key_env, Some("OPENCODE_API_KEY"));
+	assert_eq!(info("opencode-go").api_key_env, Some("OPENCODE_API_KEY"));
+	assert!(info("openai").extra_env.is_empty());
+	assert!(info("anthropic").extra_env.is_empty());
+}
+
+#[test]
+fn test_provider_setup_models_are_unique_and_supported() {
+	for info in ProviderFactory::provider_setup_info() {
+		let mut seen = std::collections::HashSet::new();
+		for model in &info.models {
+			assert!(seen.insert(model), "duplicate model for {}: {model}", info.name);
+			let full_model = format!("{}:{model}", info.name);
+			assert!(
+				ProviderFactory::get_provider_for_model(&full_model).is_ok(),
+				"unsupported setup model: {full_model}"
+			);
+		}
+	}
+	let setup = ProviderFactory::provider_setup_info();
+	let info = |name| setup.iter().find(|info| info.name == name).unwrap();
+	assert!(!info("openai").models.is_empty());
+	assert_eq!(info("cerebras").models, ["gpt-oss-120b", "qwen-3.8-27b"]);
+	assert_eq!(info("hetzner").models, ["Qwen3.8-27B", "Qwen/Qwen3.6-35B-A3B-FP8"]);
+	assert_eq!(info("reflection").models, ["Beam-1.0-501B-A23B"]);
+	assert_eq!(
+		info("isoquant").models,
+		["deepseek-v4.1-flash-1017-fast", "glm-5.3-flash"]
+	);
+	assert_eq!(info("google-studio").models, info("google-vertex").models);
+}
+
+#[test]
+fn test_provider_setup_omits_pricing_patterns_and_remote_catalogs() {
+	let setup = ProviderFactory::provider_setup_info();
+	let info = |name| setup.iter().find(|info| info.name == name).unwrap();
+	for name in [
+		"openrouter",
+		"fireworks",
+		"tinker",
+		"chatgpt",
+		"local",
+		"nvidia",
+		"octohub",
+		"opencode-zen",
+		"opencode-go",
+	] {
+		assert!(info(name).models.is_empty(), "unexpected local models for {name}");
+	}
+	assert!(!info("moonshot").models.iter().any(|model| model == "kimi-k2.7"));
+	for pattern in [
+		"gemini-omni",
+		"gemini-robotics-er-2",
+		"gemini-3.1-pro",
+		"gemini-3-flash",
+	] {
+		assert!(!info("google-studio").models.iter().any(|model| model == pattern));
+	}
+	for pattern in ["google/gemma-4-31B", "google/gemma-4-26B"] {
+		assert!(!info("featherless").models.iter().any(|model| model == pattern));
+	}
+	assert_eq!(
+		info("amazon").models,
+		[
+			"global.moonshotai.kimi-k3",
+			"moonshotai.kimi-k3",
+			"global.xai.grok-4.7",
+			"xai.grok-4.7",
+			"global.xai.grok-4.6",
+			"xai.grok-4.6",
+			"qwen.qwen3-coder-next",
+			"deepseek.v3.2",
+			"deepseek.v3.1",
+			"global.zai.glm-5.3",
+			"zai.glm-5.3",
+			"zai.glm-4.7-flash",
+			"minimax.minimax-m2.1",
+			"google.gemma-4-31b",
+			"google.gemma-4-26b-a4b",
+			"google.gemma-4-e2b",
+		]
+	);
+	assert_eq!(
+		info("byteplus").models,
+		[
+			"dola-seed-2.0-pro",
+			"dola-seed-2.0-lite",
+			"dola-seed-2.0-code",
+			"bytedance-seed-code",
+			"glm-5-3-flash-260828",
+		]
+	);
+}
+
+#[test]
+fn test_provider_setup_deduplicates_models_in_table_order() {
+	let info = ProviderSetupInfo::new("local", None, &[], ["second", "first", "second", "third", "first"]);
+	assert_eq!(info.models, ["second", "first", "third"]);
+}
+
+#[test]
 fn test_parse_model() {
 	// Test with provider prefix
 	let result = ProviderFactory::parse_model("openrouter:anthropic/claude-sonnet-4-6");

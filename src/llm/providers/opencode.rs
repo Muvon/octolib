@@ -52,7 +52,7 @@ use anyhow::Result;
 use std::env;
 use std::sync::LazyLock;
 
-const OPENCODE_API_KEY_ENV: &str = "OPENCODE_API_KEY";
+pub(crate) const OPENCODE_API_KEY_ENV: &str = "OPENCODE_API_KEY";
 
 const OPENCODE_ZEN_API_URL_ENV: &str = "OPENCODE_ZEN_API_URL";
 const OPENCODE_ZEN_API_URL: &str = "https://opencode.ai/zen/v1/chat/completions";

@@ -55,13 +55,13 @@ impl InceptionProvider {
 	}
 }
 
-const INCEPTION_API_KEY_ENV: &str = "INCEPTION_API_KEY";
+pub(crate) const INCEPTION_API_KEY_ENV: &str = "INCEPTION_API_KEY";
 const INCEPTION_API_URL_ENV: &str = "INCEPTION_API_URL";
 const INCEPTION_API_URL: &str = "https://api.inceptionlabs.ai/v1/chat/completions";
 
 /// (model id, max input tokens) — from the Inception models table
 /// (`GET /v1/models` reports `context_length`).
-const MODELS: &[(&str, usize)] = &[
+pub(crate) const MODELS: &[(&str, usize)] = &[
 	("mercury-3", 1_000_000),
 	("mercury-voice", 128_000),
 	("mercury-2.5", 260_000),

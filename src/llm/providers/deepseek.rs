@@ -58,7 +58,7 @@ use std::env;
 /// Note: DeepSeek uses cache_hit/cache_miss model - cache_write = cache_miss (input), cache_read = cache_hit
 /// DeepSeek bills peak / off-peak: peak windows are 01:00-04:00 and 06:00-10:00
 /// UTC Monday-Friday excluding Chinese public holidays; off-peak is half of peak.
-const PRICING_PEAK: &[PricingTuple] = &[
+pub(crate) const PRICING_PEAK: &[PricingTuple] = &[
 	// V4.1 Flash (1M context), peak-hour rates
 	("deepseek-flash", 0.3, 1.2, 0.3, 0.006),
 	// Legacy names deepseek-v4-flash / deepseek-v4-flash-vision-exp: retired,
@@ -211,7 +211,7 @@ impl DeepSeekProvider {
 	}
 }
 
-const DEEPSEEK_API_KEY_ENV: &str = "DEEPSEEK_API_KEY";
+pub(crate) const DEEPSEEK_API_KEY_ENV: &str = "DEEPSEEK_API_KEY";
 const DEEPSEEK_API_URL_ENV: &str = "DEEPSEEK_API_URL";
 const DEEPSEEK_API_URL: &str = "https://api.deepseek.com/chat/completions";
 

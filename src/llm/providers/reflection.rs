@@ -41,12 +41,12 @@ use crate::llm::utils::PricingTuple;
 use anyhow::Result;
 use std::env;
 
-const REFLECTION_API_KEY_ENV: &str = "REFLECTION_API_KEY";
+pub(crate) const REFLECTION_API_KEY_ENV: &str = "REFLECTION_API_KEY";
 const REFLECTION_API_URL_ENV: &str = "REFLECTION_API_URL";
 const REFLECTION_API_URL: &str = "https://api.reflection.ai/openai/v1/chat/completions";
 
 /// (model id, max input tokens), from `GET /openai/v1/models`, 2026-11-07.
-const MODELS: &[(&str, usize)] = &[("Beam-1.0-501B-A23B", 1_048_576)];
+pub(crate) const MODELS: &[(&str, usize)] = &[("Beam-1.0-501B-A23B", 1_048_576)];
 const DEFAULT_MAX_INPUT_TOKENS: usize = 1_048_576;
 
 // Pricing (per 1M tokens in USD) - Nov 2026

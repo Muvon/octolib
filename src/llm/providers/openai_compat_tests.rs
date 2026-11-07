@@ -850,6 +850,32 @@ fn test_xiaomi_reasoning_effort_maps_to_thinking_switch() {
 	assert_eq!(request_body, serde_json::json!({}));
 }
 
+/// Tinker's Nemotron models take a boolean `reasoning_effort`; its other models
+/// keep the named ladder.
+#[test]
+fn test_tinker_nemotron_reasoning_effort_is_a_boolean() {
+	let nemotron = "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16";
+	for effort in [Effort::Low, Effort::Medium, Effort::High, Effort::XHigh, Effort::Max] {
+		assert_eq!(
+			effort_body("tinker", nemotron, effort),
+			serde_json::json!({ "reasoning_effort": true }),
+			"{effort:?}"
+		);
+	}
+	assert_eq!(
+		effort_body("tinker", nemotron, Effort::None),
+		serde_json::json!({ "reasoning_effort": false })
+	);
+	let mut request_body = serde_json::json!({});
+	apply_reasoning_effort(&mut request_body, "tinker", nemotron, None);
+	assert_eq!(request_body, serde_json::json!({}));
+
+	assert_eq!(
+		effort_body("tinker", "openai/gpt-oss-120b", Effort::Low),
+		serde_json::json!({ "reasoning_effort": "low" })
+	);
+}
+
 /// Xiaomi MiMo returns 400 when a thinking-mode tool-call turn comes back
 /// without its `reasoning_content`, so every assistant turn replays it.
 #[test]

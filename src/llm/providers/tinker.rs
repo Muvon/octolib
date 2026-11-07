@@ -36,9 +36,8 @@
 //!
 //! The endpoint is a beta meant for testing and low-traffic use, not
 //! production. Vision and structured output are not documented for it, so
-//! both are reported as unsupported; caching is not claimed either — the
-//! prefill-cache discount is priced in the table, but cached-token reporting
-//! in responses is unverified.
+//! both are reported as unsupported. Prompt caching is automatic and reported
+//! in `prompt_tokens_details.cached_tokens`; see `supports_caching`.
 //!
 //! Source: <https://tinker-docs.thinkingmachines.ai/tinker/compatible-apis/openai/>
 //! Pricing: <https://tinker-docs.thinkingmachines.ai/tinker/models/>
@@ -291,6 +290,23 @@ impl AiProvider for TinkerProvider {
 
 	fn get_api_key(&self) -> Result<String> {
 		env::var(TINKER_API_KEY_ENV).map_err(|_| crate::errors::missing_api_key("tinker", TINKER_API_KEY_ENV).into())
+	}
+
+	/// The docs only say "We provide a discount on cached prefill tokens". Measured
+	/// 2026-11-07: every model this account can sample reported cached tokens on a
+	/// repeat call (Inkling, Inkling-Small, Inkling-2-Small, the Inkling serverless id,
+	/// Nemotron-3-Super, gpt-oss-120b and gpt-oss-20b), so the cache is the server's,
+	/// not a per-model feature.
+	fn supports_caching(&self, _model: &str) -> bool {
+		true
+	}
+
+	/// Measured 2026-11-07: unique 3.5k-8k-token prompts re-sent once after an idle
+	/// delay, two samples per delay, hit on every sample from 1m to 60m on gpt-oss-120b,
+	/// gpt-oss-20b, `inkling` (the serverless id) and Inkling-2-Small. The upper bound
+	/// is not measured.
+	fn cache_lifetime(&self, _model: &str, _use_long_cache: bool) -> Option<std::time::Duration> {
+		Some(crate::llm::config::CacheTTL::long().to_duration())
 	}
 
 	fn supports_vision(&self, _model: &str) -> bool {

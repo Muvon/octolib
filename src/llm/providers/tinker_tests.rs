@@ -228,7 +228,11 @@ fn test_october_2026_checkpoints_use_the_published_rates() {
 fn test_conservative_capabilities() {
 	let provider = TinkerProvider::new();
 	assert_eq!(provider.name(), "tinker");
-	assert!(!provider.supports_caching("thinkingmachines/Inkling"));
+	assert!(provider.supports_caching("thinkingmachines/Inkling"));
+	assert_eq!(
+		provider.cache_lifetime("openai/gpt-oss-120b", false),
+		Some(std::time::Duration::from_secs(3600))
+	);
 	assert!(!provider.supports_vision("thinkingmachines/Inkling"));
 	assert!(!provider.supports_structured_output("thinkingmachines/Inkling"));
 	assert!(!provider.enforces_response_schema("thinkingmachines/Inkling"));

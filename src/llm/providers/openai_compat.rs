@@ -506,6 +506,17 @@ fn apply_reasoning_effort(
 		return;
 	}
 
+	// Tinker's Nemotron 3 and 3.5 models take `reasoning_effort` as a boolean and
+	// answer 400 to any level name ("This model accepts true or false"); gpt-oss and
+	// Inkling take the names and reject a boolean (live, 2026-11-07).
+	if provider_name.eq_ignore_ascii_case("tinker") && crate::llm::utils::contains_ignore_ascii_case(model, "nemotron")
+	{
+		if let Some(effort) = effort {
+			request_body["reasoning_effort"] = serde_json::json!(effort != ReasoningEffort::None);
+		}
+		return;
+	}
+
 	// Isoquant lists each model's levels in its catalog and answers 400 to any
 	// other, so the generic ladder below cannot reach it.
 	if provider_name.eq_ignore_ascii_case("isoquant") {

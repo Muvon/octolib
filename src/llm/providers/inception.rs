@@ -101,8 +101,13 @@ impl AiProvider for InceptionProvider {
 		false
 	}
 
+	/// Automatic prefix caching with discounted cached-input billing. No
+	/// `cache_lifetime`: measured 2026-11-07 on mercury-3 (unique ~8k-token prompts
+	/// re-sent once after an idle delay, two samples per delay), at least one sample
+	/// hit at every delay up to 30m but one of two missed at 1m, 7m, 15m and 30m, and
+	/// both missed from 45m. Misses that early are routing, so no delay is one the
+	/// cache is known to survive.
 	fn supports_caching(&self, _model: &str) -> bool {
-		// Automatic prefix caching with discounted cached-input billing
 		true
 	}
 

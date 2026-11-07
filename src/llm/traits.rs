@@ -192,11 +192,14 @@ pub trait AiProvider: Send + Sync {
 	/// - **Isoquant** — measured 60m on deepseek-v4.1-flash-1017-fast; `None` on
 	///   glm-5.3-flash, which missed at 1m.
 	/// - **Reflection** — measured 10m on Beam.
+	/// - **Tinker** — measured: 60m idle still hit on gpt-oss, Inkling and
+	///   Inkling-2-Small; the true limit is unknown.
 	/// - **OpenAI GPT-5.6 and later** — documented "Minimum lifetime 30 minutes".
 	/// - **Z.ai, Xiaomi** — measured: 60m idle still hit; the true limit is unknown.
 	/// - **Everyone else** — `None`: docs state only "typically" figures or upper
 	///   bounds (OpenAI before 5.6, Groq, DeepSeek, Together, Fireworks, Vertex),
-	///   nothing at all, or misses appear within seconds (MiniMax).
+	///   nothing at all, or misses appear within seconds (MiniMax) or minutes
+	///   (Inception mercury-3).
 	fn cache_lifetime(&self, _model: &str, _use_long_cache: bool) -> Option<Duration> {
 		None
 	}

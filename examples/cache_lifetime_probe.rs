@@ -65,6 +65,12 @@ const TARGETS: &[(&str, usize)] = &[
 	("google-studio:gemini-3.1-pro-preview", DEFAULT_PROMPT_TOKENS),
 	("tinker:openai/gpt-oss-120b", DEFAULT_PROMPT_TOKENS),
 	("tinker:openai/gpt-oss-20b", DEFAULT_PROMPT_TOKENS),
+	("tinker:inkling", DEFAULT_PROMPT_TOKENS),
+	("tinker:thinkingmachines/Inkling-2-Small", DEFAULT_PROMPT_TOKENS),
+	(
+		"tinker:nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16",
+		DEFAULT_PROMPT_TOKENS,
+	),
 	("isoquant:deepseek-v4.1-flash-1017-fast", DEFAULT_PROMPT_TOKENS),
 	("isoquant:glm-5.3-flash", DEFAULT_PROMPT_TOKENS),
 	("reflection:Beam-1.0-501B-A23B", 32_000),

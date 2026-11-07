@@ -15,6 +15,16 @@
 use super::*;
 
 #[test]
+fn cache_lifetime_is_known_only_on_measured_models() {
+	let provider = GoogleStudioProvider::new();
+	let five_minutes = Some(std::time::Duration::from_secs(300));
+	assert_eq!(provider.cache_lifetime("gemini-4-argon", false), five_minutes);
+	assert_eq!(provider.cache_lifetime("gemini-3.8-flash", true), five_minutes);
+	assert_eq!(provider.cache_lifetime("gemini-3.6-flash", false), five_minutes);
+	assert_eq!(provider.cache_lifetime("gemini-3.1-pro-preview", false), None);
+	assert_eq!(provider.cache_lifetime("gemini-2.5-flash", false), None);
+}
+#[test]
 #[serial_test::serial]
 fn test_per_call_key_authenticates_without_environment_key() {
 	let provider = GoogleStudioProvider::new();

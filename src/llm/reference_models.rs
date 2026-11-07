@@ -2256,6 +2256,14 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		pricing: pricing(0.03, 0.03, 0.00, 0.00),
 	},
 	ReferenceModelEntry {
+		// Inkling 2 Small: 594B / 17B-active MoE with vision, 256K context on
+		// Tinker, the only host listing it; pricing from Tinker's models page
+		// (2026-11-07). Must precede inkling-small and inkling (substring match).
+		pattern: "inkling-2-small",
+		capabilities: caps(true, false, false, 262_144),
+		pricing: pricing(0.30, 1.00, 0.00, 0.03),
+	},
+	ReferenceModelEntry {
 		// Inkling Small (Jul 29, 2026) — same partner-served setup as Inkling
 		// below; pricing from Together, verified Aug 3, 2026. Must stay above
 		// the bare "inkling" entry (substring match, first entry wins).

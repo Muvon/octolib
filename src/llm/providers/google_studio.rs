@@ -55,6 +55,17 @@ const GOOGLE_STUDIO_API_URL: &str = "https://generativelanguage.googleapis.com/v
 /// Process-wide cache of available models, populated on first chat_completion()
 static MODELS_CACHE: OnceCell<Vec<CachedModel>> = OnceCell::const_new();
 
+// Implicit cache lifetimes. The docs give none, only "send requests with similar
+// prefix in a short amount of time" (<https://ai.google.dev/gemini-api/docs/caching>).
+// Measured 2026-11-07 on the OpenAI-compatible endpoint: unique ~8.9k-token prompts
+// re-sent once after an idle delay, two samples per delay. gemini-4-argon,
+// gemini-3.8-flash and gemini-3.6-flash hit on every sample up to 5m (one read timeout
+// at 3m excluded); at 7m only one gemini-3.8-flash sample hit, and from 15m every sample
+// missed. gemini-3.1-pro-preview missed one sample at 1m and every sample from 5m, so it
+// has no lifetime it is known to survive.
+const MEASURED_CACHE_MODELS: &[&str] = &["gemini-4-argon", "gemini-3.8-flash", "gemini-3.6-flash"];
+const MEASURED_CACHE_LIFETIME: std::time::Duration = std::time::Duration::from_secs(5 * 60);
+
 #[async_trait::async_trait]
 impl AiProvider for GoogleStudioProvider {
 	fn name(&self) -> &str {
@@ -85,6 +96,15 @@ impl AiProvider for GoogleStudioProvider {
 	fn supports_caching(&self, model: &str) -> bool {
 		let normalized = normalize_model_name(model);
 		normalized.contains("gemini-4") || normalized.contains("gemini-3") || normalized.contains("gemini-2.5")
+	}
+
+	/// See `MEASURED_CACHE_MODELS` for the evidence.
+	fn cache_lifetime(&self, model: &str, _use_long_cache: bool) -> Option<std::time::Duration> {
+		let normalized = normalize_model_name(model);
+		MEASURED_CACHE_MODELS
+			.iter()
+			.any(|measured| normalized.contains(measured))
+			.then_some(MEASURED_CACHE_LIFETIME)
 	}
 
 	fn supports_vision(&self, model: &str) -> bool {

@@ -326,6 +326,11 @@ fn test_models_without_a_maker_table_price_from_the_reference_table() {
 	// Longest-match ordering: UltraSpeed is not priced as plain Pro.
 	let ultraspeed = provider.get_model_pricing("xiaomi/mimo-v2.6-pro-ultraspeed").unwrap();
 	assert_eq!(ultraspeed.input_price_per_1m, 4.35);
+	// Inkling 2 Small is not priced as the Inkling it contains.
+	let inkling_2_small = provider.get_model_pricing("thinkingmachines/inkling-2-small").unwrap();
+	assert_eq!(inkling_2_small.input_price_per_1m, 0.30);
+	assert_eq!(inkling_2_small.output_price_per_1m, 1.00);
+	assert_eq!(inkling_2_small.cache_read_price_per_1m, 0.03);
 	assert!(provider.get_model_pricing("nobody/unknown-model-x").is_none());
 }
 

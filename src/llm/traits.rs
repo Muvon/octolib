@@ -187,6 +187,8 @@ pub trait AiProvider: Send + Sync {
 	/// - **Alibaba** — measured per model: 30m on deepseek-v4.1-flash and qwen3.8-max,
 	///   10m on glm-5.3 and qwen3.8-flash, `None` on qwen3.7-plus (about 60s); an assumed
 	///   15m elsewhere.
+	/// - **Google AI Studio** — measured 5m on gemini-4-argon, gemini-3.8-flash and
+	///   gemini-3.6-flash; `None` on other Gemini models.
 	/// - **OpenAI GPT-5.6 and later** — documented "Minimum lifetime 30 minutes".
 	/// - **Z.ai, Xiaomi** — measured: 60m idle still hit; the true limit is unknown.
 	/// - **Everyone else** — `None`: docs state only "typically" figures or upper

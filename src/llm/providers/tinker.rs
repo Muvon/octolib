@@ -78,10 +78,18 @@ const TINKER_API_URL: &str = "https://tinker.thinkingmachines.dev/services/tinke
 ///
 /// First match wins on substring matching, so longer IDs come first:
 /// serverless (`:sampling-nvfp4`) before `:peft:` variants before base IDs,
-/// and Inkling-Small before Inkling (the base Inkling ID is a substring of
-/// every Inkling-Small ID).
+/// and Inkling-2-Small and Inkling-Small before Inkling (the base Inkling ID is
+/// a substring of every other Inkling ID).
 const PRICING: &[PricingTuple] = &[
 	// Serverless inference (beta)
+	// Inkling 2 Small lists $0.30 / $0.03 cached / $1.00 on all three of its ids (2026-11-07).
+	(
+		"thinkingmachines/inkling-2-small:peft:262144:sampling-nvfp4",
+		0.30,
+		1.00,
+		0.30,
+		0.03,
+	),
 	(
 		"thinkingmachines/inkling-small:peft:262144:sampling-nvfp4",
 		0.30,
@@ -97,8 +105,10 @@ const PRICING: &[PricingTuple] = &[
 		0.17,
 	),
 	// Inkling family — 256K extended-context variants
+	("thinkingmachines/inkling-2-small:peft:262144", 0.30, 1.00, 0.30, 0.03),
 	("thinkingmachines/inkling-small:peft:262144", 1.16, 2.89, 1.16, 0.232),
 	("thinkingmachines/inkling:peft:262144", 3.74, 9.36, 3.74, 0.748),
+	("thinkingmachines/inkling-2-small", 0.30, 1.00, 0.30, 0.03),
 	("thinkingmachines/inkling-small", 0.58, 1.44, 0.58, 0.116),
 	("thinkingmachines/inkling", 1.87, 4.68, 1.87, 0.374),
 	// NVIDIA Nemotron
@@ -189,10 +199,13 @@ const PRICING: &[PricingTuple] = &[
 /// (model id, context window) from the same pricing page. Same
 /// specific-first ordering as `PRICING`.
 const CONTEXTS: &[(&str, usize)] = &[
+	("thinkingmachines/inkling-2-small:peft:262144:sampling-nvfp4", 262_144),
 	("thinkingmachines/inkling-small:peft:262144:sampling-nvfp4", 262_144),
 	("thinkingmachines/inkling:peft:262144:sampling-nvfp4", 262_144),
+	("thinkingmachines/inkling-2-small:peft:262144", 262_144),
 	("thinkingmachines/inkling-small:peft:262144", 262_144),
 	("thinkingmachines/inkling:peft:262144", 262_144),
+	("thinkingmachines/inkling-2-small", 65_536),
 	("thinkingmachines/inkling-small", 65_536),
 	("thinkingmachines/inkling", 65_536),
 	("nvidia/nvidia-nemotron-3.5-lightning-30b-a3b-bf16:peft:262144", 262_144),

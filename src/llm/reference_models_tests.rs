@@ -77,6 +77,11 @@ fn october_2026_models_resolve_with_documented_capabilities_and_pricing() {
 			caps(true, false, false, 32_000),
 			pricing(0.30, 2.50, 0.30, 0.30),
 		),
+		(
+			"thinkingmachines/Inkling-2-Small",
+			caps(true, false, false, 262_144),
+			pricing(0.30, 1.00, 0.00, 0.03),
+		),
 	] {
 		assert_same_capabilities(get_reference_capabilities(model).unwrap(), capabilities.unwrap());
 		assert_same_pricing(get_reference_pricing(model).unwrap(), pricing.unwrap());

@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.51.0] - 2026-11-07
+
+### 📋 Release Summary
+
+OctoHub cache lifetime now derives from marker TTL, and provider cache lifetimes are reported. Ollama caching and TTL keepalive are supported, and Reflection AI and Isoquant are supported as providers. HTTP requests now trust system root certificates alongside bundled roots.
+
+### 🚨 Breaking Changes
+
+- **llm**: derive OctoHub cache lifetime from marker TTL `ed464647`
+
+### ✨ New Features & Enhancements
+
+- **llm**: report provider cache lifetimes `64c2750c`
+- **ollama**: enable Ollama caching and TTL keepalive `e81d2dcd`
+- **llm**: support Reflection AI as a provider `172fc84f`
+- **llm**: add Isoquant provider support `c2460ecf`
+
+### 🔧 Improvements & Optimizations
+
+- **llm/providers**: format provider URLs as Markdown links `f017df59`
+- **openai**: clarify GPT-5.6 cache lifetime evidence `5d5d05f0`
+- **providers**: document observed prompt cache retention `9a84f7f0`
+
+### 🐛 Bug Fixes & Stability
+
+- **http**: trust system root certificates alongside bundled roots `7bdce1fc`
+
 ## [0.50.1] - 2026-11-06
 
 ### 📋 Release Summary

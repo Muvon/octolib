@@ -1,6 +1,6 @@
 [package]
 name = "octolib"
-version = "0.50.1"
+version = "0.51.0"
 edition = "2021"
 authors = ["Muvon Un Limited <contact@muvon.io>"]
 license = "Apache-2.0"
@@ -49,7 +49,6 @@ hindsight = ["onnx"]
 # macOS local backends compile Metal support through target-specific dependencies below.
 # This feature selects Metal for HuggingFace at runtime; it is a no-op elsewhere.
 metal = []
-mkl = ["candle-core?/mkl", "candle-nn?/mkl"]
 accelerate = ["candle-core?/accelerate", "candle-nn?/accelerate"]
 cuda = ["candle-core?/cuda", "candle-nn?/cuda"]
 cudnn = ["candle-core?/cudnn", "candle-nn?/cudnn"]

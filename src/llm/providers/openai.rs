@@ -610,9 +610,12 @@ impl AiProvider for OpenAiProvider {
 	}
 
 	/// GPT-5.6 and later: "Minimum lifetime 30 minutes", and a read refreshes it
-	/// (https://developers.openai.com/api/docs/guides/prompt-caching). Earlier
-	/// models only "typically remain active for around 5 to 10 minutes", which
-	/// is no guarantee.
+	/// (https://developers.openai.com/api/docs/guides/prompt-caching). Measured
+	/// 2026-11-07 on gpt-6-luna (Responses API, explicit breakpoint, 30m TTL):
+	/// unique ~6.8k-token prompts re-sent once after an idle delay hit in full
+	/// on 18 of 18 calls from 5s to 30m and missed on all 4 at 35m and 40m.
+	/// Earlier models only "typically remain active for around 5 to 10
+	/// minutes", which is no guarantee.
 	fn cache_lifetime(&self, model: &str, _use_long_cache: bool) -> Option<std::time::Duration> {
 		const GPT_5_6_MINIMUM_CACHE_LIFETIME: std::time::Duration = std::time::Duration::from_secs(30 * 60);
 		(self.supports_caching(model) && is_gpt_5_6_or_later(&normalize_model_name(model)))

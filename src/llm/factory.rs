@@ -39,6 +39,9 @@ pub struct ProviderSetupInfo {
 	/// Callable IDs from local model/pricing tables, in table order without duplicates.
 	/// Empty when only pricing patterns or a remote catalog are available.
 	pub models: Vec<String>,
+	/// Public model list in the OpenAI `/v1/models` shape (`data[].id`) that answers
+	/// without an API key. Set where `models` is empty and the provider publishes one.
+	pub models_url: Option<&'static str>,
 }
 
 impl ProviderSetupInfo {
@@ -58,6 +61,7 @@ impl ProviderSetupInfo {
 				.filter(|model| seen.insert(*model))
 				.map(str::to_string)
 				.collect(),
+			models_url: None,
 		}
 	}
 }
@@ -196,7 +200,8 @@ impl ProviderFactory {
 	}
 
 	/// Get offline setup metadata for every supported provider except CLI backends.
-	/// Does not read credentials, perform login, or fetch remote model catalogs.
+	/// Does not read credentials, perform login, or fetch remote model catalogs;
+	/// callers fetch `models_url` themselves.
 	pub fn provider_setup_info() -> Vec<ProviderSetupInfo> {
 		use crate::llm::providers::{
 			alibaba, amazon, anthropic, byteplus, cerebras, cloudflare, deepseek, featherless, fireworks,
@@ -205,7 +210,10 @@ impl ProviderFactory {
 		};
 
 		vec![
-			ProviderSetupInfo::new("openrouter", Some(openrouter::OPENROUTER_API_KEY_ENV), &[], []),
+			ProviderSetupInfo {
+				models_url: Some(openrouter::OPENROUTER_MODELS_URL),
+				..ProviderSetupInfo::new("openrouter", Some(openrouter::OPENROUTER_API_KEY_ENV), &[], [])
+			},
 			ProviderSetupInfo::new(
 				"openai",
 				Some(openai::OPENAI_API_KEY_ENV),
@@ -220,12 +228,10 @@ impl ProviderFactory {
 				cerebras::SUPPORTED_MODELS.iter().copied(),
 			),
 			ProviderSetupInfo::new("local", Some(local::LOCAL_API_KEY_ENV), &[], []),
-			ProviderSetupInfo::new(
-				"ollama",
-				Some(ollama::OLLAMA_API_KEY_ENV),
-				&[],
-				ollama::PRICING.iter().map(|row| row.0),
-			),
+			ProviderSetupInfo {
+				models_url: Some(ollama::OLLAMA_MODELS_URL),
+				..ProviderSetupInfo::new("ollama", Some(ollama::OLLAMA_API_KEY_ENV), &[], [])
+			},
 			ProviderSetupInfo::new(
 				"anthropic",
 				Some(anthropic::ANTHROPIC_API_KEY_ENV),

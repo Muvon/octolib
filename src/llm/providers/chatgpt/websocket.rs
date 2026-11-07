@@ -206,6 +206,7 @@ async fn exchange(
 	stream_timeout: Option<Duration>,
 ) -> Result<(Value, Value)> {
 	let mut slot = session.lock().await;
+	let mut stream = StreamLog::default();
 	let operation = async {
 		// Taking ownership before awaiting ensures cancellation or failure drops the
 		// socket instead of exposing this response's remaining events to the next call.
@@ -213,6 +214,7 @@ async fn exchange(
 			Some(idle) => idle.resume().await?,
 			None => None,
 		};
+		let reused = connection.is_some();
 		let mut connection = match connection {
 			Some(connection) => connection,
 			None => connect(url, token, headers).await?,
@@ -222,17 +224,84 @@ async fn exchange(
 			None => full.clone(),
 		};
 		let message = Message::Text(serde_json::to_string(&request)?);
+		stream.start(reused, request.get("previous_response_id").is_some());
 		connection.socket.send(message).await?;
-		let response = read_response(&mut connection.socket, stream_timeout).await?;
+		let response = read_response(&mut connection.socket, stream_timeout, &mut stream).await?;
 		connection.state = Some(Continuation::from_response(full, &response)?);
 		*slot = Some(connection.park());
 		Ok((request, response))
 	};
-	match timeout {
+	let result = match timeout {
 		Some(timeout) => tokio::time::timeout(timeout, operation)
 			.await
-			.map_err(|_| timeout_error(timeout, "before the complete response (request deadline)"))?,
+			.map_err(|_| timeout_error(timeout, "before the complete response (request deadline)"))
+			.and_then(|result| result),
 		None => operation.await,
+	};
+	tracing::debug!(succeeded = result.is_ok(), "ChatGPT WebSocket response: {stream}");
+	result
+}
+
+/// What one response stream delivered. A deadline drops the request future, so
+/// this lives outside it and still tells a silent stall from a reply that kept
+/// sending events without finishing.
+#[derive(Default)]
+struct StreamLog {
+	sent_at: Option<Instant>,
+	reused: bool,
+	continued: bool,
+	events: BTreeMap<String, usize>,
+	first_event: Option<Duration>,
+	last_event: Option<(String, Instant)>,
+	longest_gap: Duration,
+}
+
+impl StreamLog {
+	fn start(&mut self, reused: bool, continued: bool) {
+		self.sent_at = Some(Instant::now());
+		self.reused = reused;
+		self.continued = continued;
+	}
+
+	fn record(&mut self, kind: &str) {
+		let now = Instant::now();
+		if let Some(previous) = self.last_event.as_ref().map(|(_, at)| *at).or(self.sent_at) {
+			self.longest_gap = self.longest_gap.max(now - previous);
+		}
+		if self.first_event.is_none() {
+			self.first_event = self.sent_at.map(|sent| now - sent);
+		}
+		*self.events.entry(kind.to_owned()).or_default() += 1;
+		self.last_event = Some((kind.to_owned(), now));
+	}
+}
+
+impl std::fmt::Display for StreamLog {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		let Some(sent_at) = self.sent_at else {
+			return f.write_str("request not sent");
+		};
+		write!(
+			f,
+			"{} request on a {} connection, {:.1}s since send",
+			if self.continued { "continued" } else { "full" },
+			if self.reused { "reused" } else { "new" },
+			sent_at.elapsed().as_secs_f64()
+		)?;
+		let (Some(first), Some((kind, at))) = (self.first_event, &self.last_event) else {
+			return f.write_str(", no events");
+		};
+		write!(
+			f,
+			", first event after {:.1}s, longest gap {:.1}s, last `{kind}` {:.1}s ago; events:",
+			first.as_secs_f64(),
+			self.longest_gap.as_secs_f64(),
+			at.elapsed().as_secs_f64()
+		)?;
+		for (kind, count) in &self.events {
+			write!(f, " {kind}={count}")?;
+		}
+		Ok(())
 	}
 }
 
@@ -300,7 +369,7 @@ fn timeout_error(timeout: Duration, phase: &str) -> anyhow::Error {
 	))
 }
 
-async fn read_response(socket: &mut transport::Socket, timeout: Option<Duration>) -> Result<Value> {
+async fn read_response(socket: &mut transport::Socket, timeout: Option<Duration>, stream: &mut StreamLog) -> Result<Value> {
 	let mut events = ResponseEvents::default();
 	let mut last_received = tokio::time::Instant::now();
 	loop {
@@ -316,12 +385,16 @@ async fn read_response(socket: &mut transport::Socket, timeout: Option<Duration>
 		match message {
 			transport::Event::Text(text) => {
 				last_received = tokio::time::Instant::now();
-				let event = serde_json::from_str(&text).context("Malformed ChatGPT WebSocket event")?;
+				let event: Value = serde_json::from_str(&text).context("Malformed ChatGPT WebSocket event")?;
+				stream.record(event["type"].as_str().unwrap_or("untyped"));
 				if let Some(response) = events.push(event)? {
 					return Ok(response);
 				}
 			}
-			transport::Event::Close(_) => break,
+			transport::Event::Close(_) => {
+				stream.record("close");
+				break;
+			}
 			transport::Event::Binary => anyhow::bail!("ChatGPT WebSocket returned a binary event; expected JSON text"),
 		}
 	}

@@ -52,6 +52,8 @@ const CACHE_PREWARM_MAX_TOKENS: u32 = 1;
 pub(crate) const OPENROUTER_API_KEY_ENV: &str = "OPENROUTER_API_KEY";
 const OPENROUTER_API_URL_ENV: &str = "OPENROUTER_API_URL";
 const OPENROUTER_API_URL: &str = "https://openrouter.ai/api/v1/chat/completions";
+/// Public model list (OpenAI `/v1/models` shape); answers without an API key.
+pub(crate) const OPENROUTER_MODELS_URL: &str = "https://openrouter.ai/api/v1/models";
 
 /// Routes whose upstream decodes against a `json_schema`, by model-id prefix.
 /// Schema requests also send `provider.require_parameters`, so they only reach

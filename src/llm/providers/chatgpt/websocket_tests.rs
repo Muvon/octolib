@@ -327,6 +327,25 @@ fn output_events_are_ordered_and_incomplete_responses_fail() {
 		.is_err());
 }
 
+#[test]
+fn stream_log_reports_connection_events_and_the_last_event() {
+	let mut stream = StreamLog::default();
+	assert_eq!(stream.to_string(), "request not sent");
+	stream.start(true, true);
+	let report = stream.to_string();
+	assert!(report.starts_with("continued request on a reused connection"), "{report}");
+	assert!(report.ends_with(", no events"), "{report}");
+	stream.record("response.output_text.delta");
+	stream.record("response.output_text.delta");
+	stream.record("response.completed");
+	let report = stream.to_string();
+	assert!(report.contains("last `response.completed`"), "{report}");
+	assert!(
+		report.ends_with("events: response.completed=1 response.output_text.delta=2"),
+		"{report}"
+	);
+}
+
 #[tokio::test]
 async fn concurrent_requests_share_one_socket_without_mixing_responses() {
 	let (listener, url) = server().await;

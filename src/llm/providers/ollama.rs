@@ -53,6 +53,8 @@ impl OllamaProvider {
 pub(crate) const OLLAMA_API_KEY_ENV: &str = "OLLAMA_API_KEY";
 const OLLAMA_API_URL_ENV: &str = "OLLAMA_API_URL";
 const OLLAMA_API_URL: &str = "https://ollama.com/v1/chat/completions";
+/// Public model list (OpenAI `/v1/models` shape); answers without an API key.
+pub(crate) const OLLAMA_MODELS_URL: &str = "https://ollama.com/v1/models";
 /// Ollama has no zero-output completion, so a pre-warm asks for the cheapest one.
 const CACHE_PREWARM_MAX_TOKENS: u32 = 1;
 
@@ -62,7 +64,7 @@ const CACHE_PREWARM_MAX_TOKENS: u32 = 1;
 /// these off-peak. Ollama lists no write rate, and `-` for cached input means
 /// input rate. `clef` is omitted because it publishes no output rate. Specific
 /// patterns come first.
-pub(crate) const PRICING: &[PricingTuple] = &[
+const PRICING: &[PricingTuple] = &[
 	("beam", 0.125, 0.40, 0.125, 0.015),
 	("deepseek-v4.1-flash", 0.30, 1.20, 0.30, 0.006),
 	("deepseek-v4-pro", 1.32, 3.96, 1.32, 0.044),

@@ -89,12 +89,25 @@ fn test_provider_setup_omits_pricing_patterns_and_remote_catalogs() {
 		"tinker",
 		"chatgpt",
 		"local",
+		"ollama",
 		"nvidia",
 		"octohub",
 		"opencode-zen",
 		"opencode-go",
 	] {
 		assert!(info(name).models.is_empty(), "unexpected local models for {name}");
+	}
+	assert_eq!(
+		info("openrouter").models_url,
+		Some("https://openrouter.ai/api/v1/models")
+	);
+	assert_eq!(info("ollama").models_url, Some("https://ollama.com/v1/models"));
+	for info in setup.iter().filter(|info| !info.models.is_empty()) {
+		assert_eq!(
+			info.models_url, None,
+			"{} has both local models and a models URL",
+			info.name
+		);
 	}
 	assert!(!info("moonshot").models.iter().any(|model| model == "kimi-k2.7"));
 	for pattern in [

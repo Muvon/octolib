@@ -53,5 +53,6 @@ pub use providers::{
 	AlibabaProvider, AmazonBedrockProvider, AnthropicProvider, BytePlusProvider, CerebrasProvider, CliProvider,
 	CloudflareWorkersAiProvider, DeepSeekProvider, FireworksProvider, GoogleStudioProvider, GoogleVertexProvider,
 	GroqProvider, IsoquantProvider, LocalProvider, MetaProvider, MinimaxProvider, MoonshotProvider, OctoHubProvider,
-	OllamaProvider, OpenAiProvider, OpenRouterProvider, TogetherProvider, WebWrightProvider, XaiProvider, ZaiProvider,
+	OllamaProvider, OpenAiProvider, OpenRouterProvider, ReflectionProvider, TogetherProvider, WebWrightProvider,
+	XaiProvider, ZaiProvider,
 };

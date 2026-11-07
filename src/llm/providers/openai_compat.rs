@@ -152,6 +152,12 @@ const LOW_MEDIUM_XHIGH: &[Effort] = &[Effort::Low, Effort::Medium, Effort::XHigh
 const UP_TO_XHIGH: &[Effort] = &[Effort::Low, Effort::Medium, Effort::High, Effort::XHigh];
 const FULL: &[Effort] = &[Effort::Low, Effort::Medium, Effort::High, Effort::XHigh, Effort::Max];
 
+/// Reflection answers 400 to any earlier assistant turn without non-empty
+/// `reasoning_content`, and Beam sometimes returns tool-call turns with none, so
+/// one such turn would fail every later request. This text was accepted live
+/// (2026-11-07), and Reflection's agent guide describes the same workaround.
+const MISSING_REASONING_PLACEHOLDER: &str = "(no reasoning recorded)";
+
 const fn levels(levels: &'static [Effort], none: bool) -> EffortLevels {
 	EffortLevels { levels, none }
 }
@@ -194,6 +200,8 @@ const fn levels(levels: &'static [Effort], none: bool) -> EffortLevels {
 ///   medium reasoning only, and high-to-max requires Premium. The client
 ///   cannot see the account tier, so wren-r1 clamps to low/medium; higher
 ///   requests collapse onto `medium`.
+/// - Reflection (reasoning guide, Nov 2026): Beam takes the five levels and
+///   always reasons; `none` is a 400 (live, 2026-11-07).
 const HOSTED_EFFORT_LEVELS: &[(&str, &str, EffortLevels)] = &[
 	("alibaba", "deepseek-v4", levels(FULL, true)),
 	("alibaba", "glm-5.3", levels(LOW_HIGH_MAX, false)),
@@ -233,6 +241,7 @@ const HOSTED_EFFORT_LEVELS: &[(&str, &str, EffortLevels)] = &[
 	("cerebras", "qwen-3.8", levels(LOW_MEDIUM_HIGH, true)),
 	("groq", "qwen3.8", levels(LOW_MEDIUM_HIGH, true)),
 	("webwright", "wren-r1", levels(LOW_MEDIUM, false)),
+	("reflection", "beam", levels(FULL, false)),
 ];
 
 fn hosted_effort_levels(provider_name: &str, model: &str) -> Option<&'static EffortLevels> {
@@ -430,7 +439,7 @@ async fn chat_completion_raw(
 fn configure_streaming(provider: &str, api_url: &str, request: &mut serde_json::Value) -> Result<()> {
 	let include_usage = match provider {
 		"alibaba" | "amazon" | "byteplus" | "fireworks" | "google-studio" | "google-vertex" | "groq" | "inception"
-		| "isoquant" | "local" | "nvidia" | "ollama" | "opencode-zen" | "opencode-go" | "meta" => true,
+		| "isoquant" | "local" | "nvidia" | "ollama" | "opencode-zen" | "opencode-go" | "meta" | "reflection" => true,
 		"cerebras" | "cloudflare" | "featherless" | "xiaomi" => false,
 		// No verified streaming contract for these endpoints yet.
 		"tinker" | "webwright" | "hetzner" => return Ok(()),
@@ -761,10 +770,25 @@ fn convert_messages(messages: &[Message], provider_name: &str, model: &str) -> V
 	// Xiaomi MiMo returns 400 when a thinking-mode tool-call turn comes back
 	// without its `reasoning_content`, and recommends replaying every turn's.
 	// Isoquant's tool-calling guide asks to preserve returned reasoning.
+	let requires_reasoning_content = provider_name.eq_ignore_ascii_case("reflection");
 	let replays_reasoning_content = (provider_name.eq_ignore_ascii_case("alibaba")
 		&& crate::llm::providers::alibaba::preserves_historical_thinking(model))
 		|| provider_name.eq_ignore_ascii_case("xiaomi")
-		|| provider_name.eq_ignore_ascii_case("isoquant");
+		|| provider_name.eq_ignore_ascii_case("isoquant")
+		|| requires_reasoning_content;
+	let reasoning_content_of = |message: &crate::llm::types::Message| {
+		if !replays_reasoning_content {
+			return None;
+		}
+		let reasoning = message.thinking.as_ref().map(|t| t.content.clone());
+		if requires_reasoning_content {
+			reasoning
+				.filter(|content| !content.trim().is_empty())
+				.or_else(|| Some(MISSING_REASONING_PLACEHOLDER.to_string()))
+		} else {
+			reasoning
+		}
+	};
 
 	for (msg_idx, message) in messages.iter().enumerate() {
 		let extra_content = message
@@ -825,11 +849,7 @@ fn convert_messages(messages: &[Message], provider_name: &str, model: &str) -> V
 					} else {
 						None
 					},
-					reasoning_content: if replays_reasoning_content {
-						message.thinking.as_ref().map(|t| t.content.clone())
-					} else {
-						None
-					},
+					reasoning_content: reasoning_content_of(message),
 				});
 			}
 			"user" | "assistant" | "system" => {
@@ -892,8 +912,8 @@ fn convert_messages(messages: &[Message], provider_name: &str, model: &str) -> V
 					} else {
 						None
 					},
-					reasoning_content: if message.role == "assistant" && replays_reasoning_content {
-						message.thinking.as_ref().map(|t| t.content.clone())
+					reasoning_content: if message.role == "assistant" {
+						reasoning_content_of(message)
 					} else {
 						None
 					},

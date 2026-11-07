@@ -18,6 +18,7 @@
 | Together AI | ✅ Full Support | Multi-Provider Proxy, Vision, Tools, Structured Output |
 | Cerebras | ✅ Full Support | Fast Inference, Structured Output |
 | Isoquant | ✅ Supported | Models Read From Its Catalog, Vision, Tools, Structured Output, Caching, Zero Data Retention |
+| Reflection AI | ✅ Supported | Beam Reasoning Model, Tools, Structured Output, Caching |
 | OctoHub | ✅ Supported | Local AI Serving |
 | Google Vertex AI | ✅ Supported | Enterprise AI Integration |
 | Google AI Studio | ✅ Supported | Gemini API, API-Key Auth |

@@ -19,8 +19,8 @@ use crate::llm::providers::{
 	CliProvider, CloudflareWorkersAiProvider, DeepSeekProvider, FeatherlessProvider, FireworksProvider,
 	GoogleStudioProvider, GoogleVertexProvider, GroqProvider, HetznerProvider, InceptionProvider, IsoquantProvider,
 	LocalProvider, MetaProvider, MinimaxProvider, MoonshotProvider, NvidiaProvider, OctoHubProvider, OllamaProvider,
-	OpenAiProvider, OpenCodeGoProvider, OpenCodeZenProvider, OpenRouterProvider, TinkerProvider, TogetherProvider,
-	WebWrightProvider, XaiProvider, XiaomiProvider, ZaiProvider,
+	OpenAiProvider, OpenCodeGoProvider, OpenCodeZenProvider, OpenRouterProvider, ReflectionProvider, TinkerProvider,
+	TogetherProvider, WebWrightProvider, XaiProvider, XiaomiProvider, ZaiProvider,
 };
 use crate::llm::traits::AiProvider;
 use anyhow::Result;
@@ -82,6 +82,7 @@ impl ProviderFactory {
             "octohub" => Ok(Box::new(OctoHubProvider::new())),
             "opencode-zen" => Ok(Box::new(OpenCodeZenProvider::new())),
             "opencode-go" => Ok(Box::new(OpenCodeGoProvider::new())),
+            "reflection" => Ok(Box::new(ReflectionProvider::new())),
             "tinker" => Ok(Box::new(TinkerProvider::new())),
             "together" => Ok(Box::new(TogetherProvider::new())),
             "webwright" => Ok(Box::new(WebWrightProvider::new())),
@@ -91,7 +92,7 @@ impl ProviderFactory {
             "cli" => Err(anyhow::anyhow!(
                 "CLI provider requires a model string like 'cli:<backend>/<model>'. Use ProviderFactory::get_provider_for_model instead."
             )),
-            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported: openai, chatgpt, anthropic, openrouter, cerebras, local, ollama, google-vertex, google-studio, groq, alibaba, amazon, cloudflare, deepseek, featherless, fireworks, hetzner, inception, isoquant, meta, minimax, moonshot, nvidia, octohub, opencode-zen, opencode-go, tinker, together, webwright, xai, xiaomi, zai, byteplus, cli", provider_name))
+            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported: openai, chatgpt, anthropic, openrouter, cerebras, local, ollama, google-vertex, google-studio, groq, alibaba, amazon, cloudflare, deepseek, featherless, fireworks, hetzner, inception, isoquant, meta, minimax, moonshot, nvidia, octohub, opencode-zen, opencode-go, reflection, tinker, together, webwright, xai, xiaomi, zai, byteplus, cli", provider_name))
         }
 	}
 
@@ -145,6 +146,7 @@ impl ProviderFactory {
 			"octohub",
 			"opencode-zen",
 			"opencode-go",
+			"reflection",
 			"tinker",
 			"together",
 			"webwright",

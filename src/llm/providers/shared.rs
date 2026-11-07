@@ -503,6 +503,7 @@ const ALWAYS_THINKS: &[(&str, &str)] = &[
 	("opencode-go", "glm-5.3"),
 	("fireworks", "glm-5p3"),
 	("fireworks", "qwen3p8-2p4t"),
+	("reflection", "beam"),
 ];
 
 /// The effort `provider_name` can run `model` at. On a model in

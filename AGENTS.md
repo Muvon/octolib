@@ -1,6 +1,6 @@
 #! Octolib — AI Provider Library Guide
 
-Rust library providing a unified interface to multiple AI providers (OpenAI, Anthropic, OpenRouter, NVIDIA, Ollama, Google Vertex, Google Studio, Amazon, Cloudflare, DeepSeek, Moonshot, Z.ai, BytePlus, Alibaba, Groq, Cerebras, Together, Featherless, Fireworks, Hetzner, Inception, Isoquant, OpenCode Zen/Go, OctoHub, CLI proxies). Handles chat completions, embeddings, reranking, cost tracking, caching, structured output, vision, and tool calls. No panics, no `println!`, always `Result`. Copyright year is **2026**.
+Rust library providing a unified interface to multiple AI providers (OpenAI, Anthropic, OpenRouter, NVIDIA, Ollama, Google Vertex, Google Studio, Amazon, Cloudflare, DeepSeek, Moonshot, Z.ai, BytePlus, Alibaba, Groq, Cerebras, Together, Featherless, Fireworks, Hetzner, Inception, Isoquant, Reflection, OpenCode Zen/Go, OctoHub, CLI proxies). Handles chat completions, embeddings, reranking, cost tracking, caching, structured output, vision, and tool calls. No panics, no `println!`, always `Result`. Copyright year is **2026**.
 
 ## Project Structure
 
@@ -48,6 +48,7 @@ src/
 │       ├── hetzner.rs              → Proxy — delegates to openai_compat (free, experimental, fixed MODELS table)
 │       ├── inception.rs           → Native — PRICING table (Mercury diffusion LLMs, strict catalogue)
 │       ├── isoquant.rs             → Proxy — delegates to openai_compat (models read from `/v1/models`, zero data retention required)
+│       ├── reflection.rs           → Native — PRICING table (Beam, always reasons, strict catalogue)
 │       ├── tinker.rs               → Proxy — delegates to openai_compat (Inkling family + sampler checkpoints)
 │       ├── opencode.rs             → Proxy — Zen + Go providers, delegates to openai_compat (shared OPENCODE_API_KEY)
 │       ├── fireworks.rs            → Proxy — delegates to openai_compat (auto prefix-cache)
@@ -180,6 +181,7 @@ every provider is behind Cloudflare, nor a guarantee against slow time-to-first-
 | Featherless | Chat SSE; final usage is automatic, including cost where billed per request; [completion protocol](https://featherless.ai/docs/completions). |
 | Inception | Chat SSE with requested usage; [Chat API](https://docs.inceptionlabs.ai/api-reference/chat/create-a-chat-completion). Do not enable the separate diffusion-preview mode. |
 | Isoquant | Chat SSE with requested usage; [API reference](https://isoquant.ai/docs) lists `stream_options.include_usage` and `[DONE]`; verified live on both models (2026-11-07). |
+| Reflection | Chat SSE with requested usage; [streaming guide](https://developers.reflection.ai/streaming.md) documents `include_usage`, `[DONE]`, in-band errors and padding; verified live on Beam (2026-11-07). |
 | Meta | Chat SSE with requested usage; [streaming and usage recipe](https://dev.meta.ai/docs/cookbook/streaming-responses). |
 | Xiaomi | Chat SSE without undocumented `stream_options`; [Chat API](https://mimo.mi.com/docs/en-US/api/chat/openai-api) specifies streamed usage. |
 | Ollama | Chat SSE with requested usage on `/v1/chat/completions`; [OpenAI compatibility](https://docs.ollama.com/api/openai-compatibility). A native `/api/chat` URL override stays non-streaming because its protocol is NDJSON. |
@@ -207,7 +209,7 @@ Do not add a generic retry-to-non-streaming fallback.
 
 ### Provider Shape: Native vs. Proxy
 
-**Native** (OpenAI, Anthropic, Amazon, DeepSeek, Moonshot, MiniMax, Z.ai, BytePlus, Alibaba, Groq, Inception):
+**Native** (OpenAI, Anthropic, Amazon, DeepSeek, Moonshot, MiniMax, Z.ai, BytePlus, Alibaba, Groq, Inception, Reflection):
 - Own `PRICING` const table in the provider file — `(model, input, output, cache_write, cache_read)` per 1M tokens
 - Own `chat_completion()` implementation with provider-specific request/response structs
 - Override `supports_caching()`, `supports_vision()`, `get_max_input_tokens()`, `supports_structured_output()` directly

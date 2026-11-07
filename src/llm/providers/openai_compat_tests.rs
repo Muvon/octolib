@@ -882,6 +882,55 @@ fn test_xiaomi_replays_every_reasoning_turn_as_reasoning_content() {
 	assert!(converted.iter().all(|message| message.reasoning.is_none()));
 }
 
+/// Reflection answers 400 to an assistant turn without non-empty
+/// `reasoning_content`, so a turn with none, or an empty one, gets a placeholder.
+#[test]
+fn test_reflection_sends_reasoning_content_on_every_assistant_turn() {
+	let thinking = |text: &str| ThinkingBlock {
+		content: text.to_string(),
+		tokens: 4,
+	};
+	let messages = [
+		Message::user("fix the bug"),
+		Message::assistant("first").with_thinking(thinking("plan")),
+		Message::assistant("second"),
+		Message::assistant("third").with_thinking(thinking("")),
+	];
+
+	let converted = convert_messages(&messages, "reflection", "Beam-1.0-501B-A23B");
+	let replayed: Vec<Option<&str>> = converted
+		.iter()
+		.map(|message| message.reasoning_content.as_deref())
+		.collect();
+	assert_eq!(
+		replayed,
+		[
+			None,
+			Some("plan"),
+			Some(MISSING_REASONING_PLACEHOLDER),
+			Some(MISSING_REASONING_PLACEHOLDER),
+		]
+	);
+}
+
+#[test]
+fn test_reflection_reasoning_effort_never_sends_none() {
+	use Effort::{High, Low, Max, Medium, None, XHigh};
+
+	assert_effort_ladder(
+		"reflection",
+		"Beam-1.0-501B-A23B",
+		&[
+			(None, "low"),
+			(Low, "low"),
+			(Medium, "medium"),
+			(High, "high"),
+			(XHigh, "xhigh"),
+			(Max, "max"),
+		],
+	);
+}
+
 #[test]
 fn test_xiaomi_sends_native_json_schema() {
 	let schema = serde_json::json!({
@@ -925,6 +974,7 @@ fn streaming_defaults_and_documented_exceptions() {
 		"ollama",
 		"opencode-zen",
 		"opencode-go",
+		"reflection",
 		"featherless",
 		"cerebras",
 		"cloudflare",

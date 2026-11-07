@@ -68,6 +68,7 @@ const TARGETS: &[(&str, usize)] = &[
 	("isoquant:deepseek-v4.1-flash-1017-fast", DEFAULT_PROMPT_TOKENS),
 	("isoquant:glm-5.3-flash", DEFAULT_PROMPT_TOKENS),
 	("reflection:Beam-1.0-501B-A23B", 32_000),
+	("inception:mercury-3", DEFAULT_PROMPT_TOKENS),
 ];
 
 const DEFAULT_PROMPT_TOKENS: usize = 8_000;

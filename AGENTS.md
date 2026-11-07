@@ -84,6 +84,7 @@ files declare them with `#[cfg(test)]`, `#[path = "<name>_tests.rs"]`, and
 | Fix capabilities (vision/context/structured) | `src/llm/reference_capabilities.rs` for proxies; override trait methods for native |
 | Add structured output to a provider | `supports_structured_output()` + `response_format` in request + parse `structured_output` |
 | Add caching to a provider | `supports_caching()` + cache headers in request + parse cache token fields |
+| Set or measure a provider's cache lifetime | `cache_lifetime()` in the provider file; see "Cache lifetime: measure it live" |
 | Configure reasoning / thinking effort | `src/llm/types.rs` → `ReasoningEffort` enum; per-provider mapping inside each `chat_completion()` |
 | Tool call handling | `src/llm/strategies.rs` → `AnthropicStrategy` / `OpenAIStrategy` |
 | Shared HTTP / cache helpers | `src/llm/providers/shared.rs` |
@@ -378,6 +379,7 @@ Files still showing `Copyright 2025` (`src/storage.rs`, `src/embedding/constants
 8. Add example in `examples/`
 9. Do "Every new model or maker: routers must price it too" below for each model
 10. Do "Structured output: prove it live" below
+11. If the provider caches, do "Cache lifetime: measure it live" below
 
 ### OpenAI-Compatible Proxy
 
@@ -388,6 +390,7 @@ Files still showing `Copyright 2025` (`src/storage.rs`, `src/embedding/constants
 5. Add missing model families to `reference_pricing.rs` and `reference_capabilities.rs` if needed
 6. Register in `providers/mod.rs`, `factory.rs`, `lib.rs`; add example
 7. Do "Structured output: prove it live" below
+8. If the provider caches, do "Cache lifetime: measure it live" below
 
 ### Every new model or maker: routers must price it too
 
@@ -432,6 +435,45 @@ mode only from a live probe:
    Above the override, cite the probe: models, call count, endpoint, date.
 5. If the endpoint ignores `response_format`, do not send it: leave
    `supports_structured_output` false so the forced-tool path takes over (MiniMax).
+
+### Cache lifetime: measure it live
+
+`AiProvider::cache_lifetime(model, use_long_cache)` is how long a written prompt cache is
+known to survive without use. Octomind uses it twice: keepalive pings fire just before it
+runs out, and idle compaction folds history on the next user message once the idle gap
+passes it. A value that is too long skips compaction, so the next request re-writes a
+cold cache at full input price. A value that is too short wastes pings and folds a cache
+that was still warm. Return `None` when the lifetime is unknown; callers then do nothing.
+
+The value is a floor: the cache is known to survive at least this long. Docs usually give
+an upper bound ("up to 24 hours", "cleared after 2 hours without use") or nothing at all
+("no fixed validity period"), and neither is a floor. Lifetimes also differ by model on
+one host: on Alibaba's Token Plan endpoint on 2026-11-07, `qwen3.7-plus` lost its cache
+after about 60 seconds while `qwen3.8-flash` still hit after 7 minutes. So measure each
+model family:
+
+1. Build a prompt of several thousand tokens, above the provider's minimum cacheable
+   size, with a unique run stamp in the text so no earlier request can have cached it.
+2. Send it once (the seed), wait a fixed delay with no other traffic on that prompt, then
+   send it again (the probe). Read the cached-token counter from the probe's usage:
+   `prompt_tokens_details.cached_tokens`, `cache_read_input_tokens` or
+   `input_tokens_details.cached_tokens`.
+3. Run two samples per delay, all in parallel, with delays spread over the range you care
+   about (1, 3, 5, 7, 10, 15, 20, 30, 45 and 60 minutes). Both samples missing means the
+   cache expired; one miss among hits is usually routing, not expiry.
+4. Run again with delays between the last delay where every sample hit and the first
+   where every sample missed, to narrow the boundary.
+5. Send the request the way octolib does: the same endpoint (pay-as-you-go or the plan URL
+   from `*_API_URL`), the same cache markers and TTL, the same thinking setting.
+6. Return a lifetime at or below the last delay where every sample hit. A provider whose
+   results depend on routing gets `None` (MiniMax), and so does one whose cache is too
+   short to keep alive or compact for.
+7. Above the `cache_lifetime` override, record the evidence: date, endpoint, models,
+   delays, hit counts, and the doc quote if there is one. Pin the value in
+   `<provider>_tests.rs`.
+
+The probe measures an unused cache. Whether a hit restarts the clock is a separate
+question; take it from the docs, or probe with an extra hit partway through the delay.
 
 ### Embedding Provider
 

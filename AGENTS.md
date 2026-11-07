@@ -450,7 +450,10 @@ an upper bound ("up to 24 hours", "cleared after 2 hours without use") or nothin
 ("no fixed validity period"), and neither is a floor. Lifetimes also differ by model on
 one host: on Alibaba's Token Plan endpoint on 2026-11-07, `qwen3.7-plus` lost its cache
 after about 60 seconds while `qwen3.8-flash` still hit after 7 minutes. So measure each
-model family:
+model family. `examples/cache_lifetime_probe.rs` does the steps below through octolib's own
+provider code; add each new model to its `TARGETS` list and run it filtered, e.g.
+`cargo run --example cache_lifetime_probe -- alibaba` (keys from the usual `*_API_KEY`
+variables; models without a key are skipped).
 
 1. Build a prompt of several thousand tokens, above the provider's minimum cacheable
    size, with a unique run stamp in the text so no earlier request can have cached it.

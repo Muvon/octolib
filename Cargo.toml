@@ -128,6 +128,10 @@ name = "inception_chat"
 required-features = ["llm"]
 
 [[example]]
+name = "cache_lifetime_probe"
+required-features = ["llm"]
+
+[[example]]
 name = "isoquant_chat"
 required-features = ["llm"]
 

@@ -186,6 +186,17 @@ fn unprobed_models_do_not_claim_schema_enforcement() {
 }
 
 #[test]
+fn cache_lifetime_is_the_measured_hour_only_on_deepseek() {
+	let provider = IsoquantProvider::new();
+	assert_eq!(
+		provider.cache_lifetime("deepseek-v4.1-flash-1017-fast", false),
+		Some(std::time::Duration::from_secs(3600))
+	);
+	assert_eq!(provider.cache_lifetime("glm-5.3-flash", false), None);
+	assert_eq!(provider.cache_lifetime("model-released-tomorrow", false), None);
+}
+
+#[test]
 fn pricing_uses_isoquant_rates() {
 	let provider = IsoquantProvider::new();
 	let deepseek = provider.get_model_pricing(DEEPSEEK).unwrap();

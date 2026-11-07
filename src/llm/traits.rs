@@ -189,6 +189,9 @@ pub trait AiProvider: Send + Sync {
 	///   15m elsewhere.
 	/// - **Google AI Studio** — measured 5m on gemini-4-argon, gemini-3.8-flash and
 	///   gemini-3.6-flash; `None` on other Gemini models.
+	/// - **Isoquant** — measured 60m on deepseek-v4.1-flash-1017-fast; `None` on
+	///   glm-5.3-flash, which missed at 1m.
+	/// - **Reflection** — measured 10m on Beam.
 	/// - **OpenAI GPT-5.6 and later** — documented "Minimum lifetime 30 minutes".
 	/// - **Z.ai, Xiaomi** — measured: 60m idle still hit; the true limit is unknown.
 	/// - **Everyone else** — `None`: docs state only "typically" figures or upper

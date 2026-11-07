@@ -96,6 +96,14 @@ impl AiProvider for ReflectionProvider {
 		true
 	}
 
+	/// The docs give no lifetime. Measured 2026-11-07 on `/openai/v1/chat/completions`:
+	/// unique ~36k-token prompts (a ~5k one never hit) re-sent once after an idle delay,
+	/// two samples per delay. Every sample hit up to 10m; at 15m and 30m one of two
+	/// missed, and from 45m every sample missed.
+	fn cache_lifetime(&self, _model: &str, _use_long_cache: bool) -> Option<std::time::Duration> {
+		Some(std::time::Duration::from_secs(10 * 60))
+	}
+
 	fn supports_structured_output(&self, _model: &str) -> bool {
 		true
 	}

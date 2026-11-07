@@ -92,6 +92,9 @@ const KNOWN_MODELS: &[(&str, f64, f64, f64, &[&str])] = &[
 /// (`/v1/chat/completions`, 2026-11-07). Models added later take the forced-tool
 /// path until probed.
 const SCHEMA_ENFORCING_MODELS: &[&str] = &["deepseek-v4.1-flash-1017-fast", "glm-5.3-flash"];
+/// The only model with a measured cache lifetime; see `cache_lifetime`.
+const MEASURED_CACHE_MODEL: &str = "deepseek-v4.1-flash-1017-fast";
+const MEASURED_CACHE_LIFETIME: std::time::Duration = std::time::Duration::from_secs(60 * 60);
 
 #[derive(Debug, Clone)]
 struct IsoquantModel {
@@ -340,6 +343,15 @@ impl AiProvider for IsoquantProvider {
 		known_model(model)
 			.and_then(|entry| entry.pricing)
 			.is_some_and(|pricing| pricing.cache_read_price_per_1m < pricing.input_price_per_1m)
+	}
+
+	/// The docs give no lifetime. Measured 2026-11-07 on `/v1/chat/completions`: unique
+	/// ~3.5k-token prompts re-sent once after an idle delay, two samples per delay.
+	/// deepseek-v4.1-flash-1017-fast hit on every sample from 1m to 60m. glm-5.3-flash
+	/// missed one sample at 1m and every sample from 15m, so it has no lifetime it is
+	/// known to survive.
+	fn cache_lifetime(&self, model: &str, _use_long_cache: bool) -> Option<std::time::Duration> {
+		(normalize_model_name(model) == MEASURED_CACHE_MODEL).then_some(MEASURED_CACHE_LIFETIME)
 	}
 
 	fn supports_structured_output(&self, model: &str) -> bool {

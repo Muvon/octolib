@@ -42,6 +42,10 @@ fn declares_probed_capabilities() {
 	assert!(provider.supports_required_tool_choice(BEAM));
 	assert_eq!(provider.get_max_input_tokens(BEAM), 1_048_576);
 	assert_eq!(
+		provider.cache_lifetime(BEAM, false),
+		Some(std::time::Duration::from_secs(600))
+	);
+	assert_eq!(
 		provider.supported_sampling_params(BEAM),
 		SamplingSupport::TEMPERATURE_AND_TOP_P
 	);

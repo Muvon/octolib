@@ -156,6 +156,7 @@ const QWEN_PLUS_LONG_CONTEXT_THRESHOLD: u64 = 256_000;
 // (token-plan.ap-southeast-1): unique 3.5k-12k-token prompts re-sent once after an idle
 // delay, two samples per delay.
 // - deepseek-v4.1-flash: every sample hit up to 30m, both missed at 45m and 60m.
+// - qwen3.8-max: every sample hit up to 30m, the longest delay tried.
 // - glm-5.3, qwen3.8-flash: every sample hit up to 10m. At 15m qwen3.8-flash missed both
 //   and glm-5.3 one of two; later hits on qwen3.8-flash (30m, one at 60m) came after
 //   misses, so they are routing, not a longer lifetime.
@@ -164,6 +165,7 @@ const MEASURED_CACHE_LIFETIMES: &[(&str, std::time::Duration)] = &[
 	("deepseek-v4.1-flash", std::time::Duration::from_secs(30 * 60)),
 	("glm-5.3", std::time::Duration::from_secs(10 * 60)),
 	("qwen3.8-flash", std::time::Duration::from_secs(10 * 60)),
+	("qwen3.8-max", std::time::Duration::from_secs(30 * 60)),
 ];
 // About a minute is too short for a keepalive or an idle compaction to pay off.
 const SHORT_CACHE_MODELS: &[&str] = &["qwen3.7-plus"];

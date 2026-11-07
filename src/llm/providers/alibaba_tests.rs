@@ -30,6 +30,7 @@ fn cache_lifetime_follows_the_measured_implicit_cache() {
 	assert_eq!(provider.cache_lifetime("glm-5.3", false), minutes(10));
 	assert_eq!(provider.cache_lifetime("qwen3.8-flash", true), minutes(10));
 	assert_eq!(provider.cache_lifetime("deepseek-v4.1-flash", false), minutes(30));
+	assert_eq!(provider.cache_lifetime("qwen3.8-max", false), minutes(30));
 	assert_eq!(provider.cache_lifetime("qwen3.7-plus", false), None);
 	assert_eq!(provider.cache_lifetime("kimi-k3", false), minutes(15));
 }

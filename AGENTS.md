@@ -39,7 +39,7 @@ src/
 │       ├── nvidia.rs               → Proxy — delegates to openai_compat, reference pricing
 │       ├── cerebras.rs             → Proxy — delegates to openai_compat, reference pricing
 │       ├── together.rs             → Proxy — delegates to openai_compat, reference pricing
-│       ├── ollama.rs               → Proxy — delegates to openai_compat, reference pricing
+│       ├── ollama.rs               → Proxy — delegates to openai_compat, own PRICING for cloud rates with reference fallback, keep_alive pre-warm
 │       ├── local.rs                → Proxy — delegates to openai_compat, reference pricing
 │       ├── cloudflare.rs           → Proxy — delegates to openai_compat
 │       ├── openrouter.rs           → Proxy — delegates to openai_compat

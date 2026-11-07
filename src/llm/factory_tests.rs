@@ -159,7 +159,7 @@ fn test_provider_capabilities() {
 	let ollama = ProviderFactory::create_provider("ollama").unwrap();
 	assert_eq!(ollama.name(), "ollama");
 	assert!(ollama.supports_model("llama3.2"));
-	assert!(!ollama.supports_caching("llama3.2"));
+	assert!(ollama.supports_caching("llama3.2"));
 
 	let cerebras = ProviderFactory::create_provider("cerebras").unwrap();
 	assert_eq!(cerebras.name(), "cerebras");

@@ -386,6 +386,14 @@ async fn chat_completion_raw(
 		request_body["max_tokens"] = serde_json::json!(params.max_tokens);
 	}
 
+	// `keep_alive` is an Ollama extension to this API. Sending it pins the unload
+	// timer to the TTL `OllamaProvider::keepalive_policy` pings against, whatever
+	// the server's default is.
+	if config.provider_name == "ollama" {
+		request_body["keep_alive"] =
+			serde_json::json!(crate::llm::config::CacheTTL::from_long_cache_flag(params.use_long_cache).to_string());
+	}
+
 	// Pass-through reasoning_effort as a top-level OpenAI-compat field.
 	// Many providers (NVIDIA, Cerebras, Together, Groq, Fireworks, Cloudflare, Featherless,
 	// OpenRouter, OctoHub, Google Vertex via OpenAI-compat) accept the standard

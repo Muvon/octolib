@@ -34,12 +34,15 @@
 //! Options: `--delays <seconds,...>`, `--samples <n>` (per delay),
 //! `--prompt-tokens <n>` (overrides every model's prompt size), `--long-cache`
 //! (asks providers with a long TTL for it). Models whose provider has no API
-//! key are skipped.
+//! key are skipped. Once every sample of a model missed at two delays in a row,
+//! its longer delays are cancelled: the cache is gone and waiting adds nothing.
 
 use std::collections::BTreeMap;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use octolib::llm::{ChatCompletionParams, Message, ProviderFactory, ReasoningEffort};
+use tokio::sync::watch;
+use tokio::task::JoinSet;
 
 /// Every model measured so far, with the prompt size its cache needs.
 /// Gemini caches nothing under 4,096 tokens; Beam missed at ~5k and hit at ~36k.
@@ -77,6 +80,9 @@ const MAX_OUTPUT_TOKENS: u32 = 256;
 const MAX_RETRIES: u32 = 2;
 /// Seeds start this far apart so the first wave does not hit rate limits.
 const SEED_SPACING: Duration = Duration::from_millis(500);
+/// One delay where every sample missed can be routing; this many in a row mean the cache
+/// is gone, so the model's longer delays are cancelled instead of waited out.
+const STOP_AFTER_MISSED_DELAYS: usize = 2;
 
 struct Options {
 	filters: Vec<String>,
@@ -111,12 +117,15 @@ fn parse_options() -> anyhow::Result<Options> {
 			filter => options.filters.push(filter.to_lowercase()),
 		}
 	}
+	options.delays.sort_unstable();
+	options.delays.dedup();
 	Ok(options)
 }
 
 enum Outcome {
 	Hit,
 	Miss,
+	Cancelled,
 	Failed(String),
 }
 
@@ -125,6 +134,7 @@ impl Outcome {
 		match self {
 			Outcome::Hit => 'H',
 			Outcome::Miss => 'm',
+			Outcome::Cancelled => '-',
 			Outcome::Failed(_) => 'E',
 		}
 	}
@@ -151,12 +161,25 @@ fn probe_prompt(stamp: &str, tokens: usize) -> String {
 	prompt
 }
 
-async fn sample(spec: &'static str, prompt: String, start_after: Duration, delay: u64, long_cache: bool) -> Outcome {
-	tokio::time::sleep(start_after).await;
+async fn sample(
+	spec: &'static str,
+	prompt: String,
+	start_after: Duration,
+	delay: u64,
+	long_cache: bool,
+	mut stop: watch::Receiver<bool>,
+) -> Outcome {
+	tokio::select! {
+		_ = tokio::time::sleep(start_after) => {}
+		_ = stop.wait_for(|stopped| *stopped) => return Outcome::Cancelled,
+	}
 	if let Err(error) = cached_tokens(spec, &prompt, long_cache).await {
 		return Outcome::Failed(format!("seed: {error}"));
 	}
-	tokio::time::sleep(Duration::from_secs(delay)).await;
+	tokio::select! {
+		_ = tokio::time::sleep(Duration::from_secs(delay)) => {}
+		_ = stop.wait_for(|stopped| *stopped) => return Outcome::Cancelled,
+	}
 	match cached_tokens(spec, &prompt, long_cache).await {
 		Ok(0) => Outcome::Miss,
 		Ok(_) => Outcome::Hit,
@@ -179,6 +202,26 @@ fn held_up_to(by_delay: &BTreeMap<u64, Vec<Outcome>>) -> Option<u64> {
 		.take_while(|(_, outcomes)| outcomes.iter().all(|outcome| matches!(outcome, Outcome::Hit)))
 		.map(|(delay, _)| *delay)
 		.last()
+}
+
+/// True once every sample missed at `STOP_AFTER_MISSED_DELAYS` consecutive delays,
+/// counting only from the shortest delay up to the first one still running.
+fn cache_gone(by_delay: &BTreeMap<u64, Vec<Outcome>>, delays: &[u64], samples: usize) -> bool {
+	let mut missed_in_a_row = 0;
+	for delay in delays {
+		let Some(outcomes) = by_delay.get(delay).filter(|outcomes| outcomes.len() == samples) else {
+			return false;
+		};
+		if outcomes.iter().all(|outcome| matches!(outcome, Outcome::Miss)) {
+			missed_in_a_row += 1;
+			if missed_in_a_row == STOP_AFTER_MISSED_DELAYS {
+				return true;
+			}
+		} else {
+			missed_in_a_row = 0;
+		}
+	}
+	false
 }
 
 #[tokio::main]
@@ -204,32 +247,46 @@ async fn main() -> anyhow::Result<()> {
 		anyhow::bail!("no model matches the filters and has an API key");
 	}
 
-	let mut tasks = Vec::new();
+	let stops: BTreeMap<&str, watch::Sender<bool>> = targets
+		.iter()
+		.map(|(spec, _, _)| (*spec, watch::channel(false).0))
+		.collect();
+	let mut tasks = JoinSet::new();
+	let mut started: u32 = 0;
 	for &(spec, tokens, _) in &targets {
 		for &delay in &options.delays {
 			for index in 0..options.samples {
 				let prompt = probe_prompt(&format!("{run}-{spec}-{delay}-{index}"), tokens);
-				let start_after = SEED_SPACING * tasks.len() as u32;
-				let task = tokio::spawn(sample(spec, prompt, start_after, delay, options.long_cache));
-				tasks.push((spec, delay, task));
+				let start_after = SEED_SPACING * started;
+				let stop = stops[spec].subscribe();
+				let long_cache = options.long_cache;
+				tasks.spawn(async move {
+					let outcome = sample(spec, prompt, start_after, delay, long_cache, stop).await;
+					(spec, delay, outcome)
+				});
+				started += 1;
 			}
 		}
 	}
-	let longest = options.delays.iter().max().copied().unwrap_or(0);
+	let longest = options.delays.last().copied().unwrap_or(0);
 	println!(
-		"{} calls across {} models; done in about {}",
-		tasks.len() * 2,
+		"up to {} calls across {} models; done in at most {}",
+		started * 2,
 		targets.len(),
-		format_delay(longest + (SEED_SPACING * tasks.len() as u32).as_secs())
+		format_delay(longest + (SEED_SPACING * started).as_secs())
 	);
 
 	let mut results: BTreeMap<&str, BTreeMap<u64, Vec<Outcome>>> = BTreeMap::new();
-	for (spec, delay, task) in tasks {
-		let outcome = task.await.unwrap_or_else(|error| Outcome::Failed(error.to_string()));
-		results.entry(spec).or_default().entry(delay).or_default().push(outcome);
+	while let Some(joined) = tasks.join_next().await {
+		let (spec, delay, outcome) = joined?;
+		let by_delay = results.entry(spec).or_default();
+		by_delay.entry(delay).or_default().push(outcome);
+		if cache_gone(by_delay, &options.delays, options.samples) {
+			stops[spec].send_replace(true);
+		}
 	}
 
-	println!("\nH = cache hit, m = miss, E = error; one letter per sample");
+	println!("\nH = cache hit, m = miss, E = error, - = cancelled after the cache was gone");
 	for (spec, _, current) in &targets {
 		let by_delay = &results[spec];
 		let cells: Vec<String> = by_delay

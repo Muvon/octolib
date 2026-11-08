@@ -321,8 +321,14 @@ impl ProviderFactory {
 			),
 			ProviderSetupInfo::new("nvidia", Some(nvidia::NVIDIA_API_KEY_ENV), &[], []),
 			ProviderSetupInfo::new("octohub", Some(octohub::OCTOHUB_API_KEY_ENV), &[], []),
-			ProviderSetupInfo::new("opencode-zen", Some(opencode::OPENCODE_API_KEY_ENV), &[], []),
-			ProviderSetupInfo::new("opencode-go", Some(opencode::OPENCODE_API_KEY_ENV), &[], []),
+			ProviderSetupInfo {
+				models_url: Some(opencode::OPENCODE_ZEN_MODELS_URL),
+				..ProviderSetupInfo::new("opencode-zen", Some(opencode::OPENCODE_API_KEY_ENV), &[], [])
+			},
+			ProviderSetupInfo {
+				models_url: Some(opencode::OPENCODE_GO_MODELS_URL),
+				..ProviderSetupInfo::new("opencode-go", Some(opencode::OPENCODE_API_KEY_ENV), &[], [])
+			},
 			ProviderSetupInfo::new(
 				"reflection",
 				Some(reflection::REFLECTION_API_KEY_ENV),

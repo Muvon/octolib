@@ -102,6 +102,14 @@ fn test_provider_setup_omits_pricing_patterns_and_remote_catalogs() {
 		Some("https://openrouter.ai/api/v1/models")
 	);
 	assert_eq!(info("ollama").models_url, Some("https://ollama.com/v1/models"));
+	assert_eq!(
+		info("opencode-zen").models_url,
+		Some("https://opencode.ai/zen/v1/models")
+	);
+	assert_eq!(
+		info("opencode-go").models_url,
+		Some("https://opencode.ai/zen/go/v1/models")
+	);
 	for info in setup.iter().filter(|info| !info.models.is_empty()) {
 		assert_eq!(
 			info.models_url, None,

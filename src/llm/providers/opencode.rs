@@ -56,9 +56,13 @@ pub(crate) const OPENCODE_API_KEY_ENV: &str = "OPENCODE_API_KEY";
 
 const OPENCODE_ZEN_API_URL_ENV: &str = "OPENCODE_ZEN_API_URL";
 const OPENCODE_ZEN_API_URL: &str = "https://opencode.ai/zen/v1/chat/completions";
+/// Public model list (OpenAI `/v1/models` shape); answers without an API key.
+pub(crate) const OPENCODE_ZEN_MODELS_URL: &str = "https://opencode.ai/zen/v1/models";
 
 const OPENCODE_GO_API_URL_ENV: &str = "OPENCODE_GO_API_URL";
 const OPENCODE_GO_API_URL: &str = "https://opencode.ai/zen/go/v1/chat/completions";
+/// Public model list (OpenAI `/v1/models` shape); answers without an API key.
+pub(crate) const OPENCODE_GO_MODELS_URL: &str = "https://opencode.ai/zen/go/v1/models";
 
 const OPENCODE_SESSION_HEADER: &str = "x-opencode-session";
 

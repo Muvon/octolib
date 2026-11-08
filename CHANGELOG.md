@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.52.1] - 2026-11-08
+
+### 📋 Release Summary
+
+OpenCode model catalog URLs are now set correctly.
+
+### 🔧 Improvements & Optimizations
+
+- **websocket**: reformat websocket code and assertions `ee5ddf08`
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: set OpenCode model catalog URLs `8aacf8b5`
+
 ## [0.52.0] - 2026-11-07
 
 ### 📋 Release Summary

@@ -143,7 +143,7 @@ struct MoonshotRequest {
 	model: String,
 	messages: Vec<MoonshotMessage>,
 	#[serde(skip_serializing_if = "Option::is_none")]
-	temperature: Option<f32>,
+	temperature: Option<f64>,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	max_tokens: Option<u32>,
 	/// Kimi K3 output cap (`max_tokens` is deprecated for K3 per API docs)

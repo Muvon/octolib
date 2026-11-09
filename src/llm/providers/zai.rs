@@ -404,10 +404,10 @@ impl AiProvider for ZaiProvider {
 		let messages = convert_messages(&params.messages);
 
 		// Build request
-		// Z.ai API is strict about floating point precision - convert f32 to f64 and round to 2 decimal places
+		// Z.ai API is strict about floating point precision - round to 2 decimal places
 		let sampling = self.effective_sampling_params(&params);
-		let temperature = sampling.temperature.map(|t| (t as f64 * 100.0).round() / 100.0);
-		let top_p = sampling.top_p.map(|p| (p as f64 * 100.0).round() / 100.0);
+		let temperature = sampling.temperature.map(|t| (t * 100.0).round() / 100.0);
+		let top_p = sampling.top_p.map(|p| (p * 100.0).round() / 100.0);
 		let (thinking, reasoning_effort) = thinking_fields(&params.model, params.reasoning_effort);
 
 		let request = ZaiRequest {

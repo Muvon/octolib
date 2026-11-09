@@ -338,6 +338,13 @@ fn test_effective_sampling_params() {
 }
 
 #[test]
+fn effective_sampling_params_serialize_without_float_widening_noise() {
+	let sp = SamplingSupport::ALL.effective(0.1, 0.95, 10);
+	assert_eq!(serde_json::json!(sp.temperature).to_string(), "0.1");
+	assert_eq!(serde_json::json!(sp.top_p).to_string(), "0.95");
+}
+
+#[test]
 fn reasoning_effort_none_round_trips_through_serde() {
 	let effort: ReasoningEffort = serde_json::from_str("\"none\"").unwrap();
 	assert_eq!(effort, ReasoningEffort::None);

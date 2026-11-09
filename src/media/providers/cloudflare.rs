@@ -56,7 +56,7 @@ pub struct CloudflareMediaProvider;
 #[serde(deny_unknown_fields)]
 pub struct CloudflareMediaOptions {
 	pub steps: Option<u32>,
-	pub guidance: Option<f32>,
+	pub guidance: Option<f64>,
 	pub detect_language: Option<bool>,
 	pub diarize: Option<bool>,
 	pub punctuate: Option<bool>,

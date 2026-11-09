@@ -1175,3 +1175,37 @@ async fn google_argon_stream_round_trips_tools_text_signatures_and_usage() {
 		assert!(request.get("top_p").is_none());
 	}
 }
+
+#[tokio::test]
+async fn sampling_values_reach_the_wire_as_short_decimals() {
+	use crate::test_support::mock_http::MockHttp;
+	let wire = concat!(
+		"data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}\n\n",
+		"data: [DONE]\n\n"
+	);
+	let mock = MockHttp::start(vec![(200, wire.to_owned())]);
+	let mut params = ChatCompletionParams::new(&[], "test-model", 0.1, 0.95, 10, 100);
+	params.max_retries = 0;
+	chat_completion_with_sampling(
+		OpenAiCompatConfig {
+			provider_name: "local",
+			usage_fallback_cost: None,
+			use_response_cost: false,
+			enforces_response_schema: false,
+			supports_required_tool_choice: false,
+			supports_parallel_tool_calls: true,
+		},
+		SamplingSupport::TEMPERATURE_AND_TOP_P,
+		"mock-key".to_owned(),
+		mock.url.clone(),
+		params,
+	)
+	.await
+	.unwrap();
+	let body = &mock.requests()[0].body;
+	assert!(
+		body.contains("\"temperature\":0.1") && !body.contains("0.10000000"),
+		"{body}"
+	);
+	assert!(body.contains("\"top_p\":0.95"), "{body}");
+}

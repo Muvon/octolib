@@ -809,7 +809,7 @@ impl SamplingSupport {
 	///
 	/// Returns `EffectiveSamplingParams` where supported parameters carry the user's value
 	/// and unsupported parameters are `None` (to be omitted from API requests).
-	pub fn effective(self, temperature: f32, top_p: f32, top_k: u32) -> EffectiveSamplingParams {
+	pub fn effective(self, temperature: f64, top_p: f64, top_k: u32) -> EffectiveSamplingParams {
 		EffectiveSamplingParams {
 			temperature: self.temperature.then_some(temperature),
 			top_p: self.top_p.then_some(top_p),
@@ -834,9 +834,9 @@ impl Default for SamplingSupport {
 #[derive(Debug, Clone, PartialEq)]
 pub struct EffectiveSamplingParams {
 	/// Temperature to send, or None to omit.
-	pub temperature: Option<f32>,
+	pub temperature: Option<f64>,
 	/// Top-p to send, or None to omit.
-	pub top_p: Option<f32>,
+	pub top_p: Option<f64>,
 	/// Top-k to send, or None to omit.
 	pub top_k: Option<u32>,
 }
@@ -915,9 +915,11 @@ pub struct ChatCompletionParams {
 	/// Model identifier (e.g., "claude-3-5-sonnet", "gpt-4")
 	pub model: String,
 	/// Sampling temperature (0.0 to 2.0)
-	pub temperature: f32,
+	// `f64` on purpose: `serde_json::Value` widens an `f32`, so 0.1 would be sent as
+	// 0.10000000149011612. The same applies to `top_p`.
+	pub temperature: f64,
 	/// Top-p nucleus sampling (0.0 to 1.0)
-	pub top_p: f32,
+	pub top_p: f64,
 	/// Top-k sampling (1 to infinity)
 	pub top_k: u32,
 	/// Maximum tokens to generate (0 = no limit)
@@ -977,7 +979,7 @@ pub struct ChatCompletionParams {
 
 impl ChatCompletionParams {
 	/// Create new chat completion parameters
-	pub fn new(messages: &[Message], model: &str, temperature: f32, top_p: f32, top_k: u32, max_tokens: u32) -> Self {
+	pub fn new(messages: &[Message], model: &str, temperature: f64, top_p: f64, top_k: u32, max_tokens: u32) -> Self {
 		Self {
 			chatgpt_transport: ChatGptTransport::Http,
 			octohub_transport: OctoHubTransport::Http,

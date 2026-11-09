@@ -472,7 +472,7 @@ pub struct SpeechSynthesisRequest {
 	pub voice: String,
 	pub language: Option<String>,
 	pub instructions: Option<String>,
-	pub speed: Option<f32>,
+	pub speed: Option<f64>,
 	pub output: AudioOutputSpec,
 	pub provider_options: ProviderOptions,
 	pub request_options: RequestOptions,

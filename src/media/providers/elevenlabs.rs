@@ -861,9 +861,7 @@ mod tests {
 		request.language = Some("en".to_string());
 		let (url, body, audio, _) = provider.speech_request(&request, false).unwrap();
 		assert!(url.ends_with("/text-to-speech/21m00Tcm4TlvDq8ikWAM"));
-		// `speed` is an f32 on the request, so compare with tolerance.
-		let speed = body.pointer("/voice_settings/speed").and_then(Value::as_f64).unwrap();
-		assert!((speed - 1.1).abs() < 1e-6);
+		assert_eq!(body.pointer("/voice_settings/speed"), Some(&json!(1.1)));
 		assert_eq!(body.pointer("/model_id"), Some(&json!("eleven_multilingual_v2")));
 		assert_eq!(body.pointer("/language_code"), Some(&json!("en")));
 		assert_eq!(audio.api_format, "mp3_44100_128");

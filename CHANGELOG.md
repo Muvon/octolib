@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.52.2] - 2026-11-09
+
+### 📋 Release Summary
+
+Provider values now preserve decimal precision.
+
+### 🐛 Bug Fixes & Stability
+
+- preserve decimal precision in provider values `5ad31c83`
+
 ## [0.52.1] - 2026-11-08
 
 ### 📋 Release Summary

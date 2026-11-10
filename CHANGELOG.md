@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.52.3] - 2026-11-10
+
+### 📋 Release Summary
+
+Claude 5.2 and Muse Ember models are now supported.
+
+### ✨ New Features & Enhancements
+
+- **llm**: support Claude 5.2 and Muse Ember models `b4c0ed2e`
+
 ## [0.52.2] - 2026-11-09
 
 ### 📋 Release Summary

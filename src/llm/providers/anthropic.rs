@@ -29,12 +29,14 @@ use std::env;
 
 /// Anthropic pricing constants (per 1M tokens in USD)
 /// Model IDs sourced from Anthropic model docs / models API.
-/// Prices sourced from Anthropic pricing docs (verified Sep 22, 2026).
+/// Prices sourced from Anthropic pricing docs (verified Nov 10, 2026).
 /// Format: (model, input, output, cache_write, cache_read)
 pub(crate) const PRICING: &[PricingTuple] = &[
-	// Mythos-class (Fable/Mythos 5.1): $10/$50, cache write 1.25x, but cache
-	// read is 0.025x ($0.25); Opus 5.5 below is the other model off 0.1x.
+	// Mythos-class 5.2 and 5.1: cache write 1.25x, but cache read is 0.025x
+	// input; Opus 5.5 below is the other model off 0.1x.
 	// Must precede the 5 entries: lookup is a first-match substring scan.
+	("claude-fable-5-2", 8.00, 40.00, 10.00, 0.20),
+	("claude-mythos-5-2", 8.00, 40.00, 10.00, 0.20),
 	("claude-fable-5-1", 10.00, 50.00, 12.50, 0.25),
 	("claude-mythos-5-1", 10.00, 50.00, 12.50, 0.25),
 	// Mythos-class (Fable 5): $10/$50, cache write 1.25x, cache read 0.1x
@@ -125,7 +127,7 @@ const ADAPTIVE_ONLY_MODELS: &[&str] = &[
 ];
 
 /// Models that accept `output_config.effort`. Per the models API capability
-/// report: Fable 5/5.1, Mythos 5/5.1, Opus 5, Opus 4.8, Opus 4.7, Opus 4.6,
+/// report: Fable 5/5.1/5.2, Mythos 5/5.1/5.2, Opus 5, Opus 4.8, Opus 4.7, Opus 4.6,
 /// Sonnet 5, Sonnet 4.6, Opus 4.5, Haiku 5.5.
 const EFFORT_PARAM_MODELS: &[&str] = &[
 	"fable-5",
@@ -142,7 +144,7 @@ const EFFORT_PARAM_MODELS: &[&str] = &[
 
 /// Models that accept `output_config.format` JSON outputs, per
 /// https://platform.claude.com/docs/en/build-with-claude/structured-outputs
-/// (Oct 2026): Fable/Mythos 5 and 5.1, Opus 5.5/5/4.8/4.7/4.6/4.5, Sonnet
+/// (Oct 2026): Fable/Mythos 5, 5.1 and 5.2, Opus 5.5/5/4.8/4.7/4.6/4.5, Sonnet
 /// 5.5/5/4.6/4.5, Haiku 5.5/4.5. Decoding is constrained to the schema.
 const STRUCTURED_OUTPUT_MODELS: &[&str] = &[
 	"fable-5",
@@ -365,7 +367,7 @@ fn effort_value(model: &str, effort: ReasoningEffort, supports_adaptive: bool) -
 /// not off by default. Per the per-model table in
 /// https://platform.claude.com/docs/en/build-with-claude/thinking-troubleshooting
 /// and https://platform.claude.com/docs/en/build-with-claude/effort (verified Oct 2026):
-///   - Opus 5.5, Fable/Mythos 5 and 5.1 always think; `"disabled"` is a 400.
+///   - Opus 5.5, Fable/Mythos 5, 5.1 and 5.2 always think; `"disabled"` is a 400.
 ///     The lowest setting is effort "low" with `thinking` omitted.
 ///   - Sonnet 5.5 rejects `"disabled"`; `"between_tools"` turns off up-front
 ///     thinking at effort high or below (its default is high).

@@ -17,12 +17,12 @@
 //! Uses Meta's OpenAI-compatible endpoint at:
 //! `https://api.meta.ai/v1/chat/completions`
 //!
-//! Serves the Muse Spark family (`muse-spark-1.3`, `1.2`, `1.1` plus the
-//! discounted `-contributor` variants) — multimodal reasoning models with a
-//! 1,048,576-token context window. The old `api.llama.com` Llama API preview
-//! was sunset on 2026-07-06 and is not used.
+//! Serves Muse Wonder, Muse Ember and the Muse Spark family (`muse-spark-1.3`,
+//! `1.2`, `1.1` plus the discounted `-contributor` variants) — multimodal
+//! reasoning models with a 1,048,576-token context window. The old
+//! `api.llama.com` Llama API preview was sunset on 2026-07-06 and is not used.
 //!
-//! PRICING UPDATE: September 2026
+//! PRICING UPDATE: November 2026
 //! Source: <https://dev.meta.ai/docs/pricing-rate-limits>
 //!
 //! Configuration:
@@ -33,8 +33,8 @@ use crate::llm::providers::openai_compat::{
 	chat_completion as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
 };
 use crate::llm::traits::AiProvider;
-use crate::llm::types::{ChatCompletionParams, ProviderResponse};
-use crate::llm::utils::{is_model_in_pricing_table, PricingTuple};
+use crate::llm::types::{ChatCompletionParams, ModelPricing, ProviderResponse};
+use crate::llm::utils::{is_model_in_pricing_table, normalize_model_name, PricingTuple};
 use anyhow::Result;
 use std::env;
 
@@ -59,7 +59,7 @@ const MODEL_API_KEY_ENV: &str = "MODEL_API_KEY";
 const META_API_URL_ENV: &str = "META_API_URL";
 const META_API_URL: &str = "https://api.meta.ai/v1/chat/completions";
 
-// Meta Model API pricing (per 1M tokens in USD) - Oct 2026
+// Meta Model API pricing (per 1M tokens in USD) - Nov 2026
 // Source: https://dev.meta.ai/docs/pricing-rate-limits
 // Format: (model, input, output, cache_write, cache_read)
 // Prompt caching is implicit: writes bill at the input rate, hits at the
@@ -68,6 +68,8 @@ const META_API_URL: &str = "https://api.meta.ai/v1/chat/completions";
 // stay before their base versions because matching is substring-based.
 pub(crate) const PRICING: &[PricingTuple] = &[
 	("muse-wonder-1.0", 4.00, 20.00, 4.00, 0.20),
+	// Base tier, prompts up to 200K tokens; see MUSE_EMBER_LONG_CONTEXT_*.
+	("muse-ember-1.0", 0.10, 0.50, 0.10, 0.004),
 	// Contributor tier (1.3 / 1.2): $0.10 in / $0.20 out / $0.002 cached
 	("muse-spark-1.3-contributor", 0.10, 0.20, 0.10, 0.002),
 	("muse-spark-1.2-contributor", 0.10, 0.20, 0.10, 0.002),
@@ -77,8 +79,33 @@ pub(crate) const PRICING: &[PricingTuple] = &[
 	("muse-spark-1.1", 1.25, 4.25, 1.25, 0.15),
 ];
 
-/// Context window shared by Muse Wonder and every Muse Spark version.
+/// Context window shared by Muse Wonder, Muse Ember and every Muse Spark version.
 const MAX_INPUT_TOKENS: usize = 1_048_576;
+
+/// Muse Ember's long-context tier (pricing page above): a request whose input,
+/// cached tokens included, passes 200K tokens pays 3x every rate, and the
+/// higher rate applies to the whole request, not only the tokens past 200K.
+const MUSE_EMBER_PATTERN: &str = "muse-ember";
+const MUSE_EMBER_LONG_CONTEXT_THRESHOLD: u64 = 200_000;
+const MUSE_EMBER_LONG_CONTEXT_MULTIPLIER: f64 = 3.0;
+
+/// Cost of one request at the table rates, including Muse Ember's long-context tier.
+fn request_cost(
+	model: &str,
+	pricing: &ModelPricing,
+	input_tokens: u64,
+	cache_write_tokens: u64,
+	cache_read_tokens: u64,
+	output_tokens: u64,
+) -> f64 {
+	let cost = pricing.calculate_cost(input_tokens, cache_write_tokens, cache_read_tokens, output_tokens);
+	let prompt_tokens = input_tokens + cache_write_tokens + cache_read_tokens;
+	if normalize_model_name(model).contains(MUSE_EMBER_PATTERN) && prompt_tokens > MUSE_EMBER_LONG_CONTEXT_THRESHOLD {
+		cost * MUSE_EMBER_LONG_CONTEXT_MULTIPLIER
+	} else {
+		cost
+	}
+}
 
 #[async_trait::async_trait]
 impl AiProvider for MetaProvider {
@@ -108,7 +135,7 @@ impl AiProvider for MetaProvider {
 		true
 	}
 
-	/// Text, image, video, audio and PDF input on Muse Wonder and Muse Spark.
+	/// Text, image, video, audio and PDF input on Muse Wonder, Muse Ember and Muse Spark.
 	fn supports_vision(&self, _model: &str) -> bool {
 		true
 	}
@@ -136,10 +163,9 @@ impl AiProvider for MetaProvider {
 		MAX_INPUT_TOKENS
 	}
 
-	fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
-		crate::llm::utils::get_model_pricing(model, PRICING).map(|(input, output, cache_write, cache_read)| {
-			crate::llm::types::ModelPricing::new(input, output, cache_write, cache_read)
-		})
+	fn get_model_pricing(&self, model: &str) -> Option<ModelPricing> {
+		crate::llm::utils::get_model_pricing(model, PRICING)
+			.map(|(input, output, cache_write, cache_read)| ModelPricing::new(input, output, cache_write, cache_read))
 	}
 
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
@@ -167,7 +193,9 @@ impl AiProvider for MetaProvider {
 		if let Some(ref mut usage) = response.exchange.usage {
 			if usage.cost.is_none() {
 				if let Some(pricing) = self.get_model_pricing(&model) {
-					usage.cost = Some(pricing.calculate_cost(
+					usage.cost = Some(request_cost(
+						&model,
+						&pricing,
 						usage.input_tokens,
 						usage.cache_write_tokens,
 						usage.cache_read_tokens,

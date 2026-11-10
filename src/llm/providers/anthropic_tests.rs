@@ -190,6 +190,7 @@ fn structured_outputs_follow_the_documented_model_list() {
 		"claude-sonnet-5-5",
 		"claude-haiku-5-5",
 		"claude-fable-5-1",
+		"claude-fable-5-2",
 		"claude-haiku-4-5",
 	] {
 		assert!(provider.supports_structured_output(model), "{model}");
@@ -376,6 +377,41 @@ fn test_fable_5_1() {
 	assert_eq!(provider.get_max_input_tokens(model), 1_000_000);
 	assert_eq!(provider.supported_sampling_params(model), SamplingSupport::NONE);
 	assert_eq!(effort_value(model, ReasoningEffort::XHigh, true), "xhigh");
+}
+
+#[test]
+fn test_fable_5_2() {
+	let provider = AnthropicProvider::new();
+
+	let model = "claude-fable-5-2";
+	assert!(provider.supports_model(model));
+
+	// $8/$40, cache write 1.25x = $10, cache read 0.025x = $0.20: proves the
+	// 5.2 row is matched ahead of the "claude-fable-5" row.
+	let pricing = provider.get_model_pricing(model).unwrap();
+	assert_eq!(pricing.input_price_per_1m, 8.0);
+	assert_eq!(pricing.output_price_per_1m, 40.0);
+	assert_eq!(pricing.cache_write_price_per_1m, 10.0);
+	assert_eq!(pricing.cache_read_price_per_1m, 0.20);
+
+	// 1M of each: input $8 + output $40 + 5m write $10 + 1h write (2x input) $16
+	// + cache read $0.20.
+	let cost = calculate_anthropic_cost(model, 1_000_000, 1_000_000, 1_000_000, 1_000_000, 1_000_000).unwrap();
+	assert!((cost - 74.20).abs() < 1e-9);
+
+	assert_eq!(provider.get_max_input_tokens(model), 1_000_000);
+	assert_eq!(effective_max_tokens(model, 0), 128_000);
+	assert!(provider.supports_vision(model));
+	assert_eq!(provider.supported_sampling_params(model), SamplingSupport::NONE);
+	assert_eq!(effort_value(model, ReasoningEffort::XHigh, true), "xhigh");
+	assert_eq!(effort_value(model, ReasoningEffort::Max, true), "max");
+
+	// Mythos 5.2 (limited availability) has the same rates in its own row.
+	let mythos = provider.get_model_pricing("claude-mythos-5-2").unwrap();
+	assert_eq!(mythos.input_price_per_1m, 8.0);
+	assert_eq!(mythos.output_price_per_1m, 40.0);
+	assert_eq!(mythos.cache_write_price_per_1m, 10.0);
+	assert_eq!(mythos.cache_read_price_per_1m, 0.20);
 }
 
 #[test]
@@ -583,8 +619,10 @@ fn thinking_off_follows_each_model_switch() {
 		"claude-opus-5-5",
 		"claude-fable-5",
 		"claude-fable-5-1",
+		"claude-fable-5-2",
 		"claude-mythos-5",
 		"claude-mythos-5-1",
+		"claude-mythos-5-2",
 	] {
 		assert_eq!(
 			off(model),

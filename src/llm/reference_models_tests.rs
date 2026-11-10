@@ -31,6 +31,9 @@ fn reference_model_id_names_one_model_across_hosts() {
 	for model in ["muse-wonder-1.0", "meta/muse-wonder"] {
 		assert_eq!(reference_model_id(model), Some("muse-wonder-1.0"));
 	}
+	for model in ["muse-ember-1.0", "meta/muse-ember"] {
+		assert_eq!(reference_model_id(model), Some("muse-ember-1.0"));
+	}
 	assert_eq!(
 		reference_model_id("kimi-k2.7-code-highspeed"),
 		Some("kimi-k2.7-code-highspeed")
@@ -93,6 +96,31 @@ fn october_2026_models_resolve_with_documented_capabilities_and_pricing() {
 	}
 }
 
+#[test]
+fn november_2026_models_resolve_with_documented_capabilities_and_pricing() {
+	for (model, capabilities, pricing) in [
+		(
+			"meta/muse-ember",
+			caps(true, true, true, 1_048_576),
+			pricing(0.10, 0.50, 0.10, 0.004),
+		),
+		(
+			"anthropic/claude-fable-5.2",
+			caps(true, false, true, 1_000_000),
+			pricing(8.00, 40.00, 10.00, 0.20),
+		),
+		(
+			"claude-mythos-5-2",
+			caps(true, false, true, 1_000_000),
+			pricing(8.00, 40.00, 10.00, 0.20),
+		),
+	] {
+		assert_same_capabilities(get_reference_capabilities(model).unwrap(), capabilities.unwrap());
+		assert_same_pricing(get_reference_pricing(model).unwrap(), pricing.unwrap());
+		assert!(reference_model_id(model).is_some(), "{model}");
+	}
+}
+
 /// The verifier route the completion gate runs on. The openrouter catalogue
 /// advertises structured_outputs=false for this model while the live route
 /// honours a strict json_schema, so the entry is measured rather than
@@ -151,6 +179,8 @@ fn reference_pricing_matches_first_party_provider_tables() {
 	let anthropic = AnthropicProvider::new();
 	for model in [
 		"claude-fable-5",
+		"claude-fable-5-2",
+		"claude-mythos-5-2",
 		"claude-opus-5-5",
 		"claude-opus-5",
 		"claude-sonnet-5",

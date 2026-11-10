@@ -18,6 +18,7 @@ use super::*;
 fn test_supports_model() {
 	let provider = MetaProvider::new();
 	assert!(provider.supports_model("muse-wonder-1.0"));
+	assert!(provider.supports_model("muse-ember-1.0"));
 	assert!(provider.supports_model("muse-spark-1.3"));
 	assert!(provider.supports_model("muse-spark-1.3-contributor"));
 	assert!(provider.supports_model("muse-spark-1.2"));
@@ -35,7 +36,7 @@ fn test_supports_model() {
 fn test_capabilities() {
 	let provider = MetaProvider::new();
 	assert_eq!(provider.name(), "meta");
-	for model in ["muse-wonder-1.0", "muse-spark-1.3", "muse-spark-1.1"] {
+	for model in ["muse-wonder-1.0", "muse-ember-1.0", "muse-spark-1.3", "muse-spark-1.1"] {
 		assert!(provider.supports_caching(model));
 		assert!(provider.supports_vision(model));
 		assert!(provider.supports_video(model));
@@ -76,6 +77,39 @@ fn test_muse_wonder_pricing_matches_reference() {
 		assert_eq!(reference.cache_write_price_per_1m, pricing.cache_write_price_per_1m);
 		assert_eq!(reference.cache_read_price_per_1m, pricing.cache_read_price_per_1m);
 	}
+}
+
+#[test]
+fn test_muse_ember_pricing_and_long_context_tier() {
+	let provider = MetaProvider::new();
+	let model = "muse-ember-1.0";
+	let pricing = provider.get_model_pricing(model).unwrap();
+	assert_eq!(pricing.input_price_per_1m, 0.10);
+	assert_eq!(pricing.output_price_per_1m, 0.50);
+	assert_eq!(pricing.cache_write_price_per_1m, 0.10);
+	assert_eq!(pricing.cache_read_price_per_1m, 0.004);
+
+	for alias in [model, "meta/muse-ember"] {
+		let reference = crate::llm::reference_models::get_reference_pricing(alias).unwrap();
+		assert_eq!(reference.input_price_per_1m, pricing.input_price_per_1m);
+		assert_eq!(reference.output_price_per_1m, pricing.output_price_per_1m);
+		assert_eq!(reference.cache_write_price_per_1m, pricing.cache_write_price_per_1m);
+		assert_eq!(reference.cache_read_price_per_1m, pricing.cache_read_price_per_1m);
+	}
+
+	// Exactly 200K input tokens, cached ones included, stays on the base tier.
+	let base = request_cost(model, &pricing, 150_000, 0, 50_000, 100_000);
+	assert!((base - (0.15 * 0.10 + 0.05 * 0.004 + 0.1 * 0.50)).abs() < 1e-12);
+	// One token more triples every rate for the whole request.
+	let long = request_cost(model, &pricing, 150_001, 0, 50_000, 100_000);
+	assert!((long - 3.0 * pricing.calculate_cost(150_001, 0, 50_000, 100_000)).abs() < 1e-12);
+
+	// The tier is Muse Ember's alone.
+	let spark = provider.get_model_pricing("muse-spark-1.3").unwrap();
+	assert_eq!(
+		request_cost("muse-spark-1.3", &spark, 300_000, 0, 0, 0),
+		spark.calculate_cost(300_000, 0, 0, 0)
+	);
 }
 
 #[test]

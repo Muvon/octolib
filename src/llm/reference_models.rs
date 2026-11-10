@@ -91,6 +91,19 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		pricing: pricing(4.00, 20.00, 4.00, 0.20),
 	},
 	ReferenceModelEntry {
+		// Base rate for prompts up to 200K tokens; MetaProvider applies the
+		// long-context tier above that.
+		pattern: "muse-ember-1.0",
+		capabilities: caps(true, true, true, 1_048_576),
+		pricing: pricing(0.10, 0.50, 0.10, 0.004),
+	},
+	ReferenceModelEntry {
+		// OpenRouter uses the unversioned name for Meta's Muse Ember 1.0.
+		pattern: "muse-ember",
+		capabilities: caps(true, true, true, 1_048_576),
+		pricing: pricing(0.10, 0.50, 0.10, 0.004),
+	},
+	ReferenceModelEntry {
 		// Open weights hosted by inference providers, not Meta Model API.
 		pattern: "muse-spark-open",
 		capabilities: caps(true, true, true, 1_048_576),
@@ -1266,6 +1279,13 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		pricing: pricing(1.00, 3.00, 1.00, 1.00),
 	},
 	ReferenceModelEntry {
+		// Cache hits on the 5.2 pair are 0.025x input ($0.20), not the 0.1x
+		// every other Claude uses.
+		pattern: "claude-mythos-5-2",
+		capabilities: caps(true, false, true, 1_000_000),
+		pricing: pricing(8.00, 40.00, 10.00, 0.20),
+	},
+	ReferenceModelEntry {
 		// Cache hits on the 5.1 pair are 0.025x input ($0.25), not the 0.1x
 		// every other Claude uses.
 		pattern: "claude-mythos-5-1",
@@ -1424,6 +1444,13 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		pattern: "command-r-plus",
 		capabilities: caps(false, false, true, 131_072),
 		pricing: pricing(2.50, 10.00, 2.50, 2.50),
+	},
+	ReferenceModelEntry {
+		// Cache hits on the 5.2 pair are 0.025x input ($0.20), not the 0.1x
+		// every other Claude uses.
+		pattern: "claude-fable-5-2",
+		capabilities: caps(true, false, true, 1_000_000),
+		pricing: pricing(8.00, 40.00, 10.00, 0.20),
 	},
 	ReferenceModelEntry {
 		// Cache hits on the 5.1 pair are 0.025x input ($0.25), not the 0.1x
@@ -2472,6 +2499,7 @@ fn normalized_model(model: &str) -> String {
 /// Twin entries that spell one model two ways, mapped to the entry they mirror.
 const TWINS: &[(&str, &str)] = &[
 	("muse-wonder", "muse-wonder-1.0"),
+	("muse-ember", "muse-ember-1.0"),
 	("gpt-chat-latest", "chat-latest"),
 	("kimi-2.7-code", "kimi-k2.7-code"),
 	("kimi-2.6", "kimi-k2.6"),

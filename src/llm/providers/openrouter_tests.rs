@@ -303,6 +303,7 @@ fn dotted_claude_versions_are_priced_as_their_own_model() {
 	for (dotted, dashed) in [
 		("anthropic/claude-sonnet-5.5", "claude-sonnet-5-5"),
 		("anthropic/claude-opus-5.5", "claude-opus-5-5"),
+		("anthropic/claude-fable-5.2", "claude-fable-5-2"),
 	] {
 		let routed = provider.get_model_pricing(dotted).unwrap();
 		let direct = anthropic.get_model_pricing(dashed).unwrap();
@@ -312,6 +313,11 @@ fn dotted_claude_versions_are_priced_as_their_own_model() {
 			"{dotted}"
 		);
 	}
+	let fable = provider.get_model_pricing("anthropic/claude-fable-5.2").unwrap();
+	assert_eq!(fable.input_price_per_1m, 8.0);
+	assert_eq!(fable.output_price_per_1m, 40.0);
+	assert_eq!(fable.cache_write_price_per_1m, 10.0);
+	assert_eq!(fable.cache_read_price_per_1m, 0.20);
 }
 
 #[test]
@@ -331,6 +337,10 @@ fn test_models_without_a_maker_table_price_from_the_reference_table() {
 	assert_eq!(inkling_2_small.input_price_per_1m, 0.30);
 	assert_eq!(inkling_2_small.output_price_per_1m, 1.00);
 	assert_eq!(inkling_2_small.cache_read_price_per_1m, 0.03);
+	let ember = provider.get_model_pricing("meta/muse-ember").unwrap();
+	assert_eq!(ember.input_price_per_1m, 0.10);
+	assert_eq!(ember.output_price_per_1m, 0.50);
+	assert_eq!(ember.cache_read_price_per_1m, 0.004);
 	assert!(provider.get_model_pricing("nobody/unknown-model-x").is_none());
 }
 

@@ -14,9 +14,13 @@
 
 use super::errors::{EvaluationError, EvaluationResult};
 use super::providers::{
-	CloudflareEvaluationProvider, InceptionEvaluationProvider, OctoHubEvaluationProvider, OpenAiEvaluationProvider,
-	OpenRouterEvaluationProvider, TypeSafeEvaluationProvider,
+	CloudflareEvaluationProvider, OctoHubEvaluationProvider, OpenAiEvaluationProvider, OpenRouterEvaluationProvider,
+	TypeSafeEvaluationProvider,
 };
+// Deprecated: Inception is removed entirely from octolib on 2026-12-28; the
+// factory route stays supported until then.
+#[allow(deprecated)]
+use super::providers::InceptionEvaluationProvider;
 use super::traits::EvaluationProvider;
 
 pub struct EvaluationProviderFactory;
@@ -38,6 +42,8 @@ impl EvaluationProviderFactory {
 	pub fn create_provider(name: &str) -> EvaluationResult<Box<dyn EvaluationProvider>> {
 		match name.to_ascii_lowercase().as_str() {
 			"cloudflare" => Ok(Box::new(CloudflareEvaluationProvider::new())),
+			// Deprecated: removed entirely on 2026-12-28; route stays until then.
+			#[allow(deprecated)]
 			"inception" => Ok(Box::new(InceptionEvaluationProvider::new())),
 			"octohub" => Ok(Box::new(OctoHubEvaluationProvider::new())),
 			"openai" => Ok(Box::new(OpenAiEvaluationProvider::new())),

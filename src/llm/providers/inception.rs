@@ -14,6 +14,9 @@
 
 //! Inception Labs provider implementation.
 //!
+//! **Deprecated:** Inception is deprecated and will be removed entirely from
+//! octolib on December 28, 2026.
+//!
 //! Uses Inception's OpenAI-compatible chat endpoint at:
 //! `https://api.inceptionlabs.ai/v1/chat/completions`
 //!
@@ -46,9 +49,12 @@ use anyhow::Result;
 use std::env;
 
 /// Inception Labs provider
+#[deprecated(note = "Inception is deprecated and will be removed entirely from octolib on December 28, 2026")]
 #[derive(Debug, Clone, Default)]
 pub struct InceptionProvider;
 
+// Internal compatibility use: the impl stays until the 2026-12-28 removal.
+#[allow(deprecated)]
 impl InceptionProvider {
 	pub fn new() -> Self {
 		Self
@@ -86,6 +92,7 @@ fn find_model(model: &str) -> Option<&'static (&'static str, usize)> {
 	MODELS.iter().find(|(id, _)| id.eq_ignore_ascii_case(model))
 }
 
+#[allow(deprecated)] // impl of the deprecated type; removed with it on 2026-12-28
 #[async_trait::async_trait]
 impl AiProvider for InceptionProvider {
 	fn name(&self) -> &str {

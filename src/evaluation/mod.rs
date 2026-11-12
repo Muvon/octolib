@@ -42,9 +42,12 @@ pub mod types;
 pub use errors::{EvaluationError, EvaluationResult};
 pub use factory::EvaluationProviderFactory;
 pub use providers::{
-	CloudflareEvaluationProvider, InceptionEvaluationProvider, OctoHubEvaluationProvider, OpenAiEvaluationProvider,
-	OpenRouterEvaluationProvider, TypeSafeEvaluationProvider,
+	CloudflareEvaluationProvider, OctoHubEvaluationProvider, OpenAiEvaluationProvider, OpenRouterEvaluationProvider,
+	TypeSafeEvaluationProvider,
 };
+// Deprecated: Inception is removed entirely from octolib on 2026-12-28.
+#[allow(deprecated)]
+pub use providers::InceptionEvaluationProvider;
 pub use traits::EvaluationProvider;
 pub use types::{
 	Answer, BoundingBox, EvaluationImageFormat, EvaluationPricing, EvaluationRequest, EvaluationResponse,

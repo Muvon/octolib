@@ -21,6 +21,8 @@ pub(crate) mod shared;
 pub mod typesafe;
 
 pub use cloudflare::CloudflareEvaluationProvider;
+// Deprecated: Inception is removed entirely from octolib on 2026-12-28.
+#[allow(deprecated)]
 pub use inception::InceptionEvaluationProvider;
 pub use octohub::OctoHubEvaluationProvider;
 pub use openai::OpenAiEvaluationProvider;

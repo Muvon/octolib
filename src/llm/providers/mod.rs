@@ -72,6 +72,8 @@ pub use google_studio::GoogleStudioProvider;
 pub use google_vertex::GoogleVertexProvider;
 pub use groq::GroqProvider;
 pub use hetzner::HetznerProvider;
+// Deprecated: Inception is removed entirely from octolib on 2026-12-28.
+#[allow(deprecated)]
 pub use inception::InceptionProvider;
 pub use isoquant::IsoquantProvider;
 pub use local::LocalProvider;

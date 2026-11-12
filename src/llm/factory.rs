@@ -17,11 +17,15 @@
 use crate::llm::providers::{
 	AlibabaProvider, AmazonBedrockProvider, AnthropicProvider, BytePlusProvider, CerebrasProvider, ChatGptProvider,
 	CliProvider, CloudflareWorkersAiProvider, DeepSeekProvider, FeatherlessProvider, FireworksProvider,
-	GoogleStudioProvider, GoogleVertexProvider, GroqProvider, HetznerProvider, InceptionProvider, IsoquantProvider,
-	LocalProvider, MetaProvider, MinimaxProvider, MoonshotProvider, NvidiaProvider, OctoHubProvider, OllamaProvider,
-	OpenAiProvider, OpenCodeGoProvider, OpenCodeZenProvider, OpenRouterProvider, ReflectionProvider, TinkerProvider,
-	TogetherProvider, WebWrightProvider, XaiProvider, XiaomiProvider, ZaiProvider,
+	GoogleStudioProvider, GoogleVertexProvider, GroqProvider, HetznerProvider, IsoquantProvider, LocalProvider,
+	MetaProvider, MinimaxProvider, MoonshotProvider, NvidiaProvider, OctoHubProvider, OllamaProvider, OpenAiProvider,
+	OpenCodeGoProvider, OpenCodeZenProvider, OpenRouterProvider, ReflectionProvider, TinkerProvider, TogetherProvider,
+	WebWrightProvider, XaiProvider, XiaomiProvider, ZaiProvider,
 };
+// Deprecated: Inception is removed entirely from octolib on 2026-12-28; the
+// factory route stays supported until then.
+#[allow(deprecated)]
+use crate::llm::providers::InceptionProvider;
 use crate::llm::traits::AiProvider;
 use anyhow::Result;
 
@@ -114,6 +118,8 @@ impl ProviderFactory {
             "featherless" => Ok(Box::new(FeatherlessProvider::new())),
             "fireworks" => Ok(Box::new(FireworksProvider::new())),
             "hetzner" => Ok(Box::new(HetznerProvider::new())),
+            // Deprecated: removed entirely on 2026-12-28; route stays until then.
+            #[allow(deprecated)]
             "inception" => Ok(Box::new(InceptionProvider::new())),
             "isoquant" => Ok(Box::new(IsoquantProvider::new())),
             "meta" => Ok(Box::new(MetaProvider::new())),

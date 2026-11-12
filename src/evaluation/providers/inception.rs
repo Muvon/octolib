@@ -14,6 +14,9 @@
 
 //! Inception Mercury Decide (`POST https://api.inceptionlabs.ai/v1/decisions`).
 //!
+//! **Deprecated:** Inception is deprecated and will be removed entirely from
+//! octolib on December 28, 2026.
+//!
 //! The body is `{model, state, questions}` and the reply is the same
 //! `{model, answers, usage}` payload as the Jev hosts. Only `mercury-decide`
 //! is served: the dated `mercury-decide-20260930` answers 404 "Decision model
@@ -50,9 +53,12 @@ const MERCURY_DECIDE_PRICING: EvaluationPricing = EvaluationPricing {
 	output_price_per_1m: 0.0,
 };
 
+#[deprecated(note = "Inception is deprecated and will be removed entirely from octolib on December 28, 2026")]
 #[derive(Debug, Clone, Default)]
 pub struct InceptionEvaluationProvider;
 
+// Internal compatibility use: the impl stays until the 2026-12-28 removal.
+#[allow(deprecated)]
 impl InceptionEvaluationProvider {
 	pub fn new() -> Self {
 		Self
@@ -71,6 +77,7 @@ pub(crate) fn request_body(request: &EvaluationRequest) -> Value {
 	})
 }
 
+#[allow(deprecated)] // impl of the deprecated type; removed with it on 2026-12-28
 #[async_trait::async_trait]
 impl EvaluationProvider for InceptionEvaluationProvider {
 	fn name(&self) -> &str {

@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Inception is deprecated (removal 2026-12-28); these tests exercise it until then.
+#![allow(deprecated)]
 use super::*;
 use crate::evaluation::types::{Answer, Question};
 use crate::test_support::env::EnvGuard;

@@ -745,7 +745,7 @@ impl AnthropicProvider {
 
 		// convert_messages runs before the thinking config is decided, so the
 		// replayed thinking blocks are reconciled with it here.
-		apply_thinking_replay_policy(&mut request_body);
+		apply_thinking_replay_policy(&mut request_body, api_url == ANTHROPIC_API_URL);
 
 		// Manual thinking needs `budget_tokens < max_tokens`, so the API rejects
 		// it with a pre-warm's `max_tokens: 0`, and dropping thinking would change
@@ -1164,11 +1164,19 @@ fn replayed_assistant_content(message: &Message) -> Option<Vec<AnthropicContent>
 /// returned block fails the prefix check (tools or earlier messages changed)
 /// unless `drop_block` is set. With any other thinking mode `block_binding` is
 /// a 400, so the blocks are removed instead, which the docs allow.
-fn apply_thinking_replay_policy(request_body: &mut serde_json::Value) {
+///
+/// `block_binding` is a first-party beta field. A custom `ANTHROPIC_API_URL`
+/// (an LLM gateway fronting Bedrock or Vertex) rejects it with a 400 and has no
+/// prefix check to satisfy, so there the field is left out and the replayed
+/// thinking blocks stay, as they must for adaptive/enabled thinking.
+fn apply_thinking_replay_policy(request_body: &mut serde_json::Value, first_party_api: bool) {
 	let binds = request_body["thinking"]["type"]
 		.as_str()
 		.is_some_and(|kind| BLOCK_BINDING_THINKING_TYPES.contains(&kind));
 	if binds {
+		if !first_party_api {
+			return;
+		}
 		// Set on every request, not only those that replay thinking: the thinking
 		// config is rendered into the prompt, so adding it from turn two on would
 		// start a new cache prefix ("Thinking and prompt caching").

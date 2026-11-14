@@ -78,6 +78,9 @@ const PRICING: &[PricingTuple] = &[
 	// matches. Needs confirmation if a dedicated spot rate is published.
 	("deepseek-v4p1-flash-1017", 0.30, 1.20, 0.30, 0.006),
 	("deepseek-v4p1-flash", 0.30, 1.20, 0.30, 0.006),
+	// Kimi K3.1 Pro (Nov 2026): must precede the kimi-k3 rows, since lookups
+	// are substring matches.
+	("kimi-k3p1-pro", 2.00, 10.00, 2.00, 0.20),
 	("kimi-k3-fast", 4.50, 22.50, 4.50, 0.45),
 	("kimi-k3-us", 4.50, 22.50, 4.50, 0.45),
 	("kimi-k3", 3.00, 15.00, 3.00, 0.30),
@@ -94,6 +97,8 @@ const PRICING: &[PricingTuple] = &[
 	("nemotron-lightning-3p5-30b-a3b", 0.05, 0.20, 0.05, 0.01),
 	("nemotron-3-ultra-nvfp4", 0.60, 2.40, 0.60, 0.12),
 	("muse-spark-open", 1.25, 4.25, 1.25, 0.15),
+	// Ultramarine 1 Flash US route (Nov 2026).
+	("ultramarine-1-flash-us", 0.15, 0.50, 0.15, 0.03),
 ];
 
 fn fireworks_model_pricing(model: &str) -> Option<crate::llm::types::ModelPricing> {

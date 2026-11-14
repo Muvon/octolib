@@ -490,6 +490,20 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		pricing: pricing(0.075, 0.50, 0.075, 0.075),
 	},
 	ReferenceModelEntry {
+		// Ricursive Ripple 65B Preview (Nov 2026): 1M-context text model.
+		// Baseline from OpenRouter.
+		pattern: "ripple-65b-preview",
+		capabilities: caps(false, false, true, 1_048_576),
+		pricing: pricing(0.20, 0.60, 0.20, 0.02),
+	},
+	ReferenceModelEntry {
+		// Liquid LFM-3 1.7B (Nov 2026): 262K-context text model. Baseline
+		// from OpenRouter.
+		pattern: "lfm-3-1.7b",
+		capabilities: caps(false, false, true, 262_144),
+		pricing: pricing(0.08, 0.20, 0.08, 0.008),
+	},
+	ReferenceModelEntry {
 		// Inference.net Schematron v2 extraction models: 128K context.
 		pattern: "schematron-v2-small",
 		capabilities: caps(false, false, true, 128_000),

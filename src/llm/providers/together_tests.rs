@@ -148,6 +148,18 @@ fn deepseek_v4_1_flash_1017_snapshot_uses_together_rates() {
 		1_000_000
 	);
 }
+
+#[test]
+fn tev1_4b_experimental_uses_together_rates() {
+	let provider = TogetherProvider::new();
+	// https://www.together.ai/models/tev1-4b-experimental — no function calling
+	// or structured outputs, so it must not be schema-trusted.
+	let pricing = provider.get_model_pricing("Tev1-4B-experimental").unwrap();
+	assert_eq!(pricing.input_price_per_1m, 0.042);
+	assert_eq!(pricing.output_price_per_1m, 0.00);
+	assert_eq!(provider.get_max_input_tokens("Tev1-4B-experimental"), 32_768);
+	assert!(!provider.enforces_response_schema("Tev1-4B-experimental"));
+}
 #[test]
 fn october_changelog_models_use_together_rates() {
 	let provider = TogetherProvider::new();

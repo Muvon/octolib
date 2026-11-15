@@ -16,22 +16,41 @@ use super::*;
 
 #[test]
 fn splits_bare_repo() {
-	let (repo, file) = split_repo_and_file("muvon/octomind-embed");
+	let (repo, revision, file) = split_model_string("muvon/octomind-embed");
 	assert_eq!(repo, "muvon/octomind-embed");
+	assert_eq!(revision, None);
 	assert_eq!(file, None);
 }
 
 #[test]
 fn splits_pinned_graph() {
-	let (repo, file) = split_repo_and_file("muvon/octomind-embed#onnx/model_quantized.onnx");
+	let (repo, revision, file) = split_model_string("muvon/octomind-embed#onnx/model_quantized.onnx");
 	assert_eq!(repo, "muvon/octomind-embed");
+	assert_eq!(revision, None);
 	assert_eq!(file.as_deref(), Some("onnx/model_quantized.onnx"));
 }
 
 #[test]
-fn trims_whitespace_around_parts() {
-	let (repo, file) = split_repo_and_file("  muvon/octomind-embed # onnx/model.onnx ");
+fn splits_pinned_revision() {
+	let (repo, revision, file) = split_model_string("muvon/octomind-embed@0751f83a");
 	assert_eq!(repo, "muvon/octomind-embed");
+	assert_eq!(revision.as_deref(), Some("0751f83a"));
+	assert_eq!(file, None);
+}
+
+#[test]
+fn splits_pinned_revision_and_graph() {
+	let (repo, revision, file) = split_model_string("muvon/octomind-embed@0751f83a#onnx/model.onnx");
+	assert_eq!(repo, "muvon/octomind-embed");
+	assert_eq!(revision.as_deref(), Some("0751f83a"));
+	assert_eq!(file.as_deref(), Some("onnx/model.onnx"));
+}
+
+#[test]
+fn trims_whitespace_around_parts() {
+	let (repo, revision, file) = split_model_string("  muvon/octomind-embed @ 0751f83a # onnx/model.onnx ");
+	assert_eq!(repo, "muvon/octomind-embed");
+	assert_eq!(revision.as_deref(), Some("0751f83a"));
 	assert_eq!(file.as_deref(), Some("onnx/model.onnx"));
 }
 

@@ -29,6 +29,12 @@
  *
  *   `onnx:<org>/<repo>`                     → auto-pick the ONNX graph
  *   `onnx:<org>/<repo>#onnx/model.onnx`     → pin an exact file in the repo
+ *   `onnx:<org>/<repo>@<revision>`          → load that commit, branch or tag
+ *
+ * Without a revision the repo's `main` is loaded, and a copy already in the
+ * cache is never compared with the server. Pin a revision when the caller
+ * depends on exact weights. The two suffixes combine as
+ * `<repo>@<revision>#<file>`.
  *
  * Auto-pick order (first hit wins):
  *   onnx/model_quantized.onnx, onnx/model_int8.onnx, onnx/model.onnx,
@@ -72,12 +78,16 @@ const GRAPH_CANDIDATES: &[&str] = &[
 #[cfg(feature = "onnx")]
 const MAX_SEQ_LEN: usize = 512;
 
-/// Parse `<repo>` or `<repo>#<file>` out of the model string.
+/// Parse `<repo>[@<revision>][#<file>]` out of the model string.
 #[cfg(feature = "onnx")]
-fn split_repo_and_file(model: &str) -> (String, Option<String>) {
-	match model.split_once('#') {
-		Some((repo, file)) => (repo.trim().to_string(), Some(file.trim().to_string())),
-		None => (model.trim().to_string(), None),
+fn split_model_string(model: &str) -> (String, Option<String>, Option<String>) {
+	let (repo, file) = match model.split_once('#') {
+		Some((repo, file)) => (repo, Some(file.trim().to_string())),
+		None => (model, None),
+	};
+	match repo.split_once('@') {
+		Some((repo, revision)) => (repo.trim().to_string(), Some(revision.trim().to_string()), file),
+		None => (repo.trim().to_string(), None, file),
 	}
 }
 
@@ -94,9 +104,12 @@ pub struct OnnxProviderImpl {
 #[cfg(feature = "onnx")]
 impl OnnxProviderImpl {
 	pub async fn new(model: &str) -> Result<Self> {
-		let (repo_id, pinned_file) = split_repo_and_file(model);
+		let (repo_id, pinned_revision, pinned_file) = split_model_string(model);
 		if repo_id.is_empty() {
 			anyhow::bail!("onnx provider needs a HuggingFace repo id, e.g. onnx:muvon/octomind-embed");
+		}
+		if pinned_revision.as_deref() == Some("") {
+			anyhow::bail!("onnx model '{}' names no revision after '@'", model);
 		}
 
 		// Share the model cache with the fastembed / huggingface providers so a
@@ -108,7 +121,10 @@ impl OnnxProviderImpl {
 			.with_progress(false)
 			.build()
 			.context("Failed to initialize HuggingFace API")?;
-		let repo = api.repo(Repo::new(repo_id.clone(), RepoType::Model));
+		let repo = api.repo(match pinned_revision {
+			Some(revision) => Repo::with_revision(repo_id.clone(), RepoType::Model, revision),
+			None => Repo::new(repo_id.clone(), RepoType::Model),
+		});
 
 		// config.json is fetched first: it is the cheapest file that is always
 		// present, and its snapshot dir names the exact revision in use.

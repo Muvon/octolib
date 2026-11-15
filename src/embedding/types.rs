@@ -66,7 +66,7 @@ pub enum EmbeddingProviderType {
 	HuggingFace,
 	/// Local ONNX Runtime inference over a HuggingFace-hosted `onnx/` export.
 	/// Faster and smaller than the candle path, and the only way to run a
-	/// quantized graph. Model string: `onnx:<org>/<repo>[#<path-to.onnx>]`.
+	/// quantized graph. Model string: `onnx:<org>/<repo>[@<revision>][#<path-to.onnx>]`.
 	Onnx,
 	OpenAI,
 	OpenRouter,

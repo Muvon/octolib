@@ -49,6 +49,7 @@ pub(crate) fn environment() -> Result<Environment> {
 /// ("Unable to compute the prediction using a neural network model") and runs
 /// about three times slower than ONNX Runtime's own CPU kernels at batch one,
 /// so text encoders stay on the CPU and fixed-shape graphs still go to CoreML.
+#[cfg(any(feature = "fastembed", feature = "hindsight"))]
 pub(crate) fn execution_providers(identity: &str) -> Result<Vec<ort::ep::ExecutionProviderDispatch>> {
 	#[cfg(target_os = "macos")]
 	{
@@ -75,7 +76,7 @@ pub(crate) fn execution_providers(identity: &str) -> Result<Vec<ort::ep::Executi
 pub(crate) fn file_execution_providers(path: &std::path::Path) -> Result<Vec<ort::ep::ExecutionProviderDispatch>> {
 	#[cfg(target_os = "macos")]
 	{
-		execution_providers(&model_hash(std::fs::File::open(path)?, None)?)
+		execution_providers(&model_hash(std::fs::File::open(path)?)?)
 	}
 	#[cfg(not(target_os = "macos"))]
 	{
@@ -84,22 +85,7 @@ pub(crate) fn file_execution_providers(path: &std::path::Path) -> Result<Vec<ort
 	}
 }
 
-pub(crate) fn memory_execution_providers(
-	graph: &[u8],
-	external: Option<(&str, &[u8])>,
-) -> Result<Vec<ort::ep::ExecutionProviderDispatch>> {
-	#[cfg(target_os = "macos")]
-	{
-		execution_providers(&model_hash(std::io::Cursor::new(graph), external)?)
-	}
-	#[cfg(not(target_os = "macos"))]
-	{
-		let _ = (graph, external);
-		execution_providers("")
-	}
-}
-
-#[cfg(any(target_os = "macos", test))]
+#[cfg(any(all(target_os = "macos", any(feature = "fastembed", feature = "hindsight")), test))]
 fn cache_key(identity: &str, runtime: &str, arch: &str) -> String {
 	use sha2::{Digest, Sha256};
 	// v2: compiled models depend on the compute units, which v1 left at ALL.
@@ -107,8 +93,8 @@ fn cache_key(identity: &str, runtime: &str, arch: &str) -> String {
 	hex::encode(Sha256::digest(format!("coreml-v3:{runtime}:{arch}:{identity}")))
 }
 
-#[cfg(any(target_os = "macos", test))]
-fn model_hash(mut reader: impl std::io::Read, external: Option<(&str, &[u8])>) -> Result<String> {
+#[cfg(any(all(target_os = "macos", feature = "hindsight"), test))]
+fn model_hash(mut reader: impl std::io::Read) -> Result<String> {
 	use sha2::{Digest, Sha256};
 	let mut hash = Sha256::new();
 	let mut buffer = [0u8; 64 * 1024];
@@ -118,12 +104,6 @@ fn model_hash(mut reader: impl std::io::Read, external: Option<(&str, &[u8])>) -
 			break;
 		}
 		hash.update(&buffer[..count]);
-	}
-	hash.update([u8::from(external.is_some())]);
-	if let Some((name, bytes)) = external {
-		hash.update(name.len().to_be_bytes());
-		hash.update(name.as_bytes());
-		hash.update(bytes);
 	}
 	Ok(hex::encode(hash.finalize()))
 }

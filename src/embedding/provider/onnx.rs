@@ -51,7 +51,8 @@
 use anyhow::{Context, Result};
 #[cfg(feature = "onnx")]
 use fastembed::{
-	InitOptionsUserDefined, Pooling, QuantizationMode, TextEmbedding, TokenizerFiles, UserDefinedEmbeddingModel,
+	AutoDevicePolicy, InitOptionsUserDefined, Pooling, QuantizationMode, TextEmbedding, TokenizerFiles,
+	UserDefinedEmbeddingModel,
 };
 #[cfg(feature = "onnx")]
 use hf_hub::{api::tokio::ApiBuilder, Repo, RepoType};
@@ -204,12 +205,6 @@ impl OnnxProviderImpl {
 			None => Self::dimension_from_config(&config_path)?,
 		};
 
-		let providers = crate::ort_env::memory_execution_providers(
-			&onnx_file,
-			external_data
-				.as_ref()
-				.map(|(name, bytes)| (name.as_str(), bytes.as_slice())),
-		)?;
 		let mut user_model = UserDefinedEmbeddingModel::new(onnx_file, tokenizer_files)
 			.with_pooling(pooling)
 			// Always None: fp32/fp16/static-int8 graphs are batch-invariant, and
@@ -219,8 +214,11 @@ impl OnnxProviderImpl {
 			user_model = user_model.with_external_initializer(name, buffer);
 		}
 
+		// CPU only. ort registers CoreML on macOS unless told otherwise, and for
+		// a small text encoder CoreML measured two to three times slower than
+		// the CPU kernels at every batch size, GPU included.
 		let options = InitOptionsUserDefined::new()
-			.with_execution_providers(providers)
+			.with_auto_device(AutoDevicePolicy::PreferCPU)
 			.with_environment(crate::ort_env::environment()?)
 			.with_max_length(MAX_SEQ_LEN);
 		let embedding = TextEmbedding::try_new_from_user_defined(user_model, options)

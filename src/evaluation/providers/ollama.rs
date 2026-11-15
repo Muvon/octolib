@@ -24,7 +24,7 @@
 //!
 //! Images and box questions are refused before sending.
 //!
-//! Pricing (https://ollama.com/pricing, 2026-11-14): the page lists one
+//! Pricing (<https://ollama.com/pricing>, 2026-11-14): the page lists one
 //! decision model, `clef`, at $0.24 per 1M input tokens with no output rate.
 //! The cost is reported on the default endpoint only, because a self-hosted
 //! server is not billed.

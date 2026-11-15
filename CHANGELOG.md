@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.53.1] - 2026-11-15
+
+### 📋 Release Summary
+
+ONNX models can now use pinned revisions.
+
+### ✨ New Features & Enhancements
+
+- **onnx**: support pinned revisions for ONNX models `7f8fb980`
+
 ## [0.53.0] - 2026-11-15
 
 ### 📋 Release Summary

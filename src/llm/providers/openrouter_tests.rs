@@ -239,6 +239,15 @@ fn qwen4_max_preview_is_priced_from_the_reference_row() {
 }
 
 #[test]
+fn qwen3_omni_flash_is_priced_from_the_reference_row() {
+	let pricing = OpenRouterProvider::new()
+		.get_model_pricing("qwen/qwen3-omni-flash")
+		.expect("qwen3-omni-flash must be priced");
+	assert_eq!(pricing.input_price_per_1m, 0.43);
+	assert_eq!(pricing.output_price_per_1m, 1.66);
+}
+
+#[test]
 fn test_supports_model() {
 	let provider = OpenRouterProvider::new();
 

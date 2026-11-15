@@ -133,11 +133,11 @@ fn test_pricing_qwen() {
 	assert_eq!(p.output_price_per_1m, 4.80);
 	assert_eq!(p.cache_read_price_per_1m, 0.20);
 
-	// V4.1 Flash: busy rate, and the 10% cache-hit exception
+	// V4.1 Flash: busy rate, and the fixed busy-hour cache-hit price
 	let p = provider.get_model_pricing("deepseek-v4.1-flash").unwrap();
 	assert_eq!(p.input_price_per_1m, 0.30);
 	assert_eq!(p.output_price_per_1m, 1.20);
-	assert_eq!(p.cache_read_price_per_1m, 0.03);
+	assert_eq!(p.cache_read_price_per_1m, 0.006);
 
 	// Unversioned aliases must not shadow more specific entries
 	let p = provider.get_model_pricing("qwen-plus-latest").unwrap();
@@ -259,14 +259,28 @@ fn test_pricing_added_models() {
 	assert_eq!(p.output_price_per_1m, 4.40);
 	assert_eq!(p.cache_read_price_per_1m, 0.28);
 
+	// Prime bills 2x and must not fall through to glm-5.3.
+	let p = provider.get_model_pricing("glm-5.3-prime").unwrap();
+	assert_eq!(p.input_price_per_1m, 2.80);
+	assert_eq!(p.output_price_per_1m, 8.80);
+	assert_eq!(p.cache_read_price_per_1m, 0.56);
+
 	// The fast preview bills 2x and must not fall through to glm-5.2.
 	let p = provider.get_model_pricing("glm-5.2-fast-preview").unwrap();
 	assert_eq!(p.input_price_per_1m, 2.80);
 	assert_eq!(p.output_price_per_1m, 8.80);
-	assert_eq!(p.cache_read_price_per_1m, 2.80);
+	assert_eq!(p.cache_read_price_per_1m, 0.56);
 	let p = provider.get_model_pricing("glm-5.2").unwrap();
 	assert_eq!(p.input_price_per_1m, 1.40);
-	assert_eq!(p.cache_read_price_per_1m, 0.35);
+	assert_eq!(p.cache_read_price_per_1m, 0.28);
+	let p = provider.get_model_pricing("glm-5.1").unwrap();
+	assert_eq!(p.cache_read_price_per_1m, 0.26);
+
+	// K3.1 Pro is cheaper than K3 and must not fall through to kimi-k3.
+	let p = provider.get_model_pricing("kimi-k3.1-pro").unwrap();
+	assert_eq!(p.input_price_per_1m, 2.00);
+	assert_eq!(p.output_price_per_1m, 10.00);
+	assert_eq!(p.cache_read_price_per_1m, 0.20);
 
 	let p = provider.get_model_pricing("kimi-k3").unwrap();
 	assert_eq!(p.input_price_per_1m, 3.00);
@@ -317,6 +331,18 @@ fn test_qwen3_5_omni_flash_pricing() {
 	assert_eq!(p.output_price_per_1m, 2.20);
 	assert_eq!(p.cache_write_price_per_1m, 0.40);
 	assert_eq!(p.cache_read_price_per_1m, 0.40);
+}
+
+#[test]
+fn test_qwen3_omni_flash_pricing() {
+	let provider = AlibabaProvider::new();
+	// International list price: text input $0.43, text output after text-only
+	// input $1.66. Not on the implicit-cache list, so hits bill at the input rate.
+	let p = provider.get_model_pricing("qwen3-omni-flash").unwrap();
+	assert_eq!(p.input_price_per_1m, 0.43);
+	assert_eq!(p.output_price_per_1m, 1.66);
+	assert_eq!(p.cache_write_price_per_1m, 0.43);
+	assert_eq!(p.cache_read_price_per_1m, 0.43);
 }
 
 #[test]

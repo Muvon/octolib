@@ -530,6 +530,17 @@ fn qwen4_max_preview_resolves_to_its_stand_in_row() {
 	assert_eq!(capabilities.max_input_tokens, 1_000_000);
 }
 
+/// qwen3-omni-flash must land on its own row, not on a qwen3.5 omni row.
+#[test]
+fn qwen3_omni_flash_resolves_to_its_own_pricing_row() {
+	let props = get_reference_model_properties("qwen/qwen3-omni-flash").expect("reference entry");
+	assert_eq!(props.pricing_pattern, Some("qwen-3-omni-flash"));
+	let pricing = props.pricing.expect("reference pricing");
+	assert_eq!(pricing.input_price_per_1m, 0.43);
+	assert_eq!(pricing.output_price_per_1m, 1.66);
+	assert_eq!(pricing.cache_read_price_per_1m, 0.43);
+}
+
 /// Dotted and dashed version spellings sanitize identically, so both must land
 /// on the versioned row rather than the family fallback.
 #[test]

@@ -99,6 +99,12 @@ pub(crate) const PRICING: &[PricingTuple] = &[
 	// rates are used. Context caching is unsupported, so cache hits bill at
 	// the input rate.
 	("qwen3.5-omni-flash", 0.40, 2.20, 0.40, 0.40),
+	// Qwen3-Omni-Flash: text input at $0.43 and text output after text-only
+	// input at $1.66 (international list price). Image/video input ($0.78),
+	// audio input ($3.81) and text output after multimodal input ($3.06) are
+	// not representable in a single-rate row, so the text rates are used. Not
+	// on the implicit-cache list, so cache hits bill at the input rate.
+	("qwen3-omni-flash", 0.43, 1.66, 0.43, 0.43),
 	("qwen3.5-flash", 0.10, 0.40, 0.10, 0.01),
 	("qwen3-coder-plus", 1.00, 5.00, 1.00, 0.20),
 	("qwen3-coder-flash", 0.30, 1.50, 0.30, 0.06),
@@ -133,19 +139,24 @@ pub(crate) const PRICING: &[PricingTuple] = &[
 	("qwen3-8b", 0.18, 0.70, 0.18, 0.18),
 	// Third-party models resold by Model Studio at Alibaba's own rates.
 	// V4.1 Flash and the dated V4 snapshots bill busy/idle; the moving V4
-	// aliases have flat rates.
-	("deepseek-v4.1-flash", 0.30, 1.20, 0.30, 0.03),
+	// aliases have flat rates. V4.1 Flash cache hits bill a fixed $0.006 at
+	// busy hours ($0.003 idle), the same in every region.
+	("deepseek-v4.1-flash", 0.30, 1.20, 0.30, 0.006),
 	("deepseek-v4-pro-0813", 1.32, 3.96, 1.32, 0.132),
 	("deepseek-v4-pro", 2.40, 4.80, 2.40, 0.20),
 	("deepseek-v4-flash-0731", 0.44, 1.32, 0.44, 0.044),
 	("deepseek-v4-flash", 0.20, 0.40, 0.20, 0.04),
 	("deepseek-v3.2", 0.57, 1.71, 0.57, 0.114),
+	// GLM cache hits bill 20% of input in Singapore (glm-5.1: 18.57%).
+	// Prime bills 2x glm-5.3 and must precede it.
+	("glm-5.3-prime", 2.80, 8.80, 2.80, 0.56),
 	("glm-5.3", 1.40, 4.40, 1.40, 0.28),
-	// On no international implicit-cache list; must precede glm-5.2.
-	("glm-5.2-fast-preview", 2.80, 8.80, 2.80, 2.80),
-	// 25% cache-hit rate; implicit cache only in the US (Virginia) global scope.
-	("glm-5.2", 1.40, 4.40, 1.40, 0.35),
-	("glm-5.1", 1.40, 4.40, 1.40, 0.28),
+	// Must precede glm-5.2.
+	("glm-5.2-fast-preview", 2.80, 8.80, 2.80, 0.56),
+	("glm-5.2", 1.40, 4.40, 1.40, 0.28),
+	("glm-5.1", 1.40, 4.40, 1.40, 0.26),
+	// Published cached-input rate, not the 20% default; must precede kimi-k3.
+	("kimi-k3.1-pro", 2.00, 10.00, 2.00, 0.20),
 	("kimi-k3", 3.00, 15.00, 3.00, 0.60),
 	("kimi-k2.7-code", 0.95, 4.00, 0.95, 0.19),
 ];

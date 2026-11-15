@@ -1533,6 +1533,14 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		pricing: pricing(0.40, 2.20, 0.40, 0.40),
 	},
 	ReferenceModelEntry {
+		// Qwen3-Omni-Flash: Model Studio international text rates; not on the
+		// implicit-cache list, so cache hits bill at the input rate. The model
+		// page with its context window could not be read, so no capabilities.
+		pattern: "qwen-3-omni-flash",
+		capabilities: None,
+		pricing: pricing(0.43, 1.66, 0.43, 0.43),
+	},
+	ReferenceModelEntry {
 		pattern: "qwen-3.5-flash",
 		capabilities: caps(true, true, true, 1_000_000),
 		pricing: pricing(0.10, 0.40, 0.10, 0.01),

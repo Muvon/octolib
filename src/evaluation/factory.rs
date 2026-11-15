@@ -14,8 +14,8 @@
 
 use super::errors::{EvaluationError, EvaluationResult};
 use super::providers::{
-	CloudflareEvaluationProvider, OctoHubEvaluationProvider, OpenAiEvaluationProvider, OpenRouterEvaluationProvider,
-	TypeSafeEvaluationProvider,
+	CloudflareEvaluationProvider, OctoHubEvaluationProvider, OllamaEvaluationProvider, OpenAiEvaluationProvider,
+	OpenRouterEvaluationProvider, TypeSafeEvaluationProvider,
 };
 // Deprecated: Inception is removed entirely from octolib on 2026-12-28; the
 // factory route stays supported until then.
@@ -46,6 +46,7 @@ impl EvaluationProviderFactory {
 			#[allow(deprecated)]
 			"inception" => Ok(Box::new(InceptionEvaluationProvider::new())),
 			"octohub" => Ok(Box::new(OctoHubEvaluationProvider::new())),
+			"ollama" => Ok(Box::new(OllamaEvaluationProvider::new())),
 			"openai" => Ok(Box::new(OpenAiEvaluationProvider::new())),
 			"openrouter" => Ok(Box::new(OpenRouterEvaluationProvider::new())),
 			"typesafe" => Ok(Box::new(TypeSafeEvaluationProvider::new())),
@@ -66,7 +67,15 @@ impl EvaluationProviderFactory {
 	}
 
 	pub fn supported_providers() -> &'static [&'static str] {
-		&["cloudflare", "inception", "octohub", "openai", "openrouter", "typesafe"]
+		&[
+			"cloudflare",
+			"inception",
+			"octohub",
+			"ollama",
+			"openai",
+			"openrouter",
+			"typesafe",
+		]
 	}
 }
 
@@ -96,6 +105,15 @@ mod tests {
 		let (provider, model) = EvaluationProviderFactory::get_provider_for_model("octohub:jev").unwrap();
 		assert_eq!(provider.name(), "octohub");
 		assert_eq!(model, "jev");
+
+		let (provider, model) = EvaluationProviderFactory::get_provider_for_model("ollama:clef").unwrap();
+		assert_eq!(provider.name(), "ollama");
+		assert_eq!(model, "clef");
+
+		// A tag after the model name is part of the model, not a second separator.
+		let (provider, model) = EvaluationProviderFactory::get_provider_for_model("ollama:tev1:0.8b").unwrap();
+		assert_eq!(provider.name(), "ollama");
+		assert_eq!(model, "tev1:0.8b");
 
 		let (provider, model) = EvaluationProviderFactory::get_provider_for_model("openai:gpt-6-luna").unwrap();
 		assert_eq!(provider.name(), "openai");

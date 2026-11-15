@@ -30,7 +30,8 @@
 //! OpenRouter's Decisions router serves the same payload for every maker's
 //! decision model (`openrouter:openai/gpt-6-luna-decisions`). OpenAI's own
 //! Decisions API (`openai:gpt-6-luna`) has a different wire format and is
-//! mapped onto these types.
+//! mapped onto these types. Ollama's decision endpoint (`ollama:clef`)
+//! takes the same body, on Ollama Cloud or on a self-hosted server.
 
 pub mod errors;
 pub mod factory;
@@ -42,8 +43,8 @@ pub mod types;
 pub use errors::{EvaluationError, EvaluationResult};
 pub use factory::EvaluationProviderFactory;
 pub use providers::{
-	CloudflareEvaluationProvider, OctoHubEvaluationProvider, OpenAiEvaluationProvider, OpenRouterEvaluationProvider,
-	TypeSafeEvaluationProvider,
+	CloudflareEvaluationProvider, OctoHubEvaluationProvider, OllamaEvaluationProvider, OpenAiEvaluationProvider,
+	OpenRouterEvaluationProvider, TypeSafeEvaluationProvider,
 };
 // Deprecated: Inception is removed entirely from octolib on 2026-12-28.
 #[allow(deprecated)]

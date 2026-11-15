@@ -15,6 +15,7 @@
 pub mod cloudflare;
 pub mod inception;
 pub mod octohub;
+pub mod ollama;
 pub mod openai;
 pub mod openrouter;
 pub(crate) mod shared;
@@ -25,6 +26,7 @@ pub use cloudflare::CloudflareEvaluationProvider;
 #[allow(deprecated)]
 pub use inception::InceptionEvaluationProvider;
 pub use octohub::OctoHubEvaluationProvider;
+pub use ollama::OllamaEvaluationProvider;
 pub use openai::OpenAiEvaluationProvider;
 pub use openrouter::OpenRouterEvaluationProvider;
 pub use typesafe::TypeSafeEvaluationProvider;

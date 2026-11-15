@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.53.2] - 2026-11-15
+
+### 📋 Release Summary
+
+Qwen4-Max-Preview is now supported. Model pricing data has been corrected, and ONNX embedding execution now prefers the CPU.
+
+### ✨ New Features & Enhancements
+
+- **llm**: support qwen4-max-preview model `3549244f`
+
+### 🔧 Improvements & Optimizations
+
+- **onnx**: prefer CPU for ONNX embedding execution `93c4887a`
+- **ollama**: format pricing URL as an autolink `3c9969ea`
+
+### 🐛 Bug Fixes & Stability
+
+- **llm**: correct model pricing data `88e148d0`
+
 ## [0.53.1] - 2026-11-15
 
 ### 📋 Release Summary

@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.53.0] - 2026-11-15
+
+### 📋 Release Summary
+
+Evaluation now supports Ollama models, and CoreML is restricted to static input shapes. Inception providers are deprecated effective 2026-12-28.
+
+### ✨ New Features & Enhancements
+
+- **evaluation**: support Ollama evaluation models `418f675b`
+
+### 🔧 Improvements & Optimizations
+
+- **llm,evaluation**: deprecate Inception providers for 2026-12-28 `a7182ece`
+
+### 🐛 Bug Fixes & Stability
+
+- **coreml**: restrict CoreML to static input shapes `fc06fcd7`
+
+### 🔄 Other Changes
+
+2 maintenance, dependency, and tooling updates not listed individually.
+
 ## [0.52.3] - 2026-11-10
 
 ### 📋 Release Summary

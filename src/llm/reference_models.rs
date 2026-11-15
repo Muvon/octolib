@@ -1781,6 +1781,14 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		pricing: pricing(0.35, 2.75, 0.35, 0.35),
 	},
 	ReferenceModelEntry {
+		// Qwen4-Max-Preview (Nov 2026): Token Plan only, billed in credits
+		// with no per-token price; stands in at the Alibaba qwen3.8-max list
+		// rates. 1M context, text/image/video input.
+		pattern: "qwen-4-max-preview",
+		capabilities: caps(true, true, true, 1_000_000),
+		pricing: pricing(2.00, 6.00, 2.00, 0.25),
+	},
+	ReferenceModelEntry {
 		// Qwen3.8-Max-Prime (Sep 2026): Model Studio sells it in the China
 		// region only; baseline from OpenRouter. Must precede qwen-3.8-max.
 		pattern: "qwen-3.8-max-prime",

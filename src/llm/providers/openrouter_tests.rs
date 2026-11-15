@@ -230,6 +230,15 @@ fn october_2026_models_are_priced_on_the_aggregator_route() {
 }
 
 #[test]
+fn qwen4_max_preview_is_priced_from_the_reference_row() {
+	let pricing = OpenRouterProvider::new()
+		.get_model_pricing("qwen/qwen4-max-preview")
+		.expect("qwen4-max-preview must be priced");
+	assert_eq!(pricing.input_price_per_1m, 2.00);
+	assert_eq!(pricing.output_price_per_1m, 6.00);
+}
+
+#[test]
 fn test_supports_model() {
 	let provider = OpenRouterProvider::new();
 

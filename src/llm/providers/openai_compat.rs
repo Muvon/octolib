@@ -176,6 +176,8 @@ const fn levels(levels: &'static [Effort], none: bool) -> EffortLevels {
 ///   switched off with `enable_thinking`, not a `none` level. DeepSeek V4
 ///   accepts the OpenAI-standard five values and owns the model-specific
 ///   collapse between them, so the caller's level passes verbatim.
+///   qwen4-max-preview (model page, Nov 2026) lists `low|medium|xhigh`,
+///   default `xhigh`.
 /// - Ollama Cloud (`/api/show` thinking values, Oct 2026; docs.ollama.com
 ///   OpenAI compatibility): supported names apply exactly, unsupported names
 ///   resolve to the model default, and `"none"` requests no thinking. Live
@@ -207,6 +209,7 @@ const HOSTED_EFFORT_LEVELS: &[(&str, &str, EffortLevels)] = &[
 	("alibaba", "glm-5.3", levels(LOW_HIGH_MAX, false)),
 	("alibaba", "glm-5.2", levels(FULL, true)),
 	("alibaba", "glm-5.1", levels(UP_TO_XHIGH, true)),
+	("alibaba", "qwen4-max-preview", levels(LOW_MEDIUM_XHIGH, false)),
 	("ollama", "glm-5.3", levels(LOW_HIGH_MAX, false)),
 	("ollama", "glm-5.2", levels(HIGH_MAX, true)),
 	("ollama", "kimi-k3", levels(LOW_HIGH_MAX, true)),

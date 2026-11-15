@@ -71,6 +71,9 @@ const ALIBABA_API_URL: &str = "https://dashscope-intl.aliyuncs.com/compatible-mo
 // Busy/idle models are priced at the busy rate (idle is half). Hybrid-thinking
 // open-weight models are priced at the non-thinking output rate.
 pub(crate) const PRICING: &[PricingTuple] = &[
+	// Token Plan only, billed in credits: Model Studio publishes no per-token
+	// price (model page, Nov 2026). Stands in at the qwen3.8-max list rates.
+	("qwen4-max-preview", 2.00, 6.00, 2.00, 0.25),
 	// The 0902 snapshot is listed at the moving alias's rates.
 	("qwen3.8-max-0902", 2.00, 6.00, 2.00, 0.25),
 	("qwen3.8-max", 2.00, 6.00, 2.00, 0.25),
@@ -234,7 +237,7 @@ impl AiProvider for AlibabaProvider {
 		Some(measured.unwrap_or(UNMEASURED_CACHE_LIFETIME))
 	}
 
-	/// GLM reads every prior turn's reasoning back (see
+	/// GLM and qwen4-max-preview read every prior turn's reasoning back (see
 	/// `preserves_historical_thinking`), so it occupies context the model
 	/// reads and bills.
 	fn replays_thinking(&self, model: &str) -> bool {
@@ -333,10 +336,12 @@ fn natively_enforces_response_schema(model: &str) -> bool {
 /// that `reasoning_content` sent back complete, unmodified and in its original
 /// order. Without it every call starts with none of the model's earlier
 /// reasoning: a glm-5.3 max-effort run re-derived the same plan (20-88k chars)
-/// on every step until it timed out. DeepSeek and Qwen follow other rules on
-/// this host.
+/// on every step until it timed out. qwen4-max-preview has `preserve_thinking`
+/// on by default in Chat Completions and asks for all historical thinking back
+/// in `reasoning_content` (model page, Nov 2026). DeepSeek and earlier Qwen
+/// models follow other rules on this host.
 pub(crate) fn preserves_historical_thinking(model: &str) -> bool {
-	contains_ignore_ascii_case(model, "glm")
+	contains_ignore_ascii_case(model, "glm") || contains_ignore_ascii_case(model, "qwen4-max-preview")
 }
 
 #[cfg(test)]

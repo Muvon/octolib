@@ -417,6 +417,21 @@ fn test_alibaba_glm_reasoning_effort_follows_model_studio_ladder() {
 	);
 }
 
+/// qwen4-max-preview lists only low, medium and xhigh on Model Studio.
+#[test]
+fn test_alibaba_qwen4_reasoning_effort_uses_listed_levels() {
+	use crate::llm::types::ReasoningEffort;
+	for (effort, expected) in [
+		(ReasoningEffort::Low, "low"),
+		(ReasoningEffort::Medium, "medium"),
+		(ReasoningEffort::High, "medium"),
+		(ReasoningEffort::XHigh, "xhigh"),
+		(ReasoningEffort::Max, "xhigh"),
+	] {
+		assert_eq!(reasoning_effort_value("alibaba", "qwen4-max-preview", effort), expected);
+	}
+}
+
 /// Ollama Cloud resolves an unsupported effort name to the model default, which
 /// is `max` for glm-5.3 (`/api/show` values `low|high|max`), so the generic
 /// ladder must not send `medium` there.

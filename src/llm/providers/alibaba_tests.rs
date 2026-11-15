@@ -67,6 +67,24 @@ fn test_glm_replayed_thinking_counts_toward_context() {
 }
 
 #[test]
+fn test_qwen4_max_preview_stands_in_at_qwen3_8_max_rates() {
+	// Token Plan only with no per-token price published: billed as qwen3.8-max.
+	let provider = AlibabaProvider::new();
+	let preview = provider.get_model_pricing("qwen4-max-preview").unwrap();
+	let stand_in = provider.get_model_pricing("qwen3.8-max").unwrap();
+	assert_eq!(preview.input_price_per_1m, stand_in.input_price_per_1m);
+	assert_eq!(preview.output_price_per_1m, stand_in.output_price_per_1m);
+	assert_eq!(preview.cache_write_price_per_1m, stand_in.cache_write_price_per_1m);
+	assert_eq!(preview.cache_read_price_per_1m, stand_in.cache_read_price_per_1m);
+
+	assert_eq!(provider.get_max_input_tokens("qwen4-max-preview"), 1_000_000);
+	assert!(provider.supports_vision("qwen4-max-preview"));
+	assert!(provider.supports_video("qwen4-max-preview"));
+	// Chat Completions keeps earlier turns' reasoning by default.
+	assert!(provider.replays_thinking("qwen4-max-preview"));
+}
+
+#[test]
 fn test_pricing_qwen() {
 	let provider = AlibabaProvider::new();
 

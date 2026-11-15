@@ -514,6 +514,22 @@ fn specific_patterns_win_over_the_broader_rows_they_extend() {
 	}
 }
 
+/// qwen4-max-preview is Token Plan only with no per-token price, so its row
+/// stands in at the qwen3.8-max list rates.
+#[test]
+fn qwen4_max_preview_resolves_to_its_stand_in_row() {
+	let props = get_reference_model_properties("qwen/qwen4-max-preview").expect("reference entry");
+	assert_eq!(props.capability_pattern, Some("qwen-4-max-preview"));
+	assert_eq!(props.pricing_pattern, Some("qwen-4-max-preview"));
+	let pricing = props.pricing.expect("reference pricing");
+	assert_eq!(pricing.input_price_per_1m, 2.00);
+	assert_eq!(pricing.output_price_per_1m, 6.00);
+	assert_eq!(pricing.cache_read_price_per_1m, 0.25);
+	let capabilities = props.capabilities.expect("reference capabilities");
+	assert!(capabilities.vision && capabilities.video && capabilities.structured_output);
+	assert_eq!(capabilities.max_input_tokens, 1_000_000);
+}
+
 /// Dotted and dashed version spellings sanitize identically, so both must land
 /// on the versioned row rather than the family fallback.
 #[test]

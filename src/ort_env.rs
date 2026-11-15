@@ -43,6 +43,12 @@ pub(crate) fn environment() -> Result<Environment> {
 /// The GPU unit runs graphs through MPSGraph, which leaks its context and
 /// prints "Context leak detected" straight to stderr; the Neural Engine and
 /// CPU keep the CoreML speedup without that path.
+///
+/// CoreML takes only the nodes whose input shapes are fixed. A model it compiles
+/// for a variable batch or sequence length fails on any batch above one
+/// ("Unable to compute the prediction using a neural network model") and runs
+/// about three times slower than ONNX Runtime's own CPU kernels at batch one,
+/// so text encoders stay on the CPU and fixed-shape graphs still go to CoreML.
 pub(crate) fn execution_providers(identity: &str) -> Result<Vec<ort::ep::ExecutionProviderDispatch>> {
 	#[cfg(target_os = "macos")]
 	{
@@ -53,6 +59,7 @@ pub(crate) fn execution_providers(identity: &str) -> Result<Vec<ort::ep::Executi
 		let path = path.to_str().ok_or_else(|| anyhow!("CoreML cache path is not UTF-8"))?;
 		Ok(vec![ort::ep::CoreML::default()
 			.with_compute_units(ort::ep::coreml::ComputeUnits::CPUAndNeuralEngine)
+			.with_static_input_shapes(true)
 			.with_model_cache_dir(path)
 			.build()
 			.error_on_failure()])
@@ -96,7 +103,8 @@ pub(crate) fn memory_execution_providers(
 fn cache_key(identity: &str, runtime: &str, arch: &str) -> String {
 	use sha2::{Digest, Sha256};
 	// v2: compiled models depend on the compute units, which v1 left at ALL.
-	hex::encode(Sha256::digest(format!("coreml-v2:{runtime}:{arch}:{identity}")))
+	// v3: static-shape-only partitioning changes which nodes CoreML compiles.
+	hex::encode(Sha256::digest(format!("coreml-v3:{runtime}:{arch}:{identity}")))
 }
 
 #[cfg(any(target_os = "macos", test))]

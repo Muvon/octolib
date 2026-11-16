@@ -71,6 +71,12 @@ const FORMAT: u32 = 1;
 /// ORT threads per graph — enough to keep one encode under ~50 ms on a
 /// laptop core without starving the agent process.
 const THREADS: usize = 4;
+/// ONNX Runtime session option that keeps the weights in the one layout the
+/// model file has. Prepacking makes a second, GEMM-ready copy of every
+/// matrix: measured on the 501 MB export over 200 scored events, turning it off
+/// takes the loaded worker from 739 MB to 552 MB resident, at the same
+/// encode-and-score time (148 ms against 153 ms median, 4 threads, Linux x86-64).
+const DISABLE_PREPACKING: &str = "session.disable_prepacking";
 /// Whole-file download attempts after a transient failure (each resumes).
 const DOWNLOAD_RETRIES: usize = 3;
 const RETRY_WAIT: std::time::Duration = std::time::Duration::from_secs(5);
@@ -238,6 +244,8 @@ impl Hindsight {
 				.with_execution_providers(crate::ort_env::file_execution_providers(&dir.join(name))?)
 				.map_err(ort_error)?
 				.with_intra_threads(THREADS)
+				.map_err(ort_error)?
+				.with_config_entry(DISABLE_PREPACKING, "1")
 				.map_err(ort_error)?
 				.commit_from_file(dir.join(name))
 				.map_err(ort_error)

@@ -18,8 +18,16 @@
 //! without pulling in the chat providers.
 
 use arc_swap::ArcSwap;
-use std::sync::LazyLock;
+use hickory_resolver::{config::LookupIpStrategy, TokioResolver};
+use reqwest::dns::{Addrs, Name, Resolve, Resolving};
+use std::future::Future;
+use std::net::SocketAddr;
+use std::pin::Pin;
+use std::sync::{Arc, LazyLock};
+use std::task::{Context, Poll};
 use std::time::Duration;
+use tokio::time::Instant;
+use tower::{Layer, Service};
 
 pub(crate) const CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
 
@@ -59,9 +67,112 @@ static HTTP_CLIENT: LazyLock<ArcSwap<reqwest::Client>> =
 static WEBSOCKET_CLIENT: LazyLock<ArcSwap<reqwest::Client>> =
 	LazyLock::new(|| ArcSwap::from_pointee(build_http_client(true)));
 
+/// A lookup or connect at or above this is logged at `warn`: normal ones take
+/// milliseconds, so a full second points at the network or resolver.
+const SLOW_NETWORK_STEP: Duration = Duration::from_secs(1);
+
+/// Resolves through hickory, which caches answers for their TTL, so a new
+/// connection after the pool's idle timeout does not repeat a slow lookup.
+/// Every lookup is timed so slow DNS shows up in the log.
+struct TimedResolver<R> {
+	inner: R,
+}
+
+impl<R: Resolve> Resolve for TimedResolver<R> {
+	fn resolve(&self, name: Name) -> Resolving {
+		let host = name.as_str().to_string();
+		let lookup = self.inner.resolve(name);
+		Box::pin(async move {
+			let started = Instant::now();
+			let result = lookup.await;
+			let elapsed = started.elapsed();
+			if elapsed >= SLOW_NETWORK_STEP {
+				tracing::warn!(host = %host, elapsed_ms = elapsed.as_millis() as u64, "slow DNS lookup");
+			} else {
+				tracing::debug!(host = %host, elapsed_ms = elapsed.as_millis() as u64, "DNS lookup");
+			}
+			result
+		})
+	}
+}
+
+struct HickoryResolver(TokioResolver);
+
+impl HickoryResolver {
+	/// Reads the system DNS configuration; fails if it cannot be read.
+	fn from_system_config() -> Result<Self, hickory_resolver::ResolveError> {
+		let mut builder = TokioResolver::builder_tokio()?;
+		// Same as reqwest's own hickory integration: ask for both families so
+		// connection racing (happy eyeballs) has addresses to race.
+		builder.options_mut().ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
+		Ok(Self(builder.build()))
+	}
+}
+
+impl Resolve for HickoryResolver {
+	fn resolve(&self, name: Name) -> Resolving {
+		let resolver = self.0.clone();
+		Box::pin(async move {
+			let lookup = resolver.lookup_ip(name.as_str()).await?;
+			let addrs: Addrs = Box::new(lookup.into_iter().map(|ip| SocketAddr::new(ip, 0)));
+			Ok(addrs)
+		})
+	}
+}
+
+/// Times each new connection (DNS + TCP + TLS) and warns when it is slow.
+#[derive(Clone)]
+struct ConnectTimingLayer;
+
+impl<S> Layer<S> for ConnectTimingLayer {
+	type Service = ConnectTiming<S>;
+
+	fn layer(&self, inner: S) -> Self::Service {
+		ConnectTiming(inner)
+	}
+}
+
+#[derive(Clone)]
+struct ConnectTiming<S>(S);
+
+impl<S, Target> Service<Target> for ConnectTiming<S>
+where
+	S: Service<Target>,
+	S::Future: Send + 'static,
+	S::Response: Send + 'static,
+	S::Error: Send + 'static,
+	Target: std::fmt::Debug,
+{
+	type Response = S::Response;
+	type Error = S::Error;
+	type Future = Pin<Box<dyn Future<Output = Result<S::Response, S::Error>> + Send>>;
+
+	fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+		self.0.poll_ready(cx)
+	}
+
+	fn call(&mut self, target: Target) -> Self::Future {
+		// reqwest hides the target type; its Debug output carries the URI.
+		let described = format!("{target:?}");
+		let started = Instant::now();
+		let connecting = self.0.call(target);
+		Box::pin(async move {
+			let result = connecting.await;
+			let elapsed = started.elapsed();
+			if elapsed >= SLOW_NETWORK_STEP {
+				tracing::warn!(target = %described, elapsed_ms = elapsed.as_millis() as u64, "slow connect");
+			}
+			result
+		})
+	}
+}
+
 fn build_http_client(http1_only: bool) -> reqwest::Client {
+	let resolver = HickoryResolver::from_system_config().expect("failed to read system DNS configuration");
 	let builder = reqwest::Client::builder()
 		.user_agent(USER_AGENT.load().as_str())
+		.dns_resolver(Arc::new(TimedResolver { inner: resolver }))
+		.connector_layer(ConnectTimingLayer)
 		.connect_timeout(CONNECT_TIMEOUT)
 		.tcp_keepalive(Duration::from_secs(10))
 		.tcp_keepalive_interval(Duration::from_secs(5))
@@ -99,4 +210,89 @@ pub(crate) fn websocket_client() -> reqwest::Client {
 #[cfg(feature = "websockets")]
 pub(crate) fn user_agent() -> std::sync::Arc<String> {
 	USER_AGENT.load_full()
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use std::io;
+	use std::sync::Mutex;
+	use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+	struct SlowResolver;
+
+	impl Resolve for SlowResolver {
+		fn resolve(&self, _name: Name) -> Resolving {
+			Box::pin(async {
+				tokio::time::sleep(SLOW_NETWORK_STEP * 2).await;
+				let addrs: Addrs = Box::new(std::iter::empty());
+				Ok(addrs)
+			})
+		}
+	}
+
+	#[derive(Clone)]
+	struct LogBuffer(Arc<Mutex<Vec<u8>>>);
+
+	impl io::Write for LogBuffer {
+		fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+			self.0.lock().unwrap().extend_from_slice(buf);
+			Ok(buf.len())
+		}
+
+		fn flush(&mut self) -> io::Result<()> {
+			Ok(())
+		}
+	}
+
+	#[tokio::test(start_paused = true)]
+	async fn slow_lookup_is_reported_as_warning() {
+		let buffer = LogBuffer(Arc::default());
+		let writer = buffer.clone();
+		let subscriber = tracing_subscriber::fmt()
+			.with_max_level(tracing::Level::DEBUG)
+			.with_ansi(false)
+			.with_writer(move || writer.clone())
+			.finish();
+		let _guard = tracing::subscriber::set_default(subscriber);
+
+		let resolver = TimedResolver { inner: SlowResolver };
+		let _addrs = resolver.resolve("slow.example".parse().unwrap()).await.unwrap();
+
+		let log = String::from_utf8(buffer.0.lock().unwrap().clone()).unwrap();
+		assert!(log.contains("WARN"), "{log}");
+		assert!(log.contains("slow.example"), "{log}");
+	}
+
+	// The shared client is built inside a `LazyLock`, possibly outside any runtime.
+	#[test]
+	fn client_builds_without_a_runtime() {
+		build_http_client(false);
+	}
+
+	#[tokio::test]
+	async fn client_resolves_localhost() {
+		let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+		let port = listener.local_addr().unwrap().port();
+		tokio::spawn(async move {
+			let (mut socket, _) = listener.accept().await.unwrap();
+			let mut request = [0u8; 1024];
+			let _ = socket.read(&mut request).await;
+			socket
+				.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+				.await
+				.unwrap();
+		});
+
+		let url = format!("http://localhost:{port}/");
+		let body = build_http_client(false)
+			.get(url)
+			.send()
+			.await
+			.unwrap()
+			.text()
+			.await
+			.unwrap();
+		assert_eq!(body, "ok");
+	}
 }

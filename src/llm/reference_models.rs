@@ -126,6 +126,13 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		pricing: pricing(0.05, 0.70, 0.05, 0.025),
 	},
 	ReferenceModelEntry {
+		// Liquid LFM 3 1.7B (Nov 2026): 262K-context text model. Baseline from
+		// OpenRouter.
+		pattern: "lfm-3-1.7b",
+		capabilities: caps(false, false, true, 262_144),
+		pricing: pricing(0.08, 0.20, 0.08, 0.02),
+	},
+	ReferenceModelEntry {
 		pattern: "step-5-preview",
 		capabilities: caps(true, true, true, 1_048_576),
 		pricing: pricing(1.00, 2.70, 1.00, 0.10),
@@ -428,6 +435,13 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		pricing: pricing(0.025, 0.10, 0.025, 0.0025),
 	},
 	ReferenceModelEntry {
+		// Nex AGI Nex N2.6 (Nov 2026): 262K context, text+image input.
+		// Baseline from OpenRouter.
+		pattern: "nex-n2.6",
+		capabilities: caps(true, false, true, 262_144),
+		pricing: pricing(0.12, 0.40, 0.12, 0.024),
+	},
+	ReferenceModelEntry {
 		// StepFun Step 3.7 Flash: 262K context, text/image/video input.
 		pattern: "step-3.7-flash",
 		capabilities: caps(true, true, true, 262_144),
@@ -667,6 +681,20 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		pricing: pricing(0.834, 2.501, 0.834, 0.042),
 	},
 	ReferenceModelEntry {
+		// Tencent Hunyuan 4 Flash (Nov 2026): 1M context, text+image input.
+		// Baseline from OpenRouter. Must precede hy4.
+		pattern: "hy4-flash",
+		capabilities: caps(true, false, true, 1_048_576),
+		pricing: pricing(0.04375, 0.175625, 0.04375, 0.001875),
+	},
+	ReferenceModelEntry {
+		// Tencent Hunyuan 4 (Nov 2026): 1M context, text+image input.
+		// Baseline from OpenRouter.
+		pattern: "hy4",
+		capabilities: caps(true, false, true, 1_048_576),
+		pricing: pricing(0.417, 1.2505, 0.417, 0.021),
+	},
+	ReferenceModelEntry {
 		// IBM Granite 4.2 8B (Aug 2026): 131K-context text model.
 		pattern: "granite-4.2",
 		capabilities: caps(false, false, true, 131_072),
@@ -678,6 +706,48 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		pattern: "ling-3.1-flash",
 		capabilities: caps(false, false, true, 262_144),
 		pricing: pricing(0.075, 0.225, 0.075, 0.015),
+	},
+	ReferenceModelEntry {
+		// InclusionAI Ling 3.2 Flash (Nov 2026): 1M context, text+image input.
+		// Free routes only on OpenRouter, so no baseline price.
+		pattern: "ling-3.2-flash",
+		capabilities: caps(true, false, true, 1_048_576),
+		pricing: None,
+	},
+	ReferenceModelEntry {
+		// KT midm-k-3.0-pro (Nov 2026): 262K-context text model. Baseline from
+		// OpenRouter.
+		pattern: "midm-k-3.0-pro",
+		capabilities: caps(false, false, true, 261_795),
+		pricing: pricing(0.20, 0.80, 0.20, 0.04),
+	},
+	ReferenceModelEntry {
+		// Ricursive AI Ripple 65B preview (Nov 2026): 1M-context text model.
+		// Baseline from OpenRouter.
+		pattern: "ripple-65b-preview",
+		capabilities: caps(false, false, true, 1_048_576),
+		pricing: pricing(0.10, 0.30, 0.10, 0.025),
+	},
+	ReferenceModelEntry {
+		// Motif Technologies Motif 3 (Nov 2026): 262K-context text model.
+		// Baseline from OpenRouter.
+		pattern: "motif-3",
+		capabilities: caps(false, false, true, 262_144),
+		pricing: pricing(0.30, 1.20, 0.30, 0.06),
+	},
+	ReferenceModelEntry {
+		// Baidu ERNIE Light DT 1.0 international (Nov 2026): 1M-context text
+		// model. Baseline from OpenRouter.
+		pattern: "ernie-light-dt-1.0",
+		capabilities: caps(false, false, true, 1_024_000),
+		pricing: pricing(1.13, 3.94, 1.13, 0.113),
+	},
+	ReferenceModelEntry {
+		// Baidu ERNIE 5.5 Flash preview (Nov 2026): 1M-context text model.
+		// Free routes only on OpenRouter, so no baseline price.
+		pattern: "ernie-5.5-flash-preview",
+		capabilities: caps(false, false, true, 1_024_000),
+		pricing: None,
 	},
 	ReferenceModelEntry {
 		// Reflection Beam 1.0 (Oct 2026): 501B/23B-active open-weight MoE,
@@ -1145,6 +1215,18 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		capabilities: caps(true, true, true, 1_048_576),
 		// Introductory pricing through Nov 30, 2026 (matches providers/google_vertex.rs)
 		pricing: pricing(2.00, 10.00, 2.00, 0.10),
+	},
+	ReferenceModelEntry {
+		pattern: "gemini-4-carbon",
+		capabilities: caps(true, true, true, 1_048_576),
+		// Time-limited pricing through Nov 30, 2026 (matches providers/google_vertex.rs)
+		pricing: pricing(2.00, 10.00, 2.00, 0.10),
+	},
+	ReferenceModelEntry {
+		pattern: "gemini-4-hydrogen",
+		capabilities: caps(true, true, true, 1_048_576),
+		// Matches providers/google_vertex.rs
+		pricing: pricing(1.50, 7.50, 1.50, 0.075),
 	},
 	ReferenceModelEntry {
 		pattern: "gemini-3.8-flash",
@@ -1789,12 +1871,31 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		pricing: pricing(0.35, 2.75, 0.35, 0.35),
 	},
 	ReferenceModelEntry {
-		// Qwen4-Max-Preview (Nov 2026): Token Plan only, billed in credits
-		// with no per-token price; stands in at the Alibaba qwen3.8-max list
-		// rates. 1M context, text/image/video input.
-		pattern: "qwen-4-max-preview",
+		// Qwen4-Max (Nov 2026): 1M context, text/image/video input. Model
+		// Studio international list price. Cache write is the explicit
+		// 5-minute rate; providers/alibaba.rs bills writes at the input rate
+		// because it only uses the implicit cache.
+		pattern: "qwen-4-max",
 		capabilities: caps(true, true, true, 1_000_000),
-		pricing: pricing(2.00, 6.00, 2.00, 0.25),
+		pricing: pricing(1.50, 4.50, 1.875, 0.075),
+	},
+	ReferenceModelEntry {
+		// Macaron models from `mindlab` on Model Studio (Nov 2026), Singapore
+		// list price (matches providers/alibaba.rs). The coding variant adds
+		// image input.
+		pattern: "macaron-v1.1-coding-venti",
+		capabilities: caps(true, false, true, 1_048_576),
+		pricing: pricing(1.19, 3.74, 1.19, 0.22),
+	},
+	ReferenceModelEntry {
+		pattern: "macaron-v1.1-venti",
+		capabilities: caps(false, false, true, 1_048_576),
+		pricing: pricing(1.19, 3.74, 1.19, 0.22),
+	},
+	ReferenceModelEntry {
+		pattern: "macaron-v1-tall",
+		capabilities: caps(false, false, true, 262_144),
+		pricing: pricing(0.45, 2.60, 0.45, 0.08),
 	},
 	ReferenceModelEntry {
 		// Qwen3.8-Max-Prime (Sep 2026): Model Studio sells it in the China

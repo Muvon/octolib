@@ -44,6 +44,17 @@ fn test_model_pricing() {
 	assert_eq!(p.output_price_per_1m, 10.00);
 	assert_eq!(p.cache_read_price_per_1m, 0.10);
 
+	// Carbon shares Argon's time-limited rate; Hydrogen has a flat rate.
+	let p = provider.get_model_pricing("gemini-4-carbon").unwrap();
+	assert_eq!(p.input_price_per_1m, 2.00);
+	assert_eq!(p.output_price_per_1m, 10.00);
+	assert_eq!(p.cache_read_price_per_1m, 0.10);
+
+	let p = provider.get_model_pricing("gemini-4-hydrogen").unwrap();
+	assert_eq!(p.input_price_per_1m, 1.50);
+	assert_eq!(p.output_price_per_1m, 7.50);
+	assert_eq!(p.cache_read_price_per_1m, 0.075);
+
 	let p = provider.get_model_pricing("gemini-3.1-pro").unwrap();
 	assert_eq!(p.input_price_per_1m, 2.00);
 	assert_eq!(p.output_price_per_1m, 12.00);
@@ -145,9 +156,11 @@ fn test_sampling_params() {
 }
 
 #[test]
-fn argon_defaults_to_a_supported_vertex_location() {
+fn gemini_4_defaults_to_a_supported_vertex_location() {
 	assert_eq!(default_vertex_location("gemini-4-argon"), "global");
 	assert_eq!(default_vertex_location("google/gemini-4-argon"), "global");
+	assert_eq!(default_vertex_location("gemini-4-carbon"), "global");
+	assert_eq!(default_vertex_location("gemini-4-hydrogen"), "global");
 	assert_eq!(default_vertex_location("gemini-2.5-pro"), "us-central1");
 	assert_eq!(
 		default_vertex_api_url("project", "global"),

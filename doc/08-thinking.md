@@ -15,11 +15,12 @@ thinking switched off wherever the provider has a switch:
 
 | Provider | `ReasoningEffort::None` on the wire |
 |----------|-------------------------------------|
-| Alibaba Model Studio (DeepSeek V4, GLM, Qwen3) | `enable_thinking: false`, no `reasoning_effort` |
+| Alibaba Model Studio (DeepSeek V4, GLM, Qwen3, Qwen4) | `enable_thinking: false`, no `reasoning_effort` |
 | DeepSeek (native) | `thinking: {"type": "disabled"}` |
 | Z.AI | `thinking: {"type": "disabled"}` (omitted for GLM-5.3, which rejects it) |
 | OpenRouter | `reasoning: {"enabled": false}` for optional reasoning; the catalog's lowest effort for mandatory reasoning |
 | Google Studio / Vertex, Gemini 4 Argon | `extra_body.google.thinking_config.thinking_level: "low"` (thinking cannot be disabled) |
+| Google Studio, Gemini 4 Hydrogen | `reasoning_effort: "none"` (thinking is reduced, not disabled) |
 | OpenAI Responses (gpt-5.x) | `reasoning: {"effort": "none"}`; the o-series floors to `"low"` |
 | OctoHub | `reasoning_effort: "none"`, mapped server-side by this same library |
 | Cloudflare Workers AI | `reasoning_effort: "none"` only when the catalog lists it as a level |
@@ -124,7 +125,7 @@ Argon's 1,048,576-token context is shared by input and output, including thinkin
 A low output cap can be exhausted before an answer or tool call is produced;
 `finish_reason: "length"` remains visible to the caller. Google's long-decode
 continuation protocol requires GenerateContent and is **not supported by these
-OpenAI-compatible adapters**. Vertex defaults Argon to the global location;
+OpenAI-compatible adapters**. Vertex defaults Argon, Carbon and Hydrogen to the global location;
 explicit URL and location overrides still take precedence.
 
 Sources, reviewed November 6, 2026:

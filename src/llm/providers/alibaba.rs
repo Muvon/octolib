@@ -58,7 +58,8 @@ pub(crate) const ALIBABA_API_KEY_ENV: &str = "ALIBABA_API_KEY";
 const ALIBABA_API_URL_ENV: &str = "ALIBABA_API_URL";
 const ALIBABA_API_URL: &str = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions";
 
-// Model Studio international pricing (per 1M tokens in USD) - Oct 2026
+// Model Studio international pricing (per 1M tokens in USD) - Oct 2026; rows added
+// since carry their own date.
 // Source: https://www.alibabacloud.com/help/en/model-studio/model-pricing plus the
 // per-model pages linked from https://www.alibabacloud.com/help/en/model-studio/models
 // Format: (model, input, output, cache_write, cache_read)
@@ -71,9 +72,8 @@ const ALIBABA_API_URL: &str = "https://dashscope-intl.aliyuncs.com/compatible-mo
 // Busy/idle models are priced at the busy rate (idle is half). Hybrid-thinking
 // open-weight models are priced at the non-thinking output rate.
 pub(crate) const PRICING: &[PricingTuple] = &[
-	// Token Plan only, billed in credits: Model Studio publishes no per-token
-	// price (model page, Nov 2026). Stands in at the qwen3.8-max list rates.
-	("qwen4-max-preview", 2.00, 6.00, 2.00, 0.25),
+	// Model page, Nov 2026.
+	("qwen4-max", 1.50, 4.50, 1.50, 0.075),
 	// The 0902 snapshot is listed at the moving alias's rates.
 	("qwen3.8-max-0902", 2.00, 6.00, 2.00, 0.25),
 	("qwen3.8-max", 2.00, 6.00, 2.00, 0.25),
@@ -159,6 +159,11 @@ pub(crate) const PRICING: &[PricingTuple] = &[
 	("kimi-k3.1-pro", 2.00, 10.00, 2.00, 0.20),
 	("kimi-k3", 3.00, 15.00, 3.00, 0.60),
 	("kimi-k2.7-code", 0.95, 4.00, 0.95, 0.19),
+	// Macaron models from `mindlab` (model pages, Nov 2026): pay-as-you-go in
+	// Singapore only. One published cache rate covers implicit and explicit hits.
+	("macaron-v1.1-coding-venti", 1.19, 3.74, 1.19, 0.22),
+	("macaron-v1.1-venti", 1.19, 3.74, 1.19, 0.22),
+	("macaron-v1-tall", 0.45, 2.60, 0.45, 0.08),
 ];
 
 const QWEN_PLUS_LONG_CONTEXT_THRESHOLD: u64 = 256_000;
@@ -175,11 +180,14 @@ const QWEN_PLUS_LONG_CONTEXT_THRESHOLD: u64 = 256_000;
 //   and glm-5.3 one of two; later hits on qwen3.8-flash (30m, one at 60m) came after
 //   misses, so they are routing, not a longer lifetime.
 // - qwen3.7-plus: hits at 30s and 45s, 3 of 4 at 60s, none from 65s to 60m.
+// - qwen4-max (measured 2026-11-17, same endpoint and method, ~8k-token prompts): every
+//   sample hit at each delay from 1m to 60m, the longest tried.
 const MEASURED_CACHE_LIFETIMES: &[(&str, std::time::Duration)] = &[
 	("deepseek-v4.1-flash", std::time::Duration::from_secs(30 * 60)),
 	("glm-5.3", std::time::Duration::from_secs(10 * 60)),
 	("qwen3.8-flash", std::time::Duration::from_secs(10 * 60)),
 	("qwen3.8-max", std::time::Duration::from_secs(30 * 60)),
+	("qwen4-max", std::time::Duration::from_secs(60 * 60)),
 ];
 // About a minute is too short for a keepalive or an idle compaction to pay off.
 const SHORT_CACHE_MODELS: &[&str] = &["qwen3.7-plus"];
@@ -248,7 +256,7 @@ impl AiProvider for AlibabaProvider {
 		Some(measured.unwrap_or(UNMEASURED_CACHE_LIFETIME))
 	}
 
-	/// GLM and qwen4-max-preview read every prior turn's reasoning back (see
+	/// GLM and qwen4-max read every prior turn's reasoning back (see
 	/// `preserves_historical_thinking`), so it occupies context the model
 	/// reads and bills.
 	fn replays_thinking(&self, model: &str) -> bool {
@@ -329,9 +337,15 @@ impl AiProvider for AlibabaProvider {
 
 /// JSON Schema is native only for the Alibaba model families explicitly listed
 /// by Model Studio. Snapshot suffixes inherit their family's capability.
+/// qwen4-max was probed live on the Token Plan endpoint (2026-11-17): a strict
+/// object schema against a prompt asking for a JSON array returned the object
+/// on 5 of 5 calls, 3 with thinking and 2 with `enable_thinking: false`. The
+/// pay-as-you-go endpoint was not probed (no key for it); its model page lists
+/// JSON Schema as supported.
 fn natively_enforces_response_schema(model: &str) -> bool {
 	let model = normalize_model_name(model);
 	[
+		"qwen4-max",
 		"qwen3.8-max",
 		"qwen3.8-flash",
 		"qwen3.7-max",
@@ -347,12 +361,12 @@ fn natively_enforces_response_schema(model: &str) -> bool {
 /// that `reasoning_content` sent back complete, unmodified and in its original
 /// order. Without it every call starts with none of the model's earlier
 /// reasoning: a glm-5.3 max-effort run re-derived the same plan (20-88k chars)
-/// on every step until it timed out. qwen4-max-preview has `preserve_thinking`
+/// on every step until it timed out. qwen4-max has `preserve_thinking`
 /// on by default in Chat Completions and asks for all historical thinking back
 /// in `reasoning_content` (model page, Nov 2026). DeepSeek and earlier Qwen
 /// models follow other rules on this host.
 pub(crate) fn preserves_historical_thinking(model: &str) -> bool {
-	contains_ignore_ascii_case(model, "glm") || contains_ignore_ascii_case(model, "qwen4-max-preview")
+	contains_ignore_ascii_case(model, "glm") || contains_ignore_ascii_case(model, "qwen4-max")
 }
 
 #[cfg(test)]

@@ -31,6 +31,7 @@ fn cache_lifetime_follows_the_measured_implicit_cache() {
 	assert_eq!(provider.cache_lifetime("qwen3.8-flash", true), minutes(10));
 	assert_eq!(provider.cache_lifetime("deepseek-v4.1-flash", false), minutes(30));
 	assert_eq!(provider.cache_lifetime("qwen3.8-max", false), minutes(30));
+	assert_eq!(provider.cache_lifetime("qwen4-max", false), minutes(60));
 	assert_eq!(provider.cache_lifetime("qwen3.7-plus", false), None);
 	assert_eq!(provider.cache_lifetime("kimi-k3", false), minutes(15));
 }
@@ -67,21 +68,41 @@ fn test_glm_replayed_thinking_counts_toward_context() {
 }
 
 #[test]
-fn test_qwen4_max_preview_stands_in_at_qwen3_8_max_rates() {
-	// Token Plan only with no per-token price published: billed as qwen3.8-max.
+fn test_qwen4_max_uses_its_list_price_and_capabilities() {
 	let provider = AlibabaProvider::new();
-	let preview = provider.get_model_pricing("qwen4-max-preview").unwrap();
-	let stand_in = provider.get_model_pricing("qwen3.8-max").unwrap();
-	assert_eq!(preview.input_price_per_1m, stand_in.input_price_per_1m);
-	assert_eq!(preview.output_price_per_1m, stand_in.output_price_per_1m);
-	assert_eq!(preview.cache_write_price_per_1m, stand_in.cache_write_price_per_1m);
-	assert_eq!(preview.cache_read_price_per_1m, stand_in.cache_read_price_per_1m);
+	let p = provider.get_model_pricing("qwen4-max").unwrap();
+	assert_eq!(p.input_price_per_1m, 1.50);
+	assert_eq!(p.output_price_per_1m, 4.50);
+	// Implicit cache: writes bill at the input rate.
+	assert_eq!(p.cache_write_price_per_1m, 1.50);
+	assert_eq!(p.cache_read_price_per_1m, 0.075);
 
-	assert_eq!(provider.get_max_input_tokens("qwen4-max-preview"), 1_000_000);
-	assert!(provider.supports_vision("qwen4-max-preview"));
-	assert!(provider.supports_video("qwen4-max-preview"));
+	assert_eq!(provider.get_max_input_tokens("qwen4-max"), 1_000_000);
+	assert!(provider.supports_vision("qwen4-max"));
+	assert!(provider.supports_video("qwen4-max"));
+	assert!(provider.enforces_response_schema("qwen4-max"));
 	// Chat Completions keeps earlier turns' reasoning by default.
-	assert!(provider.replays_thinking("qwen4-max-preview"));
+	assert!(provider.replays_thinking("qwen4-max"));
+}
+
+#[test]
+fn test_macaron_models_use_their_list_prices() {
+	let provider = AlibabaProvider::new();
+	for (model, input, output, cache_read) in [
+		("mindlab/macaron-v1.1-coding-venti", 1.19, 3.74, 0.22),
+		("mindlab/macaron-v1.1-venti", 1.19, 3.74, 0.22),
+		("mindlab/macaron-v1-tall", 0.45, 2.60, 0.08),
+	] {
+		let p = provider.get_model_pricing(model).unwrap();
+		assert_eq!(p.input_price_per_1m, input, "{model}");
+		assert_eq!(p.output_price_per_1m, output, "{model}");
+		assert_eq!(p.cache_read_price_per_1m, cache_read, "{model}");
+	}
+	assert_eq!(provider.get_max_input_tokens("mindlab/macaron-v1.1-venti"), 1_048_576);
+	assert_eq!(provider.get_max_input_tokens("mindlab/macaron-v1-tall"), 262_144);
+	// Only the coding variant takes images.
+	assert!(provider.supports_vision("mindlab/macaron-v1.1-coding-venti"));
+	assert!(!provider.supports_vision("mindlab/macaron-v1.1-venti"));
 }
 
 #[test]

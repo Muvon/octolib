@@ -22,6 +22,9 @@ fn cache_lifetime_is_known_only_on_measured_models() {
 	assert_eq!(provider.cache_lifetime("gemini-3.8-flash", true), five_minutes);
 	assert_eq!(provider.cache_lifetime("gemini-3.6-flash", false), five_minutes);
 	assert_eq!(provider.cache_lifetime("gemini-3.1-pro-preview", false), None);
+	// Measured without a lifetime they are known to survive.
+	assert_eq!(provider.cache_lifetime("gemini-4-carbon", false), None);
+	assert_eq!(provider.cache_lifetime("gemini-4-hydrogen", false), None);
 	assert_eq!(provider.cache_lifetime("gemini-2.5-flash", false), None);
 }
 #[test]

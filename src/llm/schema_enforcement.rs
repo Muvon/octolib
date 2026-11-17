@@ -40,6 +40,11 @@ use anyhow::Result;
 
 const SYNTHETIC_TOOL_NAME: &str = "emit_structured_response";
 
+/// How much of the end of the reasoning a failed answer logs: enough to tell a
+/// model that was still converging from one repeating itself until its output
+/// budget ran out.
+const RAW_FAIL_THINKING_TAIL_CHARS: usize = 2000;
+
 /// Run a chat completion, forcing the response to conform to a requested JSON
 /// schema even when `provider` doesn't natively guarantee it.
 ///
@@ -124,6 +129,11 @@ fn checked(
 			provider = provider,
 			finish_reason = %redact_text(&format!("{:?}", response.finish_reason), api_key),
 			thinking_len = response.thinking.as_ref().map(|t| t.content.len()).unwrap_or(0),
+			thinking_tail = %response
+				.thinking
+				.as_ref()
+				.map(|t| redact_text(tail(&t.content, RAW_FAIL_THINKING_TAIL_CHARS), api_key))
+				.unwrap_or_default(),
 			content_len = response.content.len(),
 			content_head = %redact_text(&response.content, api_key).chars().take(400).collect::<String>(),
 			"RAW-FAIL: no parseable structured output, final output captured"
@@ -175,6 +185,16 @@ fn extract_candidate(response: &ProviderResponse) -> Option<serde_json::Value> {
 		.map(|c| c.arguments.clone())
 		.or_else(|| response.structured_output.clone())
 		.or_else(|| parse_structured_output_from_text(&response.content))
+}
+
+/// The last `chars` characters of `text`.
+fn tail(text: &str, chars: usize) -> &str {
+	let start = text
+		.char_indices()
+		.rev()
+		.nth(chars.saturating_sub(1))
+		.map_or(0, |(index, _)| index);
+	&text[start..]
 }
 
 /// Attach the validated value as `structured_output`, mirror it

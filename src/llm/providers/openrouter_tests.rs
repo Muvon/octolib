@@ -230,12 +230,38 @@ fn october_2026_models_are_priced_on_the_aggregator_route() {
 }
 
 #[test]
-fn qwen4_max_preview_is_priced_from_the_reference_row() {
+fn qwen4_max_is_priced_from_the_reference_row() {
 	let pricing = OpenRouterProvider::new()
-		.get_model_pricing("qwen/qwen4-max-preview")
-		.expect("qwen4-max-preview must be priced");
-	assert_eq!(pricing.input_price_per_1m, 2.00);
-	assert_eq!(pricing.output_price_per_1m, 6.00);
+		.get_model_pricing("qwen/qwen4-max")
+		.expect("qwen4-max must be priced");
+	assert_eq!(pricing.input_price_per_1m, 1.50);
+	assert_eq!(pricing.output_price_per_1m, 4.50);
+	assert_eq!(pricing.cache_write_price_per_1m, 1.875);
+	assert_eq!(pricing.cache_read_price_per_1m, 0.075);
+}
+
+#[test]
+fn november_2026_models_are_priced_on_the_aggregator_route() {
+	let provider = OpenRouterProvider::new();
+	for (model, input, output, cache_read) in [
+		("google/gemini-4-hydrogen", 1.50, 7.50, 0.075),
+		("google/gemini-4-carbon", 2.00, 10.00, 0.10),
+		("tencent/hy4", 0.417, 1.2505, 0.021),
+		("tencent/hy4-flash", 0.04375, 0.175625, 0.001875),
+		("nex-agi/nex-n2.6", 0.12, 0.40, 0.024),
+		("liquid/lfm-3-1.7b", 0.08, 0.20, 0.02),
+		("kt/midm-k-3.0-pro", 0.20, 0.80, 0.04),
+		("ricursiveai/ripple-65b-preview", 0.10, 0.30, 0.025),
+		("motif-technologies/motif-3", 0.30, 1.20, 0.06),
+		("baidu/ernie-light-dt-1.0-intl", 1.13, 3.94, 0.113),
+	] {
+		let pricing = provider
+			.get_model_pricing(model)
+			.unwrap_or_else(|| panic!("{model} must be priced"));
+		assert_eq!(pricing.input_price_per_1m, input, "{model}");
+		assert_eq!(pricing.output_price_per_1m, output, "{model}");
+		assert_eq!(pricing.cache_read_price_per_1m, cache_read, "{model}");
+	}
 }
 
 #[test]

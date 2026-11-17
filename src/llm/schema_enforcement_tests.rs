@@ -228,3 +228,14 @@ fn response_validation_defers_real_tool_call_turns() {
 	assert_eq!(call.name, "client_tool");
 	assert_eq!(call.arguments, serde_json::json!({}));
 }
+
+/// A failed answer logs the end of the reasoning, where a model that ran out
+/// of budget shows whether it was converging or repeating itself. The cut
+/// never splits a character.
+#[test]
+fn the_reasoning_tail_is_its_last_characters() {
+	assert_eq!(tail("abcdef", 3), "def");
+	assert_eq!(tail("abc", RAW_FAIL_THINKING_TAIL_CHARS), "abc");
+	assert_eq!(tail("ab\u{e9}\u{e9}", 2), "\u{e9}\u{e9}");
+	assert_eq!(tail("", 3), "");
+}

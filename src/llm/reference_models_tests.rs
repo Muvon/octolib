@@ -197,6 +197,8 @@ fn reference_pricing_matches_first_party_provider_tables() {
 	let google = GoogleVertexProvider::new();
 	for model in [
 		"gemini-4-argon",
+		"gemini-4-carbon",
+		"gemini-4-hydrogen",
 		"gemini-3.8-flash",
 		"gemini-3.7-flash",
 		"gemini-3.6-flash",
@@ -503,6 +505,9 @@ fn specific_patterns_win_over_the_broader_rows_they_extend() {
 		("qwen3.8-max", "qwen-3.8-max", 2.00, 6.00),
 		("qwen3.5-omni-flash", "qwen-3.5-omni-flash", 0.40, 2.20),
 		("qwen3.5-omni-plus", "qwen-3.5-omni-plus", 1.40, 8.30),
+		("hy4-preview", "hy4-preview", 0.834, 2.501),
+		("hy4-flash", "hy4-flash", 0.04375, 0.175625),
+		("hy4", "hy4", 0.417, 1.2505),
 	] {
 		let props = get_reference_model_properties(model)
 			.unwrap_or_else(|| panic!("{model} must resolve to a reference entry"));
@@ -514,20 +519,107 @@ fn specific_patterns_win_over_the_broader_rows_they_extend() {
 	}
 }
 
-/// qwen4-max-preview is Token Plan only with no per-token price, so its row
-/// stands in at the qwen3.8-max list rates.
+/// qwen4-max carries the Model Studio international list price.
 #[test]
-fn qwen4_max_preview_resolves_to_its_stand_in_row() {
-	let props = get_reference_model_properties("qwen/qwen4-max-preview").expect("reference entry");
-	assert_eq!(props.capability_pattern, Some("qwen-4-max-preview"));
-	assert_eq!(props.pricing_pattern, Some("qwen-4-max-preview"));
+fn qwen4_max_resolves_to_its_list_price_row() {
+	let props = get_reference_model_properties("qwen/qwen4-max").expect("reference entry");
+	assert_eq!(props.capability_pattern, Some("qwen-4-max"));
+	assert_eq!(props.pricing_pattern, Some("qwen-4-max"));
 	let pricing = props.pricing.expect("reference pricing");
-	assert_eq!(pricing.input_price_per_1m, 2.00);
-	assert_eq!(pricing.output_price_per_1m, 6.00);
-	assert_eq!(pricing.cache_read_price_per_1m, 0.25);
+	assert_eq!(pricing.input_price_per_1m, 1.50);
+	assert_eq!(pricing.output_price_per_1m, 4.50);
+	assert_eq!(pricing.cache_write_price_per_1m, 1.875);
+	assert_eq!(pricing.cache_read_price_per_1m, 0.075);
 	let capabilities = props.capabilities.expect("reference capabilities");
 	assert!(capabilities.vision && capabilities.video && capabilities.structured_output);
 	assert_eq!(capabilities.max_input_tokens, 1_000_000);
+}
+
+/// The November 2026 model watch: new OpenRouter and Model Studio families
+/// resolve through the reference table, so aggregators and proxies can price
+/// them too.
+#[test]
+fn november_2026_additions_resolve_with_documented_capabilities_and_pricing() {
+	for (model, capabilities, pricing) in [
+		(
+			"tencent/hy4",
+			caps(true, false, true, 1_048_576),
+			pricing(0.417, 1.2505, 0.417, 0.021),
+		),
+		(
+			"tencent/hy4-flash",
+			caps(true, false, true, 1_048_576),
+			pricing(0.04375, 0.175625, 0.04375, 0.001875),
+		),
+		(
+			"nex-agi/nex-n2.6",
+			caps(true, false, true, 262_144),
+			pricing(0.12, 0.40, 0.12, 0.024),
+		),
+		(
+			"liquid/lfm-3-1.7b",
+			caps(false, false, true, 262_144),
+			pricing(0.08, 0.20, 0.08, 0.02),
+		),
+		(
+			"kt/midm-k-3.0-pro",
+			caps(false, false, true, 261_795),
+			pricing(0.20, 0.80, 0.20, 0.04),
+		),
+		(
+			"ricursiveai/ripple-65b-preview",
+			caps(false, false, true, 1_048_576),
+			pricing(0.10, 0.30, 0.10, 0.025),
+		),
+		(
+			"motif-technologies/motif-3",
+			caps(false, false, true, 262_144),
+			pricing(0.30, 1.20, 0.30, 0.06),
+		),
+		(
+			"baidu/ernie-light-dt-1.0-intl",
+			caps(false, false, true, 1_024_000),
+			pricing(1.13, 3.94, 1.13, 0.113),
+		),
+		(
+			"google/gemini-4-hydrogen",
+			caps(true, true, true, 1_048_576),
+			pricing(1.50, 7.50, 1.50, 0.075),
+		),
+		(
+			"google/gemini-4-carbon",
+			caps(true, true, true, 1_048_576),
+			pricing(2.00, 10.00, 2.00, 0.10),
+		),
+		(
+			"mindlab/macaron-v1.1-coding-venti",
+			caps(true, false, true, 1_048_576),
+			pricing(1.19, 3.74, 1.19, 0.22),
+		),
+		(
+			"mindlab/macaron-v1.1-venti",
+			caps(false, false, true, 1_048_576),
+			pricing(1.19, 3.74, 1.19, 0.22),
+		),
+		(
+			"mindlab/macaron-v1-tall",
+			caps(false, false, true, 262_144),
+			pricing(0.45, 2.60, 0.45, 0.08),
+		),
+	] {
+		assert_same_capabilities(get_reference_capabilities(model).unwrap(), capabilities.unwrap());
+		assert_same_pricing(get_reference_pricing(model).unwrap(), pricing.unwrap());
+	}
+
+	// Free routes only: capabilities without a rate.
+	for (model, pattern) in [
+		("inclusionai/ling-3.2-flash:free", "ling-3.2-flash"),
+		("baidu/ernie-5.5-flash-preview:free", "ernie-5.5-flash-preview"),
+	] {
+		let props = get_reference_model_properties(model).unwrap();
+		assert_eq!(props.capability_pattern, Some(pattern), "{model}");
+		assert!(props.pricing.is_none(), "{model}");
+	}
 }
 
 /// qwen3-omni-flash must land on its own row, not on a qwen3.5 omni row.

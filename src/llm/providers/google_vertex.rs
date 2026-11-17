@@ -65,6 +65,12 @@ pub(super) const PRICING: &[PricingTuple] = &[
 	// standard rates from Dec 1, 2026: input $4.00, output $20.00, cache read $0.20.
 	// Implicit caching only; flat rates at every context length.
 	("gemini-4-argon", 2.00, 10.00, 2.00, 0.10),
+	// Gemini 4 Carbon — the same time-limited rates and dates as Argon (pricing
+	// page, verified Nov 17, 2026). Implicit caching only; flat rates.
+	("gemini-4-carbon", 2.00, 10.00, 2.00, 0.10),
+	// Gemini 4 Hydrogen — no time-limited rate (verified Nov 17, 2026).
+	// Implicit caching only; flat rates at every context length.
+	("gemini-4-hydrogen", 1.50, 7.50, 1.50, 0.075),
 	// Gemini 3.8 / 3.7 / 3.6 series — introductory pricing through Dec 31, 2026;
 	// standard rates from Jan 1, 2027: input $1.50, output $7.50, cache read $0.15
 	("gemini-3.8-flash", 0.75, 3.75, 0.75, 0.075),
@@ -154,9 +160,10 @@ fn default_vertex_api_url(project: &str, location: &str) -> String {
 }
 
 fn default_vertex_location(model: &str) -> &'static str {
-	// Argon is served in global/us/eu, not the legacy us-central1 region.
+	// Gemini 4 models are served in global/us/eu, not the legacy us-central1
+	// region (Argon, Carbon and Hydrogen model pages, Nov 2026).
 	// https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/4-argon
-	if normalize_model_name(model).contains("gemini-4-argon") {
+	if normalize_model_name(model).contains("gemini-4") {
 		"global"
 	} else {
 		"us-central1"

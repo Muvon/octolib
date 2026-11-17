@@ -145,6 +145,7 @@ impl EffortLevels {
 }
 
 const LOW_HIGH_MAX: &[Effort] = &[Effort::Low, Effort::High, Effort::Max];
+const LOW_HIGH_XHIGH: &[Effort] = &[Effort::Low, Effort::High, Effort::XHigh];
 const HIGH_MAX: &[Effort] = &[Effort::High, Effort::Max];
 const LOW_MEDIUM: &[Effort] = &[Effort::Low, Effort::Medium];
 const LOW_MEDIUM_HIGH: &[Effort] = &[Effort::Low, Effort::Medium, Effort::High];
@@ -176,8 +177,7 @@ const fn levels(levels: &'static [Effort], none: bool) -> EffortLevels {
 ///   switched off with `enable_thinking`, not a `none` level. DeepSeek V4
 ///   accepts the OpenAI-standard five values and owns the model-specific
 ///   collapse between them, so the caller's level passes verbatim.
-///   qwen4-max-preview (model page, Nov 2026) lists `low|medium|xhigh`,
-///   default `xhigh`.
+///   qwen4-max (model page, Nov 2026) lists `low|high|xhigh`, default `high`.
 /// - Ollama Cloud (`/api/show` thinking values, Oct 2026; docs.ollama.com
 ///   OpenAI compatibility): supported names apply exactly, unsupported names
 ///   resolve to the model default, and `"none"` requests no thinking. Live
@@ -192,8 +192,9 @@ const fn levels(levels: &'static [Effort], none: bool) -> EffortLevels {
 ///   lists their levels without an off toggle.
 /// - NVIDIA NIM (z-ai-glm-5-3 reference: `low|high|max`, default `max`;
 ///   models.dev `nvidia` catalog, Oct 2026, for the other rows).
-/// - OpenCode Zen/Go (models.dev `opencode`/`opencode-go`, Oct 2026). kimi-k3
-///   was verified live: Go returns 400 "must be one of: low, high, max".
+/// - OpenCode Zen/Go (models.dev `opencode`/`opencode-go`, Oct 2026; qwen4-max
+///   Nov 2026). kimi-k3 was verified live: Go returns 400 "must be one of:
+///   low, high, max".
 /// - Cerebras (reasoning guide, Oct 2026): qwen-3.8-27b thinks at `high` by
 ///   default; `"none"` disables it.
 /// - Groq (reasoning guide, Oct 2026): qwen3.8-27b takes `"none"` to disable
@@ -204,12 +205,17 @@ const fn levels(levels: &'static [Effort], none: bool) -> EffortLevels {
 ///   requests collapse onto `medium`.
 /// - Reflection (reasoning guide, Nov 2026): Beam takes the five levels and
 ///   always reasons; `none` is a 400 (live, 2026-11-07).
+/// - Google AI Studio (live, 2026-11-17): gemini-4-hydrogen takes `xhigh`,
+///   which gemini-4-carbon and gemini-4-argon answer with a 400, so only
+///   Hydrogen is listed. `none` is accepted there and cut thinking on a
+///   one-line answer from 137 tokens to 40.
 const HOSTED_EFFORT_LEVELS: &[(&str, &str, EffortLevels)] = &[
 	("alibaba", "deepseek-v4", levels(FULL, true)),
 	("alibaba", "glm-5.3", levels(LOW_HIGH_MAX, false)),
 	("alibaba", "glm-5.2", levels(FULL, true)),
 	("alibaba", "glm-5.1", levels(UP_TO_XHIGH, true)),
-	("alibaba", "qwen4-max-preview", levels(LOW_MEDIUM_XHIGH, false)),
+	("alibaba", "qwen4-max", levels(LOW_HIGH_XHIGH, false)),
+	("google-studio", "gemini-4-hydrogen", levels(UP_TO_XHIGH, true)),
 	("ollama", "glm-5.3", levels(LOW_HIGH_MAX, false)),
 	("ollama", "glm-5.2", levels(HIGH_MAX, true)),
 	("ollama", "kimi-k3", levels(LOW_HIGH_MAX, true)),
@@ -241,6 +247,7 @@ const HOSTED_EFFORT_LEVELS: &[(&str, &str, EffortLevels)] = &[
 	("opencode", "deepseek-v4-pro", levels(HIGH_MAX, false)),
 	("opencode", "deepseek-v4", levels(LOW_HIGH_MAX, false)),
 	("opencode", "qwen3.8", levels(LOW_MEDIUM_XHIGH, false)),
+	("opencode", "qwen4-max", levels(LOW_HIGH_XHIGH, false)),
 	("cerebras", "qwen-3.8", levels(LOW_MEDIUM_HIGH, true)),
 	("groq", "qwen3.8", levels(LOW_MEDIUM_HIGH, true)),
 	("webwright", "wren-r1", levels(LOW_MEDIUM, false)),

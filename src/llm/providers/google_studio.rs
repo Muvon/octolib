@@ -63,6 +63,10 @@ static MODELS_CACHE: OnceCell<Vec<CachedModel>> = OnceCell::const_new();
 // at 3m excluded); at 7m only one gemini-3.8-flash sample hit, and from 15m every sample
 // missed. gemini-3.1-pro-preview missed one sample at 1m and every sample from 5m, so it
 // has no lifetime it is known to survive.
+// Measured 2026-11-17 the same way with ~8k-token prompts: gemini-4-carbon hit on both
+// samples at 1m and missed both at 3m and 5m; gemini-4-hydrogen hit on both at 1m and 5m,
+// on one of two at 3m and 7m, and missed from 10m. Carbon's cache is too short to keep
+// alive and Hydrogen's hits depend on routing, so neither has a known lifetime.
 const MEASURED_CACHE_MODELS: &[&str] = &["gemini-4-argon", "gemini-3.8-flash", "gemini-3.6-flash"];
 const MEASURED_CACHE_LIFETIME: std::time::Duration = std::time::Duration::from_secs(5 * 60);
 

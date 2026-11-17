@@ -417,18 +417,18 @@ fn test_alibaba_glm_reasoning_effort_follows_model_studio_ladder() {
 	);
 }
 
-/// qwen4-max-preview lists only low, medium and xhigh on Model Studio.
+/// qwen4-max lists only low, high and xhigh on Model Studio.
 #[test]
 fn test_alibaba_qwen4_reasoning_effort_uses_listed_levels() {
 	use crate::llm::types::ReasoningEffort;
 	for (effort, expected) in [
 		(ReasoningEffort::Low, "low"),
-		(ReasoningEffort::Medium, "medium"),
-		(ReasoningEffort::High, "medium"),
+		(ReasoningEffort::Medium, "low"),
+		(ReasoningEffort::High, "high"),
 		(ReasoningEffort::XHigh, "xhigh"),
 		(ReasoningEffort::Max, "xhigh"),
 	] {
-		assert_eq!(reasoning_effort_value("alibaba", "qwen4-max-preview", effort), expected);
+		assert_eq!(reasoning_effort_value("alibaba", "qwen4-max", effort), expected);
 	}
 }
 
@@ -750,6 +750,11 @@ fn test_opencode_reasoning_effort_follows_catalog_levels() {
 			"qwen3.8-max",
 			&[(Medium, "medium"), (High, "medium"), (XHigh, "xhigh"), (Max, "xhigh")],
 		);
+		assert_effort_ladder(
+			provider_name,
+			"qwen4-max",
+			&[(Medium, "low"), (High, "high"), (XHigh, "xhigh"), (Max, "xhigh")],
+		);
 		assert_effort_ladder(provider_name, "glm-5.2", &[(Low, "high"), (Max, "max")]);
 		// No documented off level: nothing is sent.
 		assert_eq!(
@@ -757,6 +762,27 @@ fn test_opencode_reasoning_effort_follows_catalog_levels() {
 			serde_json::json!({})
 		);
 	}
+}
+
+/// AI Studio takes `xhigh` and `none` on gemini-4-hydrogen. gemini-4-carbon
+/// answers 400 to `xhigh`, so it keeps the generic ladder, which stops at `high`.
+#[test]
+fn test_google_studio_hydrogen_reasoning_effort_reaches_xhigh() {
+	assert_effort_ladder(
+		"google-studio",
+		"gemini-4-hydrogen",
+		&[
+			(Effort::None, "none"),
+			(Effort::High, "high"),
+			(Effort::XHigh, "xhigh"),
+			(Effort::Max, "xhigh"),
+		],
+	);
+	assert_effort_ladder(
+		"google-studio",
+		"gemini-4-carbon",
+		&[(Effort::XHigh, "high"), (Effort::Max, "high")],
+	);
 }
 
 /// Cerebras and Groq disable Qwen3.8 reasoning with "none"; gpt-oss has no

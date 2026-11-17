@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.54.0] - 2026-11-17
+
+### 📋 Release Summary
+
+HTTP diagnostics now include DNS and connection timings, and LLM model capabilities, pricing, and routing have been updated. DNS resolution now uses platform-appropriate behavior, and ONNX session prepacking is disabled for Hindsight.
+
+### ✨ New Features & Enhancements
+
+- **http**: add timed DNS and connection diagnostics `fcc37308`
+- **llm**: update model capabilities, pricing, and routing `c0283727`
+
+### 🔧 Improvements & Optimizations
+
+- **hindsight**: disable ONNX session prepacking `2b0a9062`
+
+### 🐛 Bug Fixes & Stability
+
+- **dns**: use platform-appropriate DNS resolution `c9d4ab93`
+
 ## [0.53.2] - 2026-11-15
 
 ### 📋 Release Summary

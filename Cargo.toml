@@ -63,9 +63,6 @@ reqwest = { version = "0.12", features = ["json", "multipart", "rustls-tls", "ru
 reqwest-websocket = { version = "0.5.1", optional = true }
 futures-util = { version = "0.3", features = ["sink"], optional = true }
 tokio = { version = "1.54.1", features = ["time", "sync", "macros", "rt-multi-thread", "net", "io-util"] }
-# Same major as the resolver behind reqwest 0.12's own `hickory-dns` feature, so one copy is built.
-# Reads the system DNS config (/etc/resolv.conf on Unix incl. macOS, adapter list on Windows).
-hickory-resolver = { version = "0.25", features = ["tokio"] }
 # Only the `Layer`/`Service` traits, for the connect-timing layer.
 tower = { version = "0.5", default-features = false }
 arc-swap = "1"
@@ -250,3 +247,9 @@ candle-nn = { version = "0.11.1", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tungstenite = { version = "0.27", default-features = false, optional = true }
+
+# Caches DNS answers for their TTL. Linux only: on macOS and Windows it would
+# skip per-domain DNS (VPN split DNS, /etc/resolver/*, .local names).
+# Same major as the resolver behind reqwest 0.12's own `hickory-dns` feature, so one copy is built.
+[target.'cfg(target_os = "linux")'.dependencies]
+hickory-resolver = { version = "0.25", features = ["tokio"] }

@@ -18,6 +18,7 @@
 //! without pulling in the chat providers.
 
 use arc_swap::ArcSwap;
+#[cfg(target_os = "linux")]
 use hickory_resolver::{config::LookupIpStrategy, TokioResolver};
 use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 use std::future::Future;
@@ -71,9 +72,7 @@ static WEBSOCKET_CLIENT: LazyLock<ArcSwap<reqwest::Client>> =
 /// milliseconds, so a full second points at the network or resolver.
 const SLOW_NETWORK_STEP: Duration = Duration::from_secs(1);
 
-/// Resolves through hickory, which caches answers for their TTL, so a new
-/// connection after the pool's idle timeout does not repeat a slow lookup.
-/// Every lookup is timed so slow DNS shows up in the log.
+/// Times every lookup so slow DNS shows up in the log.
 struct TimedResolver<R> {
 	inner: R,
 }
@@ -96,27 +95,61 @@ impl<R: Resolve> Resolve for TimedResolver<R> {
 	}
 }
 
-struct HickoryResolver(TokioResolver);
+/// How a host name becomes addresses for a new connection.
+enum Lookup {
+	/// hickory, which caches answers for their TTL, so a new connection after
+	/// the pool's idle timeout does not repeat a slow lookup (5 s per lookup in
+	/// Docker on macOS, 2026-11-17). Linux only: on macOS and Windows it would
+	/// skip per-domain DNS (VPN split DNS, `/etc/resolver/*`, `.local` names).
+	#[cfg(target_os = "linux")]
+	Cached(Box<TokioResolver>),
+	/// The operating system's lookup, as reqwest does by default.
+	System,
+}
 
-impl HickoryResolver {
-	/// Reads the system DNS configuration; fails if it cannot be read.
-	fn from_system_config() -> Result<Self, hickory_resolver::ResolveError> {
-		let mut builder = TokioResolver::builder_tokio()?;
-		// Same as reqwest's own hickory integration: ask for both families so
-		// connection racing (happy eyeballs) has addresses to race.
-		builder.options_mut().ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
-		Ok(Self(builder.build()))
+impl Lookup {
+	#[cfg(target_os = "linux")]
+	fn for_platform() -> Self {
+		match TokioResolver::builder_tokio() {
+			Ok(mut builder) => {
+				// Same as reqwest's own hickory integration: ask for both families so
+				// connection racing (happy eyeballs) has addresses to race.
+				builder.options_mut().ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
+				Lookup::Cached(Box::new(builder.build()))
+			}
+			// Without a readable /etc/resolv.conf the system lookup still serves
+			// names from /etc/hosts, such as localhost.
+			Err(error) => {
+				tracing::warn!(%error, "cannot read the DNS configuration; host names resolve without a cache");
+				Lookup::System
+			}
+		}
+	}
+
+	#[cfg(not(target_os = "linux"))]
+	fn for_platform() -> Self {
+		Lookup::System
 	}
 }
 
-impl Resolve for HickoryResolver {
+impl Resolve for Lookup {
 	fn resolve(&self, name: Name) -> Resolving {
-		let resolver = self.0.clone();
-		Box::pin(async move {
-			let lookup = resolver.lookup_ip(name.as_str()).await?;
-			let addrs: Addrs = Box::new(lookup.into_iter().map(|ip| SocketAddr::new(ip, 0)));
-			Ok(addrs)
-		})
+		match self {
+			#[cfg(target_os = "linux")]
+			Lookup::Cached(resolver) => {
+				let resolver = TokioResolver::clone(resolver);
+				Box::pin(async move {
+					let lookup = resolver.lookup_ip(name.as_str()).await?;
+					let addrs: Addrs = Box::new(lookup.into_iter().map(|ip| SocketAddr::new(ip, 0)));
+					Ok(addrs)
+				})
+			}
+			Lookup::System => Box::pin(async move {
+				let found: Vec<SocketAddr> = tokio::net::lookup_host((name.as_str(), 0)).await?.collect();
+				let addrs: Addrs = Box::new(found.into_iter());
+				Ok(addrs)
+			}),
+		}
 	}
 }
 
@@ -168,10 +201,11 @@ where
 }
 
 fn build_http_client(http1_only: bool) -> reqwest::Client {
-	let resolver = HickoryResolver::from_system_config().expect("failed to read system DNS configuration");
 	let builder = reqwest::Client::builder()
 		.user_agent(USER_AGENT.load().as_str())
-		.dns_resolver(Arc::new(TimedResolver { inner: resolver }))
+		.dns_resolver(Arc::new(TimedResolver {
+			inner: Lookup::for_platform(),
+		}))
 		.connector_layer(ConnectTimingLayer)
 		.connect_timeout(CONNECT_TIMEOUT)
 		.tcp_keepalive(Duration::from_secs(10))
@@ -268,6 +302,16 @@ mod tests {
 	#[test]
 	fn client_builds_without_a_runtime() {
 		build_http_client(false);
+	}
+
+	#[tokio::test]
+	async fn system_lookup_resolves_localhost() {
+		let addrs: Vec<SocketAddr> = Lookup::System
+			.resolve("localhost".parse().unwrap())
+			.await
+			.unwrap()
+			.collect();
+		assert!(addrs.iter().any(|addr| addr.ip().is_loopback()), "{addrs:?}");
 	}
 
 	#[tokio::test]

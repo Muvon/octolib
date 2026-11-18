@@ -230,6 +230,23 @@ fn october_2026_models_are_priced_on_the_aggregator_route() {
 }
 
 #[test]
+fn gpt_6_2_models_are_priced_on_the_aggregator_route() {
+	let provider = OpenRouterProvider::new();
+	for (model, input, output, cache_write, cache_read) in [
+		("openai/gpt-6.2-astra", 8.00, 40.00, 10.00, 0.40),
+		("openai/gpt-6.2-sol", 2.00, 10.00, 2.50, 0.10),
+	] {
+		let pricing = provider
+			.get_model_pricing(model)
+			.unwrap_or_else(|| panic!("{model} must be priced"));
+		assert_eq!(pricing.input_price_per_1m, input, "{model}");
+		assert_eq!(pricing.output_price_per_1m, output, "{model}");
+		assert_eq!(pricing.cache_write_price_per_1m, cache_write, "{model}");
+		assert_eq!(pricing.cache_read_price_per_1m, cache_read, "{model}");
+	}
+}
+
+#[test]
 fn qwen4_max_is_priced_from_the_reference_row() {
 	let pricing = OpenRouterProvider::new()
 		.get_model_pricing("qwen/qwen4-max")

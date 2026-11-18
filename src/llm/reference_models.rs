@@ -863,6 +863,20 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		pricing: pricing(0.14, 0.28, 0.14, 0.0028),
 	},
 	ReferenceModelEntry {
+		// GPT-6.2 Astra: https://developers.openai.com/api/docs/models/gpt-6.2-astra
+		// 1.05M context window, text/image input, verified Nov 18, 2026.
+		pattern: "gpt-6.2-astra",
+		capabilities: caps(true, false, true, 1_050_000),
+		pricing: pricing(8.00, 40.00, 10.00, 0.40),
+	},
+	ReferenceModelEntry {
+		// GPT-6.2 Sol: https://developers.openai.com/api/docs/models/gpt-6.2-sol
+		// 1.05M context window, text/image input, verified Nov 18, 2026.
+		pattern: "gpt-6.2-sol",
+		capabilities: caps(true, false, true, 1_050_000),
+		pricing: pricing(2.00, 10.00, 2.50, 0.10),
+	},
+	ReferenceModelEntry {
 		// OpenAI GPT-6 Astra: 1.05M-context flagship, text/image input.
 		pattern: "gpt-6-astra",
 		capabilities: caps(true, false, true, 1_050_000),

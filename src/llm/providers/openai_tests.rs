@@ -969,7 +969,13 @@ fn test_gpt_6_astra() {
 #[test]
 fn test_reasoning_off_floors_to_each_family_lowest_level() {
 	// GPT-6 rejects "none" (400: supported values are low..max).
-	for model in ["gpt-6-astra", "gpt-6.1-sol", "gpt-6-luna"] {
+	for model in [
+		"gpt-6.2-astra",
+		"gpt-6.2-sol",
+		"gpt-6-astra",
+		"gpt-6.1-sol",
+		"gpt-6-luna",
+	] {
 		assert_eq!(reasoning_effort(model, Some(ReasoningEffort::None)), Some("low"));
 	}
 	assert_eq!(
@@ -1035,9 +1041,11 @@ fn test_reasoning_effort_snaps_to_each_model_supported_levels() {
 }
 
 #[test]
-fn test_gpt_6_sol_and_luna_provider_and_reference_support() {
+fn test_gpt_6_models_provider_and_reference_support() {
 	let provider = OpenAiProvider::new();
 	for (model, input, output, cache_write, cache_read) in [
+		("gpt-6.2-astra", 8.00, 40.00, 10.00, 0.40),
+		("gpt-6.2-sol", 2.00, 10.00, 2.50, 0.10),
 		("gpt-6.1-sol", 2.00, 10.00, 2.50, 0.10),
 		("gpt-6-sol", 2.00, 10.00, 2.50, 0.20),
 		("gpt-6-luna", 0.10, 0.50, 0.125, 0.01),
@@ -1113,8 +1121,10 @@ fn test_gpt_6_1_terra_reasoning_effort_supports_none() {
 }
 
 #[test]
-fn test_gpt_6_sol_and_luna_long_context_boundary_includes_cache_tokens() {
+fn test_gpt_6_long_context_boundary_includes_cache_tokens() {
 	for (model, standard_cost, long_cost) in [
+		("gpt-6.2-astra", 2.3008, 4.4096008),
+		("gpt-6.2-sol", 0.5752, 1.1024002),
 		("gpt-6.1-sol", 0.5752, 1.1024002),
 		("gpt-6-sol", 0.5794, 1.1108004),
 		("gpt-6-luna", 0.02897, 0.05554002),

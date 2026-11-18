@@ -337,6 +337,29 @@ fn october_2026_additions_resolve_with_documented_capabilities_and_pricing() {
 	}
 }
 
+/// GPT-6.2 (Nov 2026) resolves through the reference table, so aggregators
+/// and proxies can price it too.
+#[test]
+fn gpt_6_2_models_resolve_with_documented_capabilities_and_pricing() {
+	for (model, capabilities, pricing) in [
+		(
+			"openai/gpt-6.2-astra",
+			caps(true, false, true, 1_050_000),
+			pricing(8.00, 40.00, 10.00, 0.40),
+		),
+		(
+			"openai/gpt-6.2-sol",
+			caps(true, false, true, 1_050_000),
+			pricing(2.00, 10.00, 2.50, 0.10),
+		),
+	] {
+		assert_same_capabilities(get_reference_capabilities(model).unwrap(), capabilities.unwrap());
+		assert_same_pricing(get_reference_pricing(model).unwrap(), pricing.unwrap());
+		assert!(proxy_route_enforces_response_schema(model), "{model}");
+		assert!(reference_model_id(model).is_some(), "{model}");
+	}
+}
+
 /// qwen-long has no published international USD rate, so it carries
 /// capabilities only and must not report a price.
 #[test]

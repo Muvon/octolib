@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.54.1] - 2026-11-18
+
+### 📋 Release Summary
+
+Pricing information is now available for GPT-6.2 models.
+
+### ✨ New Features & Enhancements
+
+- **llm**: price GPT-6.2 models `f232e38e`
+
 ## [0.54.0] - 2026-11-17
 
 ### 📋 Release Summary

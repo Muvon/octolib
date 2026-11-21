@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.55.0] - 2026-11-21
+
+### 📋 Release Summary
+
+Sampling controls have been removed from chat completions.
+
+### 🚨 Breaking Changes
+
+- **llm**: remove sampling controls from chat completions `0d04a2c1`
+
 ## [0.54.2] - 2026-11-21
 
 ### 📋 Release Summary

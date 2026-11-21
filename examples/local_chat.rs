@@ -87,7 +87,7 @@ async fn main() -> anyhow::Result<()> {
 	println!("💬 Sending message to local model...\n");
 
 	// Create chat completion parameters
-	let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 500);
+	let params = ChatCompletionParams::new(&messages, &model, 500);
 
 	// Get response
 	let response = provider.chat_completion(params).await?;

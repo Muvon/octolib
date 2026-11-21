@@ -187,7 +187,7 @@ fn test_k3_1_pro_capabilities() {
 	// K3 series models share the 1M context window.
 	assert_eq!(provider.get_max_input_tokens("kimi-k3.1-pro"), 1_048_576);
 	assert_eq!(provider.get_max_input_tokens("kimi-k3.1-pro-highspeed"), 1_048_576);
-	// K3.1 Pro takes K3's low/high/max reasoning_effort and fixed sampling.
+	// K3.1 Pro takes K3's low/high/max reasoning_effort.
 	assert_eq!(
 		k3_reasoning_effort("kimi-k3.1-pro", Some(ReasoningEffort::Max)),
 		Some("max")
@@ -196,7 +196,6 @@ fn test_k3_1_pro_capabilities() {
 		k3_reasoning_effort("kimi-k3.1-pro-highspeed", Some(ReasoningEffort::Medium)),
 		Some("low")
 	);
-	assert!(!provider.supported_sampling_params("kimi-k3.1-pro").temperature);
 }
 
 #[test]
@@ -580,7 +579,7 @@ async fn chat_completion_via_mock_http_returns_content_and_usage() {
 	let _env = EnvGuard::new().set("MOONSHOT_API_URL", mock.url.clone());
 
 	let provider = MoonshotProvider::new();
-	let params = ChatCompletionParams::new(&[], "kimi-k3", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
+	let params = ChatCompletionParams::new(&[], "kimi-k3", 10).with_api_key("mock-key".to_owned());
 	let response = provider.chat_completion(params).await.expect("mock completion");
 
 	assert_eq!(response.content, "moonshot mocked answer");
@@ -592,6 +591,9 @@ async fn chat_completion_via_mock_http_returns_content_and_usage() {
 	let requests = mock.requests();
 	let req_body: serde_json::Value = serde_json::from_str(&requests[0].body).expect("request json");
 	assert_eq!(req_body["model"], "kimi-k3");
+	for field in ["temperature", "top_p", "top_k"] {
+		assert!(req_body.get(field).is_none(), "{field} must not be sent");
+	}
 }
 
 #[test]

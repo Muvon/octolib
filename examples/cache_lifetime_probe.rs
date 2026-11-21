@@ -154,7 +154,7 @@ impl Outcome {
 async fn cached_tokens(spec: &str, prompt: &str, long_cache: bool) -> anyhow::Result<u64> {
 	let (provider, model) = ProviderFactory::get_provider_for_model(spec)?;
 	let messages = vec![Message::system(prompt).with_cache_marker(), Message::user("Say ok.")];
-	let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, MAX_OUTPUT_TOKENS)
+	let params = ChatCompletionParams::new(&messages, &model, MAX_OUTPUT_TOKENS)
 		.with_reasoning_effort(ReasoningEffort::Low)
 		.with_long_cache(long_cache)
 		.with_max_retries(MAX_RETRIES);

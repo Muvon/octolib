@@ -18,8 +18,7 @@ use super::*;
 #[serial_test::serial]
 fn test_per_call_key_authenticates_without_environment_key() {
 	let provider = CerebrasProvider::new();
-	let params =
-		ChatCompletionParams::new(&[], "gpt-oss-120b", 1.0, 1.0, 0, 10).with_api_key("private-request-key".to_owned());
+	let params = ChatCompletionParams::new(&[], "gpt-oss-120b", 10).with_api_key("private-request-key".to_owned());
 	let original = env::var_os(CEREBRAS_API_KEY_ENV);
 	env::remove_var(CEREBRAS_API_KEY_ENV);
 	assert!(provider.get_api_key().is_err());

@@ -30,8 +30,8 @@ async fn chat_completion_via_mock_http_fills_reference_cost() {
 	let _env = EnvGuard::new().set("NVIDIA_API_URL", mock.url.clone());
 
 	let provider = NvidiaProvider::new();
-	let params = ChatCompletionParams::new(&[Message::user("hello")], "llama-3.1-8b", 0.2, 0.9, 0, 100)
-		.with_api_key("mock-key".to_owned());
+	let params =
+		ChatCompletionParams::new(&[Message::user("hello")], "llama-3.1-8b", 100).with_api_key("mock-key".to_owned());
 	let response = provider.chat_completion(params).await.expect("mock completion");
 
 	assert_eq!(response.content, "nvidia answer");
@@ -61,7 +61,7 @@ async fn chat_completion_via_mock_http_bills_reasoning_at_the_output_rate() {
 	let _env = EnvGuard::new().set("NVIDIA_API_URL", mock.url.clone());
 
 	let provider = NvidiaProvider::new();
-	let params = ChatCompletionParams::new(&[Message::user("weather?")], "llama-3.1-8b", 0.2, 0.9, 0, 100)
+	let params = ChatCompletionParams::new(&[Message::user("weather?")], "llama-3.1-8b", 100)
 		.with_api_key("mock-key".to_owned());
 	let response = provider.chat_completion(params).await.expect("mock completion");
 
@@ -91,8 +91,8 @@ async fn chat_completion_via_mock_http_surfaces_http_error() {
 	let _env = EnvGuard::new().set("NVIDIA_API_URL", mock.url.clone());
 
 	let provider = NvidiaProvider::new();
-	let params = ChatCompletionParams::new(&[Message::user("hello")], "llama-3.1-8b", 0.2, 0.9, 0, 100)
-		.with_api_key("mock-key".to_owned());
+	let params =
+		ChatCompletionParams::new(&[Message::user("hello")], "llama-3.1-8b", 100).with_api_key("mock-key".to_owned());
 	let err = provider.chat_completion(params).await.expect_err("http error surfaces");
 	assert!(err.to_string().contains("nvidia API error"), "unexpected error: {err}");
 }

@@ -17,8 +17,7 @@ use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::ReasoningEffort as Effort;
 use crate::llm::types::{
-	ChatCompletionParams, Message, ProviderExchange, ProviderResponse, SamplingSupport, ThinkingBlock, TokenUsage,
-	ToolCall, ToolChoice,
+	ChatCompletionParams, Message, ProviderExchange, ProviderResponse, ThinkingBlock, TokenUsage, ToolCall, ToolChoice,
 };
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -286,23 +285,9 @@ pub(crate) async fn chat_completion(
 	api_url: String,
 	params: ChatCompletionParams,
 ) -> Result<ProviderResponse> {
-	chat_completion_with_sampling(config, SamplingSupport::ALL, api_key, api_url, params).await
-}
-
-/// Like [`chat_completion`], but omits sampling parameters the model rejects.
-/// Proxy providers whose upstreams pin temperature/top_p (e.g. OpenCode routing
-/// to Kimi K2.7/K3) must use this entry point.
-pub(crate) async fn chat_completion_with_sampling(
-	config: OpenAiCompatConfig,
-	sampling: SamplingSupport,
-	api_key: String,
-	api_url: String,
-	params: ChatCompletionParams,
-) -> Result<ProviderResponse> {
 	crate::llm::schema_enforcement::chat_completion_enforced(
 		&OpenAiCompatTransport {
 			config,
-			sampling,
 			api_key,
 			api_url,
 		},
@@ -313,7 +298,6 @@ pub(crate) async fn chat_completion_with_sampling(
 
 struct OpenAiCompatTransport {
 	config: OpenAiCompatConfig,
-	sampling: SamplingSupport,
 	api_key: String,
 	api_url: String,
 }
@@ -341,15 +325,7 @@ impl AiProvider for OpenAiCompatTransport {
 	}
 
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-		chat_completion_raw(
-			self.config,
-			self.sampling,
-			self.api_key.clone(),
-			self.api_url.clone(),
-			None,
-			params,
-		)
-		.await
+		chat_completion_raw(self.config, self.api_key.clone(), self.api_url.clone(), None, params).await
 	}
 
 	async fn chat_completion_with_tool_choice(
@@ -359,7 +335,6 @@ impl AiProvider for OpenAiCompatTransport {
 	) -> Result<ProviderResponse> {
 		chat_completion_raw(
 			self.config,
-			self.sampling,
 			self.api_key.clone(),
 			self.api_url.clone(),
 			Some(tool_choice),
@@ -371,7 +346,6 @@ impl AiProvider for OpenAiCompatTransport {
 
 async fn chat_completion_raw(
 	config: OpenAiCompatConfig,
-	sampling: SamplingSupport,
 	api_key: String,
 	api_url: String,
 	tool_choice: Option<ToolChoice>,
@@ -383,14 +357,6 @@ async fn chat_completion_raw(
 		"model": params.model,
 		"messages": messages,
 	});
-
-	let effective = sampling.effective(params.temperature, params.top_p, params.top_k);
-	if let Some(temperature) = effective.temperature {
-		request_body["temperature"] = serde_json::json!(temperature);
-	}
-	if let Some(top_p) = effective.top_p {
-		request_body["top_p"] = serde_json::json!(top_p);
-	}
 
 	if params.max_tokens > 0 {
 		request_body["max_tokens"] = serde_json::json!(params.max_tokens);

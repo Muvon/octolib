@@ -383,7 +383,7 @@ async fn chat_completion_via_mock_http_separates_cached_input_and_prices_from_ta
 	let _env = EnvGuard::new().set("ZAI_API_URL", mock.url.clone());
 
 	let provider = ZaiProvider::new();
-	let params = ChatCompletionParams::new(&[], "glm-5.3-flash", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
+	let params = ChatCompletionParams::new(&[], "glm-5.3-flash", 10).with_api_key("mock-key".to_owned());
 	let response = provider.chat_completion(params).await.expect("mock completion");
 
 	assert_eq!(response.content, "zai answer");
@@ -398,6 +398,9 @@ async fn chat_completion_via_mock_http_separates_cached_input_and_prices_from_ta
 	let requests = mock.requests();
 	let req_body: serde_json::Value = serde_json::from_str(&requests[0].body).expect("request json");
 	assert_eq!(req_body["model"], "glm-5.3-flash");
+	for field in ["do_sample", "temperature", "top_p", "top_k"] {
+		assert!(req_body.get(field).is_none(), "{field} must not be sent");
+	}
 }
 
 #[tokio::test]
@@ -410,7 +413,7 @@ async fn chat_completion_via_mock_http_surfaces_http_error() {
 	let _env = EnvGuard::new().set("ZAI_API_URL", mock.url.clone());
 
 	let provider = ZaiProvider::new();
-	let params = ChatCompletionParams::new(&[], "glm-5.3-flash", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
+	let params = ChatCompletionParams::new(&[], "glm-5.3-flash", 10).with_api_key("mock-key".to_owned());
 	let err = provider.chat_completion(params).await.expect_err("http error surfaces");
 	assert!(err.to_string().contains("Z.ai API error"), "unexpected error: {err}");
 }

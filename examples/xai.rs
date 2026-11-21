@@ -21,9 +21,6 @@ async fn main() -> Result<()> {
 	let params = ChatCompletionParams::new(
 		&[Message::user("Explain why the sky is blue in two sentences.")],
 		"grok-4.5",
-		0.2,
-		0.9,
-		40,
 		512,
 	)
 	.with_reasoning_effort(ReasoningEffort::Medium);

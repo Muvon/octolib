@@ -52,7 +52,7 @@ async fn main() -> anyhow::Result<()> {
 
 	let messages = vec![Message::user("What is the capital of France?")];
 
-	let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000);
+	let params = ChatCompletionParams::new(&messages, &model, 1000);
 
 	match provider.chat_completion(params).await {
 		Ok(response) => {
@@ -79,7 +79,7 @@ async fn main() -> anyhow::Result<()> {
 
 	let messages = vec![Message::user("Explain quantum computing in simple terms")];
 
-	let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000);
+	let params = ChatCompletionParams::new(&messages, &model, 1000);
 
 	match provider.chat_completion(params).await {
 		Ok(response) => {
@@ -106,7 +106,7 @@ async fn main() -> anyhow::Result<()> {
 
 	let messages = vec![Message::user("Write a haiku about technology")];
 
-	let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000);
+	let params = ChatCompletionParams::new(&messages, &model, 1000);
 
 	match provider.chat_completion(params).await {
 		Ok(response) => {

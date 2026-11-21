@@ -24,8 +24,8 @@ use crate::llm::reference_models::proxy_route_enforces_response_schema;
 use crate::llm::retry;
 use crate::llm::traits::{AiProvider, KeepalivePolicy};
 use crate::llm::types::{
-	ChatCompletionParams, Message, OctoHubTransport, ProviderExchange, ProviderResponse, SamplingSupport,
-	ThinkingBlock, TokenUsage, ToolCall,
+	ChatCompletionParams, Message, OctoHubTransport, ProviderExchange, ProviderResponse, ThinkingBlock, TokenUsage,
+	ToolCall,
 };
 use anyhow::Result;
 use serde::Deserialize;
@@ -144,11 +144,6 @@ impl AiProvider for OctoHubProvider {
 		"octohub"
 	}
 
-	fn supported_sampling_params(&self, _model: &str) -> SamplingSupport {
-		// OctoHub uses OpenAI-compatible API — supports temperature and top_p, not top_k.
-		SamplingSupport::TEMPERATURE_AND_TOP_P
-	}
-
 	/// OctoHub accepts any model — it routes to the appropriate provider.
 	fn supports_model(&self, model: &str) -> bool {
 		!model.is_empty()
@@ -235,16 +230,6 @@ impl AiProvider for OctoHubProvider {
 		if let Some(ref prev_id) = previous_id {
 			request_body["previous_completion_id"] = serde_json::json!(prev_id);
 		}
-
-		// Apply sampling parameters based on model support
-		let sampling = self.effective_sampling_params(&params);
-		if let Some(temp) = sampling.temperature {
-			request_body["temperature"] = serde_json::json!(temp);
-		}
-		if let Some(top_p) = sampling.top_p {
-			request_body["top_p"] = serde_json::json!(top_p);
-		}
-		// Note: OctoHub doesn't support top_k
 
 		if params.max_tokens > 0 {
 			request_body["max_output_tokens"] = serde_json::json!(params.max_tokens);

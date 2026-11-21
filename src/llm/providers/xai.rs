@@ -25,7 +25,7 @@ use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
 	ChatCompletionParams, Message, ModelPricing, OutputFormat, ProviderExchange, ProviderResponse, ReasoningEffort,
-	ResponseMode, SamplingSupport, ThinkingBlock, TokenUsage, ToolCall,
+	ResponseMode, ThinkingBlock, TokenUsage, ToolCall,
 };
 use crate::llm::utils::{get_model_pricing, normalize_strict_schema, PricingTuple};
 use anyhow::Result;
@@ -678,14 +678,6 @@ impl AiProvider for XaiProvider {
 		usage_pricing(model, 0)
 	}
 
-	fn supported_sampling_params(&self, model: &str) -> SamplingSupport {
-		if self.supports_model(model) {
-			SamplingSupport::TEMPERATURE_AND_TOP_P
-		} else {
-			SamplingSupport::NONE
-		}
-	}
-
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
 		if !self.supports_model(&params.model) {
 			return Err(ProviderError::ModelNotSupported {
@@ -696,14 +688,7 @@ impl AiProvider for XaiProvider {
 		}
 		let api_key = super::shared::resolve_api_key(self, &params)?;
 		let previous = resolve_previous_response_id(&params.messages, params.previous_id.clone());
-		let mut request = build_request(&params, previous.as_deref());
-		let sampling = self.effective_sampling_params(&params);
-		if let Some(temperature) = sampling.temperature {
-			request["temperature"] = json!(temperature);
-		}
-		if let Some(top_p) = sampling.top_p {
-			request["top_p"] = json!(top_p);
-		}
+		let request = build_request(&params, previous.as_deref());
 		let api_url = env::var(XAI_API_URL_ENV).unwrap_or_else(|_| XAI_API_URL.to_string());
 		execute_request(api_key, api_url, params.model.clone(), request, &params).await
 	}

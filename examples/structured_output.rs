@@ -49,8 +49,7 @@ async fn main() -> anyhow::Result<()> {
 
 	let structured_request = StructuredOutputRequest::json();
 
-	let params =
-		ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000).with_structured_output(structured_request);
+	let params = ChatCompletionParams::new(&messages, &model, 1000).with_structured_output(structured_request);
 
 	match provider.chat_completion(params).await {
 		Ok(response) => {
@@ -103,8 +102,7 @@ async fn main() -> anyhow::Result<()> {
 
 	let structured_request = StructuredOutputRequest::json_schema(schema).with_strict_mode();
 
-	let params =
-		ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000).with_structured_output(structured_request);
+	let params = ChatCompletionParams::new(&messages, &model, 1000).with_structured_output(structured_request);
 
 	match provider.chat_completion(params).await {
 		Ok(response) => {
@@ -136,8 +134,8 @@ async fn main() -> anyhow::Result<()> {
 		if deepseek_provider.supports_structured_output(&deepseek_model) {
 			let structured_request = StructuredOutputRequest::json();
 
-			let params = ChatCompletionParams::new(&messages, &deepseek_model, 0.7, 1.0, 50, 1000)
-				.with_structured_output(structured_request);
+			let params =
+				ChatCompletionParams::new(&messages, &deepseek_model, 1000).with_structured_output(structured_request);
 
 			match deepseek_provider.chat_completion(params).await {
 				Ok(response) => {
@@ -166,7 +164,7 @@ async fn main() -> anyhow::Result<()> {
 		if openrouter_provider.supports_structured_output(&openrouter_model) {
 			let structured_request = StructuredOutputRequest::json();
 
-			let params = ChatCompletionParams::new(&messages, &openrouter_model, 0.7, 1.0, 50, 1000)
+			let params = ChatCompletionParams::new(&messages, &openrouter_model, 1000)
 				.with_structured_output(structured_request);
 
 			match openrouter_provider.chat_completion(params).await {
@@ -202,8 +200,8 @@ async fn main() -> anyhow::Result<()> {
 
 		// Try anyway to demonstrate error handling
 		let structured_request = StructuredOutputRequest::json();
-		let params = ChatCompletionParams::new(&messages, &anthropic_model, 0.7, 1.0, 50, 1000)
-			.with_structured_output(structured_request);
+		let params =
+			ChatCompletionParams::new(&messages, &anthropic_model, 1000).with_structured_output(structured_request);
 
 		match anthropic_provider.chat_completion(params).await {
 			Ok(response) => {

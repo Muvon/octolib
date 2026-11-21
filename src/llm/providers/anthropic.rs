@@ -18,8 +18,8 @@ use super::shared;
 use crate::llm::retry;
 use crate::llm::traits::{AiProvider, KeepalivePolicy};
 use crate::llm::types::{
-	ChatCompletionParams, Message, OutputFormat, ProviderExchange, ProviderResponse, ReasoningEffort, SamplingSupport,
-	ThinkingBlock, TokenUsage, ToolCall,
+	ChatCompletionParams, Message, OutputFormat, ProviderExchange, ProviderResponse, ReasoningEffort, ThinkingBlock,
+	TokenUsage, ToolCall,
 };
 use crate::llm::utils::{get_model_pricing, is_model_in_pricing_table, normalize_model_name, PricingTuple};
 use anyhow::Result;
@@ -554,12 +554,6 @@ impl AiProvider for AnthropicProvider {
 			cache_write_price,
 			cache_read_price,
 		))
-	}
-
-	/// API version 2026-10-21 rejects `temperature`, `top_p` and `top_k` on
-	/// every model, even at their defaults.
-	fn supported_sampling_params(&self, _model: &str) -> SamplingSupport {
-		SamplingSupport::NONE
 	}
 
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {

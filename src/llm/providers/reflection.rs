@@ -33,10 +33,10 @@
 //! - `REFLECTION_API_URL`: Optional endpoint override
 
 use crate::llm::providers::openai_compat::{
-	chat_completion_with_sampling as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
+	chat_completion as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
 };
 use crate::llm::traits::AiProvider;
-use crate::llm::types::{ChatCompletionParams, ModelPricing, ProviderResponse, SamplingSupport};
+use crate::llm::types::{ChatCompletionParams, ModelPricing, ProviderResponse};
 use crate::llm::utils::PricingTuple;
 use anyhow::Result;
 use std::env;
@@ -124,11 +124,6 @@ impl AiProvider for ReflectionProvider {
 		find_model(model).map_or(DEFAULT_MAX_INPUT_TOKENS, |(_, max)| *max)
 	}
 
-	fn supported_sampling_params(&self, _model: &str) -> SamplingSupport {
-		// `top_k` is a 400 `unsupported_parameter` (live, 2026-11-07)
-		SamplingSupport::TEMPERATURE_AND_TOP_P
-	}
-
 	fn get_api_key(&self) -> Result<String> {
 		env::var(REFLECTION_API_KEY_ENV)
 			.map_err(|_| crate::errors::missing_api_key("reflection", REFLECTION_API_KEY_ENV).into())
@@ -157,7 +152,6 @@ impl AiProvider for ReflectionProvider {
 				supports_required_tool_choice: self.supports_required_tool_choice(&model),
 				supports_parallel_tool_calls: true,
 			},
-			self.supported_sampling_params(&model),
 			api_key,
 			api_url,
 			params,

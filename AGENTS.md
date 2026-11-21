@@ -249,7 +249,6 @@ fn enforces_response_schema(&self, model: &str) -> bool   // default: supports_s
 fn supports_required_tool_choice(&self, model: &str) -> bool // default: false
 fn get_max_input_tokens(&self, model: &str) -> usize      // default: reference_capabilities lookup (8192 fallback)
 fn get_model_pricing(&self, model: &str) -> Option<ModelPricing> // default: reference_pricing lookup
-fn supported_sampling_params(&self, model: &str) -> SamplingSupport // default: ALL
 ```
 
 ### Reference Tables
@@ -297,14 +296,6 @@ Per-provider mapping:
 - **OctoHub** → passthrough string (supports all five levels including `"max"`)
 - **Z.ai** → binary `thinking: { "type": "enabled" }` for any non-None effort (no budget knob)
 - **Codex CLI** → `model_reasoning_effort` config (accepts `low` / `medium` / `high` only)
-
-### Sampling Parameters
-
-Use `SamplingSupport` constants to declare what a model accepts:
-- `SamplingSupport::ALL` — temperature + top_p + top_k
-- `SamplingSupport::TEMPERATURE_AND_TOP_P` — no top_k (most OpenAI-compat APIs)
-- `SamplingSupport::TEMPERATURE_ONLY`
-- `SamplingSupport::NONE` — reasoning models (o1, o3, claude-opus-4-7, etc.)
 
 ### Error Handling
 

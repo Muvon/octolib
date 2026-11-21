@@ -57,7 +57,7 @@ async fn main() -> anyhow::Result<()> {
 
 		let (provider, model) = ProviderFactory::get_provider_for_model("moonshot:kimi-k3")?;
 
-		let params = ChatCompletionParams::new(&[message], &model, 0.7, 1.0, 50, 4000);
+		let params = ChatCompletionParams::new(&[message], &model, 4000);
 
 		let response = provider.chat_completion(params).await?;
 
@@ -92,7 +92,7 @@ async fn main() -> anyhow::Result<()> {
 
 		let (provider, model) = ProviderFactory::get_provider_for_model("moonshot:kimi-k3")?;
 
-		let params = ChatCompletionParams::new(&[message], &model, 0.7, 1.0, 50, 4000);
+		let params = ChatCompletionParams::new(&[message], &model, 4000);
 
 		let response = provider.chat_completion(params).await?;
 

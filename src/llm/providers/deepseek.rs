@@ -45,7 +45,7 @@
 use crate::llm::providers::shared;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
-use crate::llm::types::{ChatCompletionParams, ProviderExchange, ProviderResponse, SamplingSupport, TokenUsage};
+use crate::llm::types::{ChatCompletionParams, ProviderExchange, ProviderResponse, TokenUsage};
 use crate::llm::utils::{contains_ignore_ascii_case, is_model_in_pricing_table, PricingTuple};
 use anyhow::Result;
 
@@ -504,13 +504,6 @@ impl AiProvider for DeepSeekProvider {
 
 	fn get_max_input_tokens(&self, _model: &str) -> usize {
 		1_000_000 // V4.1 Flash and V4 Pro: 1M context
-	}
-
-	fn supported_sampling_params(&self, _model: &str) -> SamplingSupport {
-		// Both native routes (V4.1 Flash, V4 Pro) run in thinking mode. DeepSeek
-		// documents sampling controls as unsupported in thinking mode (accepted
-		// but ignored).
-		SamplingSupport::NONE
 	}
 
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {

@@ -18,8 +18,8 @@ use super::shared;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-	ChatCompletionParams, ImageData, Message, ProviderExchange, ProviderResponse, ReasoningEffort, SamplingSupport,
-	ThinkingBlock, TokenUsage, ToolCall, VideoData,
+	ChatCompletionParams, ImageData, Message, ProviderExchange, ProviderResponse, ReasoningEffort, ThinkingBlock,
+	TokenUsage, ToolCall, VideoData,
 };
 use crate::llm::utils::{get_model_pricing, is_model_in_pricing_table, normalize_model_name, PricingTuple};
 use anyhow::Result;
@@ -182,11 +182,6 @@ impl AiProvider for MinimaxProvider {
 		is_model_in_pricing_table(model, PRICING)
 	}
 
-	fn supported_sampling_params(&self, _model: &str) -> SamplingSupport {
-		// MiniMax supports temperature and top_p, not top_k
-		SamplingSupport::TEMPERATURE_AND_TOP_P
-	}
-
 	fn get_api_key(&self) -> Result<String> {
 		env::var(MINIMAX_API_KEY_ENV).map_err(|_| crate::errors::missing_api_key("minimax", MINIMAX_API_KEY_ENV).into())
 	}
@@ -254,30 +249,12 @@ impl AiProvider for MinimaxProvider {
 
 		let system_cached = params.messages.iter().any(|m| m.role == "system" && m.cached);
 
-		// Validate temperature range (MiniMax requires 0.0 < temperature <= 1.0)
-		let sampling = self.effective_sampling_params(&params);
-		if let Some(temp) = sampling.temperature {
-			if temp <= 0.0 || temp > 1.0 {
-				return Err(anyhow::anyhow!(
-					"MiniMax requires temperature in range (0.0, 1.0], got {}",
-					temp
-				));
-			}
-		}
-
 		// Create the request body
 		let mut request_body = serde_json::json!({
 			"stream": true,
 			"model": params.model,
 			"messages": minimax_messages,
 		});
-		if let Some(temp) = sampling.temperature {
-			request_body["temperature"] = serde_json::json!(temp);
-		}
-		if let Some(top_p) = sampling.top_p {
-			request_body["top_p"] = serde_json::json!(top_p);
-		}
-
 		// Add max_tokens if specified (0 means don't include it in request)
 		if params.max_tokens > 0 {
 			request_body["max_tokens"] = serde_json::json!(params.max_tokens);

@@ -430,13 +430,13 @@ fn schema_enforcement_follows_live_verified_routes() {
 
 #[tokio::test]
 #[serial_test::serial]
-async fn schema_requests_omit_unsupported_sampling_and_keep_strict_routing() {
+async fn schema_requests_omit_sampling_fields_and_keep_strict_routing() {
 	let mock = crate::test_support::mock_http::MockHttp::start(vec![
 		(
 			200,
 			serde_json::json!({"data": [
 				{"id": "openai/gpt-6-luna", "supported_parameters": ["max_tokens", "response_format", "structured_outputs"]},
-				{"id": "example/sampling", "supported_parameters": ["temperature", "top_p", "top_k", "repetition_penalty"]}
+				{"id": "example/options", "supported_parameters": ["repetition_penalty"]}
 			]})
 			.to_string(),
 		),
@@ -447,8 +447,7 @@ async fn schema_requests_omit_unsupported_sampling_and_keep_strict_routing() {
 	]);
 	let _env = EnvGuard::new().set("OPENROUTER_API_URL", mock.url.clone());
 
-	let mut params =
-		ChatCompletionParams::new(&[], "openai/gpt-6-luna", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
+	let mut params = ChatCompletionParams::new(&[], "openai/gpt-6-luna", 10).with_api_key("mock-key".to_owned());
 	params.response_format = Some(crate::llm::types::StructuredOutputRequest {
 		format: crate::llm::types::OutputFormat::JsonSchema,
 		mode: crate::llm::types::ResponseMode::Strict,
@@ -475,7 +474,7 @@ async fn schema_requests_omit_unsupported_sampling_and_keep_strict_routing() {
 }
 
 fn strict_schema_params(model: &str) -> ChatCompletionParams {
-	let mut params = ChatCompletionParams::new(&[], model, 0.25, 0.5, 17, 10);
+	let mut params = ChatCompletionParams::new(&[], model, 10);
 	params.response_format = Some(crate::llm::types::StructuredOutputRequest {
 		format: crate::llm::types::OutputFormat::JsonSchema,
 		mode: crate::llm::types::ResponseMode::Strict,
@@ -570,9 +569,6 @@ fn strict_schema_with_unknown_or_unsupported_metadata_omits_optional_hints() {
 #[test]
 fn strict_schema_retains_only_supported_optional_parameters() {
 	let optional = [
-		"temperature",
-		"top_p",
-		"top_k",
 		"repetition_penalty",
 		"reasoning",
 		"reasoning_effort",
@@ -605,9 +601,9 @@ fn strict_schema_retains_only_supported_optional_parameters() {
 	.unwrap()];
 	let body = build_request_body(&strict_schema_params("example/model"), Some(&catalog)).unwrap();
 	assert_strict_requirements(&body);
-	assert_eq!(body["temperature"], 0.25);
-	assert_eq!(body["top_p"], 0.5);
-	assert_eq!(body["top_k"], 17);
+	for field in ["temperature", "top_p", "top_k"] {
+		assert!(body.get(field).is_none(), "{field} must not be sent");
+	}
 	assert_eq!(body["repetition_penalty"], DEFAULT_REPETITION_PENALTY);
 	assert_eq!(body["reasoning_effort"], "low");
 	assert_eq!(body["tool_choice"], "auto");
@@ -641,30 +637,33 @@ fn catalog_parameter_support_distinguishes_missing_and_empty_lists() {
 		{"id": "example/none", "supported_parameters": []},
 		{"id": "example/missing"},
 		{"id": "example/null", "supported_parameters": null},
-		{"id": "example/partial", "supported_parameters": ["temperature"]}
+		{"id": "example/partial", "supported_parameters": ["repetition_penalty"]}
 	]}))
 	.unwrap()
 	.data;
 	assert_eq!(
-		supports_parameter(Some(&catalog), "example/none", "temperature"),
+		supports_parameter(Some(&catalog), "example/none", "repetition_penalty"),
 		Some(false)
 	);
 	assert_eq!(
-		supports_parameter(Some(&catalog), "example/missing", "temperature"),
+		supports_parameter(Some(&catalog), "example/missing", "repetition_penalty"),
 		None
 	);
-	assert_eq!(supports_parameter(Some(&catalog), "example/null", "temperature"), None);
 	assert_eq!(
-		supports_parameter(Some(&catalog), "example/unknown", "temperature"),
+		supports_parameter(Some(&catalog), "example/null", "repetition_penalty"),
 		None
 	);
-	assert_eq!(supports_parameter(None, "example/partial", "temperature"), None);
 	assert_eq!(
-		supports_parameter(Some(&catalog), "EXAMPLE/PARTIAL:nitro", "temperature"),
+		supports_parameter(Some(&catalog), "example/unknown", "repetition_penalty"),
+		None
+	);
+	assert_eq!(supports_parameter(None, "example/partial", "repetition_penalty"), None);
+	assert_eq!(
+		supports_parameter(Some(&catalog), "EXAMPLE/PARTIAL:nitro", "repetition_penalty"),
 		Some(true)
 	);
 	assert_eq!(
-		supports_parameter(Some(&catalog), "example/partial", "top_k"),
+		supports_parameter(Some(&catalog), "example/partial", "tool_choice"),
 		Some(false)
 	);
 }
@@ -693,7 +692,7 @@ async fn chat_completion_via_mock_http_parses_text_and_usage() {
 	let _env = EnvGuard::new().set("OPENROUTER_API_URL", mock.url.clone());
 
 	let provider = OpenRouterProvider::new();
-	let params = ChatCompletionParams::new(&[], "openai/gpt-4o", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
+	let params = ChatCompletionParams::new(&[], "openai/gpt-4o", 10).with_api_key("mock-key".to_owned());
 	let response = provider.chat_completion(params).await.expect("mock completion");
 
 	assert_eq!(response.content, "mocked openrouter answer");
@@ -717,7 +716,7 @@ async fn chat_completion_via_mock_http_handles_tools_thinking_and_cache() {
 	let _env = EnvGuard::new().set("OPENROUTER_API_URL", mock.url.clone());
 
 	let provider = OpenRouterProvider::new();
-	let params = ChatCompletionParams::new(&[], "openai/gpt-4o", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
+	let params = ChatCompletionParams::new(&[], "openai/gpt-4o", 10).with_api_key("mock-key".to_owned());
 	let response = provider.chat_completion(params).await.expect("mock completion");
 
 	// Only "function" tool calls survive; other types are dropped.
@@ -750,7 +749,7 @@ async fn chat_completion_via_mock_http_surfaces_http_error() {
 	let _env = EnvGuard::new().set("OPENROUTER_API_URL", mock.url.clone());
 
 	let provider = OpenRouterProvider::new();
-	let params = ChatCompletionParams::new(&[], "openai/gpt-4o", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
+	let params = ChatCompletionParams::new(&[], "openai/gpt-4o", 10).with_api_key("mock-key".to_owned());
 	let err = provider.chat_completion(params).await.expect_err("http error surfaces");
 	assert!(
 		err.to_string().contains("OpenRouter API error"),
@@ -774,8 +773,7 @@ async fn argon_encrypted_reasoning_is_replayed_without_becoming_display_text() {
 			"usage":{"prompt_tokens":100,"completion_tokens":10,"total_tokens":110,"completion_tokens_details":{"reasoning_tokens":0},"cost":0.0003}});
 		let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, body.to_string())]);
 		let _env = EnvGuard::new().set("OPENROUTER_API_URL", mock.url.clone());
-		let params = ChatCompletionParams::new(&[], "google/gemini-4-argon", 1.0, 1.0, 0, 100)
-			.with_api_key("mock-key".to_owned());
+		let params = ChatCompletionParams::new(&[], "google/gemini-4-argon", 100).with_api_key("mock-key".to_owned());
 		let response = OpenRouterProvider::new().chat_completion(params).await.unwrap();
 		assert!(response.thinking.is_none());
 		assert_eq!(response.content, "ready");

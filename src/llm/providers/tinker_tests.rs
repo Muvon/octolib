@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::*;
+use crate::test_support::env::EnvGuard;
 
 #[test]
 fn test_short_names_resolve_consistently() {
@@ -89,15 +90,6 @@ fn test_qualified_model_ids_are_preserved() {
 	] {
 		assert_eq!(resolve_model(model), model);
 	}
-}
-
-#[test]
-fn test_sampling_capabilities() {
-	let provider = TinkerProvider::new();
-	assert_eq!(
-		provider.supported_sampling_params("inkling"),
-		SamplingSupport::TEMPERATURE_AND_TOP_P
-	);
 }
 
 #[test]
@@ -236,4 +228,23 @@ fn test_conservative_capabilities() {
 	assert!(!provider.supports_vision("thinkingmachines/Inkling"));
 	assert!(!provider.supports_structured_output("thinkingmachines/Inkling"));
 	assert!(!provider.enforces_response_schema("thinkingmachines/Inkling"));
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn request_omits_sampling_fields() {
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(
+		200,
+		crate::test_support::mock_http::chat_completion_body("ok"),
+	)]);
+	let _env = EnvGuard::new().set("TINKER_API_URL", mock.url.clone());
+	let params = ChatCompletionParams::new(&[], "inkling", 10).with_api_key("mock-key".to_owned());
+	TinkerProvider::new()
+		.chat_completion(params)
+		.await
+		.expect("mock completion");
+	let body: serde_json::Value = serde_json::from_str(&mock.requests()[0].body).expect("request json");
+	for field in ["temperature", "top_p", "top_k"] {
+		assert!(body.get(field).is_none(), "{field} must not be sent");
+	}
 }

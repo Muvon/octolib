@@ -127,35 +127,6 @@ fn test_max_input_tokens_fallback() {
 }
 
 #[test]
-fn test_sampling_params() {
-	let provider = GoogleVertexProvider::new();
-	assert_eq!(
-		provider.supported_sampling_params("gemini-4-argon"),
-		SamplingSupport::NONE
-	);
-	assert_eq!(
-		provider.supported_sampling_params("gemini-3.8-flash"),
-		SamplingSupport::NONE
-	);
-	assert_eq!(
-		provider.supported_sampling_params("gemini-3.7-flash"),
-		SamplingSupport::NONE
-	);
-	assert_eq!(
-		provider.supported_sampling_params("gemini-3.6-flash"),
-		SamplingSupport::NONE
-	);
-	assert_eq!(
-		provider.supported_sampling_params("gemini-3.5-flash"),
-		SamplingSupport::ALL
-	);
-	assert_eq!(
-		provider.supported_sampling_params("gemini-2.5-pro"),
-		SamplingSupport::ALL
-	);
-}
-
-#[test]
 fn gemini_4_defaults_to_a_supported_vertex_location() {
 	assert_eq!(default_vertex_location("gemini-4-argon"), "global");
 	assert_eq!(default_vertex_location("google/gemini-4-argon"), "global");

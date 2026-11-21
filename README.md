@@ -68,8 +68,8 @@ async fn example() -> anyhow::Result<()> {
 
     let messages = vec![Message::user("Hello, how are you?")];
 
-    // Arguments: messages, model, temperature, top_p, top_k, max_tokens
-    let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000);
+    // Arguments: messages, model, max_tokens
+    let params = ChatCompletionParams::new(&messages, &model, 1000);
 
     // Requires OPENAI_API_KEY in the environment
     let response = provider.chat_completion(params).await?;
@@ -211,7 +211,7 @@ async fn structured_example() -> anyhow::Result<()> {
 
     // Request structured JSON output
     let structured_request = StructuredOutputRequest::json();
-    let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000)
+    let params = ChatCompletionParams::new(&messages, &model, 1000)
         .with_structured_output(structured_request);
 
     let response = provider.chat_completion(params).await?;
@@ -300,7 +300,7 @@ async fn tool_calling_example() -> anyhow::Result<()> {
     ];
 
     // Initial request with tools
-    let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000)
+    let params = ChatCompletionParams::new(&messages, &model, 1000)
         .with_tools(tools.clone());
 
     let response = provider.chat_completion(params).await?;
@@ -349,7 +349,7 @@ async fn tool_calling_example() -> anyhow::Result<()> {
         }
 
         // Get final response with tool results
-        let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000)
+        let params = ChatCompletionParams::new(&messages, &model, 1000)
             .with_tools(tools);
 
         let final_response = provider.chat_completion(params).await?;
@@ -477,7 +477,7 @@ octolib = { version = "<latest>", features = ["websockets"] }
 use octolib::{ChatCompletionParams, Message, OctoHubTransport};
 
 let messages = vec![Message::user("Hello")];
-let params = ChatCompletionParams::new(&messages, "auto", 1.0, 1.0, 0, 100);
+let params = ChatCompletionParams::new(&messages, "auto", 100);
 assert_eq!(params.octohub_transport, OctoHubTransport::Http);
 
 #[cfg(feature = "websockets")]
@@ -653,7 +653,7 @@ async fn thinking_example() -> anyhow::Result<()> {
         Message::user("Solve this complex math problem step by step"),
     ];
 
-    let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000);
+    let params = ChatCompletionParams::new(&messages, &model, 1000);
     let response = provider.chat_completion(params).await?;
 
     // Access thinking content (separate from response.content)

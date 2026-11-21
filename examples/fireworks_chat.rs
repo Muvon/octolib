@@ -49,7 +49,7 @@ async fn main() -> anyhow::Result<()> {
 	let messages = vec![Message::user(
 		"In one short sentence, what is the Fireworks AI inference platform?",
 	)];
-	let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 256);
+	let params = ChatCompletionParams::new(&messages, &model, 256);
 
 	println!("\n=== Turn 1 ===");
 	let response = provider.chat_completion(params).await?;
@@ -70,7 +70,7 @@ async fn main() -> anyhow::Result<()> {
 		Message::assistant(&response.content),
 		Message::user("Now name two open-weight model families it serves."),
 	];
-	let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 256);
+	let params = ChatCompletionParams::new(&messages, &model, 256);
 
 	println!("\n=== Turn 2 (cache should warm up) ===");
 	let response = provider.chat_completion(params).await?;

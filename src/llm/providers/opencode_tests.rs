@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::*;
+use crate::test_support::env::EnvGuard;
 
 #[test]
 fn test_supports_model() {
@@ -29,29 +30,6 @@ fn test_supports_model() {
 	assert!(go.supports_model("kimi-k2.7-code"));
 	assert!(go.supports_model("glm-5.2"));
 	assert!(!go.supports_model(""));
-}
-
-#[test]
-fn test_sampling_support_mirrors_upstream_restrictions() {
-	// Kimi K2.7/K3 pin temperature=1 and top_p=0.95 upstream (verified live on Go)
-	assert!(!sampling_support("kimi-k2.7-code").temperature);
-	assert!(!sampling_support("kimi-k2.7-code").top_p);
-	assert!(!sampling_support("kimi-k3").temperature);
-	assert!(!sampling_support("Kimi-K3").temperature);
-
-	// GPT-5 family reasoning models reject non-default temperature/top_p
-	assert!(!sampling_support("gpt-5.6-luna").temperature);
-	assert!(!sampling_support("gpt-5.5").top_p);
-
-	// Claude mirrors the native provider: API version 2026-10-21 rejects every
-	// sampling parameter, so none is sent on any model
-	assert_eq!(sampling_support("claude-fable-5"), SamplingSupport::NONE);
-	assert_eq!(sampling_support("claude-sonnet-4-6"), SamplingSupport::NONE);
-
-	// Other families pass through untouched
-	assert_eq!(sampling_support("glm-5.2"), SamplingSupport::ALL);
-	assert_eq!(sampling_support("minimax-m3"), SamplingSupport::ALL);
-	assert_eq!(sampling_support("deepseek-v4-pro"), SamplingSupport::ALL);
 }
 
 #[test]
@@ -200,14 +178,14 @@ fn test_default_capabilities() {
 
 #[test]
 fn test_session_header_is_added_unless_caller_set_it() {
-	let mut params = ChatCompletionParams::new(&[], "kimi-k3", 1.0, 1.0, 0, 0);
+	let mut params = ChatCompletionParams::new(&[], "kimi-k3", 0);
 	set_session_header(&mut params);
 	let headers = params.extra_headers.unwrap();
 	assert_eq!(headers.len(), 1);
 	assert!(!headers[OPENCODE_SESSION_HEADER].is_empty());
 
 	// Caller-supplied session wins, whatever the header casing
-	let mut params = ChatCompletionParams::new(&[], "kimi-k3", 1.0, 1.0, 0, 0);
+	let mut params = ChatCompletionParams::new(&[], "kimi-k3", 0);
 	params.extra_headers = Some(std::collections::HashMap::from([(
 		"X-OpenCode-Session".to_string(),
 		"caller-session".to_string(),
@@ -236,7 +214,6 @@ fn haiku_5_5_opencode_reference_fallback() {
 		assert_eq!(actual_pricing.cache_read_price_per_1m, pricing.cache_read_price_per_1m);
 		assert_eq!(provider.get_max_input_tokens(model), 1_000_000);
 		assert!(provider.supports_vision(model));
-		assert_eq!(provider.supported_sampling_params(model), SamplingSupport::NONE);
 	}
 	for prompt_tokens in [100_000, 100_001] {
 		let usage = TokenUsage {
@@ -263,5 +240,24 @@ fn haiku_5_5_opencode_reference_fallback() {
 			resolve_opencode_cost("opencode-zen", model, Some(0.01), &usage),
 			Some(0.01)
 		);
+	}
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn request_omits_sampling_fields() {
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(
+		200,
+		crate::test_support::mock_http::chat_completion_body("ok"),
+	)]);
+	let _env = EnvGuard::new().set("OPENCODE_ZEN_API_URL", mock.url.clone());
+	let params = ChatCompletionParams::new(&[], "gpt-5.6-luna", 10).with_api_key("mock-key".to_owned());
+	OpenCodeZenProvider::new()
+		.chat_completion(params)
+		.await
+		.expect("mock completion");
+	let body: serde_json::Value = serde_json::from_str(&mock.requests()[0].body).expect("request json");
+	for field in ["temperature", "top_p", "top_k"] {
+		assert!(body.get(field).is_none(), "{field} must not be sent");
 	}
 }

@@ -404,8 +404,7 @@ async fn chat_completion_via_mock_http_merges_sse_stream_and_prices_from_table()
 	let _env = EnvGuard::new().set("TOGETHER_API_URL", mock.url.clone());
 
 	let provider = TogetherProvider::new();
-	let params =
-		ChatCompletionParams::new(&[], "Qwen/Qwen3.8-Flash", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
+	let params = ChatCompletionParams::new(&[], "Qwen/Qwen3.8-Flash", 10).with_api_key("mock-key".to_owned());
 	let response = provider.chat_completion(params).await.expect("mock completion");
 
 	// Deltas from both chunks are concatenated.
@@ -418,6 +417,9 @@ async fn chat_completion_via_mock_http_merges_sse_stream_and_prices_from_table()
 	let requests = mock.requests();
 	let req_body: serde_json::Value = serde_json::from_str(&requests[0].body).expect("request json");
 	assert_eq!(req_body["model"], "Qwen/Qwen3.8-Flash");
+	for field in ["temperature", "top_p", "top_k"] {
+		assert!(req_body.get(field).is_none(), "{field} must not be sent");
+	}
 }
 
 #[tokio::test]
@@ -431,8 +433,7 @@ async fn stream_without_usage_reports_no_usage_instead_of_zero_cost() {
 	let _env = EnvGuard::new().set("TOGETHER_API_URL", mock.url.clone());
 
 	let provider = TogetherProvider::new();
-	let params =
-		ChatCompletionParams::new(&[], "Qwen/Qwen3.8-Flash", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
+	let params = ChatCompletionParams::new(&[], "Qwen/Qwen3.8-Flash", 10).with_api_key("mock-key".to_owned());
 	let response = provider.chat_completion(params).await.expect("mock completion");
 
 	assert_eq!(response.content, "no usage");

@@ -266,7 +266,7 @@ async fn usage_limit_is_terminal_and_partial_output_is_not_a_success() {
 
 #[test]
 fn session_key_isolates_credentials_models_headers_and_sessions() {
-	let params = ChatCompletionParams::new(&[], "gpt-6.1-sol", 0.0, 1.0, 0, 0).with_prompt_cache_key("session-a");
+	let params = ChatCompletionParams::new(&[], "gpt-6.1-sol", 0).with_prompt_cache_key("session-a");
 	let headers = HeaderMap::new();
 	let key = session_key(params.prompt_cache_key.as_deref(), &params.model, "token-a", &headers).unwrap();
 	assert_ne!(

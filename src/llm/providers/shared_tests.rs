@@ -16,8 +16,8 @@ use super::*;
 
 #[test]
 fn test_redaction_removes_error_sources_and_preserves_connection_classification() {
-	let params = crate::llm::types::ChatCompletionParams::new(&[], "model", 1.0, 1.0, 0, 10)
-		.with_api_key("private-request-key".to_owned());
+	let params =
+		crate::llm::types::ChatCompletionParams::new(&[], "model", 10).with_api_key("private-request-key".to_owned());
 	let error = anyhow::Error::new(RedactedError {
 		message: "connection failed: private-request-key".to_owned(),
 		transport_error: Some(TransportErrorKind::Connect),
@@ -33,8 +33,8 @@ fn test_redaction_removes_error_sources_and_preserves_connection_classification(
 
 #[test]
 fn test_response_parse_errors_redact_echoed_credentials() {
-	let params = crate::llm::types::ChatCompletionParams::new(&[], "model", 1.0, 1.0, 0, 10)
-		.with_api_key("private-request-key".to_owned());
+	let params =
+		crate::llm::types::ChatCompletionParams::new(&[], "model", 10).with_api_key("private-request-key".to_owned());
 	let error = parse_response::<Vec<String>>(r#""private-request-key""#, params.api_key.as_ref()).unwrap_err();
 	assert!(error.to_string().contains("[redacted]"));
 	assert!(!format!("{error:#?}").contains("private-request-key"));
@@ -62,7 +62,7 @@ fn test_byok_key_resolution_without_or_with_environment_keys() {
 	] {
 		let original = std::env::var_os(env_var);
 		let provider = ProviderFactory::create_provider(provider_name).unwrap();
-		let params = ChatCompletionParams::new(&[], "model", 1.0, 1.0, 0, 10).with_api_key("request-key".to_owned());
+		let params = ChatCompletionParams::new(&[], "model", 10).with_api_key("request-key".to_owned());
 		std::env::remove_var(env_var);
 		assert_eq!(
 			resolve_api_key(provider.as_ref(), &params).unwrap(),
@@ -89,8 +89,7 @@ async fn test_multi_credential_and_managed_providers_reject_per_call_keys() {
 	use crate::llm::types::ChatCompletionParams;
 	for provider_name in ["cloudflare", "google-vertex", "chatgpt"] {
 		let provider = ProviderFactory::create_provider(provider_name).unwrap();
-		let params =
-			ChatCompletionParams::new(&[], "model", 1.0, 1.0, 0, 10).with_api_key("private-request-key".to_owned());
+		let params = ChatCompletionParams::new(&[], "model", 10).with_api_key("private-request-key".to_owned());
 		let error = provider.chat_completion(params).await.unwrap_err();
 		assert!(matches!(
 			error.downcast_ref::<ProviderError>(),

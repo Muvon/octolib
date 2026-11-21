@@ -84,7 +84,7 @@ fn headers(token: &str, route: &str) -> HeaderMap {
 }
 
 fn params(key: Option<&str>) -> ChatCompletionParams {
-	let mut params = ChatCompletionParams::new(&[], "test-model", 0.0, 1.0, 0, 32)
+	let mut params = ChatCompletionParams::new(&[], "test-model", 32)
 		.with_max_retries(0)
 		.with_request_timeout(Some(Duration::from_secs(5)));
 	params.prompt_cache_key = key.map(str::to_owned);

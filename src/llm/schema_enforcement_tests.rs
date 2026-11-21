@@ -103,7 +103,7 @@ fn schema() -> serde_json::Value {
 }
 
 fn params_with_schema(model: &str) -> ChatCompletionParams {
-	ChatCompletionParams::new(&[Message::user("what is 2+2?")], model, 0.7, 1.0, 50, 100)
+	ChatCompletionParams::new(&[Message::user("what is 2+2?")], model, 100)
 		.with_structured_output(StructuredOutputRequest::json_schema(schema()))
 }
 

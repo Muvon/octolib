@@ -55,13 +55,9 @@ async fn chat_completion_via_mock_http_parses_text_reasoning_and_usage() {
 	let _env = EnvGuard::new().set("OCTOHUB_API_URL", mock.base_url());
 
 	let provider = OctoHubProvider::new();
-	// new(messages, model, temperature, top_p, top_k, max_tokens)
 	let params = ChatCompletionParams::new(
 		&[Message::system("You are helpful."), Message::user("hello")],
 		"gpt-4o",
-		0.5,
-		0.9,
-		50,
 		100,
 	)
 	.with_api_key("mock-key".to_owned());
@@ -87,12 +83,9 @@ async fn chat_completion_via_mock_http_parses_text_reasoning_and_usage() {
 	assert_eq!(request["model"], "gpt-4o");
 	assert_eq!(request["instructions"], "You are helpful.");
 	assert_eq!(request["input"][0]["role"], "user");
-	assert_eq!(request["temperature"], 0.5);
-	// top_p is an f32 on the way in, so compare with a tolerance.
-	let top_p = request["top_p"].as_f64().expect("top_p sent");
-	assert!((top_p - 0.9).abs() < 1e-6, "top_p: {top_p}");
-	// OctoHub has no top_k, so it is dropped rather than sent.
-	assert!(request.get("top_k").is_none());
+	for field in ["temperature", "top_p", "top_k"] {
+		assert!(request.get(field).is_none(), "{field} must not be sent");
+	}
 	assert_eq!(request["max_output_tokens"], 100);
 }
 
@@ -110,8 +103,8 @@ async fn chat_completion_via_mock_http_parses_tool_calls_and_structured_output()
 	let _env = EnvGuard::new().set("OCTOHUB_API_URL", mock.base_url());
 
 	let provider = OctoHubProvider::new();
-	let params = ChatCompletionParams::new(&[Message::user("find it")], "gpt-4o", 0.5, 0.9, 0, 10)
-		.with_api_key("mock-key".to_owned());
+	let params =
+		ChatCompletionParams::new(&[Message::user("find it")], "gpt-4o", 10).with_api_key("mock-key".to_owned());
 	let response = provider.chat_completion(params).await.expect("mock completion");
 
 	let calls = response.tool_calls.expect("tool calls present");
@@ -134,7 +127,7 @@ async fn chat_completion_via_mock_http_sends_tools_reasoning_and_schema() {
 	let _env = EnvGuard::new().set("OCTOHUB_API_URL", mock.base_url());
 
 	let provider = OctoHubProvider::new();
-	let params = ChatCompletionParams::new(&[Message::user("hello")], "gpt-4o", 0.5, 0.9, 0, 10)
+	let params = ChatCompletionParams::new(&[Message::user("hello")], "gpt-4o", 10)
 		.with_api_key("mock-key".to_owned())
 		.with_reasoning_effort(ReasoningEffort::High)
 		.with_tools(vec![FunctionDefinition {
@@ -171,7 +164,7 @@ async fn cache_prewarm_is_flagged_and_keeps_the_real_request_shape() {
 
 	let provider = OctoHubProvider::new();
 	let params = || {
-		ChatCompletionParams::new(&[Message::user("hello")], "claude-sonnet-5-5", 0.5, 0.9, 0, 64)
+		ChatCompletionParams::new(&[Message::user("hello")], "claude-sonnet-5-5", 64)
 			.with_api_key("mock-key".to_owned())
 	};
 	provider.chat_completion(params()).await.expect("real request");
@@ -198,8 +191,7 @@ async fn chat_completion_via_mock_http_surfaces_auth_aware_error() {
 	let _env = EnvGuard::new().set("OCTOHUB_API_URL", mock.base_url());
 
 	let provider = OctoHubProvider::new();
-	let params = ChatCompletionParams::new(&[Message::user("hello")], "gpt-4o", 0.5, 0.9, 0, 10)
-		.with_api_key("mock-key".to_owned());
+	let params = ChatCompletionParams::new(&[Message::user("hello")], "gpt-4o", 10).with_api_key("mock-key".to_owned());
 	let err = provider.chat_completion(params).await.expect_err("auth error surfaces");
 	assert!(
 		err.to_string().contains("passed for this request"),
@@ -216,7 +208,7 @@ async fn chat_completion_via_mock_http_retries_server_errors_then_surfaces_them(
 
 	let provider = OctoHubProvider::new();
 	// 5xx is retryable; a 1ms backoff keeps the retry from sleeping for seconds.
-	let params = ChatCompletionParams::new(&[Message::user("hello")], "gpt-4o", 0.5, 0.9, 0, 10)
+	let params = ChatCompletionParams::new(&[Message::user("hello")], "gpt-4o", 10)
 		.with_api_key("mock-key".to_owned())
 		.with_max_retries(1)
 		.with_retry_timeout(std::time::Duration::from_millis(1));

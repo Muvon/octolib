@@ -281,7 +281,7 @@ async fn chat_completion_via_mock_http_splits_text_thinking_tools_and_cache() {
 	let _env = EnvGuard::new().set("MINIMAX_API_URL", mock.url.clone());
 
 	let provider = MinimaxProvider::new();
-	let params = ChatCompletionParams::new(&[], "MiniMax-M2.7", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
+	let params = ChatCompletionParams::new(&[], "MiniMax-M2.7", 10).with_api_key("mock-key".to_owned());
 	let response = provider.chat_completion(params).await.expect("mock completion");
 
 	// Only text parts become content; thinking rides its own block.
@@ -318,6 +318,9 @@ async fn chat_completion_via_mock_http_splits_text_thinking_tools_and_cache() {
 	let requests = mock.requests();
 	let req_body: serde_json::Value = serde_json::from_str(&requests[0].body).expect("request json");
 	assert_eq!(req_body["model"], "MiniMax-M2.7");
+	for field in ["temperature", "top_p", "top_k"] {
+		assert!(req_body.get(field).is_none(), "{field} must not be sent");
+	}
 }
 
 #[tokio::test]
@@ -330,7 +333,7 @@ async fn chat_completion_via_mock_http_surfaces_http_error() {
 	let _env = EnvGuard::new().set("MINIMAX_API_URL", mock.url.clone());
 
 	let provider = MinimaxProvider::new();
-	let params = ChatCompletionParams::new(&[], "MiniMax-M2.7", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
+	let params = ChatCompletionParams::new(&[], "MiniMax-M2.7", 10).with_api_key("mock-key".to_owned());
 	let err = provider.chat_completion(params).await.expect_err("http error surfaces");
 	assert!(err.to_string().contains("MiniMax API error"), "unexpected error: {err}");
 }

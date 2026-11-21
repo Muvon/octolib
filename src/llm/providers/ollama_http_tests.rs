@@ -30,8 +30,8 @@ async fn chat_completion_via_mock_http_fills_reference_cost() {
 	let _env = EnvGuard::new().set("OLLAMA_API_URL", mock.url.clone());
 
 	let provider = OllamaProvider::new();
-	let params = ChatCompletionParams::new(&[Message::user("hello")], "llama-3.1-8b", 0.2, 0.9, 0, 100)
-		.with_api_key("mock-key".to_owned());
+	let params =
+		ChatCompletionParams::new(&[Message::user("hello")], "llama-3.1-8b", 100).with_api_key("mock-key".to_owned());
 	let response = provider.chat_completion(params).await.expect("mock completion");
 
 	assert_eq!(response.content, "ollama answer");
@@ -61,7 +61,7 @@ async fn long_cache_keeps_the_model_loaded_for_an_hour() {
 	)]);
 	let _env = EnvGuard::new().set("OLLAMA_API_URL", mock.url.clone());
 
-	let params = ChatCompletionParams::new(&[Message::user("hello")], "gpt-oss:120b", 0.2, 0.9, 0, 100)
+	let params = ChatCompletionParams::new(&[Message::user("hello")], "gpt-oss:120b", 100)
 		.with_api_key("mock-key".to_owned())
 		.with_long_cache(true);
 	OllamaProvider::new()
@@ -79,7 +79,7 @@ async fn cache_prewarm_asks_for_one_token_and_drops_the_output_format() {
 	let mock = MockHttp::start(vec![(200, crate::test_support::mock_http::chat_completion_body("o"))]);
 	let _env = EnvGuard::new().set("OLLAMA_API_URL", mock.url.clone());
 
-	let params = ChatCompletionParams::new(&[Message::user("hello")], "gpt-oss:120b", 0.2, 0.9, 0, 100)
+	let params = ChatCompletionParams::new(&[Message::user("hello")], "gpt-oss:120b", 100)
 		.with_api_key("mock-key".to_owned())
 		.with_structured_output(crate::llm::types::StructuredOutputRequest::json())
 		.with_cache_prewarm(true);
@@ -102,8 +102,8 @@ async fn cached_tokens_are_billed_at_the_ollama_cached_rate() {
 	let mock = MockHttp::start(vec![(200, body.to_string())]);
 	let _env = EnvGuard::new().set("OLLAMA_API_URL", mock.url.clone());
 
-	let params = ChatCompletionParams::new(&[Message::user("hello")], "gpt-oss:120b", 0.2, 0.9, 0, 100)
-		.with_api_key("mock-key".to_owned());
+	let params =
+		ChatCompletionParams::new(&[Message::user("hello")], "gpt-oss:120b", 100).with_api_key("mock-key".to_owned());
 	let response = OllamaProvider::new()
 		.chat_completion(params)
 		.await
@@ -128,7 +128,7 @@ async fn chat_completion_via_mock_http_retries_server_errors_then_surfaces_them(
 
 	let provider = OllamaProvider::new();
 	// 5xx is retryable; a 1ms backoff keeps the retry from sleeping for seconds.
-	let params = ChatCompletionParams::new(&[Message::user("hello")], "llama-3.1-8b", 0.2, 0.9, 0, 100)
+	let params = ChatCompletionParams::new(&[Message::user("hello")], "llama-3.1-8b", 100)
 		.with_api_key("mock-key".to_owned())
 		.with_max_retries(1)
 		.with_retry_timeout(std::time::Duration::from_millis(1));

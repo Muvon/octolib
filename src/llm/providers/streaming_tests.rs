@@ -299,7 +299,7 @@ async fn native_chat_providers_accumulate_and_keep_usage() {
 		events[0]["model"] = json!(model);
 		let mock = MockHttp::start(vec![(200, wire(&events, true))]);
 		let _env = EnvGuard::new().set(env, &mock.url);
-		let mut params = ChatCompletionParams::new(&[], model, 1.0, 1.0, 0, 100).with_api_key("mock-key".to_owned());
+		let mut params = ChatCompletionParams::new(&[], model, 100).with_api_key("mock-key".to_owned());
 		params.max_retries = 0;
 		let response = provider
 			.chat_completion(params)
@@ -345,7 +345,7 @@ async fn messages_providers_accumulate_text_and_bill_final_usage() {
 		];
 		let mock = MockHttp::start(vec![(200, wire(&events, false))]);
 		let _env = EnvGuard::new().set(env, &mock.url);
-		let mut params = ChatCompletionParams::new(&[], model, 1.0, 1.0, 0, 100).with_api_key("mock-key".to_owned());
+		let mut params = ChatCompletionParams::new(&[], model, 100).with_api_key("mock-key".to_owned());
 		params.max_retries = 0;
 		let response = provider
 			.chat_completion(params)
@@ -379,7 +379,7 @@ async fn responses_providers_keep_the_complete_terminal_response() {
 			wire(&[json!({"type":"response.completed","response":body})], false),
 		)]);
 		let _env = EnvGuard::new().set(env, &mock.url);
-		let mut params = ChatCompletionParams::new(&[], model, 1.0, 1.0, 0, 100).with_api_key("mock-key".to_owned());
+		let mut params = ChatCompletionParams::new(&[], model, 100).with_api_key("mock-key".to_owned());
 		params.max_retries = 0;
 		let response = provider
 			.chat_completion(params)
@@ -413,7 +413,7 @@ async fn truncated_stream_retries_but_malformed_and_permanent_errors_do_not() {
 		),
 	] {
 		let mock = MockHttp::start(vec![(200, first_body), (200, wire(&chat_events(), true))]);
-		let params = ChatCompletionParams::new(&[], "test", 1.0, 1.0, 0, 100).with_api_key("private-key".to_owned());
+		let params = ChatCompletionParams::new(&[], "test", 100).with_api_key("private-key".to_owned());
 		let result = retry::retry_provider_request(
 			|| {
 				Box::pin(send_and_read(
@@ -555,7 +555,7 @@ async fn compatible_adapter_validates_assembled_json_and_preserves_billing() {
 		json!({"choices":[],"usage":{"prompt_tokens":20,"completion_tokens":10,"total_tokens":30,"prompt_tokens_details":{"cached_tokens":5},"completion_tokens_details":{"reasoning_tokens":3},"cost":0.25}}),
 	];
 	let mock = MockHttp::start(vec![(200, wire(&events, true))]);
-	let mut params = ChatCompletionParams::new(&[], "test", 1.0, 1.0, 0, 100);
+	let mut params = ChatCompletionParams::new(&[], "test", 100);
 	params.response_format = Some(StructuredOutputRequest::json_schema(schema));
 	params.max_retries = 0;
 	let response = chat_completion(

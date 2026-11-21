@@ -31,8 +31,8 @@ async fn chat_completion_via_mock_http_fills_reference_cost_for_cloud_equivalent
 	let _env = EnvGuard::new().set("LOCAL_API_URL", mock.url.clone());
 
 	let provider = LocalProvider::new();
-	let params = ChatCompletionParams::new(&[Message::user("hello")], "llama-3.1-8b", 0.2, 0.9, 0, 100)
-		.with_api_key("mock-key".to_owned());
+	let params =
+		ChatCompletionParams::new(&[Message::user("hello")], "llama-3.1-8b", 100).with_api_key("mock-key".to_owned());
 	let response = provider.chat_completion(params).await.expect("mock completion");
 
 	assert_eq!(response.content, "local answer");
@@ -64,7 +64,7 @@ async fn chat_completion_via_mock_http_leaves_unpriced_local_models_costless() {
 	let _env = EnvGuard::new().set("LOCAL_API_URL", mock.url.clone());
 
 	let provider = LocalProvider::new();
-	let params = ChatCompletionParams::new(&[Message::user("hello")], "some-unknown-local-model", 0.2, 0.9, 0, 100)
+	let params = ChatCompletionParams::new(&[Message::user("hello")], "some-unknown-local-model", 100)
 		.with_api_key("mock-key".to_owned());
 	let response = provider.chat_completion(params).await.expect("mock completion");
 
@@ -80,7 +80,7 @@ async fn chat_completion_via_mock_http_retries_server_errors_then_surfaces_them(
 
 	let provider = LocalProvider::new();
 	// 5xx is retryable; a 1ms backoff keeps the retry from sleeping for seconds.
-	let params = ChatCompletionParams::new(&[Message::user("hello")], "llama-3.1-8b", 0.2, 0.9, 0, 100)
+	let params = ChatCompletionParams::new(&[Message::user("hello")], "llama-3.1-8b", 100)
 		.with_api_key("mock-key".to_owned())
 		.with_max_retries(1)
 		.with_retry_timeout(std::time::Duration::from_millis(1));

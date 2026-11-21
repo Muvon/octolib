@@ -21,8 +21,8 @@ use crate::errors::ToolCallError;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-	ChatCompletionParams, Message, ProviderExchange, ProviderResponse, ReasoningEffort, SamplingSupport, ThinkingBlock,
-	TokenUsage, ToolCall,
+	ChatCompletionParams, Message, ProviderExchange, ProviderResponse, ReasoningEffort, ThinkingBlock, TokenUsage,
+	ToolCall,
 };
 use crate::llm::utils::{get_model_pricing, PricingTuple};
 use anyhow::Result;
@@ -243,11 +243,6 @@ impl AiProvider for TogetherProvider {
 	fn supports_model(&self, model: &str) -> bool {
 		!model.is_empty()
 	}
-	fn supported_sampling_params(&self, _model: &str) -> SamplingSupport {
-		// Together uses OpenAI-compatible API — supports temperature and top_p, not top_k.
-		SamplingSupport::TEMPERATURE_AND_TOP_P
-	}
-
 	fn get_api_key(&self) -> Result<String> {
 		env::var(TOGETHER_API_KEY_ENV)
 			.map_err(|_| crate::errors::missing_api_key("together", TOGETHER_API_KEY_ENV).into())
@@ -283,21 +278,10 @@ impl AiProvider for TogetherProvider {
 		let api_key = super::shared::resolve_api_key(self, &params)?;
 		let messages = convert_messages(&params.messages)?;
 
-		// Apply sampling parameters based on model support
-		let sampling = self.effective_sampling_params(&params);
-
 		let mut request_body = serde_json::json!({
 			"model": params.model,
 			"messages": messages,
 		});
-		if let Some(temp) = sampling.temperature {
-			request_body["temperature"] = serde_json::json!(temp);
-		}
-		if let Some(top_p) = sampling.top_p {
-			request_body["top_p"] = serde_json::json!(top_p);
-		}
-		// Note: Together doesn't support top_k
-
 		if params.max_tokens > 0 {
 			request_body["max_tokens"] = serde_json::json!(params.max_tokens);
 		}

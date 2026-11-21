@@ -51,7 +51,7 @@ use super::shared;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-	ChatCompletionParams, ProviderExchange, ProviderResponse, ReasoningEffort, SamplingSupport, TokenUsage, ToolCall,
+	ChatCompletionParams, ProviderExchange, ProviderResponse, ReasoningEffort, TokenUsage, ToolCall,
 };
 use crate::llm::utils::{contains_ignore_ascii_case, is_model_in_pricing_table, PricingTuple};
 use anyhow::Result;
@@ -142,8 +142,6 @@ const MEASURED_CACHE_LIFETIME: std::time::Duration = std::time::Duration::from_s
 struct MoonshotRequest {
 	model: String,
 	messages: Vec<MoonshotMessage>,
-	#[serde(skip_serializing_if = "Option::is_none")]
-	temperature: Option<f64>,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	max_tokens: Option<u32>,
 	/// Kimi K3 output cap (`max_tokens` is deprecated for K3 per API docs)
@@ -643,20 +641,6 @@ impl AiProvider for MoonshotProvider {
 		128_000
 	}
 
-	fn supported_sampling_params(&self, model: &str) -> SamplingSupport {
-		// Kimi K2.6 and K2.7 do not expose a modifiable temperature.
-		// Kimi K3 has no temperature parameter at all (always-reasoning model).
-		// No Kimi model supports top_p or top_k.
-		let fixed_temp = contains_ignore_ascii_case(model, "kimi-k2.6")
-			|| contains_ignore_ascii_case(model, "kimi-k2.7")
-			|| contains_ignore_ascii_case(model, "kimi-k3");
-		SamplingSupport {
-			temperature: !fixed_temp,
-			top_p: false,
-			top_k: false,
-		}
-	}
-
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
 		let api_key = super::shared::resolve_api_key(self, &params)?;
 
@@ -664,11 +648,6 @@ impl AiProvider for MoonshotProvider {
 		// NOTE: Moonshot uses AUTOMATIC context caching (like OpenAI)
 		// Manual caching via /v1/caching endpoint is deprecated (returns "model family is invalid")
 		let messages = convert_messages(&params.messages, &params.model);
-
-		// Kimi K2.6, K2.7 and K3 do not expose a modifiable temperature,
-		// so effective sampling support omits it from the request.
-		let sampling = self.effective_sampling_params(&params);
-		let temperature = sampling.temperature;
 
 		// Kimi K3 caps output via `max_completion_tokens`; `max_tokens` is
 		// deprecated for K3 per the API docs. Older Kimi models keep max_tokens.
@@ -686,7 +665,6 @@ impl AiProvider for MoonshotProvider {
 		let mut request = MoonshotRequest {
 			model: params.model.clone(),
 			messages,
-			temperature,
 			max_tokens,
 			max_completion_tokens,
 			reasoning_effort: k3_reasoning_effort(&params.model, params.reasoning_effort),

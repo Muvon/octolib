@@ -19,8 +19,7 @@ use serial_test::serial;
 #[serial_test::serial]
 fn test_per_call_key_auth_headers_override_api_key_and_oauth() {
 	let provider = OpenAiProvider::new();
-	let params =
-		ChatCompletionParams::new(&[], "gpt-4o", 1.0, 1.0, 0, 10).with_api_key("private-request-key".to_owned());
+	let params = ChatCompletionParams::new(&[], "gpt-4o", 10).with_api_key("private-request-key".to_owned());
 	let original = [
 		OPENAI_API_KEY_ENV,
 		OPENAI_OAUTH_ACCESS_TOKEN_ENV,
@@ -50,52 +49,6 @@ fn test_per_call_key_auth_headers_override_api_key_and_oauth() {
 			None => env::remove_var(name),
 		}
 	}
-}
-
-#[test]
-fn test_supported_sampling_params() {
-	let provider = OpenAiProvider::new();
-
-	// Models that should support temperature/top_p (but never top_k)
-	let sp = provider.supported_sampling_params("gpt-4");
-	assert!(sp.temperature);
-	assert!(sp.top_p);
-	assert!(!sp.top_k); // OpenAI never supports top_k
-
-	let sp = provider.supported_sampling_params("gpt-4o");
-	assert!(sp.temperature);
-	assert!(sp.top_p);
-
-	let sp = provider.supported_sampling_params("gpt-4o-mini");
-	assert!(sp.temperature);
-
-	let sp = provider.supported_sampling_params("chatgpt-4o-latest");
-	assert!(sp.temperature);
-
-	// Reasoning models should NOT support temperature/top_p
-	let sp = provider.supported_sampling_params("o1");
-	assert!(!sp.temperature);
-	assert!(!sp.top_p);
-	assert!(!sp.top_k);
-
-	let sp = provider.supported_sampling_params("o1-preview");
-	assert!(!sp.temperature);
-
-	let sp = provider.supported_sampling_params("o3");
-	assert!(!sp.temperature);
-
-	let sp = provider.supported_sampling_params("o4");
-	assert!(!sp.temperature);
-
-	let sp = provider.supported_sampling_params("gpt-5");
-	assert!(!sp.temperature);
-	assert!(!sp.top_p);
-
-	let sp = provider.supported_sampling_params("gpt-5-mini");
-	assert!(!sp.temperature);
-
-	let sp = provider.supported_sampling_params("gpt-5-nano");
-	assert!(!sp.temperature);
 }
 
 #[test]
@@ -880,18 +833,11 @@ fn test_alias_capabilities_follow_underlying_model() {
 		assert!(provider.supports_caching(model), "{model}");
 	}
 
-	// Daybreak aliases resolve to gpt-5.6 snapshots: explicit cache breakpoints,
-	// `max` effort, and no sampling params.
+	// Daybreak aliases resolve to gpt-5.6 snapshots with explicit cache breakpoints
+	// and `max` effort.
 	assert!(is_gpt_5_6_or_later("gpt-daybreak-blue-latest"));
 	assert!(is_gpt_5_6_or_later("gpt-daybreak-red-latest"));
 	assert!(!is_gpt_5_6_or_later("chat-latest"));
-	assert!(
-		!provider
-			.supported_sampling_params("gpt-daybreak-blue-latest")
-			.temperature
-	);
-	assert!(provider.supported_sampling_params("chat-latest").temperature);
-
 	// Long-context tier: sol and daybreak-blue are tiered; cyber and daybreak-red are not.
 	let sol = calculate_cost("gpt-5.6-sol", 300_000, 10_000).unwrap();
 	let blue = calculate_cost("gpt-daybreak-blue-latest", 300_000, 10_000).unwrap();
@@ -945,8 +891,6 @@ fn test_gpt_6_astra() {
 	assert_eq!(provider.get_max_input_tokens("gpt-6-astra"), 1_050_000);
 	assert!(provider.supports_vision("gpt-6-astra"));
 	assert!(provider.supports_caching("gpt-6-astra"));
-	assert!(!provider.supported_sampling_params("gpt-6-astra").temperature);
-
 	let pricing = provider.get_model_pricing("gpt-6-astra").unwrap();
 	assert_eq!(pricing.input_price_per_1m, 10.00);
 	assert_eq!(pricing.output_price_per_1m, 50.00);
@@ -1057,9 +1001,6 @@ fn test_gpt_6_models_provider_and_reference_support() {
 		assert_eq!(provider.get_max_input_tokens(model), 1_050_000);
 		assert!(is_gpt_5_6_or_later(model));
 
-		let sampling = provider.supported_sampling_params(model);
-		assert!(!sampling.temperature && !sampling.top_p && !sampling.top_k);
-
 		// Check both public reference facades, including aggregator model IDs.
 		let proxy_model = format!("openai/{model}");
 		for pricing in [
@@ -1087,9 +1028,6 @@ fn test_gpt_6_1_terra_provider_and_reference_support() {
 	assert!(provider.supports_caching(model));
 	assert!(provider.supports_structured_output(model));
 	assert_eq!(provider.get_max_input_tokens(model), 1_050_000);
-
-	let sampling = provider.supported_sampling_params(model);
-	assert!(!sampling.temperature && !sampling.top_p && !sampling.top_k);
 
 	let proxy_model = format!("openai/{model}");
 	for pricing in [

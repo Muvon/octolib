@@ -15,6 +15,7 @@
 use super::*;
 use crate::llm::providers::OpenRouterProvider;
 use crate::llm::types::Message;
+use crate::test_support::env::EnvGuard;
 
 const DEEPSEEK: &str = "deepseek-v4.1-flash-1017-fast";
 const GLM: &str = "glm-5.3-flash";
@@ -129,7 +130,7 @@ fn models_without_levels_send_no_effort() {
 #[test]
 fn zero_data_retention_replaces_a_caller_value() {
 	let messages = vec![Message::user("hi")];
-	let mut params = ChatCompletionParams::new(&messages, GLM, 0.7, 1.0, 50, 64).with_extra_headers(
+	let mut params = ChatCompletionParams::new(&messages, GLM, 64).with_extra_headers(
 		[
 			("isoquant-zdr".to_string(), "off".to_string()),
 			("x-kept".to_string(), "yes".to_string()),
@@ -170,11 +171,6 @@ fn known_models_work_before_the_catalog_loads() {
 		assert!(provider.enforces_response_schema(model), "{model}");
 		assert!(provider.supports_required_tool_choice(model), "{model}");
 		assert_eq!(provider.get_max_input_tokens(model), 1_048_576, "{model}");
-		assert_eq!(
-			provider.supported_sampling_params(model),
-			SamplingSupport::TEMPERATURE_AND_TOP_P,
-			"{model}"
-		);
 	}
 }
 
@@ -236,5 +232,30 @@ async fn live_catalog_lists_known_models_with_their_facts() {
 		assert!(model.structured_output, "{id}");
 		assert!(model.required_tool_choice, "{id}");
 		assert_eq!(model.efforts, listed_efforts(efforts), "{id}");
+	}
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn request_omits_sampling_fields() {
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(
+		200,
+		crate::test_support::mock_http::chat_completion_body("ok"),
+	)]);
+	let _env = EnvGuard::new().set("ISOQUANT_API_URL", mock.url.clone());
+	let params = ChatCompletionParams::new(&[], DEEPSEEK, 10).with_api_key("mock-key".to_owned());
+	IsoquantProvider::new()
+		.chat_completion(params)
+		.await
+		.expect("mock completion");
+	// The provider may fetch its catalog first (once per process), so pick the completion POST.
+	let request = mock
+		.requests()
+		.into_iter()
+		.find(|request| request.method == "POST")
+		.expect("completion request");
+	let body: serde_json::Value = serde_json::from_str(&request.body).expect("request json");
+	for field in ["temperature", "top_p", "top_k"] {
+		assert!(body.get(field).is_none(), "{field} must not be sent");
 	}
 }

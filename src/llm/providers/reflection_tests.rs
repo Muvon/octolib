@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::*;
+use crate::test_support::env::EnvGuard;
 
 const BEAM: &str = "Beam-1.0-501B-A23B";
 
@@ -45,10 +46,6 @@ fn declares_probed_capabilities() {
 		provider.cache_lifetime(BEAM, false),
 		Some(std::time::Duration::from_secs(600))
 	);
-	assert_eq!(
-		provider.supported_sampling_params(BEAM),
-		SamplingSupport::TEMPERATURE_AND_TOP_P
-	);
 }
 
 #[test]
@@ -60,4 +57,23 @@ fn prices_beam_and_no_unknown_model() {
 	assert_eq!(pricing.cache_write_price_per_1m, 0.125);
 	assert_eq!(pricing.cache_read_price_per_1m, 0.015);
 	assert!(provider.get_model_pricing("Beam-2.0").is_none());
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn request_omits_sampling_fields() {
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(
+		200,
+		crate::test_support::mock_http::chat_completion_body("ok"),
+	)]);
+	let _env = EnvGuard::new().set("REFLECTION_API_URL", mock.url.clone());
+	let params = ChatCompletionParams::new(&[], BEAM, 10).with_api_key("mock-key".to_owned());
+	ReflectionProvider::new()
+		.chat_completion(params)
+		.await
+		.expect("mock completion");
+	let body: serde_json::Value = serde_json::from_str(&mock.requests()[0].body).expect("request json");
+	for field in ["temperature", "top_p", "top_k"] {
+		assert!(body.get(field).is_none(), "{field} must not be sent");
+	}
 }

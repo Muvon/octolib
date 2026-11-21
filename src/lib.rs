@@ -64,7 +64,7 @@
 //!     ];
 //!
 //!     // Create completion parameters
-//!     let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000);
+//!     let params = ChatCompletionParams::new(&messages, &model, 1000);
 //!
 //!     // Get completion (requires OPENAI_API_KEY environment variable)
 //!     let response = provider.chat_completion(params).await?;
@@ -125,7 +125,7 @@
 //!
 //!     // Request structured JSON output
 //!     let structured_request = StructuredOutputRequest::json();
-//!     let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000)
+//!     let params = ChatCompletionParams::new(&messages, &model, 1000)
 //!         .with_structured_output(structured_request);
 //!
 //!     let response = provider.chat_completion(params).await?;
@@ -184,13 +184,12 @@ pub use evaluation::{
 pub use llm::{
 	chat_completion_enforced, AiProvider, AmazonBedrockProvider, AnthropicProvider, CacheConfig, CacheTTL, CacheType,
 	CerebrasProvider, ChatCompletionParams, ChatGptTransport, CloudflareWorkersAiProvider, DeepSeekProvider,
-	EffectiveSamplingParams, FireworksProvider, FunctionDefinition, GenericToolCall, GoogleStudioProvider,
-	GoogleVertexProvider, ImageAttachment, ImageData, LocalProvider, Message, MessageBuilder, MetaProvider,
-	MinimaxProvider, ModelLimits, MoonshotProvider, OctoHubTransport, OllamaProvider, OpenAiProvider,
-	OpenRouterProvider, OutputFormat, ProviderExchange, ProviderFactory, ProviderResponse, ProviderStrategy,
-	ProviderToolCalls, ReasoningEffort, ResponseMode, SamplingSupport, SourceType, StrategyFactory,
-	StructuredOutputRequest, ThinkingBlock, TogetherProvider, TokenUsage, ToolCall, ToolChoice, ToolResult,
-	VideoAttachment, VideoData, WebWrightProvider, XaiProvider, ZaiProvider,
+	FireworksProvider, FunctionDefinition, GenericToolCall, GoogleStudioProvider, GoogleVertexProvider,
+	ImageAttachment, ImageData, LocalProvider, Message, MessageBuilder, MetaProvider, MinimaxProvider, ModelLimits,
+	MoonshotProvider, OctoHubTransport, OllamaProvider, OpenAiProvider, OpenRouterProvider, OutputFormat,
+	ProviderExchange, ProviderFactory, ProviderResponse, ProviderStrategy, ProviderToolCalls, ReasoningEffort,
+	ResponseMode, SourceType, StrategyFactory, StructuredOutputRequest, ThinkingBlock, TogetherProvider, TokenUsage,
+	ToolCall, ToolChoice, ToolResult, VideoAttachment, VideoData, WebWrightProvider, XaiProvider, ZaiProvider,
 };
 #[cfg(feature = "media")]
 pub use media::{

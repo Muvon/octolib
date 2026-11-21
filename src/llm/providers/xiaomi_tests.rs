@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::*;
+use crate::test_support::env::EnvGuard;
 
 #[test]
 fn test_supports_model() {
@@ -48,10 +49,6 @@ fn test_chat_features() {
 	assert!(provider.supports_structured_output("mimo-v2.6-pro"));
 	assert!(provider.enforces_response_schema("mimo-v2.6-pro"));
 	assert!(!provider.supports_required_tool_choice("mimo-v2.6-pro"));
-	assert_eq!(
-		provider.supported_sampling_params("mimo-v2.6-pro"),
-		SamplingSupport::TEMPERATURE_AND_TOP_P
-	);
 }
 
 #[test]
@@ -84,4 +81,23 @@ fn cache_lifetime_is_the_measured_hour() {
 		provider.cache_lifetime("mimo-v2.6-pro", false),
 		Some(std::time::Duration::from_secs(3600))
 	);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn request_omits_sampling_fields() {
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(
+		200,
+		crate::test_support::mock_http::chat_completion_body("ok"),
+	)]);
+	let _env = EnvGuard::new().set("XIAOMI_API_URL", mock.url.clone());
+	let params = ChatCompletionParams::new(&[], "mimo-v2.6-pro", 10).with_api_key("mock-key".to_owned());
+	XiaomiProvider::new()
+		.chat_completion(params)
+		.await
+		.expect("mock completion");
+	let body: serde_json::Value = serde_json::from_str(&mock.requests()[0].body).expect("request json");
+	for field in ["temperature", "top_p", "top_k"] {
+		assert!(body.get(field).is_none(), "{field} must not be sent");
+	}
 }

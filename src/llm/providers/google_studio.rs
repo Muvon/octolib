@@ -27,12 +27,12 @@
 //! chat_completion() call. The list is cached for the lifetime of the process.
 
 use crate::llm::providers::google_vertex::{
-	calculate_usage_cost, fetch_available_models, gemini_max_input_tokens, gemini_sampling_support,
-	get_cached_input_limit, is_model_cached, CachedModel, PRICING,
+	calculate_usage_cost, fetch_available_models, gemini_max_input_tokens, get_cached_input_limit, is_model_cached,
+	CachedModel, PRICING,
 };
-use crate::llm::providers::openai_compat::{chat_completion_with_sampling, get_api_url, OpenAiCompatConfig};
+use crate::llm::providers::openai_compat::{chat_completion, get_api_url, OpenAiCompatConfig};
 use crate::llm::traits::AiProvider;
-use crate::llm::types::{ChatCompletionParams, ProviderResponse, SamplingSupport};
+use crate::llm::types::{ChatCompletionParams, ProviderResponse};
 use crate::llm::utils::{get_model_pricing, normalize_model_name};
 use anyhow::Result;
 use std::env;
@@ -141,10 +141,6 @@ impl AiProvider for GoogleStudioProvider {
 		gemini_max_input_tokens(model)
 	}
 
-	fn supported_sampling_params(&self, model: &str) -> SamplingSupport {
-		gemini_sampling_support(model)
-	}
-
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
 		let api_key = super::shared::resolve_api_key(self, &params)?;
 		let api_url = get_api_url(GOOGLE_STUDIO_API_URL_ENV, GOOGLE_STUDIO_API_URL);
@@ -158,7 +154,7 @@ impl AiProvider for GoogleStudioProvider {
 			.get_or_try_init(|| async move { fetch_available_models(&key, &url, per_call_api_key.as_ref()).await })
 			.await;
 
-		let mut response = chat_completion_with_sampling(
+		let mut response = chat_completion(
 			OpenAiCompatConfig {
 				provider_name: "google-studio",
 				usage_fallback_cost: None,
@@ -167,7 +163,6 @@ impl AiProvider for GoogleStudioProvider {
 				supports_required_tool_choice: false,
 				supports_parallel_tool_calls: true,
 			},
-			self.supported_sampling_params(&model),
 			api_key,
 			api_url,
 			params,

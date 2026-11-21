@@ -46,7 +46,7 @@ fn completion_body() -> Value {
 }
 
 fn params() -> ChatCompletionParams {
-	ChatCompletionParams::new(&[Message::user("hello 日本語 🦀")], "test-model", 0.5, 0.75, 50, 128)
+	ChatCompletionParams::new(&[Message::user("hello 日本語 🦀")], "test-model", 128)
 		.with_api_key("transport-test-key".to_owned())
 		.with_max_retries(0)
 		.with_request_timeout(Some(Duration::from_secs(5)))
@@ -141,9 +141,9 @@ fn assert_rich_request(request: &Value) {
 			]}
 		])
 	);
-	assert_eq!(request["temperature"], 0.5);
-	assert_eq!(request["top_p"], 0.75);
-	assert!(request.get("top_k").is_none());
+	for field in ["temperature", "top_p", "top_k"] {
+		assert!(request.get(field).is_none(), "{field} must not be sent");
+	}
 	assert_eq!(request["max_output_tokens"], 128);
 	assert_eq!(request["reasoning_effort"], "max");
 	assert_eq!(
@@ -556,7 +556,7 @@ mod websocket_integration {
 			});
 			let _env = EnvGuard::new().set("OCTOHUB_API_URL", url).remove("OCTOHUB_API_KEY");
 			let _stored = (mode != "missing").then(|| EnvGuard::new().set("OCTOHUB_API_KEY", "stored-test-key"));
-			let mut request = ChatCompletionParams::new(&[Message::user("auth")], "test-model", 0.5, 0.75, 0, 128)
+			let mut request = ChatCompletionParams::new(&[Message::user("auth")], "test-model", 128)
 				.with_octohub_transport(OctoHubTransport::WebSocket)
 				.with_max_retries(3)
 				.with_retry_timeout(Duration::ZERO)

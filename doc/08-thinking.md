@@ -143,7 +143,7 @@ use xAI's `previous_response_id` state directly.
 
 ```rust
 let (provider, model) = ProviderFactory::get_provider_for_model("xai:grok-4.5")?;
-let params = ChatCompletionParams::new(&messages, &model, 0.2, 0.9, 40, 2048)
+let params = ChatCompletionParams::new(&messages, &model, 2048)
     .with_reasoning_effort(ReasoningEffort::High);
 let response = provider.chat_completion(params).await?;
 ```
@@ -285,7 +285,7 @@ async fn thinking_example() -> anyhow::Result<()> {
     ];
 
     // Create parameters
-    let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000);
+    let params = ChatCompletionParams::new(&messages, &model, 1000);
 
     // Get completion
     let response = provider.chat_completion(params).await?;
@@ -395,7 +395,7 @@ conversation.push(Message::assistant(&response.content)
     .with_thinking(response.thinking.clone()));
 
 // Use conversation in next request
-let params = ChatCompletionParams::new(&conversation, &model, 0.7, 1.0, 50, 1000);
+let params = ChatCompletionParams::new(&conversation, &model, 1000);
 ```
 
 ### 3. Token Budgeting

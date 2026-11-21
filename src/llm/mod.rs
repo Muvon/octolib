@@ -41,10 +41,9 @@ pub use strategies::{ModelLimits, ProviderStrategy, StrategyFactory, ToolResult}
 pub use tool_calls::{GenericToolCall, ProviderToolCalls};
 pub use traits::{AiProvider, KeepalivePolicy};
 pub use types::{
-	ChatCompletionParams, ChatGptTransport, EffectiveSamplingParams, FunctionDefinition, ImageAttachment, ImageData,
-	Message, MessageBuilder, ModelPricing, OctoHubTransport, OutputFormat, ProviderExchange, ProviderResponse,
-	ReasoningEffort, ResponseMode, SamplingSupport, SourceType, StructuredOutputRequest, ThinkingBlock, TokenUsage,
-	ToolCall, ToolChoice, VideoAttachment, VideoData,
+	ChatCompletionParams, ChatGptTransport, FunctionDefinition, ImageAttachment, ImageData, Message, MessageBuilder,
+	ModelPricing, OctoHubTransport, OutputFormat, ProviderExchange, ProviderResponse, ReasoningEffort, ResponseMode,
+	SourceType, StructuredOutputRequest, ThinkingBlock, TokenUsage, ToolCall, ToolChoice, VideoAttachment, VideoData,
 };
 
 // Re-export all provider implementations

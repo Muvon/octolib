@@ -31,8 +31,7 @@ fn cache_lifetime_is_known_only_on_measured_models() {
 #[serial_test::serial]
 fn test_per_call_key_authenticates_without_environment_key() {
 	let provider = GoogleStudioProvider::new();
-	let params = ChatCompletionParams::new(&[], "gemini-2.5-flash", 1.0, 1.0, 0, 10)
-		.with_api_key("private-request-key".to_owned());
+	let params = ChatCompletionParams::new(&[], "gemini-2.5-flash", 10).with_api_key("private-request-key".to_owned());
 	let original = env::var_os(GOOGLE_STUDIO_API_KEY_ENV);
 	env::remove_var(GOOGLE_STUDIO_API_KEY_ENV);
 	assert!(provider.get_api_key().is_err());
@@ -82,31 +81,6 @@ fn test_default_capabilities() {
 	assert!(provider.supports_structured_output("any-model"));
 	assert_eq!(provider.get_max_input_tokens("gemini-3.6-flash"), 1_048_576);
 	assert_eq!(provider.get_max_input_tokens("gemini-4-argon"), 1_048_576);
-}
-
-#[test]
-fn test_sampling_params() {
-	let provider = GoogleStudioProvider::new();
-	assert_eq!(
-		provider.supported_sampling_params("gemini-4-argon"),
-		SamplingSupport::NONE
-	);
-	assert_eq!(
-		provider.supported_sampling_params("gemini-3.8-flash"),
-		SamplingSupport::NONE
-	);
-	assert_eq!(
-		provider.supported_sampling_params("gemini-3.7-flash"),
-		SamplingSupport::NONE
-	);
-	assert_eq!(
-		provider.supported_sampling_params("gemini-3.6-flash"),
-		SamplingSupport::NONE
-	);
-	assert_eq!(
-		provider.supported_sampling_params("gemini-2.5-flash"),
-		SamplingSupport::ALL
-	);
 }
 
 #[test]

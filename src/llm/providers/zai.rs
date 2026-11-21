@@ -62,8 +62,8 @@ use super::shared;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-	ChatCompletionParams, ProviderExchange, ProviderResponse, ReasoningEffort, ResponseMode, SamplingSupport,
-	ThinkingBlock, TokenUsage, ToolCall,
+	ChatCompletionParams, ProviderExchange, ProviderResponse, ReasoningEffort, ResponseMode, ThinkingBlock, TokenUsage,
+	ToolCall,
 };
 use crate::llm::utils::{get_model_pricing, is_model_in_pricing_table, normalize_model_name, PricingTuple};
 use anyhow::Result;
@@ -190,12 +190,6 @@ struct ZaiRequest {
 	model: String,
 	messages: Vec<ZaiMessage>,
 	#[serde(skip_serializing_if = "Option::is_none")]
-	do_sample: Option<bool>,
-	#[serde(skip_serializing_if = "Option::is_none")]
-	temperature: Option<f64>, // Changed to f64 for better precision control
-	#[serde(skip_serializing_if = "Option::is_none")]
-	top_p: Option<f64>, // Changed to f64 for better precision control
-	#[serde(skip_serializing_if = "Option::is_none")]
 	max_tokens: Option<u32>,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	stop: Option<serde_json::Value>,
@@ -307,11 +301,6 @@ impl AiProvider for ZaiProvider {
 		is_model_in_pricing_table(model, PRICING)
 	}
 
-	fn supported_sampling_params(&self, _model: &str) -> SamplingSupport {
-		// Z.ai supports temperature and top_p, not top_k
-		SamplingSupport::TEMPERATURE_AND_TOP_P
-	}
-
 	fn get_api_key(&self) -> Result<String> {
 		env::var(ZAI_API_KEY_ENV).map_err(|_| crate::errors::missing_api_key("zai", ZAI_API_KEY_ENV).into())
 	}
@@ -403,19 +392,11 @@ impl AiProvider for ZaiProvider {
 		// Convert messages to Z.ai format
 		let messages = convert_messages(&params.messages);
 
-		// Build request
-		// Z.ai API is strict about floating point precision - round to 2 decimal places
-		let sampling = self.effective_sampling_params(&params);
-		let temperature = sampling.temperature.map(|t| (t * 100.0).round() / 100.0);
-		let top_p = sampling.top_p.map(|p| (p * 100.0).round() / 100.0);
 		let (thinking, reasoning_effort) = thinking_fields(&params.model, params.reasoning_effort);
 
 		let request = ZaiRequest {
 			model: params.model.clone(),
 			messages,
-			do_sample: Some(sampling.temperature.is_some_and(|t| t > 0.0)),
-			temperature,
-			top_p,
 			// 0 = provider default: omit rather than send a literal zero cap.
 			max_tokens: (params.max_tokens > 0).then_some(params.max_tokens),
 			stream: Some(true),

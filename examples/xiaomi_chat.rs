@@ -36,7 +36,7 @@ async fn main() -> anyhow::Result<()> {
 		"In one short sentence, what is a mixture-of-experts model?",
 	)];
 	// MiMo thinks by default, so leave headroom for reasoning tokens
-	let params = ChatCompletionParams::new(&messages, &model, 1.0, 0.95, 50, 1024);
+	let params = ChatCompletionParams::new(&messages, &model, 1024);
 
 	let response = provider.chat_completion(params).await?;
 	println!("Response: {}", response.content);

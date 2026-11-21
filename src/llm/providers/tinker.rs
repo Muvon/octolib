@@ -26,9 +26,6 @@
 //! INFERENCE ids (`...:peft:262144:sampling-nvfp4`), which is the tier this
 //! endpoint serves — the bare `thinkingmachines/Inkling` spelling is the same
 //! model in the TRAINING table, at a different rate and window.
-//! Sampling: temperature and top_p are forwarded; top_k is not supported
-//! by this OpenAI-compatible adapter.
-//!
 //! Reasoning: the server separates chain-of-thought into `reasoning_content`
 //! by default (`separate_reasoning` defaults to true since June 2026), which
 //! the shared compat layer already parses. `reasoning_effort` accepts the
@@ -47,10 +44,10 @@
 //! - `TINKER_API_URL`: Optional endpoint override
 
 use crate::llm::providers::openai_compat::{
-	chat_completion_with_sampling as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
+	chat_completion as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
 };
 use crate::llm::traits::AiProvider;
-use crate::llm::types::{ChatCompletionParams, ModelPricing, ProviderResponse, SamplingSupport};
+use crate::llm::types::{ChatCompletionParams, ModelPricing, ProviderResponse};
 use crate::llm::utils::{get_model_pricing, normalize_model_name, PricingTuple};
 use anyhow::Result;
 use std::env;
@@ -329,10 +326,6 @@ impl AiProvider for TinkerProvider {
 		tinker_model_context(model).unwrap_or(262_144)
 	}
 
-	fn supported_sampling_params(&self, _model: &str) -> SamplingSupport {
-		SamplingSupport::TEMPERATURE_AND_TOP_P
-	}
-
 	async fn chat_completion(&self, mut params: ChatCompletionParams) -> Result<ProviderResponse> {
 		let api_key = super::shared::resolve_api_key(self, &params)?;
 		let api_url = get_api_url(TINKER_API_URL_ENV, TINKER_API_URL);
@@ -348,7 +341,6 @@ impl AiProvider for TinkerProvider {
 				supports_required_tool_choice: false,
 				supports_parallel_tool_calls: true,
 			},
-			self.supported_sampling_params(&model),
 			api_key,
 			api_url,
 			params,

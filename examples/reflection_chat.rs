@@ -31,8 +31,7 @@ async fn main() -> anyhow::Result<()> {
 
 	let messages = vec![Message::user("In one short sentence, what is prompt caching?")];
 	// Reasoning and the answer share this allowance
-	let params =
-		ChatCompletionParams::new(&messages, &model, 0.7, 0.9, 50, 2048).with_reasoning_effort(ReasoningEffort::Low);
+	let params = ChatCompletionParams::new(&messages, &model, 2048).with_reasoning_effort(ReasoningEffort::Low);
 
 	let response = provider.chat_completion(params).await?;
 	println!("Response: {}", response.content);

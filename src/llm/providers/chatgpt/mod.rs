@@ -29,9 +29,7 @@ pub use auth::{current_account, list_models, start_login, Account, ChatGptModel,
 
 use super::openai::{self, OpenAiProvider};
 use crate::llm::traits::AiProvider;
-use crate::llm::types::{
-	ChatCompletionParams, ChatGptTransport, Message, ModelPricing, ProviderResponse, SamplingSupport,
-};
+use crate::llm::types::{ChatCompletionParams, ChatGptTransport, Message, ModelPricing, ProviderResponse};
 use anyhow::{Context, Result};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap};
@@ -64,10 +62,6 @@ impl AiProvider for ChatGptProvider {
 
 	fn get_api_key(&self) -> Result<String> {
 		auth::stored_access_token()
-	}
-
-	fn supported_sampling_params(&self, _model: &str) -> SamplingSupport {
-		SamplingSupport::NONE
 	}
 
 	fn get_max_input_tokens(&self, model: &str) -> usize {

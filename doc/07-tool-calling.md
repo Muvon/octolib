@@ -175,7 +175,7 @@ async fn tool_calling_example() -> anyhow::Result<()> {
     ];
 
     // First request
-    let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000)
+    let params = ChatCompletionParams::new(&messages, &model, 1000)
         .with_tools(tools.clone());
 
     let response = provider.chat_completion(params).await?;
@@ -212,7 +212,7 @@ async fn tool_calling_example() -> anyhow::Result<()> {
 
         // Second request with tool results
         // Metadata (thought signatures) automatically preserved
-        let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000)
+        let params = ChatCompletionParams::new(&messages, &model, 1000)
             .with_tools(tools);
 
         let final_response = provider.chat_completion(params).await?;

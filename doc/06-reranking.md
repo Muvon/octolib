@@ -382,7 +382,7 @@ async fn rag_with_reranking(
         Message::user(user_query),
     ];
 
-    let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000);
+    let params = ChatCompletionParams::new(&messages, &model, 1000);
     let response = provider.chat_completion(params).await?;
 
     Ok(response.content)

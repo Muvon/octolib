@@ -34,11 +34,11 @@
 //!   the `/models` path beside it
 
 use crate::llm::providers::openai_compat::{
-	chat_completion_with_sampling as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
+	chat_completion as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
 };
 use crate::llm::reference_models::{get_reference_capabilities, get_reference_pricing};
 use crate::llm::traits::AiProvider;
-use crate::llm::types::{ChatCompletionParams, ModelPricing, ProviderResponse, ReasoningEffort, SamplingSupport};
+use crate::llm::types::{ChatCompletionParams, ModelPricing, ProviderResponse, ReasoningEffort};
 use crate::llm::utils::normalize_model_name;
 use anyhow::{anyhow, Context, Result};
 use serde::Deserialize;
@@ -379,12 +379,6 @@ impl AiProvider for IsoquantProvider {
 		}
 	}
 
-	fn supported_sampling_params(&self, _model: &str) -> SamplingSupport {
-		// DeepSeek accepts temperature and top_p but answers 400 to top_k (live,
-		// 2026-11-07), although its catalog entry lists none of them.
-		SamplingSupport::TEMPERATURE_AND_TOP_P
-	}
-
 	fn get_api_key(&self) -> Result<String> {
 		env::var(ISOQUANT_API_KEY_ENV)
 			.map_err(|_| crate::errors::missing_api_key("isoquant", ISOQUANT_API_KEY_ENV).into())
@@ -417,7 +411,6 @@ impl AiProvider for IsoquantProvider {
 				supports_required_tool_choice: self.supports_required_tool_choice(&model),
 				supports_parallel_tool_calls: true,
 			},
-			self.supported_sampling_params(&model),
 			api_key,
 			api_url,
 			params,

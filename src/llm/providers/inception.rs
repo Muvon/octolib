@@ -25,8 +25,6 @@
 //! when Inception changes the catalogue (`GET /v1/models`). Mercury Edit 2 is
 //! FIM/edit-only and intentionally absent: the chat endpoint 404s it.
 //!
-//! Sampling: temperature only, clamped to 0.5–1.0 upstream (out-of-range
-//! values are reset to the model default with a warning). Reasoning:
 //! `reasoning_effort` accepts `instant`/`low`/`medium`/`high`; XHigh and Max
 //! collapse to `high` via the generic openai_compat ceiling. Prompt caching
 //! is automatic; cached input is billed at a discount and reported via
@@ -40,10 +38,10 @@
 //! - `INCEPTION_API_URL`: Optional endpoint override
 
 use crate::llm::providers::openai_compat::{
-	chat_completion_with_sampling as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
+	chat_completion as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
 };
 use crate::llm::traits::AiProvider;
-use crate::llm::types::{ChatCompletionParams, ModelPricing, ProviderResponse, SamplingSupport};
+use crate::llm::types::{ChatCompletionParams, ModelPricing, ProviderResponse};
 use crate::llm::utils::PricingTuple;
 use anyhow::Result;
 use std::env;
@@ -140,11 +138,6 @@ impl AiProvider for InceptionProvider {
 		find_model(model).map(|(_, max)| *max).unwrap_or(128_000)
 	}
 
-	fn supported_sampling_params(&self, _model: &str) -> SamplingSupport {
-		// supported_sampling_parameters: ["temperature", "stop"]
-		SamplingSupport::TEMPERATURE_ONLY
-	}
-
 	fn get_api_key(&self) -> Result<String> {
 		env::var(INCEPTION_API_KEY_ENV)
 			.map_err(|_| crate::errors::missing_api_key("inception", INCEPTION_API_KEY_ENV).into())
@@ -173,7 +166,6 @@ impl AiProvider for InceptionProvider {
 				supports_required_tool_choice: true,
 				supports_parallel_tool_calls: true,
 			},
-			self.supported_sampling_params(&model),
 			api_key,
 			api_url,
 			params,

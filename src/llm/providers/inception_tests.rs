@@ -15,6 +15,7 @@
 // Inception is deprecated (removal 2026-12-28); these tests exercise it until then.
 #![allow(deprecated)]
 use super::*;
+use crate::test_support::env::EnvGuard;
 
 #[test]
 fn test_supports_model() {
@@ -57,11 +58,6 @@ fn test_chat_features() {
 	assert!(provider.supports_required_tool_choice("mercury-2.5"));
 	// Automatic prefix caching with discounted cached-input billing
 	assert!(provider.supports_caching("mercury-2.5"));
-	// supported_sampling_parameters: ["temperature", "stop"]
-	assert_eq!(
-		provider.supported_sampling_params("mercury-2.5"),
-		SamplingSupport::TEMPERATURE_ONLY
-	);
 }
 
 #[test]
@@ -97,4 +93,23 @@ fn test_pricing() {
 
 	// Unknown models are not priced (strict catalogue)
 	assert!(provider.get_model_pricing("mercury-9").is_none());
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn request_omits_sampling_fields() {
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(
+		200,
+		crate::test_support::mock_http::chat_completion_body("ok"),
+	)]);
+	let _env = EnvGuard::new().set("INCEPTION_API_URL", mock.url.clone());
+	let params = ChatCompletionParams::new(&[], "mercury-2.5", 10).with_api_key("mock-key".to_owned());
+	InceptionProvider::new()
+		.chat_completion(params)
+		.await
+		.expect("mock completion");
+	let body: serde_json::Value = serde_json::from_str(&mock.requests()[0].body).expect("request json");
+	for field in ["temperature", "top_p", "top_k"] {
+		assert!(body.get(field).is_none(), "{field} must not be sent");
+	}
 }

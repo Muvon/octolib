@@ -754,93 +754,6 @@ pub struct ProviderResponse {
 	pub id: Option<String>,
 }
 
-/// Parameters for chat completion requests
-///
-/// This struct groups all parameters needed for AI provider chat completion calls,
-/// following best practices for parameter passing and future extensibility.
-/// Declares which sampling parameters a model supports.
-///
-/// Providers return this from `supported_sampling_params()` to declare what a model accepts.
-/// Each field is a simple boolean — `true` means the parameter is supported, `false` means
-/// it must be omitted from API requests.
-///
-/// This is intentionally separate from the values themselves: support is a property of the
-/// model, while values come from user configuration.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct SamplingSupport {
-	/// Whether the model accepts the temperature parameter.
-	pub temperature: bool,
-	/// Whether the model accepts the top_p parameter.
-	pub top_p: bool,
-	/// Whether the model accepts the top_k parameter.
-	pub top_k: bool,
-}
-
-impl SamplingSupport {
-	/// All sampling parameters supported.
-	pub const ALL: Self = Self {
-		temperature: true,
-		top_p: true,
-		top_k: true,
-	};
-
-	/// No sampling parameters supported (e.g., reasoning models).
-	pub const NONE: Self = Self {
-		temperature: false,
-		top_p: false,
-		top_k: false,
-	};
-
-	/// Only temperature supported (no top_p, no top_k).
-	pub const TEMPERATURE_ONLY: Self = Self {
-		temperature: true,
-		top_p: false,
-		top_k: false,
-	};
-
-	/// Temperature and top_p supported, but not top_k (common for OpenAI-compatible APIs).
-	pub const TEMPERATURE_AND_TOP_P: Self = Self {
-		temperature: true,
-		top_p: true,
-		top_k: false,
-	};
-
-	/// Merge user-requested values with this support mask.
-	///
-	/// Returns `EffectiveSamplingParams` where supported parameters carry the user's value
-	/// and unsupported parameters are `None` (to be omitted from API requests).
-	pub fn effective(self, temperature: f64, top_p: f64, top_k: u32) -> EffectiveSamplingParams {
-		EffectiveSamplingParams {
-			temperature: self.temperature.then_some(temperature),
-			top_p: self.top_p.then_some(top_p),
-			top_k: self.top_k.then_some(top_k),
-		}
-	}
-}
-
-impl Default for SamplingSupport {
-	/// Default: all parameters supported.
-	fn default() -> Self {
-		Self::ALL
-	}
-}
-
-/// The result of merging user-requested sampling values with model support.
-///
-/// Each field is `Option` — `Some(value)` means the parameter should be sent with that value,
-/// `None` means it must be omitted from the API request entirely.
-///
-/// Construct this via `SamplingSupport::effective()` or `AiProvider::effective_sampling_params()`.
-#[derive(Debug, Clone, PartialEq)]
-pub struct EffectiveSamplingParams {
-	/// Temperature to send, or None to omit.
-	pub temperature: Option<f64>,
-	/// Top-p to send, or None to omit.
-	pub top_p: Option<f64>,
-	/// Top-k to send, or None to omit.
-	pub top_k: Option<u32>,
-}
-
 /// Generic reasoning effort level for thinking-capable models.
 ///
 /// This enum is intentionally provider-agnostic. Each provider owns its own
@@ -902,6 +815,9 @@ pub enum OctoHubTransport {
 	WebSocket,
 }
 
+/// Parameters for chat completion requests.
+///
+/// This struct groups all parameters needed for AI provider chat completion calls.
 #[derive(Debug, Clone)]
 pub struct ChatCompletionParams {
 	/// ChatGPT transport. Defaults to HTTP/SSE, even when WebSocket support is compiled.
@@ -914,14 +830,6 @@ pub struct ChatCompletionParams {
 	pub messages: Vec<Message>,
 	/// Model identifier (e.g., "claude-3-5-sonnet", "gpt-4")
 	pub model: String,
-	/// Sampling temperature (0.0 to 2.0)
-	// `f64` on purpose: `serde_json::Value` widens an `f32`, so 0.1 would be sent as
-	// 0.10000000149011612. The same applies to `top_p`.
-	pub temperature: f64,
-	/// Top-p nucleus sampling (0.0 to 1.0)
-	pub top_p: f64,
-	/// Top-k sampling (1 to infinity)
-	pub top_k: u32,
 	/// Maximum tokens to generate (0 = no limit)
 	pub max_tokens: u32,
 	/// Maximum retry attempts on failure
@@ -979,15 +887,12 @@ pub struct ChatCompletionParams {
 
 impl ChatCompletionParams {
 	/// Create new chat completion parameters
-	pub fn new(messages: &[Message], model: &str, temperature: f64, top_p: f64, top_k: u32, max_tokens: u32) -> Self {
+	pub fn new(messages: &[Message], model: &str, max_tokens: u32) -> Self {
 		Self {
 			chatgpt_transport: ChatGptTransport::Http,
 			octohub_transport: OctoHubTransport::Http,
 			messages: messages.to_vec(),
 			model: model.to_string(),
-			temperature,
-			top_p,
-			top_k,
 			max_tokens,
 			max_retries: 3,                                   // Default retry attempts
 			retry_timeout: std::time::Duration::from_secs(1), // Default 1 second base timeout
@@ -1018,7 +923,7 @@ impl ChatCompletionParams {
 	/// ```
 	/// use octolib::{ChatCompletionParams, OctoHubTransport};
 	///
-	/// let params = ChatCompletionParams::new(&[], "auto", 1.0, 1.0, 0, 100);
+	/// let params = ChatCompletionParams::new(&[], "auto", 100);
 	/// assert_eq!(params.octohub_transport, OctoHubTransport::Http);
 	///
 	/// #[cfg(feature = "websockets")]
@@ -1041,7 +946,7 @@ impl ChatCompletionParams {
 	/// ```
 	/// use octolib::ChatCompletionParams;
 	///
-	/// let params = ChatCompletionParams::new(&[], "gpt-4o", 1.0, 1.0, 0, 100)
+	/// let params = ChatCompletionParams::new(&[], "gpt-4o", 100)
 	///     .with_max_retries(0)
 	///     .with_api_key("request-key".to_owned());
 	/// ```

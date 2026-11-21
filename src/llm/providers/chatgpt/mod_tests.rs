@@ -43,7 +43,7 @@ fn factory_resolves_chatgpt_models() {
 #[test]
 fn request_follows_the_plan_route_contract() {
 	let messages = vec![Message::system("rules"), Message::user("hi")];
-	let mut params = ChatCompletionParams::new(&messages, "gpt-6.1-sol", 0.7, 1.0, 50, 1000).with_long_cache(true);
+	let mut params = ChatCompletionParams::new(&messages, "gpt-6.1-sol", 1000).with_long_cache(true);
 	params.previous_id = Some("resp_1".to_string());
 	params.tools = Some(vec![FunctionDefinition {
 		name: "view".to_string(),
@@ -80,7 +80,7 @@ fn request_follows_the_plan_route_contract() {
 #[test]
 fn cache_key_names_the_session_so_the_plan_route_keeps_it() {
 	let messages = vec![Message::user("hi")];
-	let params = ChatCompletionParams::new(&messages, "gpt-6.1-sol", 0.7, 1.0, 50, 1000);
+	let params = ChatCompletionParams::new(&messages, "gpt-6.1-sol", 1000);
 	assert!(!request_headers(&params).unwrap().contains_key(SESSION_HEADER));
 	let params = params.with_prompt_cache_key("s-1");
 	assert_eq!(build_request(&params)["prompt_cache_key"], "s-1");
@@ -95,7 +95,7 @@ fn cache_key_names_the_session_so_the_plan_route_keeps_it() {
 #[cfg(feature = "websockets")]
 #[test]
 fn malformed_handshake_headers_fail_before_connecting() {
-	let params = ChatCompletionParams::new(&[], "gpt-6.1-sol", 0.7, 1.0, 50, 1000)
+	let params = ChatCompletionParams::new(&[], "gpt-6.1-sol", 1000)
 		.with_extra_headers(HashMap::from([("x-test".to_string(), "bad\nvalue".to_string())]));
 	assert!(request_headers(&params).is_err());
 }
@@ -187,8 +187,7 @@ fn a_grown_transcript_extends_the_previous_request_unchanged() {
 		Message::tool("ok", "call_1", "view"),
 	];
 	let request_at = |messages: &[Message]| {
-		let mut params =
-			ChatCompletionParams::new(messages, "gpt-6.1-sol", 0.7, 1.0, 50, 1000).with_prompt_cache_key("s-1");
+		let mut params = ChatCompletionParams::new(messages, "gpt-6.1-sol", 1000).with_prompt_cache_key("s-1");
 		params.tools = Some(vec![FunctionDefinition {
 			name: "view".to_string(),
 			description: "Read a file".to_string(),
@@ -352,7 +351,7 @@ fn tool_images_reach_the_chatgpt_plan_route() {
 #[cfg(feature = "websockets")]
 #[test]
 fn websocket_selection_is_explicit_and_http_can_be_selected_again() {
-	let params = ChatCompletionParams::new(&[Message::user("hello")], "gpt-6.1-sol", 0.0, 1.0, 0, 0);
+	let params = ChatCompletionParams::new(&[Message::user("hello")], "gpt-6.1-sol", 0);
 	assert_eq!(params.chatgpt_transport, crate::ChatGptTransport::Http);
 	let http = build_request(&params);
 	let params = params.with_chatgpt_transport(crate::ChatGptTransport::WebSocket);

@@ -101,9 +101,6 @@ async fn main() -> anyhow::Result<()> {
 			id: None,
 		}],
 		&model,
-		0.7,
-		1.0,
-		0,
 		200,
 	)
 	.with_retry_timeout(std::time::Duration::from_secs(10));
@@ -160,9 +157,6 @@ async fn main() -> anyhow::Result<()> {
 			id: None,
 		}],
 		&model,
-		0.5,
-		1.0,
-		0,
 		300,
 	)
 	.with_retry_timeout(std::time::Duration::from_secs(10));

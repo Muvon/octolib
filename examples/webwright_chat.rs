@@ -35,7 +35,7 @@ async fn main() -> anyhow::Result<()> {
 	let messages = vec![Message::user(
 		"In one short sentence, what is an OpenAI-compatible API?",
 	)];
-	let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 512);
+	let params = ChatCompletionParams::new(&messages, &model, 512);
 
 	let response = provider.chat_completion(params).await?;
 	println!("Response: {}", response.content);

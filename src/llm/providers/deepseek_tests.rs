@@ -51,7 +51,6 @@ fn test_legacy_flash_names_resolve_like_flash() {
 	for legacy in ["deepseek-v4-flash", "deepseek-v4-flash-vision-exp"] {
 		assert!(provider.supports_vision(legacy));
 		assert_eq!(provider.get_max_input_tokens(legacy), 1_000_000);
-		assert_eq!(provider.supported_sampling_params(legacy), SamplingSupport::NONE);
 	}
 }
 
@@ -118,8 +117,8 @@ fn test_build_request_uses_native_thinking_tool_contract() {
 		content: "previous reasoning".to_string(),
 		tokens: 3,
 	})];
-	let mut params = ChatCompletionParams::new(&messages, "deepseek-flash", 0.7, 0.9, 40, 1024)
-		.with_reasoning_effort(ReasoningEffort::Medium);
+	let mut params =
+		ChatCompletionParams::new(&messages, "deepseek-flash", 1024).with_reasoning_effort(ReasoningEffort::Medium);
 	params.tools = Some(vec![FunctionDefinition {
 		name: "inspect".to_string(),
 		description: "Inspect state".to_string(),
@@ -143,26 +142,13 @@ fn test_zero_max_tokens_is_omitted() {
 	use crate::llm::types::Message;
 	let messages = [Message::user("hi")];
 
-	let params = ChatCompletionParams::new(&messages, "deepseek-flash", 0.7, 0.9, 40, 0);
+	let params = ChatCompletionParams::new(&messages, "deepseek-flash", 0);
 	let request = serde_json::to_value(build_request(&params)).unwrap();
 	assert!(request.get("max_tokens").is_none());
 
-	let params = ChatCompletionParams::new(&messages, "deepseek-flash", 0.7, 0.9, 40, 1024);
+	let params = ChatCompletionParams::new(&messages, "deepseek-flash", 1024);
 	let request = serde_json::to_value(build_request(&params)).unwrap();
 	assert_eq!(request["max_tokens"], 1024);
-}
-
-#[test]
-fn test_thinking_models_do_not_advertise_sampling_controls() {
-	let provider = DeepSeekProvider::new();
-	assert_eq!(
-		provider.supported_sampling_params("deepseek-flash"),
-		SamplingSupport::NONE
-	);
-	assert_eq!(
-		provider.supported_sampling_params("deepseek-v4-pro"),
-		SamplingSupport::NONE
-	);
 }
 
 #[test]
@@ -459,8 +445,8 @@ fn test_build_request_none_effort_disables_thinking() {
 	use crate::llm::types::{Message, ReasoningEffort};
 
 	let messages = [Message::user("summarize")];
-	let params = ChatCompletionParams::new(&messages, "deepseek-flash", 0.3, 1.0, 0, 4096)
-		.with_reasoning_effort(ReasoningEffort::None);
+	let params =
+		ChatCompletionParams::new(&messages, "deepseek-flash", 4096).with_reasoning_effort(ReasoningEffort::None);
 
 	let request = serde_json::to_value(build_request(&params)).unwrap();
 	assert_eq!(request["thinking"]["type"], "disabled");
@@ -498,7 +484,7 @@ async fn chat_completion_via_mock_http_returns_content_and_usage() {
 	let _env = EnvGuard::new().set("DEEPSEEK_API_URL", mock.url.clone());
 
 	let provider = DeepSeekProvider::new();
-	let params = ChatCompletionParams::new(&[], "deepseek-flash", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
+	let params = ChatCompletionParams::new(&[], "deepseek-flash", 10).with_api_key("mock-key".to_owned());
 	let response = provider.chat_completion(params).await.expect("mock completion");
 
 	assert_eq!(response.content, "deepseek mocked answer");

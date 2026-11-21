@@ -19,8 +19,8 @@ use crate::errors::ToolCallError;
 use crate::llm::retry;
 use crate::llm::traits::{AiProvider, KeepalivePolicy};
 use crate::llm::types::{
-	ChatCompletionParams, Message, ProviderExchange, ProviderResponse, ReasoningEffort, SamplingSupport, ThinkingBlock,
-	TokenUsage, ToolCall,
+	ChatCompletionParams, Message, ProviderExchange, ProviderResponse, ReasoningEffort, ThinkingBlock, TokenUsage,
+	ToolCall,
 };
 use crate::llm::utils::normalize_model_name;
 use anyhow::{Context, Result};
@@ -165,16 +165,6 @@ fn supports_parameter(catalog: Option<&[CatalogModel]>, model: &str, parameter: 
 	Some(supported.iter().any(|name| name == parameter))
 }
 
-fn sampling_support(catalog: Option<&[CatalogModel]>, model: &str) -> SamplingSupport {
-	// Unknown support must not turn optional sampling into a routing requirement.
-	let supported = |name| supports_parameter(catalog, model, name) == Some(true);
-	SamplingSupport {
-		temperature: supported("temperature"),
-		top_p: supported("top_p"),
-		top_k: supported("top_k"),
-	}
-}
-
 const EFFORT_LADDER: [&str; 7] = ["none", "minimal", "low", "medium", "high", "xhigh", "max"];
 
 #[derive(Debug, PartialEq, Eq)]
@@ -268,10 +258,6 @@ fn apply_reasoning_effort(
 impl AiProvider for OpenRouterProvider {
 	fn name(&self) -> &str {
 		"openrouter"
-	}
-
-	fn supported_sampling_params(&self, model: &str) -> SamplingSupport {
-		sampling_support(CATALOG.get().map(Vec::as_slice), model)
 	}
 
 	fn supports_model(&self, model: &str) -> bool {
@@ -462,9 +448,6 @@ fn build_request_body(params: &ChatCompletionParams, catalog: Option<&[CatalogMo
 	// Convert messages to OpenRouter format (same as OpenAI)
 	let messages = convert_messages(&params.messages)?;
 
-	// Apply sampling parameters based on model support
-	let sampling = sampling_support(catalog, &params.model).effective(params.temperature, params.top_p, params.top_k);
-
 	// Create the request body
 	let mut request_body = serde_json::json!({
 		"stream": true,
@@ -490,16 +473,6 @@ fn build_request_body(params: &ChatCompletionParams, catalog: Option<&[CatalogMo
 	if supports_parameter(catalog, &params.model, "repetition_penalty") == Some(true) {
 		request_body["repetition_penalty"] = serde_json::json!(DEFAULT_REPETITION_PENALTY);
 	}
-	if let Some(temp) = sampling.temperature {
-		request_body["temperature"] = serde_json::json!(temp);
-	}
-	if let Some(top_p) = sampling.top_p {
-		request_body["top_p"] = serde_json::json!(top_p);
-	}
-	if let Some(top_k) = sampling.top_k {
-		request_body["top_k"] = serde_json::json!(top_k);
-	}
-
 	// Add max_tokens if specified (0 means don't include it in request). OpenRouter has
 	// no zero-output primitive, so a cache pre-warm asks for the cheapest valid completion.
 	if params.cache_prewarm {

@@ -14,7 +14,7 @@
 
 //! AI Provider trait definition
 
-use crate::llm::types::{ChatCompletionParams, EffectiveSamplingParams, ProviderResponse, SamplingSupport, ToolChoice};
+use crate::llm::types::{ChatCompletionParams, ProviderResponse, ToolChoice};
 use anyhow::Result;
 use std::time::Duration;
 
@@ -84,31 +84,11 @@ pub trait AiProvider: Send + Sync {
 	/// Each provider should implement this to check their specific environment variable
 	fn get_api_key(&self) -> Result<String>;
 
-	/// Which sampling parameters this model supports.
-	///
-	/// Returns `SamplingSupport` — a boolean mask declaring which parameters the model accepts.
-	/// Use `SamplingSupport::ALL` (default), `SamplingSupport::NONE`, or construct custom masks.
-	///
-	/// The `effective_sampling_params()` helper merges this with user-requested values.
-	fn supported_sampling_params(&self, _model: &str) -> SamplingSupport {
-		SamplingSupport::default()
-	}
-
 	/// Whether this provider can force at least one tool call for the model.
 	/// Used by the schema fallback to distinguish hard tool selection from
 	/// prompt-only guidance.
 	fn supports_required_tool_choice(&self, _model: &str) -> bool {
 		false
-	}
-
-	/// Compute effective sampling parameters by merging user-requested values
-	/// with what the model actually supports.
-	///
-	/// Returns `EffectiveSamplingParams` where supported parameters carry the user's value
-	/// and unsupported parameters are `None` (to be omitted from API requests).
-	fn effective_sampling_params(&self, params: &ChatCompletionParams) -> EffectiveSamplingParams {
-		self.supported_sampling_params(&params.model)
-			.effective(params.temperature, params.top_p, params.top_k)
 	}
 
 	/// Check if the provider/model supports caching

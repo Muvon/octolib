@@ -26,9 +26,9 @@
 //! Model discovery: Available models are lazy-loaded from the Vertex AI API on first
 //! chat_completion() call. The list is cached for the lifetime of the process.
 
-use crate::llm::providers::openai_compat::{chat_completion_with_sampling, OpenAiCompatConfig};
+use crate::llm::providers::openai_compat::{chat_completion, OpenAiCompatConfig};
 use crate::llm::traits::AiProvider;
-use crate::llm::types::{ChatCompletionParams, ProviderResponse, SamplingSupport};
+use crate::llm::types::{ChatCompletionParams, ProviderResponse};
 use crate::llm::utils::{get_model_pricing, normalize_model_name, PricingTuple};
 use anyhow::{Context, Result};
 use jsonwebtoken::{Algorithm, EncodingKey, Header};
@@ -273,21 +273,6 @@ pub(super) fn gemini_max_input_tokens(model: &str) -> usize {
 	}
 }
 
-/// Sampling-parameter support for Gemini models (shared with the google-studio
-/// provider). Gemini 3.6/3.7/3.8 and Gemini 4 ignore temperature/top_p/top_k.
-pub(super) fn gemini_sampling_support(model: &str) -> SamplingSupport {
-	let normalized = normalize_model_name(model);
-	if normalized.contains("gemini-4")
-		|| normalized.contains("gemini-3.6")
-		|| normalized.contains("gemini-3.7")
-		|| normalized.contains("gemini-3.8")
-	{
-		SamplingSupport::NONE
-	} else {
-		SamplingSupport::ALL
-	}
-}
-
 // --- Auth ---
 
 #[derive(Debug, Deserialize)]
@@ -474,10 +459,6 @@ impl AiProvider for GoogleVertexProvider {
 		gemini_max_input_tokens(model)
 	}
 
-	fn supported_sampling_params(&self, model: &str) -> SamplingSupport {
-		gemini_sampling_support(model)
-	}
-
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
 		crate::llm::providers::shared::reject_api_key(self.name(), &params)?;
 		// Generate access token from service account
@@ -503,7 +484,7 @@ impl AiProvider for GoogleVertexProvider {
 			.await;
 
 		let model = params.model.clone();
-		let mut response = chat_completion_with_sampling(
+		let mut response = chat_completion(
 			OpenAiCompatConfig {
 				provider_name: "google-vertex",
 				usage_fallback_cost: None,
@@ -512,7 +493,6 @@ impl AiProvider for GoogleVertexProvider {
 				supports_required_tool_choice: false,
 				supports_parallel_tool_calls: true,
 			},
-			self.supported_sampling_params(&params.model),
 			api_key,
 			api_url,
 			params,

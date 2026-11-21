@@ -51,8 +51,8 @@ async fn chat_completion_via_mock_http_parses_text_reasoning_and_usage() {
 	let _env = EnvGuard::new().set("XAI_API_URL", mock.url.clone());
 
 	let provider = XaiProvider::new();
-	let params = ChatCompletionParams::new(&[Message::user("hello")], "grok-4.5", 0.2, 0.9, 40, 100)
-		.with_api_key("mock-key".to_owned());
+	let params =
+		ChatCompletionParams::new(&[Message::user("hello")], "grok-4.5", 100).with_api_key("mock-key".to_owned());
 	let response = provider.chat_completion(params).await.expect("mock completion");
 
 	assert_eq!(response.content, "mocked grok answer");
@@ -75,6 +75,9 @@ async fn chat_completion_via_mock_http_parses_text_reasoning_and_usage() {
 	assert_eq!(request["include"][0], "reasoning.encrypted_content");
 	assert_eq!(request["input"][0]["role"], "user");
 	assert_eq!(request["max_output_tokens"], 100);
+	for field in ["temperature", "top_p", "top_k"] {
+		assert!(request.get(field).is_none(), "{field} must not be sent");
+	}
 }
 
 #[tokio::test]
@@ -91,8 +94,8 @@ async fn chat_completion_via_mock_http_parses_tool_calls_and_structured_output()
 	let _env = EnvGuard::new().set("XAI_API_URL", mock.url.clone());
 
 	let provider = XaiProvider::new();
-	let params = ChatCompletionParams::new(&[Message::user("find it")], "grok-4.5", 0.2, 0.9, 0, 10)
-		.with_api_key("mock-key".to_owned());
+	let params =
+		ChatCompletionParams::new(&[Message::user("find it")], "grok-4.5", 10).with_api_key("mock-key".to_owned());
 	let response = provider.chat_completion(params).await.expect("mock completion");
 
 	let calls = response.tool_calls.expect("tool calls present");
@@ -110,8 +113,8 @@ async fn chat_completion_via_mock_http_surfaces_http_error() {
 	let _env = EnvGuard::new().set("XAI_API_URL", mock.url.clone());
 
 	let provider = XaiProvider::new();
-	let params = ChatCompletionParams::new(&[Message::user("hello")], "grok-4.5", 0.2, 0.9, 0, 10)
-		.with_api_key("mock-key".to_owned());
+	let params =
+		ChatCompletionParams::new(&[Message::user("hello")], "grok-4.5", 10).with_api_key("mock-key".to_owned());
 	let err = provider.chat_completion(params).await.expect_err("http error surfaces");
 	assert!(err.to_string().contains("xAI API error"), "unexpected error: {err}");
 }
@@ -120,8 +123,8 @@ async fn chat_completion_via_mock_http_surfaces_http_error() {
 #[serial_test::serial]
 async fn chat_completion_rejects_unsupported_model_before_any_request() {
 	let provider = XaiProvider::new();
-	let params = ChatCompletionParams::new(&[Message::user("hello")], "grok-unknown", 0.2, 0.9, 0, 10)
-		.with_api_key("mock-key".to_owned());
+	let params =
+		ChatCompletionParams::new(&[Message::user("hello")], "grok-unknown", 10).with_api_key("mock-key".to_owned());
 	let err = provider
 		.chat_completion(params)
 		.await

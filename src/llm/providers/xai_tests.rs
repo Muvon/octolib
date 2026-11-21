@@ -249,7 +249,7 @@ fn xai_ids_gate_automatic_stateful_continuation() {
 
 #[test]
 fn request_always_asks_for_encrypted_reasoning() {
-	let params = ChatCompletionParams::new(&[Message::user("hello")], "grok-4.5", 0.2, 0.9, 40, 100)
+	let params = ChatCompletionParams::new(&[Message::user("hello")], "grok-4.5", 100)
 		.with_reasoning_effort(ReasoningEffort::High);
 	let request = build_request(&params, None);
 	assert_eq!(request["include"][0], "reasoning.encrypted_content");

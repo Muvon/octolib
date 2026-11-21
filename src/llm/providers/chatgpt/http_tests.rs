@@ -19,7 +19,7 @@ use crate::llm::types::Message;
 #[test]
 fn cache_key_names_the_session_so_the_plan_route_keeps_it() {
 	let messages = vec![Message::user("hi")];
-	let params = ChatCompletionParams::new(&messages, "gpt-6.1-sol", 0.7, 1.0, 50, 1000);
+	let params = ChatCompletionParams::new(&messages, "gpt-6.1-sol", 1000);
 	let mut turn_states = TurnStateStore::default();
 	assert_eq!(request_headers_with_store(&params, &mut turn_states), None);
 
@@ -46,16 +46,15 @@ fn cache_key_names_the_session_so_the_plan_route_keeps_it() {
 fn turn_state_is_echoed_on_the_second_request_of_a_turn() {
 	let mut turn_states = TurnStateStore::default();
 	let user_messages = vec![Message::user("start")];
-	let user_params =
-		ChatCompletionParams::new(&user_messages, "gpt-6.1-sol", 0.7, 1.0, 50, 1000).with_prompt_cache_key("session");
+	let user_params = ChatCompletionParams::new(&user_messages, "gpt-6.1-sol", 1000).with_prompt_cache_key("session");
 
 	let headers = request_headers_with_store(&user_params, &mut turn_states).unwrap();
 	assert!(!headers.contains_key(TURN_STATE_HEADER));
 	remember_turn_state_with_store(Some("session"), Some("first-turn-state"), &mut turn_states);
 
 	let continued_messages = vec![Message::user("start"), Message::assistant("working")];
-	let continued_params = ChatCompletionParams::new(&continued_messages, "gpt-6.1-sol", 0.7, 1.0, 50, 1000)
-		.with_prompt_cache_key("session");
+	let continued_params =
+		ChatCompletionParams::new(&continued_messages, "gpt-6.1-sol", 1000).with_prompt_cache_key("session");
 	let headers = request_headers_with_store(&continued_params, &mut turn_states).unwrap();
 	assert_eq!(
 		headers.get(TURN_STATE_HEADER).map(String::as_str),
@@ -77,8 +76,7 @@ fn new_user_turn_clears_the_stored_turn_state() {
 	let mut turn_states = TurnStateStore::default();
 	turn_states.store_first("session", "previous-turn");
 	let messages = vec![Message::user("next turn")];
-	let params =
-		ChatCompletionParams::new(&messages, "gpt-6.1-sol", 0.7, 1.0, 50, 1000).with_prompt_cache_key("session");
+	let params = ChatCompletionParams::new(&messages, "gpt-6.1-sol", 1000).with_prompt_cache_key("session");
 
 	let headers = request_headers_with_store(&params, &mut turn_states).unwrap();
 
@@ -94,8 +92,7 @@ fn requests_without_cache_keys_have_no_turn_state_affinity() {
 		(TURN_STATE_HEADER.to_string(), "caller-token".to_string()),
 		("x-test".to_string(), "kept".to_string()),
 	]);
-	let params =
-		ChatCompletionParams::new(&messages, "gpt-6.1-sol", 0.7, 1.0, 50, 1000).with_extra_headers(caller_headers);
+	let params = ChatCompletionParams::new(&messages, "gpt-6.1-sol", 1000).with_extra_headers(caller_headers);
 
 	let headers = request_headers_with_store(&params, &mut turn_states).unwrap();
 	remember_turn_state_with_store(None, Some("response-token"), &mut turn_states);

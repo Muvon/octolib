@@ -27,8 +27,8 @@ async fn test_cli_rejects_per_call_api_key_before_starting_process() {
 		reasoning_effort: "high".to_owned(),
 		skip_git_check: false,
 	};
-	let params = ChatCompletionParams::new(&[], "codex/gpt-5.2-codex", 1.0, 1.0, 0, 10)
-		.with_api_key("private-request-key".to_owned());
+	let params =
+		ChatCompletionParams::new(&[], "codex/gpt-5.2-codex", 10).with_api_key("private-request-key".to_owned());
 	let error = provider.chat_completion(params).await.unwrap_err();
 	assert!(matches!(
 		error.downcast_ref::<ProviderError>(),
@@ -262,7 +262,7 @@ async fn test_cli_chat_completion_rejects_model_for_other_backend() {
 		reasoning_effort: String::new(),
 		skip_git_check: false,
 	};
-	let params = ChatCompletionParams::new(&[Message::user("hi")], "claude/some-model", 1.0, 1.0, 0, 10);
+	let params = ChatCompletionParams::new(&[Message::user("hi")], "claude/some-model", 10);
 	let err = provider.chat_completion(params).await.unwrap_err();
 	assert!(format!("{err}").contains("backend"));
 }

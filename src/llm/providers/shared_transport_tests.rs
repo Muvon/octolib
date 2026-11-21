@@ -94,8 +94,8 @@ async fn transport_retry_preserves_other_hosts_pooled_connections() {
 async fn request_timeout_keeps_its_category_after_credential_redaction() {
 	let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
 	let url = format!("http://{}/private-request-key", listener.local_addr().unwrap());
-	let params = crate::llm::types::ChatCompletionParams::new(&[], "model", 1.0, 1.0, 0, 10)
-		.with_api_key("private-request-key".to_owned());
+	let params =
+		crate::llm::types::ChatCompletionParams::new(&[], "model", 10).with_api_key("private-request-key".to_owned());
 	let events = Arc::new(std::sync::Mutex::new(Vec::new()));
 	let sink = events.clone();
 	let observer = RetryObserver::new(move |event| sink.lock().unwrap().push(event.clone()));

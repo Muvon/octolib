@@ -23,9 +23,8 @@
 //!
 //! Reasoning: no effort ladder — `thinking: {"type": "enabled" | "disabled"}`
 //! is the only knob (on by default); the openai_compat layer maps any effort
-//! to `enabled` and `ReasoningEffort::None` to `disabled`. In thinking mode
-//! temperature/top_p are pinned upstream to 1.0/0.95. Tool-call turns must
-//! replay their `reasoning_content` or the API returns 400.
+//! to `enabled` and `ReasoningEffort::None` to `disabled`. Tool-call turns
+//! must replay their `reasoning_content` or the API returns 400.
 //!
 //! Structured output: native `json_schema` with strict decoding (also on the
 //! Token Plan endpoint), plus `json_object`.
@@ -39,10 +38,10 @@
 //!   with its `tp-` key)
 
 use crate::llm::providers::openai_compat::{
-	chat_completion_with_sampling as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
+	chat_completion as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
 };
 use crate::llm::traits::AiProvider;
-use crate::llm::types::{ChatCompletionParams, ModelPricing, ProviderResponse, SamplingSupport};
+use crate::llm::types::{ChatCompletionParams, ModelPricing, ProviderResponse};
 use crate::llm::utils::PricingTuple;
 use anyhow::Result;
 use std::env;
@@ -149,11 +148,6 @@ impl AiProvider for XiaomiProvider {
 		find_model(model).map(|(_, max)| *max).unwrap_or(1_048_576)
 	}
 
-	fn supported_sampling_params(&self, _model: &str) -> SamplingSupport {
-		// temperature and top_p are documented; top_k is not
-		SamplingSupport::TEMPERATURE_AND_TOP_P
-	}
-
 	fn get_api_key(&self) -> Result<String> {
 		env::var(XIAOMI_API_KEY_ENV).map_err(|_| crate::errors::missing_api_key("xiaomi", XIAOMI_API_KEY_ENV).into())
 	}
@@ -181,7 +175,6 @@ impl AiProvider for XiaomiProvider {
 				supports_required_tool_choice: false,
 				supports_parallel_tool_calls: true,
 			},
-			self.supported_sampling_params(&model),
 			api_key,
 			api_url,
 			params,

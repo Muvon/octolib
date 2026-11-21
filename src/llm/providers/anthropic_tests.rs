@@ -20,8 +20,7 @@ use serial_test::serial;
 #[serial]
 fn test_per_call_key_auth_headers_override_api_key_and_oauth() {
 	let provider = AnthropicProvider::new();
-	let params = ChatCompletionParams::new(&[], "claude-sonnet-4-6", 1.0, 1.0, 0, 10)
-		.with_api_key("private-request-key".to_owned());
+	let params = ChatCompletionParams::new(&[], "claude-sonnet-4-6", 10).with_api_key("private-request-key".to_owned());
 	let original_key = env::var_os(ANTHROPIC_API_KEY_ENV);
 	let original_oauth = env::var_os(ANTHROPIC_OAUTH_TOKEN_ENV);
 	for platform_auth in [false, true] {
@@ -269,27 +268,6 @@ fn test_get_model_pricing() {
 }
 
 #[test]
-fn sampling_params_are_never_sent() {
-	// API version 2026-10-21 rejects them on every model, including the ones
-	// that accepted non-default values on 2023-06-01.
-	let provider = AnthropicProvider::new();
-	for model in [
-		"claude-opus-5-5",
-		"claude-opus-4-7",
-		"claude-opus-4-6",
-		"claude-sonnet-4-6",
-		"claude-opus-4-5",
-		"claude-haiku-4-5",
-	] {
-		assert_eq!(
-			provider.supported_sampling_params(model),
-			SamplingSupport::NONE,
-			"{model}"
-		);
-	}
-}
-
-#[test]
 fn test_opus_5_5() {
 	let provider = AnthropicProvider::new();
 	let model = "claude-opus-5-5";
@@ -305,8 +283,6 @@ fn test_opus_5_5() {
 
 	assert_eq!(provider.get_max_input_tokens(model), 1_000_000);
 	assert!(provider.supports_vision(model));
-	assert_eq!(provider.supported_sampling_params(model), SamplingSupport::NONE);
-
 	assert!(ADAPTIVE_ONLY_MODELS.iter().any(|p| model.contains(p)));
 	assert!(EFFORT_PARAM_MODELS.iter().any(|p| model.contains(p)));
 	assert_eq!(effort_value(model, ReasoningEffort::XHigh, true), "xhigh");
@@ -328,8 +304,6 @@ fn test_opus_5() {
 
 	assert_eq!(provider.get_max_input_tokens(model), 1_000_000);
 	assert!(provider.supports_vision(model));
-	assert_eq!(provider.supported_sampling_params(model), SamplingSupport::NONE);
-
 	assert!(THINKING_MODELS.contains(&"opus-5"));
 	assert!(ADAPTIVE_THINKING_MODELS.contains(&"opus-5"));
 	assert!(EFFORT_PARAM_MODELS.contains(&"opus-5"));
@@ -354,9 +328,6 @@ fn test_fable_5() {
 	// 1M context window and vision
 	assert_eq!(provider.get_max_input_tokens(model), 1_000_000);
 	assert!(provider.supports_vision(model));
-
-	// Mythos-class is adaptive-only: rejects ALL sampling parameters
-	assert_eq!(provider.supported_sampling_params(model), SamplingSupport::NONE);
 }
 
 #[test]
@@ -375,7 +346,6 @@ fn test_fable_5_1() {
 	assert_eq!(pricing.cache_read_price_per_1m, 0.25);
 
 	assert_eq!(provider.get_max_input_tokens(model), 1_000_000);
-	assert_eq!(provider.supported_sampling_params(model), SamplingSupport::NONE);
 	assert_eq!(effort_value(model, ReasoningEffort::XHigh, true), "xhigh");
 }
 
@@ -402,7 +372,6 @@ fn test_fable_5_2() {
 	assert_eq!(provider.get_max_input_tokens(model), 1_000_000);
 	assert_eq!(effective_max_tokens(model, 0), 128_000);
 	assert!(provider.supports_vision(model));
-	assert_eq!(provider.supported_sampling_params(model), SamplingSupport::NONE);
 	assert_eq!(effort_value(model, ReasoningEffort::XHigh, true), "xhigh");
 	assert_eq!(effort_value(model, ReasoningEffort::Max, true), "max");
 
@@ -429,8 +398,6 @@ fn test_sonnet_5_5() {
 
 	assert_eq!(provider.get_max_input_tokens(model), 1_000_000);
 	assert!(provider.supports_vision(model));
-	assert_eq!(provider.supported_sampling_params(model), SamplingSupport::NONE);
-
 	assert!(ADAPTIVE_ONLY_MODELS.iter().any(|p| model.contains(p)));
 	assert!(EFFORT_PARAM_MODELS.iter().any(|p| model.contains(p)));
 	assert_eq!(effort_value(model, ReasoningEffort::XHigh, true), "xhigh");
@@ -444,9 +411,6 @@ fn test_sonnet_5() {
 	let model = "claude-sonnet-5";
 	assert!(provider.supports_model(model));
 
-	// Adaptive-only like the Opus 5 tier: manual thinking and every sampling
-	// parameter return a 400.
-	assert_eq!(provider.supported_sampling_params(model), SamplingSupport::NONE);
 	assert!(THINKING_MODELS.contains(&"sonnet-5"));
 	assert!(ADAPTIVE_THINKING_MODELS.contains(&"sonnet-5"));
 	assert!(ADAPTIVE_ONLY_MODELS.contains(&"sonnet-5"));
@@ -472,9 +436,6 @@ fn test_mythos_5() {
 	// 1M context window and vision
 	assert_eq!(provider.get_max_input_tokens(model), 1_000_000);
 	assert!(provider.supports_vision(model));
-
-	// Adaptive-only: rejects ALL sampling parameters
-	assert_eq!(provider.supported_sampling_params(model), SamplingSupport::NONE);
 }
 
 #[test]
@@ -536,7 +497,6 @@ fn test_haiku_5_5() {
 	assert!(provider.supports_vision(model));
 	assert!(provider.supports_caching(model));
 	assert!(provider.supports_structured_output(model));
-	assert_eq!(provider.supported_sampling_params(model), SamplingSupport::NONE);
 	let pricing = provider.get_model_pricing(model).unwrap();
 	assert_eq!(pricing.input_price_per_1m, 0.10);
 	assert_eq!(pricing.output_price_per_1m, 0.50);
@@ -784,10 +744,7 @@ async fn chat_completion_via_mock_http_splits_blocks_and_cache_usage() {
 	let _env = EnvGuard::new().set("ANTHROPIC_API_URL", mock.url.clone());
 
 	let provider = AnthropicProvider::new();
-	// Sonnet 4.6 accepted non-default sampling on 2023-06-01; none of it may
-	// reach the request now.
-	let params =
-		ChatCompletionParams::new(&[], "claude-sonnet-4-6", 0.2, 0.9, 40, 10).with_api_key("mock-key".to_owned());
+	let params = ChatCompletionParams::new(&[], "claude-sonnet-4-6", 10).with_api_key("mock-key".to_owned());
 	let response = provider.chat_completion(params).await.expect("mock completion");
 
 	// Text blocks become content; thinking rides its own block; tool_use maps to calls.
@@ -828,8 +785,7 @@ async fn chat_completion_sends_output_config_format_next_to_effort() {
 		"required": ["verdict"],
 		"properties": {"verdict": {"type": "string", "enum": ["PASS", "GAPS"]}}
 	});
-	let mut params =
-		ChatCompletionParams::new(&[], "claude-opus-5-5", 1.0, 1.0, 0, 100).with_api_key("mock-key".to_owned());
+	let mut params = ChatCompletionParams::new(&[], "claude-opus-5-5", 100).with_api_key("mock-key".to_owned());
 	params.reasoning_effort = Some(ReasoningEffort::Medium);
 	params.response_format = Some(crate::llm::types::StructuredOutputRequest {
 		format: OutputFormat::JsonSchema,
@@ -862,8 +818,7 @@ async fn chat_completion_via_mock_http_surfaces_http_error() {
 	let _env = EnvGuard::new().set("ANTHROPIC_API_URL", mock.url.clone());
 
 	let provider = AnthropicProvider::new();
-	let params =
-		ChatCompletionParams::new(&[], "claude-sonnet-4-6", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
+	let params = ChatCompletionParams::new(&[], "claude-sonnet-4-6", 10).with_api_key("mock-key".to_owned());
 	let err = provider.chat_completion(params).await.expect_err("http error surfaces");
 	assert!(
 		err.to_string().contains("Anthropic API error"),
@@ -1174,8 +1129,8 @@ async fn chat_completion_keeps_thinking_blocks_verbatim_and_skips_redacted_text(
 	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, body.to_string())]);
 	let _env = EnvGuard::new().set("ANTHROPIC_API_URL", mock.url.clone());
 
-	let params = ChatCompletionParams::new(&[Message::user("hi")], "claude-sonnet-4-6", 1.0, 1.0, 0, 10)
-		.with_api_key("mock-key".to_owned());
+	let params =
+		ChatCompletionParams::new(&[Message::user("hi")], "claude-sonnet-4-6", 10).with_api_key("mock-key".to_owned());
 	let response = AnthropicProvider::new()
 		.chat_completion(params)
 		.await
@@ -1198,8 +1153,8 @@ async fn chat_completion_continues_an_empty_turn_once_and_bills_both_calls() {
 		crate::test_support::mock_http::MockHttp::start(vec![(200, empty.to_string()), (200, answered.to_string())]);
 	let _env = EnvGuard::new().set("ANTHROPIC_API_URL", mock.url.clone());
 
-	let params = ChatCompletionParams::new(&[Message::user("hi")], "claude-sonnet-4-6", 1.0, 1.0, 0, 10)
-		.with_api_key("mock-key".to_owned());
+	let params =
+		ChatCompletionParams::new(&[Message::user("hi")], "claude-sonnet-4-6", 10).with_api_key("mock-key".to_owned());
 	let response = AnthropicProvider::new()
 		.chat_completion(params)
 		.await
@@ -1229,8 +1184,8 @@ async fn chat_completion_does_not_loop_on_repeated_empty_turns() {
 	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, empty.to_string())]);
 	let _env = EnvGuard::new().set("ANTHROPIC_API_URL", mock.url.clone());
 
-	let params = ChatCompletionParams::new(&[Message::user("hi")], "claude-sonnet-4-6", 1.0, 1.0, 0, 10)
-		.with_api_key("mock-key".to_owned());
+	let params =
+		ChatCompletionParams::new(&[Message::user("hi")], "claude-sonnet-4-6", 10).with_api_key("mock-key".to_owned());
 	let response = AnthropicProvider::new()
 		.chat_completion(params)
 		.await
@@ -1247,7 +1202,7 @@ async fn cache_prewarm_sends_zero_max_tokens_without_streaming_and_returns_cache
 	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, body.to_string())]);
 	let _env = EnvGuard::new().set("ANTHROPIC_API_URL", mock.url.clone());
 
-	let params = ChatCompletionParams::new(&[Message::user("hi")], "claude-sonnet-4-6", 1.0, 1.0, 0, 10)
+	let params = ChatCompletionParams::new(&[Message::user("hi")], "claude-sonnet-4-6", 10)
 		.with_api_key("mock-key".to_owned())
 		.with_cache_prewarm(true);
 	let response = AnthropicProvider::new()
@@ -1271,8 +1226,8 @@ async fn regular_requests_keep_streaming_and_the_effective_max_tokens() {
 	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, body.to_string())]);
 	let _env = EnvGuard::new().set("ANTHROPIC_API_URL", mock.url.clone());
 
-	let params = ChatCompletionParams::new(&[Message::user("hi")], "claude-sonnet-4-6", 1.0, 1.0, 0, 0)
-		.with_api_key("mock-key".to_owned());
+	let params =
+		ChatCompletionParams::new(&[Message::user("hi")], "claude-sonnet-4-6", 0).with_api_key("mock-key".to_owned());
 	AnthropicProvider::new()
 		.chat_completion(params)
 		.await
@@ -1305,8 +1260,7 @@ fn thread_params(messages: &[Message]) -> ChatCompletionParams {
 		parameters: serde_json::json!({"type": "object", "properties": {}}),
 		cache_control: None,
 	};
-	let mut params =
-		ChatCompletionParams::new(messages, "claude-opus-5-5", 1.0, 1.0, 0, 100).with_api_key("mock-key".to_owned());
+	let mut params = ChatCompletionParams::new(messages, "claude-opus-5-5", 100).with_api_key("mock-key".to_owned());
 	params.tools = Some(vec![tool]);
 	params
 }

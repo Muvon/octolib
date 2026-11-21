@@ -147,8 +147,7 @@ async fn chat_completion_via_mock_http_returns_content_and_usage() {
 	let _env = EnvGuard::new().set("GROQ_API_URL", mock.url.clone());
 
 	let provider = GroqProvider::new();
-	let params =
-		ChatCompletionParams::new(&[], "llama-3.3-70b-versatile", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
+	let params = ChatCompletionParams::new(&[], "llama-3.3-70b-versatile", 10).with_api_key("mock-key".to_owned());
 	let response = provider.chat_completion(params).await.expect("mock completion");
 
 	assert_eq!(response.content, "groq mocked answer");
@@ -171,8 +170,7 @@ async fn chat_completion_via_mock_http_surfaces_http_error() {
 	let _env = EnvGuard::new().set("GROQ_API_URL", mock.url.clone());
 
 	let provider = GroqProvider::new();
-	let params =
-		ChatCompletionParams::new(&[], "llama-3.3-70b-versatile", 1.0, 1.0, 0, 10).with_api_key("mock-key".to_owned());
+	let params = ChatCompletionParams::new(&[], "llama-3.3-70b-versatile", 10).with_api_key("mock-key".to_owned());
 	let err = provider.chat_completion(params).await.expect_err("http error surfaces");
 	assert!(
 		err.to_string().to_lowercase().contains("groq"),

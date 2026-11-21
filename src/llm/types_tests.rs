@@ -16,8 +16,7 @@ use super::*;
 
 #[test]
 fn test_per_call_api_key_is_cloned_and_debug_redacted() {
-	let params =
-		ChatCompletionParams::new(&[], "model", 1.0, 1.0, 0, 10).with_api_key("private-request-key".to_owned());
+	let params = ChatCompletionParams::new(&[], "model", 10).with_api_key("private-request-key".to_owned());
 	let cloned = params.clone();
 	assert_eq!(cloned.api_key.as_ref().unwrap().as_str(), "private-request-key");
 	for debug in [
@@ -28,9 +27,7 @@ fn test_per_call_api_key_is_cloned_and_debug_redacted() {
 		assert!(debug.contains("[REDACTED]"));
 		assert!(!debug.contains("private-request-key"));
 	}
-	assert!(ChatCompletionParams::new(&[], "model", 1.0, 1.0, 0, 10)
-		.api_key
-		.is_none());
+	assert!(ChatCompletionParams::new(&[], "model", 10).api_key.is_none());
 }
 
 #[test]
@@ -66,12 +63,9 @@ fn test_message_with_cache_marker() {
 #[test]
 fn test_chat_completion_params() {
 	let messages = vec![Message::user("Hello")];
-	let params = ChatCompletionParams::new(&messages, "openai:gpt-4o", 0.7, 1.0, 50, 1000);
+	let params = ChatCompletionParams::new(&messages, "openai:gpt-4o", 1000);
 
 	assert_eq!(params.model, "openai:gpt-4o");
-	assert_eq!(params.temperature, 0.7);
-	assert_eq!(params.top_p, 1.0);
-	assert_eq!(params.top_k, 50);
 	assert_eq!(params.max_tokens, 1000);
 	assert_eq!(params.max_retries, 3); // Default
 	assert!(params.cancellation_token.is_none());
@@ -94,7 +88,7 @@ fn test_chat_completion_params() {
 
 #[test]
 fn test_octohub_transport_defaults_to_http() {
-	let params = ChatCompletionParams::new(&[], "auto", 1.0, 1.0, 0, 100);
+	let params = ChatCompletionParams::new(&[], "auto", 100);
 	assert_eq!(OctoHubTransport::default(), OctoHubTransport::Http);
 	assert_eq!(params.octohub_transport, crate::OctoHubTransport::Http);
 	assert_eq!(params.chatgpt_transport, ChatGptTransport::Http);
@@ -109,7 +103,7 @@ fn test_octohub_transport_defaults_to_http() {
 #[cfg(feature = "websockets")]
 #[test]
 fn test_octohub_transport_selection_is_independent_of_chatgpt() {
-	let params = ChatCompletionParams::new(&[], "auto", 1.0, 1.0, 0, 100)
+	let params = ChatCompletionParams::new(&[], "auto", 100)
 		.with_prompt_cache_key("session")
 		.with_octohub_transport(OctoHubTransport::WebSocket);
 	assert_eq!(params.octohub_transport, OctoHubTransport::WebSocket);
@@ -285,63 +279,6 @@ fn test_message_builder_with_thinking() {
 
 	assert!(msg.thinking.is_some());
 	assert_eq!(msg.thinking.unwrap().content, "First, I'll analyze the problem...");
-}
-
-#[test]
-fn test_sampling_support_all() {
-	let sp = SamplingSupport::ALL;
-	assert!(sp.temperature);
-	assert!(sp.top_p);
-	assert!(sp.top_k);
-}
-
-#[test]
-fn test_sampling_support_none() {
-	let sp = SamplingSupport::NONE;
-	assert!(!sp.temperature);
-	assert!(!sp.top_p);
-	assert!(!sp.top_k);
-}
-
-#[test]
-fn test_sampling_support_default() {
-	let sp = SamplingSupport::default();
-	assert!(sp.temperature);
-	assert!(sp.top_p);
-	assert!(sp.top_k);
-}
-
-#[test]
-fn test_effective_sampling_params() {
-	// All supported — user values pass through
-	let sp = SamplingSupport::ALL.effective(0.3, 0.8, 10);
-	assert_eq!(sp.temperature, Some(0.3));
-	assert_eq!(sp.top_p, Some(0.8));
-	assert_eq!(sp.top_k, Some(10));
-
-	// None supported — user values are ignored
-	let sp = SamplingSupport::NONE.effective(0.3, 0.8, 10);
-	assert_eq!(sp.temperature, None);
-	assert_eq!(sp.top_p, None);
-	assert_eq!(sp.top_k, None);
-
-	// Partial support — only supported params pass through
-	let sp = SamplingSupport {
-		temperature: true,
-		top_p: false,
-		top_k: true,
-	}
-	.effective(0.5, 0.9, 20);
-	assert_eq!(sp.temperature, Some(0.5));
-	assert_eq!(sp.top_p, None);
-	assert_eq!(sp.top_k, Some(20));
-}
-
-#[test]
-fn effective_sampling_params_serialize_without_float_widening_noise() {
-	let sp = SamplingSupport::ALL.effective(0.1, 0.95, 10);
-	assert_eq!(serde_json::json!(sp.temperature).to_string(), "0.1");
-	assert_eq!(serde_json::json!(sp.top_p).to_string(), "0.95");
 }
 
 #[test]

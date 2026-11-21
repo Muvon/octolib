@@ -19,7 +19,7 @@ use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
 	ChatCompletionParams, FunctionDefinition, ImageData, Message, ProviderExchange, ProviderResponse, ReasoningEffort,
-	SamplingSupport, StructuredOutputRequest, ThinkingBlock, TokenUsage, ToolCall, VideoData,
+	StructuredOutputRequest, ThinkingBlock, TokenUsage, ToolCall, VideoData,
 };
 use crate::llm::utils::{get_model_pricing, is_model_in_pricing_table, normalize_model_name, PricingTuple};
 use anyhow::Result;
@@ -193,10 +193,6 @@ fn calculate_cost_with_cache(
 			+ (completion_tokens as f64 / 1_000_000.0) * output,
 	)
 }
-
-/// Models that reject temperature and top_p (reasoning models).
-/// O1, O2, O3, O4 and GPT-5/GPT-6 series use internal reasoning and don't accept sampling params.
-const NO_TEMPERATURE_PREFIXES: &[&str] = &["o1", "o2", "o3", "o4", "gpt-5", "gpt-6", "gpt-daybreak"];
 
 /// Convert messages to Responses API input format
 ///
@@ -751,17 +747,6 @@ impl AiProvider for OpenAiProvider {
 		))
 	}
 
-	fn supported_sampling_params(&self, model: &str) -> SamplingSupport {
-		// OpenAI never supports top_k.
-		// Reasoning models (o1/o2/o3/o4/gpt-5) also reject temperature and top_p.
-		let is_reasoning = NO_TEMPERATURE_PREFIXES.iter().any(|p| model.starts_with(p));
-		SamplingSupport {
-			temperature: !is_reasoning,
-			top_p: !is_reasoning,
-			top_k: false, // OpenAI API doesn't support top_k
-		}
-	}
-
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
 		let auth_headers = self.auth_headers(&params)?;
 
@@ -785,16 +770,6 @@ impl AiProvider for OpenAiProvider {
 		// Disable the additional implicit latest-message write so only those
 		// marked prefixes can incur GPT-5.6 cache-write charges.
 		apply_explicit_cache_options(&mut request_body, explicit_cache_breakpoints)?;
-
-		// Apply sampling parameters based on model support
-		let sampling = self.effective_sampling_params(&params);
-		if let Some(temp) = sampling.temperature {
-			request_body["temperature"] = serde_json::json!(temp);
-		}
-		if let Some(top_p) = sampling.top_p {
-			request_body["top_p"] = serde_json::json!(top_p);
-		}
-		// Note: OpenAI doesn't support top_k
 
 		// Add previous_id for multi-turn conversations
 		if let Some(ref prev_id) = previous_id {

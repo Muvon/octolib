@@ -63,7 +63,7 @@ async fn example() -> anyhow::Result<()> {
     ];
 
     // Create completion parameters
-    let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000);
+    let params = ChatCompletionParams::new(&messages, &model, 1000);
 
     // Get completion (requires OPENAI_API_KEY environment variable)
     let response = provider.chat_completion(params).await?;
@@ -224,7 +224,7 @@ async fn structured_output_example() -> anyhow::Result<()> {
 
     // Basic JSON output
     let structured_request = StructuredOutputRequest::json();
-    let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000)
+    let params = ChatCompletionParams::new(&messages, &model, 1000)
         .with_structured_output(structured_request);
 
     let response = provider.chat_completion(params).await?;
@@ -254,7 +254,7 @@ async fn structured_output_example() -> anyhow::Result<()> {
     let structured_request = StructuredOutputRequest::json_schema(schema)
         .with_strict_mode();
 
-    let params = ChatCompletionParams::new(&messages, &model, 0.7, 1.0, 50, 1000)
+    let params = ChatCompletionParams::new(&messages, &model, 1000)
         .with_structured_output(structured_request);
 
     let response = provider.chat_completion(params).await?;

@@ -38,8 +38,7 @@ async fn test_upstream_key_is_redacted_in_returned_error_and_retry_logs() {
 	use crate::llm::types::ChatCompletionParams;
 	use tracing::instrument::WithSubscriber;
 
-	let params =
-		ChatCompletionParams::new(&[], "model", 1.0, 1.0, 0, 10).with_api_key("private-request-key".to_owned());
+	let params = ChatCompletionParams::new(&[], "model", 10).with_api_key("private-request-key".to_owned());
 	let buffer = LogBuffer(std::sync::Arc::new(std::sync::Mutex::new(Vec::new())));
 	let writer = buffer.clone();
 	let subscriber = tracing_subscriber::fmt()
@@ -84,8 +83,7 @@ async fn test_upstream_key_is_redacted_in_returned_error_and_retry_logs() {
 async fn test_non_retryable_error_body_is_redacted_and_success_body_is_preserved() {
 	use crate::llm::providers::shared::CapturedResponse;
 	use crate::llm::types::ChatCompletionParams;
-	let params =
-		ChatCompletionParams::new(&[], "model", 1.0, 1.0, 0, 10).with_api_key("private-request-key".to_owned());
+	let params = ChatCompletionParams::new(&[], "model", 10).with_api_key("private-request-key".to_owned());
 	for status in [reqwest::StatusCode::UNAUTHORIZED, reqwest::StatusCode::OK] {
 		let result = retry_provider_request(
 			|| {
@@ -208,8 +206,8 @@ async fn test_observer_is_silent_when_the_first_attempt_succeeds() {
 #[tokio::test]
 #[serial_test::serial(retry_log)]
 async fn test_retry_event_reason_never_carries_the_body_or_the_key() {
-	let params = crate::llm::types::ChatCompletionParams::new(&[], "model", 1.0, 1.0, 0, 10)
-		.with_api_key("private-request-key".to_owned());
+	let params =
+		crate::llm::types::ChatCompletionParams::new(&[], "model", 10).with_api_key("private-request-key".to_owned());
 	let (observer, events) = recording_observer();
 	let result = retry_provider_request(
 		|| {
@@ -249,7 +247,7 @@ async fn test_retry_event_reason_never_carries_the_body_or_the_key() {
 #[serial_test::serial(retry_log)]
 async fn test_retry_chat_operation_uses_the_observer_on_params() {
 	let (observer, events) = recording_observer();
-	let params = crate::llm::types::ChatCompletionParams::new(&[], "model", 1.0, 1.0, 0, 10)
+	let params = crate::llm::types::ChatCompletionParams::new(&[], "model", 10)
 		.with_max_retries(1)
 		.with_retry_timeout(Duration::ZERO)
 		.with_retry_observer(observer);
@@ -427,7 +425,7 @@ async fn retry_logs_include_the_underlying_error_without_flattening_the_returned
 #[serial_test::serial(retry_log)]
 async fn typed_provider_timeout_is_reported_as_a_timeout_to_the_observer() {
 	let (observer, events) = recording_observer();
-	let params = crate::llm::types::ChatCompletionParams::new(&[], "model", 0.0, 1.0, 0, 0)
+	let params = crate::llm::types::ChatCompletionParams::new(&[], "model", 0)
 		.with_max_retries(1)
 		.with_retry_timeout(Duration::ZERO)
 		.with_retry_observer(observer);

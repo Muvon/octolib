@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.54.2] - 2026-11-21
+
+### 📋 Release Summary
+
+HTTP handling now accounts for resolver build failures.
+
+### 🐛 Bug Fixes & Stability
+
+- **http**: handle resolver build failures `086e23e8`
+
 ## [0.54.1] - 2026-11-18
 
 ### 📋 Release Summary

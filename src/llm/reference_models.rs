@@ -775,6 +775,13 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		pricing: None,
 	},
 	ReferenceModelEntry {
+		// InclusionAI Ling 3.0 Tiny (Nov 2026): 7.9B MoE (1.3B active), 262K-context
+		// text model for responsive agents. Baseline from OpenRouter.
+		pattern: "ling-3.0-tiny",
+		capabilities: caps(false, false, true, 262_144),
+		pricing: pricing(0.015, 0.045, 0.015, 0.003),
+	},
+	ReferenceModelEntry {
 		// InclusionAI Ling 3.0 Flash finance variant — priced above the base
 		// model, so it must precede it here.
 		pattern: "ling-3.0-flash-fin",

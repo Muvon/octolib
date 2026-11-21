@@ -488,6 +488,7 @@ fn september_2026_additions_resolve() {
 		("inception/mercury-2", 0.25, 0.75),
 		("tencent/hy4-preview", 0.834, 2.501),
 		("ibm-granite/granite-4.2-8b", 0.06, 0.25),
+		("inclusionai/ling-3.0-tiny", 0.015, 0.045),
 		("inclusionai/ling-3.0-flash", 0.021, 0.063),
 		("inclusionai/ling-3.0-flash-fin", 0.06, 0.18),
 		("inclusionai/ling-3.1-flash", 0.075, 0.225),

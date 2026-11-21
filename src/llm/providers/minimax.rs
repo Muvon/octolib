@@ -354,6 +354,7 @@ impl AiProvider for MinimaxProvider {
 			params.extra_headers.clone(),
 			params.api_key.as_ref(),
 			params.retry_observer.as_ref(),
+			params.retry_charge(),
 		)
 		.await?;
 
@@ -577,6 +578,7 @@ async fn execute_minimax_request(
 	extra_headers: Option<std::collections::HashMap<String, String>>,
 	per_call_api_key: Option<&crate::llm::types::PerCallApiKey>,
 	retry_observer: Option<&crate::llm::retry::RetryObserver>,
+	retry_charge: Option<crate::llm::retry::RetryCharge>,
 ) -> Result<ProviderResponse> {
 	let start_time = std::time::Instant::now();
 
@@ -620,6 +622,7 @@ async fn execute_minimax_request(
 		cancellation_token,
 		per_call_api_key,
 		retry_observer,
+		retry_charge,
 	)
 	.await?;
 

@@ -429,6 +429,7 @@ async fn truncated_stream_retries_but_malformed_and_permanent_errors_do_not() {
 			None,
 			params.api_key.as_ref(),
 			None,
+			None,
 		)
 		.await;
 		assert_eq!(result.is_ok(), retry_expected);
@@ -480,6 +481,7 @@ async fn timeout_and_cancellation_cover_the_stream_body() {
 				0,
 				Duration::ZERO,
 				Some(&token),
+				None,
 				None,
 				None,
 			)
@@ -849,6 +851,7 @@ async fn timeout_retry_starts_with_a_fresh_stream_accumulator() {
 		},
 		1,
 		Duration::ZERO,
+		None,
 		None,
 		None,
 		None,

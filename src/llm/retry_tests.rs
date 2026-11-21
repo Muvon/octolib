@@ -60,6 +60,7 @@ async fn test_upstream_key_is_redacted_in_returned_error_and_retry_logs() {
 		None,
 		params.api_key.as_ref(),
 		None,
+		None,
 	)
 	.with_subscriber(subscriber)
 	.await;
@@ -101,6 +102,7 @@ async fn test_non_retryable_error_body_is_redacted_and_success_body_is_preserved
 			Duration::ZERO,
 			None,
 			params.api_key.as_ref(),
+			None,
 			None,
 		)
 		.await
@@ -157,6 +159,7 @@ async fn test_observer_is_told_before_every_retry_but_not_after_the_last_attempt
 		None,
 		None,
 		Some(&observer),
+		None,
 	)
 	.await;
 
@@ -198,6 +201,7 @@ async fn test_observer_is_silent_when_the_first_attempt_succeeds() {
 		None,
 		None,
 		Some(&observer),
+		None,
 	)
 	.await;
 
@@ -227,6 +231,7 @@ async fn test_retry_event_reason_never_carries_the_body_or_the_key() {
 		None,
 		params.api_key.as_ref(),
 		Some(&observer),
+		None,
 	)
 	.await;
 
@@ -323,6 +328,7 @@ async fn test_retry_after_from_a_503_stretches_the_observed_delay() {
 		None,
 		None,
 		Some(&observer),
+		None,
 	)
 	.await;
 
@@ -408,6 +414,7 @@ async fn retry_logs_include_the_underlying_error_without_flattening_the_returned
 		None,
 		None,
 		None,
+		None,
 	)
 	.with_subscriber(subscriber)
 	.await;
@@ -447,4 +454,111 @@ async fn typed_provider_timeout_is_reported_as_a_timeout_to_the_observer() {
 	let events = events.lock().unwrap();
 	assert_eq!(events.len(), 1);
 	assert_eq!(events[0].reason, "request timed out");
+}
+
+#[tokio::test]
+#[serial_test::serial(retry_log)]
+async fn test_retry_budget_stops_retries_once_the_dollars_are_spent() {
+	// Each retry is estimated at $0.40 against a $1.00 budget with no traffic
+	// share: two retries fit, the third is refused, so a call allowed ten
+	// retries sends three attempts and fails with the provider's own error.
+	let budget = RetrySpend::new(1.00).with_ratio(0.0);
+	let (observer, events) = recording_observer();
+	let attempts = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
+	let counter = attempts.clone();
+	let result = retry_provider_request(
+		move || {
+			counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+			Box::pin(async {
+				let response = status_response(503, None);
+				Err(retryable_status_error(
+					&response,
+					format!("OctoHub API error {}: {}", response.status, response.body),
+				))
+			})
+		},
+		10,
+		Duration::ZERO,
+		None,
+		None,
+		Some(&observer),
+		Some(RetryCharge::new(budget.clone(), 0.40)),
+	)
+	.await;
+
+	let error = match result {
+		Ok(_) => panic!("a provider that keeps failing must return its error"),
+		Err(error) => error,
+	};
+	assert_eq!(
+		error.to_string(),
+		"OctoHub API error 503 Service Unavailable: upstream down"
+	);
+	assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 3);
+	assert_eq!(events.lock().unwrap().len(), 2, "no backoff sleep for a refused retry");
+	assert!(budget.remaining_usd() < 0.40);
+}
+
+#[tokio::test]
+#[serial_test::serial(retry_log)]
+async fn test_retry_budget_is_shared_across_calls() {
+	// One budget, two calls: the first call's retries use it up, so the
+	// second call fails on its first error instead of retrying.
+	let budget = RetrySpend::new(0.50).with_ratio(0.0);
+	let failing =
+		|| -> Pin<Box<dyn Future<Output = Result<crate::llm::providers::shared::CapturedResponse>> + Send>> {
+			Box::pin(async {
+				let response = status_response(503, None);
+				Err(retryable_status_error(&response, "down".to_owned()))
+			})
+		};
+	let first = retry_provider_request(
+		failing,
+		5,
+		Duration::ZERO,
+		None,
+		None,
+		None,
+		Some(RetryCharge::new(budget.clone(), 0.25)),
+	)
+	.await;
+	assert!(first.is_err());
+
+	let attempts = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
+	let counter = attempts.clone();
+	let second = retry_provider_request(
+		move || {
+			counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+			failing()
+		},
+		5,
+		Duration::ZERO,
+		None,
+		None,
+		None,
+		Some(RetryCharge::new(budget.clone(), 0.25)),
+	)
+	.await;
+	assert!(second.is_err());
+	assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 1);
+}
+
+#[test]
+fn test_retry_charge_prices_the_call_from_reference_pricing() {
+	use crate::llm::types::{ChatCompletionParams, Message};
+
+	let mut message = Message::user("x");
+	message.content = "a".repeat(400_000); // about 100k prompt tokens
+	let params = ChatCompletionParams::new(&[message], "claude-sonnet-4-5", 1.0, 1.0, 0, 0);
+	assert!(params.retry_charge().is_none(), "no budget, no charge");
+
+	let params = params.with_retry_budget(RetrySpend::new(1.0));
+	let charge = params.retry_charge().unwrap();
+	let expected = crate::llm::reference_pricing::calculate_reference_cost("claude-sonnet-4-5", 100_000, 0, 0).unwrap();
+	assert!(expected > 0.0);
+	assert!((charge.estimated_usd() - expected).abs() < 1e-12);
+
+	let unpriced =
+		ChatCompletionParams::new(&[], "no-such-model-xyz", 1.0, 1.0, 0, 0).with_retry_budget(RetrySpend::new(1.0));
+	assert_eq!(unpriced.retry_charge().unwrap().estimated_usd(), 0.0);
 }

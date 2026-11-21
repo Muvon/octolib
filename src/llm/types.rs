@@ -945,6 +945,10 @@ pub struct ChatCompletionParams {
 	/// Told before every backoff sleep so the caller can show that the call is
 	/// waiting on a failing provider. `None` = retries stay silent.
 	pub retry_observer: Option<crate::llm::retry::RetryObserver>,
+	/// Shared USD budget every retry of this call must pay its estimated cost
+	/// from (see [`crate::llm::retry::RetrySpend`]). `None` = retries are
+	/// capped by `max_retries` only.
+	pub retry_budget: Option<crate::llm::retry::RetrySpend>,
 	/// Available tools for function calling
 	pub tools: Option<Vec<FunctionDefinition>>,
 	/// Structured output configuration
@@ -995,6 +999,7 @@ impl ChatCompletionParams {
 			stream_timeout: None,
 			cancellation_token: None,
 			retry_observer: None,
+			retry_budget: None,
 			tools: None,
 			response_format: None,
 			previous_id: None,
@@ -1113,6 +1118,38 @@ impl ChatCompletionParams {
 	pub fn with_retry_observer(mut self, observer: crate::llm::retry::RetryObserver) -> Self {
 		self.retry_observer = Some(observer);
 		self
+	}
+
+	/// Cap this call's retries in dollars as well as in count. Clones of one
+	/// [`RetrySpend`](crate::llm::retry::RetrySpend) share the budget, so one
+	/// budget can cover every call in a process. Record real spend on it
+	/// (`budget.record_spend(cost)`) to let the allowance grow with traffic.
+	pub fn with_retry_budget(mut self, budget: crate::llm::retry::RetrySpend) -> Self {
+		self.retry_budget = Some(budget);
+		self
+	}
+
+	/// Estimated USD cost of sending this call once more: its prompt (about
+	/// four bytes per token) at the model's reference input price, plus
+	/// `max_tokens` of output when set. A model without reference pricing
+	/// estimates to $0, which the budget always grants.
+	pub fn estimated_attempt_cost(&self) -> f64 {
+		let prompt_bytes: usize = self.messages.iter().map(|message| message.content.len()).sum();
+		let input_tokens = prompt_bytes.div_ceil(4) as u64;
+		crate::llm::reference_pricing::calculate_reference_cost(
+			&self.model,
+			input_tokens,
+			0,
+			u64::from(self.max_tokens),
+		)
+		.unwrap_or(0.0)
+	}
+
+	/// The budget this call's retries draw from, priced for this call.
+	pub fn retry_charge(&self) -> Option<crate::llm::retry::RetryCharge> {
+		self.retry_budget
+			.as_ref()
+			.map(|budget| crate::llm::retry::RetryCharge::new(budget.clone(), self.estimated_attempt_cost()))
 	}
 
 	/// Set available tools

@@ -74,6 +74,7 @@ async fn transport_retry_preserves_other_hosts_pooled_connections() {
 			None,
 			None,
 			None,
+			None,
 		)
 		.await
 		.unwrap();
@@ -121,6 +122,7 @@ async fn request_timeout_keeps_its_category_after_credential_redaction() {
 		None,
 		params.api_key.as_ref(),
 		Some(&observer),
+		None,
 	)
 	.await;
 	server.abort();
@@ -162,6 +164,7 @@ async fn truncated_response_body_is_retried() {
 			|| Box::pin(shared::send_and_read(shared::http_client().get(&url), None, None)),
 			1,
 			Duration::ZERO,
+			None,
 			None,
 			None,
 			None,

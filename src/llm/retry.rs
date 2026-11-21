@@ -42,6 +42,19 @@
 //! the wait instead of going silent for minutes. The event carries only a short
 //! cause (`HTTP 503`, `connection error`) — never a response body or credential.
 //!
+//! # Dollar budget
+//!
+//! A retry count says nothing about money: three retries of a 2,000-token
+//! prompt cost a fraction of a cent, three retries of a 200,000-token agent
+//! context on a frontier model cost dollars, and during a provider outage
+//! every in-flight call retries at once. A [`RetrySpend`] on
+//! [`ChatCompletionParams`](crate::llm::types::ChatCompletionParams)
+//! (`with_retry_budget`) makes every retry pay its estimated cost, priced from
+//! the model's reference pricing, out of a shared USD budget before its
+//! backoff sleep starts. When the budget is spent the call fails with the
+//! error it already has instead of sending another full-context request.
+//! The budget comes from [`llm_resilience`].
+//!
 //! # Cancellation
 //!
 //! All retry operations support optional cancellation tokens.
@@ -55,6 +68,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::watch;
 use tokio::time::sleep;
+
+pub use llm_resilience::{RetryRefused, RetrySpend};
 
 /// Longest single backoff sleep, whatever the exponent or `Retry-After` says.
 const MAX_RETRY_DELAY: Duration = Duration::from_secs(300);
@@ -93,6 +108,30 @@ impl RetryObserver {
 impl std::fmt::Debug for RetryObserver {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		f.write_str("RetryObserver")
+	}
+}
+
+/// The dollar budget one call's retries draw from, with the estimated cost
+/// of one retry of that call. Built by
+/// [`ChatCompletionParams::retry_charge`](crate::llm::types::ChatCompletionParams::retry_charge).
+#[derive(Debug, Clone)]
+pub struct RetryCharge {
+	budget: RetrySpend,
+	estimated_usd: f64,
+}
+
+impl RetryCharge {
+	pub fn new(budget: RetrySpend, estimated_usd: f64) -> Self {
+		Self { budget, estimated_usd }
+	}
+
+	/// Estimated cost of one more attempt of this call, in USD.
+	pub fn estimated_usd(&self) -> f64 {
+		self.estimated_usd
+	}
+
+	fn try_pay(&self) -> Result<(), RetryRefused> {
+		self.budget.try_retry(self.estimated_usd)
 	}
 }
 
@@ -241,6 +280,7 @@ pub(crate) async fn retry_provider_request<F>(
 	cancellation_token: Option<&watch::Receiver<bool>>,
 	api_key: Option<&crate::llm::types::PerCallApiKey>,
 	retry_observer: Option<&RetryObserver>,
+	retry_charge: Option<RetryCharge>,
 ) -> Result<crate::llm::providers::shared::CapturedResponse>
 where
 	F: FnMut() -> Pin<Box<dyn Future<Output = Result<crate::llm::providers::shared::CapturedResponse>> + Send>>,
@@ -272,6 +312,7 @@ where
 		},
 		describe_error,
 		retry_observer,
+		retry_charge.as_ref(),
 	)
 	.await
 }
@@ -296,6 +337,7 @@ where
 		|error| matches!(error.downcast_ref::<ProviderError>(), Some(ProviderError::Cancelled)),
 		describe_error,
 		params.retry_observer.as_ref(),
+		params.retry_charge().as_ref(),
 	)
 	.await
 }
@@ -347,6 +389,7 @@ where
 			retry_after: None,
 		},
 		None,
+		None,
 	)
 	.await
 }
@@ -361,6 +404,7 @@ async fn retry_with_backoff<F, T, E>(
 	stop_retrying: impl Fn(&E) -> bool + Copy,
 	describe: impl Fn(&E) -> RetryCause,
 	retry_observer: Option<&RetryObserver>,
+	retry_charge: Option<&RetryCharge>,
 ) -> Result<T, E>
 where
 	F: FnMut() -> Pin<Box<dyn Future<Output = Result<T, E>> + Send>>,
@@ -388,6 +432,20 @@ where
 
 				// Don't sleep after the last attempt
 				if attempt < max_retries {
+					// Pay for the retry before sleeping for it: a refused retry
+					// fails now with the error we have, not after the backoff.
+					if let Some(charge) = retry_charge {
+						if let Err(refused) = charge.try_pay() {
+							tracing::warn!(
+								reason = %cause.reason,
+								estimated_usd = refused.estimated_usd(),
+								remaining_usd = refused.remaining_usd(),
+								"retry budget spent, not retrying"
+							);
+							return Err(e);
+						}
+					}
+
 					let delay = backoff_delay(base_timeout, attempt, cause.retry_after);
 
 					tracing::debug!("Waiting {:?} before retry attempt {}", delay, attempt + 2);

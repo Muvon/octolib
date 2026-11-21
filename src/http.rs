@@ -110,17 +110,18 @@ enum Lookup {
 impl Lookup {
 	#[cfg(target_os = "linux")]
 	fn for_platform() -> Self {
-		match TokioResolver::builder_tokio() {
-			Ok(mut builder) => {
-				// Same as reqwest's own hickory integration: ask for both families so
-				// connection racing (happy eyeballs) has addresses to race.
-				builder.options_mut().ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
-				Lookup::Cached(Box::new(builder.build()))
-			}
+		let built = TokioResolver::builder_tokio().and_then(|mut builder| {
+			// Same as reqwest's own hickory integration: ask for both families so
+			// connection racing (happy eyeballs) has addresses to race.
+			builder.options_mut().ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
+			builder.build()
+		});
+		match built {
+			Ok(resolver) => Lookup::Cached(Box::new(resolver)),
 			// Without a readable /etc/resolv.conf the system lookup still serves
 			// names from /etc/hosts, such as localhost.
 			Err(error) => {
-				tracing::warn!(%error, "cannot read the DNS configuration; host names resolve without a cache");
+				tracing::warn!(%error, "cannot set up the DNS cache; host names resolve without a cache");
 				Lookup::System
 			}
 		}

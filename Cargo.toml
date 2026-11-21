@@ -250,6 +250,5 @@ tungstenite = { version = "0.27", default-features = false, optional = true }
 
 # Caches DNS answers for their TTL. Linux only: on macOS and Windows it would
 # skip per-domain DNS (VPN split DNS, /etc/resolver/*, .local names).
-# Same major as the resolver behind reqwest 0.12's own `hickory-dns` feature, so one copy is built.
 [target.'cfg(target_os = "linux")'.dependencies]
-hickory-resolver = { version = "0.25", features = ["tokio"] }
+hickory-resolver = { version = "0.26.3", features = ["tokio"] }

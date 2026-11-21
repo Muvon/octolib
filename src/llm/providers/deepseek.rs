@@ -560,6 +560,7 @@ impl AiProvider for DeepSeekProvider {
 			params.cancellation_token.as_ref(),
 			params.api_key.as_ref(),
 			params.retry_observer.as_ref(),
+			params.retry_charge(),
 		)
 		.await?;
 		let request_time_ms = start_time.elapsed().as_millis() as u64;

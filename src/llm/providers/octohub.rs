@@ -350,6 +350,7 @@ impl AiProvider for OctoHubProvider {
 					params.cancellation_token.as_ref(),
 					params.api_key.as_ref(),
 					params.retry_observer.as_ref(),
+					params.retry_charge(),
 				)
 				.await?
 			}

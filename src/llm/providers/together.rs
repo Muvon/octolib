@@ -585,6 +585,7 @@ async fn execute_together_request(
 		params.cancellation_token.as_ref(),
 		params.api_key.as_ref(),
 		params.retry_observer.as_ref(),
+		params.retry_charge(),
 	)
 	.await?;
 

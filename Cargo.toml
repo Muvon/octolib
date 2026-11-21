@@ -18,7 +18,7 @@ default = ["llm", "embeddings", "reranker", "media", "evaluation", "fastembed", 
 
 # Capability modules. Each gates one top-level module and the dependencies only
 # it needs, so an LLM-only build does not compile the media or embedding stack.
-llm = ["dep:jsonschema", "dep:jsonwebtoken", "dep:base64"]
+llm = ["dep:jsonschema", "dep:jsonwebtoken", "dep:base64", "dep:llm-resilience"]
 # Optional WebSocket transports; HTTP/SSE remains the per-request default.
 websockets = ["llm", "dep:reqwest-websocket", "dep:futures-util", "dep:tungstenite"]
 embeddings = ["dep:tiktoken-rs"]
@@ -75,6 +75,8 @@ jsonwebtoken = { version = "10", optional = true }
 # schemas are self-contained), so default features (which pull in a second
 # reqwest/rustls stack) are disabled.
 jsonschema = { version = "0.46.10", default-features = false, optional = true }
+# Dollar-capped retry budget for provider calls (core only: tokio, parking_lot, tracing).
+llm-resilience = { version = "0.2.1", default-features = false, optional = true }
 
 sha2 = "0.10"
 hex = "0.4"

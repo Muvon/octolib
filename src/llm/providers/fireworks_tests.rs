@@ -213,6 +213,21 @@ fn deepseek_v4p1_flash_1017_spot_snapshot_uses_fireworks_rates() {
 fn november_serverless_models_use_fireworks_pricing_and_context() {
 	let provider = FireworksProvider::new();
 
+	// Kimi K3.1 Pro must not fall through to the kimi-k3 rate.
+	let kimi = provider
+		.get_model_pricing("accounts/fireworks/models/kimi-k3p1-pro")
+		.unwrap();
+	assert_eq!(kimi.input_price_per_1m, 2.00);
+	assert_eq!(kimi.cache_read_price_per_1m, 0.20);
+	assert_eq!(kimi.output_price_per_1m, 10.00);
+
+	let ultramarine = provider
+		.get_model_pricing("accounts/fireworks/models/ultramarine-1-flash-us")
+		.unwrap();
+	assert_eq!(ultramarine.input_price_per_1m, 0.15);
+	assert_eq!(ultramarine.cache_read_price_per_1m, 0.03);
+	assert_eq!(ultramarine.output_price_per_1m, 0.50);
+
 	let muse = provider
 		.get_model_pricing("accounts/fireworks/models/muse-spark-open")
 		.unwrap();

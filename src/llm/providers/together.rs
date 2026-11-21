@@ -75,6 +75,9 @@ pub(crate) const PRICING: &[PricingTuple] = &[
 	("nvidia/NVIDIA-Nemotron-3.5-Super-VL", 0.15, 0.50, 0.15, 0.02),
 	// Free serverless model (verified Oct 2, 2026).
 	("Prism-ML/Ternary-Bonsai-27B", 0.00, 0.00, 0.00, 0.00),
+	// Tev1 4B experimental (Nov 2026): $0.042/M input, free output; no
+	// function calling or structured outputs.
+	("Tev1-4B-experimental", 0.042, 0.00, 0.042, 0.042),
 ];
 
 fn together_model_pricing(model: &str) -> Option<crate::llm::types::ModelPricing> {
@@ -89,7 +92,9 @@ fn together_model_pricing(model: &str) -> Option<crate::llm::types::ModelPricing
 
 fn together_model_context(model: &str) -> Option<usize> {
 	let normalized = model.to_ascii_lowercase();
-	if normalized.contains("thinkingmachines/inkling") || normalized.contains("minimaxai/minimax-m3") {
+	if normalized.contains("tev1-4b-experimental") {
+		Some(32_768)
+	} else if normalized.contains("thinkingmachines/inkling") || normalized.contains("minimaxai/minimax-m3") {
 		Some(524_288)
 	} else if normalized.contains("moonshotai/kimi-k3") || normalized.contains("deepseek-ai/deepseek-v4-pro-0813") {
 		Some(1_048_576)

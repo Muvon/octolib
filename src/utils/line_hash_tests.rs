@@ -38,6 +38,33 @@ fn line_ids_hash_the_whole_physical_line_and_keep_its_position_separate() {
 }
 
 #[test]
+fn parse_line_reads_back_what_format_line_rendered() {
+	for (number, text) in [
+		(1, "fn main() {"),
+		(51, "  export enum EffectFlags {"),
+		(9, "\tlet x = a | b;"),
+		(7, ""),
+	] {
+		assert_eq!(parse_line(&format_line(number, text)), Some((number, text)));
+	}
+	// A blank line keeps its id when the trailing separator was trimmed.
+	assert_eq!(parse_line("7:c5"), Some((7, "")));
+}
+
+#[test]
+fn parse_line_rejects_text_that_only_looks_like_an_id_line() {
+	// `grep -n` output: "be" is two hex digits, but not the hash of "careful".
+	assert_eq!(parse_line("7:be careful"), None);
+	// Line 0 does not exist, a sign is not part of an id, and a hash alone names no line.
+	assert_eq!(parse_line("0:c5 "), None);
+	assert_eq!(parse_line("+7:c5 "), None);
+	assert_eq!(parse_line("c5 "), None);
+	// Edit-result rows that carry ids but no line content.
+	assert_eq!(parse_line("2:cd..3:ef (2 lines as sent)"), None);
+	assert_eq!(parse_line("[... 4 lines omitted]"), None);
+}
+
+#[test]
 fn lf_and_crlf_source_lines_produce_identical_ids() {
 	let lf = "alpha\n  beta\n";
 	let crlf = "alpha\r\n  beta\r\n";

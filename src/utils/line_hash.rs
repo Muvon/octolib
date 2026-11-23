@@ -55,6 +55,22 @@ pub fn format_line(line_1idx: usize, content: &str) -> String {
 	format!("{}{LINE_ID_SEPARATOR}{}", line_id(line_1idx, content), content)
 }
 
+/// The line number and content of a line [`format_line`] rendered, or `None` for
+/// any other text. The hash has to be the content's own: a numbered line another
+/// program printed (`7:be careful` from `grep -n`) has the same shape, and only
+/// the hash tells it from an id line. A blank line whose trailing separator was
+/// trimmed away still parses.
+pub fn parse_line(rendered: &str) -> Option<(usize, &str)> {
+	let (id, content) = rendered.split_once(LINE_ID_SEPARATOR).unwrap_or((rendered, ""));
+	let (number, hash) = id.split_once(':')?;
+	// `usize::from_str` takes a leading `+`, which an id never has.
+	if number.is_empty() || !number.bytes().all(|b| b.is_ascii_digit()) {
+		return None;
+	}
+	let line_1idx: usize = number.parse().ok().filter(|n| *n > 0)?;
+	(line_hash(content) == hash).then_some((line_1idx, content))
+}
+
 #[cfg(test)]
 #[path = "line_hash_tests.rs"]
 mod tests;

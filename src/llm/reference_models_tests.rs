@@ -114,6 +114,16 @@ fn november_2026_models_resolve_with_documented_capabilities_and_pricing() {
 			caps(true, false, true, 1_000_000),
 			pricing(8.00, 40.00, 10.00, 0.20),
 		),
+		(
+			"ricursiveai/ripple-65b-preview",
+			caps(false, false, true, 1_048_576),
+			pricing(0.20, 0.60, 0.20, 0.02),
+		),
+		(
+			"liquid/lfm-3-1.7b",
+			caps(false, false, true, 262_144),
+			pricing(0.08, 0.20, 0.08, 0.008),
+		),
 	] {
 		assert_same_capabilities(get_reference_capabilities(model).unwrap(), capabilities.unwrap());
 		assert_same_pricing(get_reference_pricing(model).unwrap(), pricing.unwrap());

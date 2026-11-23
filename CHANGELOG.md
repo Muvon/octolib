@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.55.1] - 2026-11-23
+
+### 📋 Release Summary
+
+Line IDs are now separated from content with a space. Pricing is available for InclusionAI Ling 3.0 Tiny.
+
+### 🚨 Breaking Changes
+
+- **line-hash**: separate line ids from content with a space `1a3d22b5`
+
+### ✨ New Features & Enhancements
+
+- **llm**: price InclusionAI Ling 3.0 Tiny `95c6ce3e`
+
 ## [0.55.0] - 2026-11-21
 
 ### 📋 Release Summary

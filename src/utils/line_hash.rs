@@ -44,9 +44,15 @@ pub fn line_id(line_1idx: usize, content: &str) -> String {
 	format!("{}:{}", line_1idx, line_hash(content))
 }
 
+/// What stands between a line id and the line's content in rendered output. One
+/// space, because a tokenizer folds it into the indentation that follows, where a
+/// visible mark such as `|` costs a token of its own on every line. The id ends at
+/// the first space, so the content, indentation included, is everything after it.
+pub const LINE_ID_SEPARATOR: char = ' ';
+
 /// Render an original source line without changing its content or indentation.
 pub fn format_line(line_1idx: usize, content: &str) -> String {
-	format!("{}|{}", line_id(line_1idx, content), content)
+	format!("{}{LINE_ID_SEPARATOR}{}", line_id(line_1idx, content), content)
 }
 
 #[cfg(test)]

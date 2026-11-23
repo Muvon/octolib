@@ -28,7 +28,13 @@ fn line_ids_hash_the_whole_physical_line_and_keep_its_position_separate() {
 	let text = "  export enum EffectFlags {";
 	assert_ne!(line_hash(text), line_hash(text.trim_start()));
 	assert_eq!(line_id(51, text), format!("51:{}", line_hash(text)));
-	assert_eq!(format_line(51, text), format!("{}|{text}", line_id(51, text)));
+	assert_eq!(format_line(51, text), format!("{} {text}", line_id(51, text)));
+	// The separator is one space: the line's own indentation follows it untouched.
+	assert_eq!(
+		format_line(51, text),
+		"51:".to_string() + &line_hash(text) + "   export enum EffectFlags {"
+	);
+	assert_eq!(format_line(7, ""), "7:c5 ");
 }
 
 #[test]

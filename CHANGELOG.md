@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.55.2] - 2026-11-23
+
+### 📋 Release Summary
+
+Formatted line identifiers can now be parsed.
+
+### ✨ New Features & Enhancements
+
+- **line-hash**: parse formatted line identifiers `b271653d`
+
 ## [0.55.1] - 2026-11-23
 
 ### 📋 Release Summary

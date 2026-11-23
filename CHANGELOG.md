@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.55.3] - 2026-11-23
+
+### 📋 Release Summary
+
+GLM-5.4 is now supported across model catalogs.
+
+### ✨ New Features & Enhancements
+
+- **llm**: support GLM-5.4 across model catalogs `d0a3c996`
+
 ## [0.55.2] - 2026-11-23
 
 ### 📋 Release Summary

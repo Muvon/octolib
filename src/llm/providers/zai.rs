@@ -16,6 +16,12 @@
 //!
 //! PRICING VERIFIED: September 22, 2026 (from <https://docs.z.ai/guides/overview/pricing>)
 //!
+//! GLM-5.4 (Nov 23, 2026, Coding Plan only):
+//! - GLM-5.4: placeholder at GLM-5.3 rates (Input $1.40/1M, Cached $0.26/1M,
+//!   Output $4.40/1M). Z.ai has not published a per-token price yet; its Coding
+//!   Plan charges GLM-5.4 about 2/3 of GLM-5.3's credits, so this overstates cost.
+//!   Replace once the pricing page lists it.
+//!
 //! GLM-5.3 series (added Aug 2026):
 //! - GLM-5.3: Input $1.40/1M, Cached $0.26/1M, Output $4.40/1M (official pricing
 //!   confirmed Aug 2026; previously mirrored from GLM-5.2)
@@ -75,6 +81,9 @@ use std::env;
 /// Source: https://docs.z.ai/guides/overview/pricing (verified Sep 22, 2026)
 /// Format: (model, input, output, cache_write, cache_read)
 pub(crate) const PRICING: &[PricingTuple] = &[
+	// GLM-5.4 — placeholder at GLM-5.3 rates until Z.ai publishes a per-token
+	// price (Coding Plan only as of Nov 23, 2026; see module docs)
+	("glm-5.4", 1.40, 4.40, 0.00, 0.26),
 	// GLM-5.3-FlashX-Legal — the legal-tuned FlashX variant, listed at the
 	// same rates; must precede glm-5.3-flashx since that pattern is a
 	// substring of this name
@@ -326,7 +335,8 @@ impl AiProvider for ZaiProvider {
 
 	fn supports_vision(&self, model: &str) -> bool {
 		let normalized = normalize_model_name(model);
-		normalized.contains("glm-5.3-flash") // GLM-5.3-Flash / FlashX, natively multimodal
+		normalized.contains("glm-5.4") // video/image/text/file input per the GLM-5.4 guide; image verified live
+            || normalized.contains("glm-5.3-flash") // GLM-5.3-Flash / FlashX, natively multimodal
             || normalized.contains("glm-5v")
             || normalized.contains("glm-4.6v")
             || normalized.contains("glm-4.5v")
@@ -334,7 +344,8 @@ impl AiProvider for ZaiProvider {
 	}
 
 	fn supports_video(&self, model: &str) -> bool {
-		normalize_model_name(model).contains("glm-5.3-flash")
+		let normalized = normalize_model_name(model);
+		normalized.contains("glm-5.4") || normalized.contains("glm-5.3-flash")
 	}
 
 	fn supports_structured_output(&self, _model: &str) -> bool {
@@ -368,8 +379,8 @@ impl AiProvider for ZaiProvider {
 		// Z.ai model context window limits (case-insensitive), per
 		// https://docs.z.ai/guides/overview/overview (verified Oct 2, 2026)
 		let model_lower = normalize_model_name(model);
-		if model_lower.contains("glm-5.3") || model_lower.contains("glm-5.2") {
-			1_000_000 // 1M for GLM-5.3 (incl. Flash/FlashX) and GLM-5.2
+		if model_lower.contains("glm-5.4") || model_lower.contains("glm-5.3") || model_lower.contains("glm-5.2") {
+			1_000_000 // 1M for GLM-5.4, GLM-5.3 (incl. Flash/FlashX) and GLM-5.2
 		} else if model_lower.contains("glm-5") || model_lower.contains("glm-4.7") {
 			200_000 // 200K for GLM-5 / GLM-5-Turbo, GLM-5.1 and GLM-4.7
 		} else if model_lower.contains("glm-4.5v") {
@@ -762,8 +773,10 @@ fn extract_structured_output(response: &serde_json::Value) -> Option<serde_json:
 /// `xhigh` to `max` itself, so the caller's level is forwarded. GLM-5.3 and
 /// GLM-5.3-Flash accept only `low|high|max` — verified live: `medium` and
 /// `xhigh` return 400 "please use low, high, or max". Intermediate levels floor
-/// to the next supported one, matching the K3 handling in `opencode`. Older
-/// models ignore the field (glm-5.1 and glm-4.7 returned 200 with it set).
+/// to the next supported one, matching the K3 handling in `opencode`. GLM-5.4
+/// accepted all five levels live (Coding Plan endpoint, Nov 23, 2026), so it
+/// keeps the caller's level. Older models ignore the field (glm-5.1 and
+/// glm-4.7 returned 200 with it set).
 fn reasoning_effort_value(model: &str, effort: ReasoningEffort) -> &'static str {
 	let glm_5_3 = normalize_model_name(model).contains("glm-5.3");
 	match effort {

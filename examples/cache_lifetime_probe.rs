@@ -47,6 +47,7 @@ use tokio::task::JoinSet;
 /// Every model measured so far, with the prompt size its cache needs.
 /// Gemini caches nothing under 4,096 tokens; Beam missed at ~5k and hit at ~36k.
 const TARGETS: &[(&str, usize)] = &[
+	("zai:glm-5.4", DEFAULT_PROMPT_TOKENS),
 	("zai:glm-5.3", DEFAULT_PROMPT_TOKENS),
 	("xiaomi:mimo-v2.6-pro", DEFAULT_PROMPT_TOKENS),
 	("openai:gpt-6-luna", DEFAULT_PROMPT_TOKENS),

@@ -271,6 +271,7 @@ fn november_2026_models_are_priced_on_the_aggregator_route() {
 		("ricursiveai/ripple-65b-preview", 0.10, 0.30, 0.025),
 		("motif-technologies/motif-3", 0.30, 1.20, 0.06),
 		("baidu/ernie-light-dt-1.0-intl", 1.13, 3.94, 0.113),
+		("z-ai/glm-5.4", 1.40, 4.40, 0.26),
 	] {
 		let pricing = provider
 			.get_model_pricing(model)

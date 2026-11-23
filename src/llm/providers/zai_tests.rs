@@ -31,6 +31,22 @@ fn test_glm_5_3_flashx_legal_pricing() {
 }
 
 #[test]
+fn test_glm_5_4_placeholder_pricing_and_capabilities() {
+	let provider = ZaiProvider::new();
+	assert!(provider.supports_model("glm-5.4"));
+
+	// Placeholder at GLM-5.3 rates until Z.ai publishes a per-token price
+	let cost = calculate_cost("glm-5.4", 1_000_000, 0, 1_000_000);
+	assert!((cost.unwrap() - 5.80).abs() < 0.01); // 1.40 + 4.40
+	let cost = calculate_cost("glm-5.4", 0, 1_000_000, 0);
+	assert!((cost.unwrap() - 0.26).abs() < 0.0001);
+
+	assert!(provider.supports_vision("glm-5.4"));
+	assert!(provider.supports_video("glm-5.4"));
+	assert_eq!(provider.get_max_input_tokens("glm-5.4"), 1_000_000);
+}
+
+#[test]
 fn test_tool_call_and_result_round_trip() {
 	use crate::llm::tool_calls::GenericToolCall;
 	use crate::llm::types::Message;
@@ -166,6 +182,10 @@ fn test_reasoning_effort_floors_to_glm_5_3_supported_levels() {
 	assert_eq!(reasoning_effort_value("glm-5.2", ReasoningEffort::Medium), "medium");
 	assert_eq!(reasoning_effort_value("glm-5.2", ReasoningEffort::XHigh), "xhigh");
 	assert_eq!(reasoning_effort_value("glm-5.2", ReasoningEffort::Max), "max");
+
+	// GLM-5.4 accepted every level live, so the caller's level is kept.
+	assert_eq!(reasoning_effort_value("glm-5.4", ReasoningEffort::Medium), "medium");
+	assert_eq!(reasoning_effort_value("glm-5.4", ReasoningEffort::XHigh), "xhigh");
 }
 
 /// GLM-5.3 cannot stop thinking, so no reasoning runs it at its lowest level;

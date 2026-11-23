@@ -630,6 +630,11 @@ fn november_2026_additions_resolve_with_documented_capabilities_and_pricing() {
 			caps(false, false, true, 262_144),
 			pricing(0.45, 2.60, 0.45, 0.08),
 		),
+		(
+			"z-ai/glm-5.4",
+			caps(true, true, true, 1_000_000),
+			pricing(1.40, 4.40, 0.00, 0.26),
+		),
 	] {
 		assert_same_capabilities(get_reference_capabilities(model).unwrap(), capabilities.unwrap());
 		assert_same_pricing(get_reference_pricing(model).unwrap(), pricing.unwrap());

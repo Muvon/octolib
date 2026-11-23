@@ -2358,6 +2358,14 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		pricing: None,
 	},
 	ReferenceModelEntry {
+		// GLM-5.4 (Nov 23, 2026): video/image/text/file input, 1M context per
+		// Z.ai's model guide. Coding Plan only, no per-token price yet: placeholder
+		// at GLM-5.3 rates, matching the zai PRICING row.
+		pattern: "glm-5.4",
+		capabilities: caps(true, true, true, 1_000_000),
+		pricing: pricing(1.40, 4.40, 0.00, 0.26),
+	},
+	ReferenceModelEntry {
 		// GLM-5.3-Prime (Sep 2026): not on Z.ai's international price list;
 		// baseline from OpenRouter. Must precede glm-5.3.
 		pattern: "glm-5.3-prime",

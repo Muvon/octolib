@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.56.0] - 2026-11-24
+
+### 📋 Release Summary
+
+Terminal prompts and setup metadata are now supported. The Responses API now supports freeform tools.
+
+### ✨ New Features & Enhancements
+
+- add terminal prompts and setup metadata `fd9ca6e6`
+- **llm**: support freeform tools in Responses API `60d1ae39`
+
 ## [0.55.3] - 2026-11-23
 
 ### 📋 Release Summary

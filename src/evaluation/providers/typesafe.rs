@@ -34,9 +34,10 @@ use reqwest::multipart::{Form, Part};
 use serde_json::{json, Value};
 
 const PROVIDER: &str = "typesafe";
-const API_KEY_ENV: &str = "TYPESAFE_API_KEY";
+pub(crate) const API_KEY_ENV: &str = "TYPESAFE_API_KEY";
 const API_BASE_ENV: &str = "TYPESAFE_BASE_URL";
 const API_BASE: &str = "https://api.typesafe.ai";
+pub(crate) const JEV_LATEST_MODEL: &str = "jev-latest";
 const JEV_PRICING: EvaluationPricing = EvaluationPricing {
 	input_price_per_1m: 0.042,
 	output_price_per_1m: 0.0,

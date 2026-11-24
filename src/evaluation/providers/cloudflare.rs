@@ -50,15 +50,15 @@ use crate::evaluation::types::{EvaluationPricing, EvaluationRequest, EvaluationR
 use serde_json::{json, Value};
 
 const PROVIDER: &str = "cloudflare";
-const API_KEY_ENV: &str = "CLOUDFLARE_API_KEY";
-const ACCOUNT_ID_ENV: &str = "CLOUDFLARE_ACCOUNT_ID";
+pub(crate) const API_KEY_ENV: &str = "CLOUDFLARE_API_KEY";
+pub(crate) const ACCOUNT_ID_ENV: &str = "CLOUDFLARE_ACCOUNT_ID";
 const API_URL_ENV: &str = "CLOUDFLARE_EVALUATION_API_URL";
 const API_BASE: &str = "https://api.cloudflare.com/client/v4/accounts";
 const JEV_MODEL: &str = "typesafe/jev";
 const WORKERS_AI_PREFIX: &str = "@cf/cloudflare/";
 
 /// Canonical model id and its price; the only models this provider serves.
-const MODELS: &[(&str, EvaluationPricing)] = &[
+pub(crate) const MODELS: &[(&str, EvaluationPricing)] = &[
 	(
 		JEV_MODEL,
 		EvaluationPricing {

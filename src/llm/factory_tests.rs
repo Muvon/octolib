@@ -72,6 +72,7 @@ fn test_provider_setup_models_are_unique_and_supported() {
 	assert_eq!(info("cerebras").models, ["gpt-oss-120b", "qwen-3.8-27b"]);
 	assert_eq!(info("hetzner").models, ["Qwen3.8-27B", "Qwen/Qwen3.6-35B-A3B-FP8"]);
 	assert_eq!(info("reflection").models, ["Beam-1.0-501B-A23B"]);
+	assert_eq!(info("octohub").models, ["auto"]);
 	assert_eq!(
 		info("isoquant").models,
 		["deepseek-v4.1-flash-1017-fast", "glm-5.3-flash"]
@@ -91,7 +92,6 @@ fn test_provider_setup_omits_pricing_patterns_and_remote_catalogs() {
 		"local",
 		"ollama",
 		"nvidia",
-		"octohub",
 		"opencode-zen",
 		"opencode-go",
 	] {

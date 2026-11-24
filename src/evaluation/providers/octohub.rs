@@ -30,8 +30,9 @@ use crate::evaluation::types::{EvaluationPricing, EvaluationRequest, EvaluationR
 use serde_json::{json, Value};
 
 const PROVIDER: &str = "octohub";
-const API_KEY_ENV: &str = "OCTOHUB_API_KEY";
+pub(crate) const API_KEY_ENV: &str = "OCTOHUB_API_KEY";
 const API_URL_ENV: &str = "OCTOHUB_API_URL";
+pub(crate) const AUTO_MODEL: &str = "auto";
 const DEFAULT_BASE_URL: &str = "https://hub.octomind.run";
 
 #[derive(Debug, Clone, Default)]

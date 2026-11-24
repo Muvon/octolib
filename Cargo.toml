@@ -25,6 +25,7 @@ embeddings = ["dep:tiktoken-rs"]
 reranker = []
 media = ["dep:base64"]
 evaluation = ["dep:base64"]
+terminal = ["dep:crossterm", "dep:fuzzy-matcher"]
 
 # Local embedding backends. Both are useless without the embedding module, so
 # they enable it. Both also enable `onnx`, so the ONNX provider is present
@@ -67,6 +68,8 @@ tokio = { version = "1.54.1", features = ["time", "sync", "macros", "rt-multi-th
 tower = { version = "0.5", default-features = false }
 arc-swap = "1"
 base64 = { version = "0.22", optional = true }
+crossterm = { version = "0.29.0", optional = true }
+fuzzy-matcher = { version = "0.3.7", optional = true }
 thiserror = "2.0.21"
 tracing = "0.1.44"
 dirs = "7.0.0"

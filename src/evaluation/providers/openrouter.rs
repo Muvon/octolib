@@ -41,13 +41,13 @@ use base64::Engine;
 use serde_json::{json, Map, Value};
 
 const PROVIDER: &str = "openrouter";
-const API_KEY_ENV: &str = "OPENROUTER_API_KEY";
+pub(crate) const API_KEY_ENV: &str = "OPENROUTER_API_KEY";
 const API_URL_ENV: &str = "OPENROUTER_EVALUATION_API_URL";
 const DEFAULT_URL: &str = "https://openrouter.ai/api/alpha/decisions";
 
 /// Input USD per 1M tokens as OpenRouter lists them
 /// (`/api/v1/models?output_modalities=decisions`, checked 2026-11-02).
-const MODELS: &[(&str, f64)] = &[
+pub(crate) const MODELS: &[(&str, f64)] = &[
 	("openai/gpt-6-luna-decisions", 0.10),
 	("perplexity/pplx-decider-v1.2", 0.02),
 	("perplexity/pplx-decider-flash-v1.2", 0.01),

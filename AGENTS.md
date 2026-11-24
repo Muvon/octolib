@@ -7,6 +7,8 @@ Rust library providing a unified interface to multiple AI providers (OpenAI, Ant
 ```
 src/
 ├── lib.rs                          → Public re-exports (all public types live here)
+├── evaluation/factory.rs           → EvaluationProviderFactory::provider_setup_info() lists providers, credential variables, and callable model IDs
+├── terminal.rs                     → Opt-in `terminal` feature with a fuzzy list picker and hidden input
 ├── errors.rs                       → ProviderError, ConfigError, MessageError, ToolCallError + ErrorContext trait
 ├── storage.rs                      → Cache dirs for FastEmbed/HuggingFace models
 ├── llm/

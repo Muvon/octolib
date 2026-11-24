@@ -41,7 +41,7 @@ use crate::evaluation::types::{EvaluationPricing, EvaluationRequest, EvaluationR
 use serde_json::{json, Value};
 
 const PROVIDER: &str = "ollama";
-const API_KEY_ENV: &str = "OLLAMA_API_KEY";
+pub(crate) const API_KEY_ENV: &str = "OLLAMA_API_KEY";
 const API_URL_ENV: &str = "OLLAMA_EVALUATION_API_URL";
 const DEFAULT_API_URL: &str = "https://ollama.com/v1/systemone";
 const CLEF_MODEL: &str = "clef";

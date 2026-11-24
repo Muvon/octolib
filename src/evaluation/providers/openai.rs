@@ -61,10 +61,10 @@ use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
 const PROVIDER: &str = "openai";
-const API_KEY_ENV: &str = "OPENAI_API_KEY";
+pub(crate) const API_KEY_ENV: &str = "OPENAI_API_KEY";
 const API_URL_ENV: &str = "OPENAI_EVALUATION_API_URL";
 const API_URL: &str = "https://api.openai.com/v1/decisions";
-const MODEL: &str = "gpt-6-luna";
+pub(crate) const MODEL: &str = "gpt-6-luna";
 
 const MAX_QUESTIONS: usize = 400;
 const MAX_CHOICES: usize = 255;

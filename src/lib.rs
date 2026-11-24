@@ -157,6 +157,8 @@ pub(crate) mod ort_env;
 #[cfg(feature = "reranker")]
 pub mod reranker;
 pub mod storage;
+#[cfg(feature = "terminal")]
+pub mod terminal;
 #[cfg(all(test, any(feature = "llm", feature = "media", feature = "evaluation")))]
 mod test_support;
 pub mod utils;
@@ -174,6 +176,8 @@ pub use errors::{
 	ConfigError, ConfigResult, MessageError, MessageResult, ProviderError, ProviderResult, StructuredOutputError,
 	StructuredOutputResult, ToolCallError, ToolCallResult,
 };
+#[cfg(feature = "evaluation")]
+pub use evaluation::factory::EvaluationProviderSetupInfo;
 #[cfg(feature = "evaluation")]
 pub use evaluation::{
 	evaluate, Answer, BoundingBox, EvaluationError, EvaluationImageFormat, EvaluationProvider,

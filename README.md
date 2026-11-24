@@ -37,7 +37,7 @@ octolib = "<latest>"
 octolib = { git = "https://github.com/muvon/octolib" }
 ```
 
-Capability modules are on by default; `websockets` is opt-in. Pick only what you need to cut compile time and dependencies:
+`websockets` and `terminal` are opt-in. Pick only what you need to cut compile time and dependencies:
 
 | Feature | Module | Pulls in |
 |---|---|---|
@@ -46,7 +46,8 @@ Capability modules are on by default; `websockets` is opt-in. Pick only what you
 | `embeddings` | `octolib::embedding` | `tiktoken-rs` |
 | `reranker` | `octolib::reranker` | — |
 | `media` | `octolib::media` — image, video, speech, transcription | `base64` |
-| `evaluation` | structured evaluation (TypeSafe Jev, Cloudflare AI Gateway and Clef, Inception Mercury Decide, OpenRouter Decisions, OpenAI Decisions, Ollama decision models) | `base64` |
+| `evaluation` | `octolib::evaluation` — structured evaluation (TypeSafe Jev, Cloudflare AI Gateway and Clef, Inception Mercury Decide, OpenRouter Decisions, OpenAI Decisions, Ollama decision models) | `base64` |
+| `terminal` (off by default) | `octolib::terminal` — fuzzy list picker and hidden input | `crossterm`, `fuzzy-matcher` |
 | `fastembed` | local embedding backend (implies `embeddings`) | `fastembed` |
 | `huggingface` | local embedding backend (implies `embeddings`) | `candle`, `tokenizers`, `hf-hub` |
 
@@ -181,6 +182,8 @@ async fn locate(image: Vec<u8>) -> EvaluationResult<()> {
 Image limits are checked before sending (PNG/JPEG still images, at most 16 MiB each, sides 256–1568 px, and 78,400–2,458,624 total pixels, all inclusive); images are never resized, padded or rotated for the caller.
 
 TypeSafe flags images and box questions as not production-ready. The `typesafe` and `openrouter` providers send them; `openai` sends top-level state images only, and `cloudflare`, `inception`, `octohub` and `ollama` reject both.
+
+Use `EvaluationProviderFactory::provider_setup_info()` to list providers, credential variables, and known callable model IDs for interactive setup. Ollama accepts a model ID entered by the user, and OctoHub offers the `auto` routing model.
 
 ### 📋 Structured Output
 

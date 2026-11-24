@@ -23,6 +23,35 @@ use super::providers::{
 use super::providers::InceptionEvaluationProvider;
 use super::traits::EvaluationProvider;
 
+/// Offline metadata for configuring an evaluation provider and selecting a model.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EvaluationProviderSetupInfo {
+	/// Provider ID, as returned by [`EvaluationProviderFactory::supported_providers`].
+	pub name: &'static str,
+	/// Primary API key variable, including optional keys such as Ollama's.
+	pub api_key_env: Option<&'static str>,
+	/// Environment variables required by the default endpoint in addition to the API key.
+	pub extra_env: &'static [&'static str],
+	/// Callable model IDs in table order. Empty when the provider has no model list.
+	pub models: Vec<String>,
+}
+
+impl EvaluationProviderSetupInfo {
+	fn new(
+		name: &'static str,
+		api_key_env: &'static str,
+		extra_env: &'static [&'static str],
+		models: impl IntoIterator<Item = &'static str>,
+	) -> Self {
+		Self {
+			name,
+			api_key_env: Some(api_key_env),
+			extra_env,
+			models: models.into_iter().map(str::to_string).collect(),
+		}
+	}
+}
+
 pub struct EvaluationProviderFactory;
 
 impl EvaluationProviderFactory {
@@ -77,72 +106,33 @@ impl EvaluationProviderFactory {
 			"typesafe",
 		]
 	}
+
+	/// Get setup metadata without reading credentials or fetching model catalogs.
+	pub fn provider_setup_info() -> Vec<EvaluationProviderSetupInfo> {
+		use super::providers::{cloudflare, octohub, ollama, openai, openrouter, typesafe};
+
+		// Inception is deprecated and will be removed on 2026-12-28, so omit it from setup.
+		vec![
+			EvaluationProviderSetupInfo::new(
+				"cloudflare",
+				cloudflare::API_KEY_ENV,
+				&[cloudflare::ACCOUNT_ID_ENV],
+				cloudflare::MODELS.iter().map(|row| row.0),
+			),
+			EvaluationProviderSetupInfo::new("octohub", octohub::API_KEY_ENV, &[], [octohub::AUTO_MODEL]),
+			EvaluationProviderSetupInfo::new("ollama", ollama::API_KEY_ENV, &[], []),
+			EvaluationProviderSetupInfo::new("openai", openai::API_KEY_ENV, &[], [openai::MODEL]),
+			EvaluationProviderSetupInfo::new(
+				"openrouter",
+				openrouter::API_KEY_ENV,
+				&[],
+				openrouter::MODELS.iter().map(|row| row.0),
+			),
+			EvaluationProviderSetupInfo::new("typesafe", typesafe::API_KEY_ENV, &[], [typesafe::JEV_LATEST_MODEL]),
+		]
+	}
 }
 
 #[cfg(test)]
-mod tests {
-	use super::*;
-
-	#[test]
-	fn routes_provider_model_pairs_to_their_native_model() {
-		let (provider, model) = EvaluationProviderFactory::get_provider_for_model(" TypeSafe : jev-latest ").unwrap();
-		assert_eq!(provider.name(), "typesafe");
-		assert_eq!(model, "jev-latest");
-
-		let (provider, model) = EvaluationProviderFactory::get_provider_for_model("cloudflare:typesafe/jev").unwrap();
-		assert_eq!(provider.name(), "cloudflare");
-		assert_eq!(model, "typesafe/jev");
-
-		let (provider, model) =
-			EvaluationProviderFactory::get_provider_for_model("cloudflare:@cf/cloudflare/clef").unwrap();
-		assert_eq!(provider.name(), "cloudflare");
-		assert_eq!(model, "@cf/cloudflare/clef");
-
-		let (provider, model) = EvaluationProviderFactory::get_provider_for_model("inception:mercury-decide").unwrap();
-		assert_eq!(provider.name(), "inception");
-		assert_eq!(model, "mercury-decide");
-
-		let (provider, model) = EvaluationProviderFactory::get_provider_for_model("octohub:jev").unwrap();
-		assert_eq!(provider.name(), "octohub");
-		assert_eq!(model, "jev");
-
-		let (provider, model) = EvaluationProviderFactory::get_provider_for_model("ollama:clef").unwrap();
-		assert_eq!(provider.name(), "ollama");
-		assert_eq!(model, "clef");
-
-		// A tag after the model name is part of the model, not a second separator.
-		let (provider, model) = EvaluationProviderFactory::get_provider_for_model("ollama:tev1:0.8b").unwrap();
-		assert_eq!(provider.name(), "ollama");
-		assert_eq!(model, "tev1:0.8b");
-
-		let (provider, model) = EvaluationProviderFactory::get_provider_for_model("openai:gpt-6-luna").unwrap();
-		assert_eq!(provider.name(), "openai");
-		assert_eq!(model, "gpt-6-luna");
-
-		let (provider, model) =
-			EvaluationProviderFactory::get_provider_for_model("openrouter:openai/gpt-6-luna-decisions").unwrap();
-		assert_eq!(provider.name(), "openrouter");
-		assert_eq!(model, "openai/gpt-6-luna-decisions");
-	}
-
-	#[test]
-	fn rejects_unknown_providers_models_and_malformed_ids() {
-		assert!(matches!(
-			EvaluationProviderFactory::get_provider_for_model("unknown:jev-latest"),
-			Err(EvaluationError::UnsupportedProvider(_))
-		));
-		assert!(matches!(
-			EvaluationProviderFactory::get_provider_for_model("openai:jev-latest"),
-			Err(EvaluationError::UnsupportedModel { .. })
-		));
-		assert!(matches!(
-			EvaluationProviderFactory::get_provider_for_model("cloudflare:@cf/zai-org/glm-5.3"),
-			Err(EvaluationError::UnsupportedModel { .. })
-		));
-		assert!(matches!(
-			EvaluationProviderFactory::parse_model("jev-latest"),
-			Err(EvaluationError::InvalidModelFormat(_))
-		));
-		assert!(EvaluationProviderFactory::parse_model("typesafe:").is_err());
-	}
-}
+#[path = "factory_tests.rs"]
+mod tests;

@@ -40,7 +40,7 @@ pub struct ProviderSetupInfo {
 	/// Environment variables required in addition to api_key_env;
 	/// alternatives and vars with defaults are not listed.
 	pub extra_env: &'static [&'static str],
-	/// Callable IDs from local model/pricing tables, in table order without duplicates.
+	/// Callable IDs known locally, in table order without duplicates.
 	/// Empty when only pricing patterns or a remote catalog are available.
 	pub models: Vec<String>,
 	/// Public model list in the OpenAI `/v1/models` shape (`data[].id`) that answers
@@ -326,7 +326,7 @@ impl ProviderFactory {
 				moonshot::setup_models(),
 			),
 			ProviderSetupInfo::new("nvidia", Some(nvidia::NVIDIA_API_KEY_ENV), &[], []),
-			ProviderSetupInfo::new("octohub", Some(octohub::OCTOHUB_API_KEY_ENV), &[], []),
+			ProviderSetupInfo::new("octohub", Some(octohub::OCTOHUB_API_KEY_ENV), &[], ["auto"]),
 			ProviderSetupInfo {
 				models_url: Some(opencode::OPENCODE_ZEN_MODELS_URL),
 				..ProviderSetupInfo::new("opencode-zen", Some(opencode::OPENCODE_API_KEY_ENV), &[], [])

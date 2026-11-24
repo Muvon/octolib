@@ -124,6 +124,7 @@ fn test_build_request_uses_native_thinking_tool_contract() {
 		description: "Inspect state".to_string(),
 		parameters: serde_json::json!({"type": "object"}),
 		cache_control: None,
+		freeform: None,
 	}]);
 
 	let request = serde_json::to_value(build_request(&params)).unwrap();

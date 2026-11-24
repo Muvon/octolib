@@ -135,6 +135,7 @@ async fn chat_completion_via_mock_http_sends_tools_reasoning_and_schema() {
 			description: "Look things up".to_string(),
 			parameters: json!({"type": "object", "properties": {}}),
 			cache_control: None,
+			freeform: None,
 		}])
 		.with_structured_output(StructuredOutputRequest {
 			format: OutputFormat::JsonSchema,

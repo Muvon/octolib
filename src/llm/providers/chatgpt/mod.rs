@@ -29,7 +29,9 @@ pub use auth::{current_account, list_models, start_login, Account, ChatGptModel,
 
 use super::openai::{self, OpenAiProvider};
 use crate::llm::traits::AiProvider;
-use crate::llm::types::{ChatCompletionParams, ChatGptTransport, Message, ModelPricing, ProviderResponse};
+use crate::llm::types::{
+	ChatCompletionParams, ChatGptTransport, FunctionDefinition, Message, ModelPricing, ProviderResponse,
+};
 use anyhow::{Context, Result};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap};
@@ -84,7 +86,7 @@ impl AiProvider for ChatGptProvider {
 
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
 		crate::llm::providers::shared::reject_api_key(self.name(), &params)?;
-		let request_body = build_request(&params);
+		let request_body = build_request(&params)?;
 		let start_time = std::time::Instant::now();
 		let (request_body, response_json) = match params.chatgpt_transport {
 			ChatGptTransport::Http => {
@@ -96,14 +98,21 @@ impl AiProvider for ChatGptProvider {
 		};
 		let request_time_ms = start_time.elapsed().as_millis() as u64;
 
-		openai::parse_responses_api_response(request_body, response_json, "chatgpt", request_time_ms, HashMap::new())
+		openai::parse_responses_api_response(
+			request_body,
+			response_json,
+			"chatgpt",
+			request_time_ms,
+			HashMap::new(),
+			params.tools.as_deref(),
+		)
 	}
 }
 
-fn build_request(params: &ChatCompletionParams) -> Value {
+fn build_request(params: &ChatCompletionParams) -> Result<Value> {
 	let mut request = json!({
 		"model": params.model,
-		"input": build_input(&params.messages),
+		"input": build_input(&params.messages, params.tools.as_deref())?,
 		"store": false,
 		"include": ["reasoning.encrypted_content"],
 	});
@@ -135,7 +144,7 @@ fn build_request(params: &ChatCompletionParams) -> Value {
 		request["prompt_cache_key"] = json!(cache_key);
 	}
 
-	request
+	Ok(request)
 }
 
 #[cfg(feature = "websockets")]
@@ -169,15 +178,13 @@ fn request_headers(params: &ChatCompletionParams) -> Result<reqwest::header::Hea
 /// The full transcript as Responses API input: assistant turns replay their
 /// captured output items verbatim, system messages are sent as developer
 /// messages, and function calls are tagged with the namespace they were declared in.
-fn build_input(messages: &[Message]) -> Vec<Value> {
-	messages
-		.iter()
-		.flat_map(|message| {
-			openai::replay_provider_items(message, "chatgpt")
-				.unwrap_or_else(|| openai::messages_to_input(std::slice::from_ref(message), None, false))
-		})
-		.map(normalize_input_item)
-		.collect()
+fn build_input(messages: &[Message], tools: Option<&[FunctionDefinition]>) -> Result<Vec<Value>> {
+	Ok(
+		openai::messages_to_input(messages, None, false, tools, Some("chatgpt"))?
+			.into_iter()
+			.map(normalize_input_item)
+			.collect(),
+	)
 }
 
 fn normalize_input_item(mut item: Value) -> Value {

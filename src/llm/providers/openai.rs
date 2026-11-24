@@ -22,9 +22,12 @@ use crate::llm::types::{
 	StructuredOutputRequest, ThinkingBlock, TokenUsage, ToolCall, VideoData,
 };
 use crate::llm::utils::{get_model_pricing, is_model_in_pricing_table, normalize_model_name, PricingTuple};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::env;
+
+const FREEFORM_GRAMMAR: &str = "start: plain_source\nplain_source: SOURCE\nSOURCE: /[\\s\\S]+/\n";
 
 /// OpenAI pricing constants (per 1M tokens in USD)
 /// Source: https://developers.openai.com/api/docs/pricing (verified Sep 22, 2026)
@@ -202,18 +205,14 @@ fn calculate_cost_with_cache(
 ///
 /// # Behavior
 /// - **Initial/rebased request** (no previous_id): Send the complete local transcript
-/// - **Tool response**: Send ONLY new tool results after last assistant message as function_call_output
-/// - **Continuation**: Send ONLY new user/system messages after last assistant message
-///
-/// # Arguments
-/// * `messages` - Full conversation history
-/// * `previous_response_id` - Exact OpenAI response being continued, if any
-/// * `explicit_cache_breakpoints` - Map `Message.cached` to GPT-5.6+ content breakpoints
+/// - **Continuation**: Send only messages after the exact response being continued
 pub(super) fn messages_to_input(
 	messages: &[Message],
 	previous_response_id: Option<&str>,
 	explicit_cache_breakpoints: bool,
-) -> Vec<serde_json::Value> {
+	tools: Option<&[FunctionDefinition]>,
+	replay_provider: Option<&str>,
+) -> Result<Vec<serde_json::Value>> {
 	let content = |msg: &Message| {
 		let has_images = msg.images.as_ref().is_some_and(|v| !v.is_empty());
 		let has_videos = msg.videos.as_ref().is_some_and(|v| !v.is_empty());
@@ -283,14 +282,78 @@ pub(super) fn messages_to_input(
 		}
 	};
 
-	let input_items = |msg: &Message| {
-		let mut items = Vec::new();
+	// Include tool results and user follow-ups together after the continued turn.
+	let start = previous_response_id
+		.and_then(|id| {
+			messages
+				.iter()
+				.rposition(|m| m.role == "assistant" && m.id.as_deref() == Some(id))
+		})
+		.map_or(0, |idx| idx + 1);
+	// Results must match the original call even when its turn is omitted from
+	// a continuation or the active tool definition has changed.
+	let mut captured_calls = HashMap::new();
+	let mut assistant_calls = Vec::with_capacity(messages.len());
+	for msg in messages {
+		if msg.role != "assistant" {
+			assistant_calls.push(Vec::new());
+			continue;
+		}
+		if let Some(captured) = msg.provider_items.as_ref().and_then(|items| items["items"].as_array()) {
+			for item in captured {
+				let call_id = match item["type"].as_str() {
+					Some("custom_tool_call") => Some(
+						item["call_id"]
+							.as_str()
+							.context("Captured custom_tool_call is missing call_id")?,
+					),
+					Some("function_call") => item["call_id"].as_str(),
+					_ => continue,
+				};
+				if let Some(call_id) = call_id {
+					captured_calls.insert(call_id, item);
+				}
+			}
+		}
+		assistant_calls.push(shared::parse_generic_tool_calls_lossy(
+			msg.tool_calls.as_ref(),
+			"openai",
+		));
+	}
+
+	let legacy_call_types: HashMap<_, _> = assistant_calls
+		.iter()
+		.flatten()
+		.filter(|call| !captured_calls.contains_key(call.id.as_str()))
+		.map(|call| {
+			let is_custom =
+				freeform_parameter(tools, &call.name).is_some_and(|parameter| call.arguments[parameter].is_string());
+			(call.id.as_str(), is_custom)
+		})
+		.collect();
+
+	let mut items = Vec::new();
+	for (msg, calls) in messages.iter().zip(&assistant_calls).skip(start) {
+		if let Some(replayed) = replay_provider.and_then(|provider| replay_provider_items(msg, provider)) {
+			items.extend_from_slice(replayed);
+			continue;
+		}
 
 		match msg.role.as_str() {
 			"tool" => {
 				let call_id = msg.tool_call_id.clone().unwrap_or_default();
+				let is_custom = if let Some(call) = captured_calls.get(call_id.as_str()) {
+					call["type"] == "custom_tool_call"
+				} else if let Some(is_custom) = legacy_call_types.get(call_id.as_str()) {
+					*is_custom
+				} else {
+					msg.name
+						.as_deref()
+						.and_then(|name| freeform_parameter(tools, name))
+						.is_some()
+				};
 				items.push(serde_json::json!({
-					"type": "function_call_output",
+					"type": if is_custom { "custom_tool_call_output" } else { "function_call_output" },
 					"call_id": call_id,
 					"output": if msg.images.as_ref().is_some_and(|images| !images.is_empty()) {
 						content(msg)
@@ -311,41 +374,38 @@ pub(super) fn messages_to_input(
 					}));
 				}
 
-				for call in shared::parse_generic_tool_calls_lossy(msg.tool_calls.as_ref(), "openai") {
-					items.push(serde_json::json!({
-						"type": "function_call",
-						"call_id": call.id,
-						"name": call.name,
-						"arguments": call.arguments.to_string()
-					}));
+				for call in calls {
+					let input = match captured_calls.get(call.id.as_str()) {
+						Some(item) if item["type"] == "custom_tool_call" => {
+							Some(item["input"].as_str().with_context(|| {
+								format!("Captured custom_tool_call '{}' requires a string input", call.id)
+							})?)
+						}
+						Some(_) => None,
+						None => freeform_parameter(tools, &call.name)
+							.and_then(|parameter| call.arguments[parameter].as_str()),
+					};
+					if let Some(input) = input {
+						items.push(serde_json::json!({
+							"type": "custom_tool_call",
+							"call_id": call.id,
+							"name": call.name,
+							"input": input,
+						}));
+					} else {
+						items.push(serde_json::json!({
+							"type": "function_call",
+							"call_id": call.id,
+							"name": call.name,
+							"arguments": call.arguments.to_string()
+						}));
+					}
 				}
 			}
 			_ => {}
 		}
-
-		items
-	};
-
-	if let Some(previous_response_id) = previous_response_id {
-		// Everything after the exact response being continued is new input. Send tool
-		// results AND user follow-ups together — splitting them silently
-		// drops the user message when both exist (e.g. after a multi-turn
-		// cancel that left a tool_result without a follow-up assistant).
-		let last_assistant_idx = messages
-			.iter()
-			.enumerate()
-			.rev()
-			.find(|(_, m)| m.role == "assistant" && m.id.as_deref() == Some(previous_response_id))
-			.map(|(idx, _)| idx);
-
-		let start = last_assistant_idx.map(|idx| idx + 1).unwrap_or(0);
-
-		messages.iter().skip(start).flat_map(input_items).collect()
-	} else {
-		// Initial or provider-rebased request: OpenAI has no server-side chain for
-		// this transcript. Include assistant summaries/history as manual state.
-		messages.iter().flat_map(input_items).collect()
 	}
+	Ok(items)
 }
 
 fn is_openai_response_id(id: &str) -> bool {
@@ -464,7 +524,12 @@ pub(super) fn reasoning_effort(model: &str, effort: Option<ReasoningEffort>) -> 
 	})
 }
 
-/// Responses API function tools sorted by name, or `None` when there are none.
+fn freeform_parameter<'a>(tools: Option<&'a [FunctionDefinition]>, name: &str) -> Option<&'a str> {
+	let tool = tools?.iter().find(|tool| tool.name == name)?;
+	tool.freeform.as_deref()
+}
+
+/// Responses API tools sorted by name, or `None` when there are none.
 pub(super) fn function_tools(tools: Option<&[FunctionDefinition]>) -> Option<Vec<serde_json::Value>> {
 	let tools = tools.filter(|tools| !tools.is_empty())?;
 	let mut sorted_tools = tools.to_vec();
@@ -474,6 +539,18 @@ pub(super) fn function_tools(tools: Option<&[FunctionDefinition]>) -> Option<Vec
 		sorted_tools
 			.iter()
 			.map(|f| {
+				if f.freeform.is_some() {
+					return serde_json::json!({
+						"type": "custom",
+						"name": f.name,
+						"description": f.description,
+						"format": {
+							"type": "grammar",
+							"syntax": "lark",
+							"definition": FREEFORM_GRAMMAR,
+						},
+					});
+				}
 				serde_json::json!({
 					"type": "function",
 					"name": f.name,
@@ -756,7 +833,13 @@ impl AiProvider for OpenAiProvider {
 
 		// Convert messages to array input format for Responses API
 		let is_gpt_5_6_plus = is_gpt_5_6_or_later(&normalize_model_name(&params.model));
-		let input_array = messages_to_input(&params.messages, previous_id.as_deref(), is_gpt_5_6_plus);
+		let input_array = messages_to_input(
+			&params.messages,
+			previous_id.as_deref(),
+			is_gpt_5_6_plus,
+			params.tools.as_deref(),
+			None,
+		)?;
 		let explicit_cache_breakpoints = count_explicit_cache_breakpoints(&input_array);
 
 		// Create the request body for Responses API
@@ -821,6 +904,7 @@ impl AiProvider for OpenAiProvider {
 			params.extra_headers.clone(),
 			params.api_key.as_ref(),
 			params.retry_observer.as_ref(),
+			params.tools.as_deref(),
 		)
 		.await?;
 
@@ -839,7 +923,7 @@ struct ResponsesApiResponse {
 #[derive(Deserialize, Debug)]
 struct ResponseOutput {
 	#[serde(rename = "type")]
-	output_type: String, // "message", "function_call", "reasoning"
+	output_type: String,
 	#[serde(default)]
 	#[allow(dead_code)]
 	// id field exists in API response but we use call_id for function calls
@@ -851,6 +935,8 @@ struct ResponseOutput {
 	name: Option<String>,
 	#[serde(default)]
 	arguments: Option<serde_json::Value>,
+	#[serde(default)]
+	input: Option<serde_json::Value>,
 	#[serde(default)]
 	content: Option<Vec<ResponseContent>>,
 }
@@ -902,6 +988,7 @@ async fn execute_openai_request(
 	extra_headers: Option<std::collections::HashMap<String, String>>,
 	per_call_api_key: Option<&crate::llm::types::PerCallApiKey>,
 	retry_observer: Option<&crate::llm::retry::RetryObserver>,
+	tools: Option<&[FunctionDefinition]>,
 ) -> Result<ProviderResponse> {
 	let start_time = std::time::Instant::now();
 
@@ -1003,6 +1090,7 @@ async fn execute_openai_request(
 		"openai",
 		request_time_ms,
 		rate_limit_headers,
+		tools,
 	)
 	.map_err(|error| shared::redact_error(error, per_call_api_key))
 }
@@ -1010,9 +1098,9 @@ async fn execute_openai_request(
 /// Replay a message's captured output items verbatim, in their original order,
 /// as the Responses API asks of callers that keep history themselves. The items
 /// only stand for the message while they come from this provider (encrypted
-/// reasoning is bound to the account that produced it) and their function calls
+/// reasoning is bound to the account that produced it) and their tool calls
 /// are exactly its tool calls; otherwise the caller falls back to its stored fields.
-pub(super) fn replay_provider_items(message: &Message, provider: &str) -> Option<Vec<serde_json::Value>> {
+fn replay_provider_items<'a>(message: &'a Message, provider: &str) -> Option<&'a [serde_json::Value]> {
 	let captured = message.provider_items.as_ref()?;
 	if captured["provider"] != provider {
 		return None;
@@ -1025,13 +1113,13 @@ pub(super) fn replay_provider_items(message: &Message, provider: &str) -> Option
 	let mut message_call_ids: Vec<&str> = calls.iter().map(|call| call.id.as_str()).collect();
 	let mut item_call_ids: Vec<&str> = items
 		.iter()
-		.filter(|item| item["type"] == "function_call")
+		.filter(|item| item["type"] == "function_call" || item["type"] == "custom_tool_call")
 		.map(|item| item["call_id"].as_str().unwrap_or_default())
 		.collect();
 	message_call_ids.sort_unstable();
 	item_call_ids.sort_unstable();
 
-	(item_call_ids == message_call_ids).then(|| items.clone())
+	(item_call_ids == message_call_ids).then_some(items.as_slice())
 }
 
 /// Build a [`ProviderResponse`] from a complete Responses API response object.
@@ -1041,6 +1129,7 @@ pub(super) fn parse_responses_api_response(
 	provider_name: &str,
 	request_time_ms: u64,
 	rate_limit_headers: std::collections::HashMap<String, String>,
+	tools: Option<&[FunctionDefinition]>,
 ) -> Result<ProviderResponse> {
 	let api_response: ResponsesApiResponse = serde_json::from_value(response_json.clone())?;
 
@@ -1088,6 +1177,29 @@ pub(super) fn parse_responses_api_response(
 						tool_calls = Some(vec![new_tool_call]);
 					}
 				}
+			}
+			"custom_tool_call" => {
+				let name = output
+					.name
+					.as_deref()
+					.context("Responses custom_tool_call is missing name")?;
+				let parameter = freeform_parameter(tools, name).with_context(|| {
+					format!("Responses custom_tool_call references undeclared freeform tool '{name}'")
+				})?;
+				let call_id = output
+					.call_id
+					.as_deref()
+					.with_context(|| format!("Responses custom_tool_call for '{name}' is missing call_id"))?;
+				let input = output
+					.input
+					.as_ref()
+					.and_then(serde_json::Value::as_str)
+					.with_context(|| format!("Responses custom_tool_call for '{name}' requires a string input"))?;
+				tool_calls.get_or_insert_with(Vec::new).push(ToolCall {
+					id: call_id.to_owned(),
+					name: name.to_owned(),
+					arguments: serde_json::json!({ (parameter): input }),
+				});
 			}
 
 			"reasoning" => {
@@ -1190,9 +1302,13 @@ pub(super) fn parse_responses_api_response(
 	if let Some(ref tc) = tool_calls {
 		shared::set_response_tool_calls(&mut response_json, tc, None);
 	}
-	// A stateless caller (`store: false`) holds the conversation itself and must
-	// replay these items as returned.
-	if request_body["store"] == false {
+	// Stateless callers replay these items. Stateful callers also need custom
+	// call metadata to type continuation results after the tool list changes.
+	let has_custom_call = api_response
+		.output
+		.iter()
+		.any(|item| item.output_type == "custom_tool_call");
+	if request_body["store"] == false || has_custom_call {
 		response_json["output_items"] = serde_json::json!({
 			"provider": provider_name,
 			"items": response_json["output"].clone(),

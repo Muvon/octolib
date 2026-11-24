@@ -99,12 +99,14 @@ fn rich_params() -> ChatCompletionParams {
 				description: "Save result".to_owned(),
 				parameters: json!({"type":"object", "properties":{"answer":{"type":"integer"}}}),
 				cache_control: None,
+				freeform: None,
 			},
 			FunctionDefinition {
 				name: "lookup".to_owned(),
 				description: "Look up result".to_owned(),
 				parameters: json!({"type":"object", "properties":{"q":{"type":"string"}}}),
 				cache_control: Some(json!({"type":"ephemeral"})),
+				freeform: None,
 			},
 		])
 		.with_structured_output(

@@ -196,6 +196,7 @@ async fn passthrough_when_client_already_supplies_tools() {
 		description: String::new(),
 		parameters: serde_json::json!({}),
 		cache_control: None,
+		freeform: None,
 	}]);
 	let response = chat_completion_enforced(&provider, params).await.unwrap();
 	assert_eq!(response.tool_calls.unwrap()[0].name, "client_tool");
@@ -210,6 +211,7 @@ async fn client_tools_invalid_final_fails_without_a_second_call() {
 		description: String::new(),
 		parameters: serde_json::json!({}),
 		cache_control: None,
+		freeform: None,
 	}]);
 	let err = chat_completion_enforced(&provider, params).await.unwrap_err();
 	assert!(err.to_string().contains("no parseable structured output"));

@@ -488,6 +488,7 @@ fn strict_schema_params(model: &str) -> ChatCompletionParams {
 		description: "Read verification evidence".to_string(),
 		parameters: serde_json::json!({"type": "object", "properties": {}}),
 		cache_control: None,
+		freeform: None,
 	}]);
 	params.reasoning_effort = Some(ReasoningEffort::Low);
 	params

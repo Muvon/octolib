@@ -1259,6 +1259,7 @@ fn thread_params(messages: &[Message]) -> ChatCompletionParams {
 		description: "Look something up".to_string(),
 		parameters: serde_json::json!({"type": "object", "properties": {}}),
 		cache_control: None,
+		freeform: None,
 	};
 	let mut params = ChatCompletionParams::new(messages, "claude-opus-5-5", 100).with_api_key("mock-key".to_owned());
 	params.tools = Some(vec![tool]);

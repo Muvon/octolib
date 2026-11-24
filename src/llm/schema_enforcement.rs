@@ -99,6 +99,7 @@ async fn force_schema(
         description: "Return the final answer as arguments to this function. Arguments MUST conform exactly to the provided JSON schema.".to_string(),
         parameters: schema.clone(),
         cache_control: None,
+        freeform: None,
     }]);
 	params.response_format = None;
 	params.messages.push(Message::system(&format!(

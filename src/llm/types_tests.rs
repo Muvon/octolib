@@ -80,6 +80,7 @@ fn test_chat_completion_params() {
 		description: "A test function".to_string(),
 		parameters: serde_json::json!({"type": "object", "properties": {}}),
 		cache_control: None,
+		freeform: None,
 	}];
 	let params_with_tools = params_with_retries.with_tools(tools.clone());
 	assert!(params_with_tools.tools.is_some());
@@ -192,6 +193,7 @@ fn test_function_definition() {
 			"required": ["param1"]
 		}),
 		cache_control: None,
+		freeform: None,
 	};
 
 	assert_eq!(func_def.name, "test_function");
@@ -199,6 +201,10 @@ fn test_function_definition() {
 	assert_eq!(func_def.parameters["type"], "object");
 	assert!(func_def.parameters["properties"]["param1"].is_object());
 	assert!(func_def.cache_control.is_none());
+	let serialized = serde_json::to_value(&func_def).unwrap();
+	assert!(serialized.get("freeform").is_none());
+	let restored: FunctionDefinition = serde_json::from_value(serialized).unwrap();
+	assert!(restored.freeform.is_none());
 
 	// Test with cache control
 	let func_def_with_cache = FunctionDefinition {
@@ -209,6 +215,7 @@ fn test_function_definition() {
 			"type": "ephemeral",
 			"ttl": "5m"
 		})),
+		freeform: None,
 	};
 
 	assert!(func_def_with_cache.cache_control.is_some());

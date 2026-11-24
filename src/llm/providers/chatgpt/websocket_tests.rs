@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::*;
+use crate::llm::types::{ChatGptTransport, Message as ChatMessage};
 use futures_util::{SinkExt, StreamExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_tungstenite::{accept_async, tungstenite::Message as ServerMessage, WebSocketStream};
@@ -116,27 +117,44 @@ async fn connection_reuses_socket_and_sends_only_new_input() {
 }
 
 #[test]
-fn continuation_matches_encrypted_reasoning_and_namespaced_tool_calls() {
-	let full = full_request(json!([{"role":"user", "content":"read"}]));
+fn continuation_matches_encrypted_reasoning_and_both_tool_call_types() {
+	let user = ChatMessage::user("read");
+	let request = |messages: &[ChatMessage]| {
+		let params =
+			ChatCompletionParams::new(messages, "gpt-6.1-sol", 0).with_chatgpt_transport(ChatGptTransport::WebSocket);
+		super::super::build_request(&params).unwrap()
+	};
+	let full = request(std::slice::from_ref(&user));
+	let custom = json!({"type":"custom_tool_call", "id":"ctc_2", "call_id":"call_2", "name":"code", "input":"run()"});
 	let response = json!({"id":"resp_1", "output":[
 		{"type":"reasoning", "encrypted_content":"enc"},
-		{"type":"function_call", "call_id":"call_1", "name":"read", "arguments":"{}"}
+		{"type":"function_call", "call_id":"call_1", "name":"read", "arguments":"{}"},
+		custom.clone()
 	]});
 	let previous = Continuation::from_response(&full, &response).unwrap();
-	let mut next = full.clone();
-	next["input"].as_array_mut().unwrap().extend(
-		response["output"]
-			.as_array()
-			.unwrap()
-			.iter()
-			.cloned()
-			.map(normalize_input_item),
-	);
-	let result = json!({"type":"function_call_output", "call_id":"call_1", "output":"file"});
-	next["input"].as_array_mut().unwrap().push(result.clone());
+	let mut assistant = ChatMessage::assistant("");
+	assistant.provider_items = Some(json!({"provider":"chatgpt", "items":response["output"]}));
+	assistant.tool_calls = Some(json!([
+		{"id":"call_1", "name":"read", "arguments":{}},
+		{"id":"call_2", "name":"code", "arguments":{"script":"run()"}}
+	]));
+	let mut custom_result = ChatMessage::tool("done", "call_2", "code");
+	custom_result.name = None;
+	let mut next = request(&[
+		user,
+		assistant,
+		ChatMessage::tool("file", "call_1", "read"),
+		custom_result,
+	]);
+	assert_eq!(next["input"][2]["namespace"], super::super::TOOL_NAMESPACE);
+	assert_eq!(next["input"][3], custom);
+	let results = [
+		json!({"type":"function_call_output", "call_id":"call_1", "output":"file"}),
+		json!({"type":"custom_tool_call_output", "call_id":"call_2", "output":"done"}),
+	];
 	let delta = previous.request(&next).unwrap();
 	assert_eq!(delta["previous_response_id"], "resp_1");
-	assert_eq!(delta["input"], json!([result]));
+	assert_eq!(delta["input"], json!(results));
 	next["input"][1]["encrypted_content"] = json!("different");
 	assert_eq!(previous.request(&next).unwrap(), next);
 	assert_eq!(previous.request(&full).unwrap(), full);

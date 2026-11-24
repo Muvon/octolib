@@ -50,9 +50,10 @@ fn request_follows_the_plan_route_contract() {
 		description: "Read a file".to_string(),
 		parameters: json!({"type": "object"}),
 		cache_control: None,
+		freeform: None,
 	}]);
 
-	let request = build_request(&params);
+	let request = build_request(&params).unwrap();
 
 	assert_eq!(request["store"], false);
 	assert_eq!(params.chatgpt_transport, crate::ChatGptTransport::Http);
@@ -83,7 +84,7 @@ fn cache_key_names_the_session_so_the_plan_route_keeps_it() {
 	let params = ChatCompletionParams::new(&messages, "gpt-6.1-sol", 1000);
 	assert!(!request_headers(&params).unwrap().contains_key(SESSION_HEADER));
 	let params = params.with_prompt_cache_key("s-1");
-	assert_eq!(build_request(&params)["prompt_cache_key"], "s-1");
+	assert_eq!(build_request(&params).unwrap()["prompt_cache_key"], "s-1");
 	assert_eq!(request_headers(&params).unwrap()[SESSION_HEADER], "s-1");
 	let caller = HashMap::from([("Session-Id".to_string(), "caller".to_string())]);
 	assert_eq!(
@@ -116,7 +117,66 @@ fn captured_items_replay_verbatim_and_in_order() {
 	assistant.content = "flattened text is not replayed".to_string();
 	assistant.provider_items = captured(items.clone());
 
-	assert_eq!(build_input(&[assistant]), items.as_array().unwrap().clone());
+	assert_eq!(
+		build_input(&[assistant], None).unwrap(),
+		items.as_array().unwrap().clone()
+	);
+}
+
+#[test]
+fn custom_calls_round_trip_through_the_chatgpt_namespace_and_captured_history() {
+	let input = "const value = \"quoted\";\n\tvalue";
+	let params = ChatCompletionParams::new(&[Message::user("run a script")], "gpt-6.1-sol", 1000).with_tools(vec![
+		FunctionDefinition {
+			name: "code".to_owned(),
+			description: "Run a script".to_owned(),
+			parameters: json!({"type": "object", "properties": {"script": {"type": "string"}}}),
+			cache_control: None,
+			freeform: Some("script".to_owned()),
+		},
+	]);
+	let request = build_request(&params).unwrap();
+	assert_eq!(request["tools"][0]["type"], "namespace");
+	assert_eq!(request["tools"][0]["name"], TOOL_NAMESPACE);
+	assert_eq!(request["tools"][0]["tools"][0]["type"], "custom");
+	assert_eq!(request["tools"][0]["tools"][0]["name"], "code");
+	assert_eq!(request["tools"][0]["tools"][0]["format"]["syntax"], "lark");
+
+	let item = json!({
+		"type": "custom_tool_call", "id": "ctc_1", "status": "completed",
+		"call_id": "call_code", "name": "code", "input": input
+	});
+	let response = openai::parse_responses_api_response(
+		request,
+		json!({
+			"output": [item.clone()],
+			"usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
+		}),
+		"chatgpt",
+		0,
+		HashMap::new(),
+		params.tools.as_deref(),
+	)
+	.unwrap();
+	assert_eq!(response.tool_calls.unwrap()[0].arguments, json!({"script": input}));
+
+	let mut assistant = Message::assistant("");
+	assistant.tool_calls = Some(response.exchange.response["tool_calls"].clone());
+	assistant.provider_items = Some(response.exchange.response["output_items"].clone());
+	let mut tool_result = Message::tool("done", "call_code", "code");
+	tool_result.name = None;
+	let mut messages = [assistant, tool_result];
+	let result = json!({"type": "custom_tool_call_output", "call_id": "call_code", "output": "done"});
+	assert_eq!(build_input(&messages, None).unwrap(), vec![item, result.clone()]);
+
+	messages[0].provider_items = None;
+	assert_eq!(
+		build_input(&messages, params.tools.as_deref()).unwrap(),
+		vec![
+			json!({"type": "custom_tool_call", "call_id": "call_code", "name": "code", "input": input}),
+			result,
+		],
+	);
 }
 
 #[test]
@@ -138,19 +198,20 @@ fn text_only_response_round_trips_through_captured_items() {
 		"chatgpt",
 		1,
 		HashMap::new(),
+		None,
 	)
 	.unwrap();
 	let mut assistant = Message::assistant(&response.content);
 	assistant.provider_items = Some(response.exchange.response["output_items"].clone());
 
-	assert_eq!(build_input(&[assistant]), expected);
+	assert_eq!(build_input(&[assistant], None).unwrap(), expected);
 }
 
 #[test]
 fn captured_items_that_do_not_match_the_message_are_not_replayed() {
 	let mut assistant = assistant_with_call(None);
 	assistant.content = "working".to_string();
-	let fallback = build_input(std::slice::from_ref(&assistant));
+	let fallback = build_input(std::slice::from_ref(&assistant), None).unwrap();
 	assert_eq!(
 		fallback[0],
 		json!({"role": "assistant", "content": "working"}),
@@ -167,7 +228,7 @@ fn captured_items_that_do_not_match_the_message_are_not_replayed() {
 		captured(json!([call.clone(), call])),
 	] {
 		assistant.provider_items = provider_items;
-		assert_eq!(build_input(std::slice::from_ref(&assistant)), fallback);
+		assert_eq!(build_input(std::slice::from_ref(&assistant), None).unwrap(), fallback);
 	}
 }
 // The plan route caches by rendered prefix: a later request of the same session
@@ -193,8 +254,9 @@ fn a_grown_transcript_extends_the_previous_request_unchanged() {
 			description: "Read a file".to_string(),
 			parameters: json!({"type": "object", "properties": {"path": {"type": "string"}}}),
 			cache_control: None,
+			freeform: None,
 		}]);
-		build_request(&params)
+		build_request(&params).unwrap()
 	};
 
 	let first = request_at(&messages);
@@ -244,6 +306,7 @@ async fn stream_folds_into_a_response_that_keeps_reasoning_for_replay() {
 		"chatgpt",
 		1,
 		HashMap::new(),
+		None,
 	)
 	.unwrap();
 
@@ -258,7 +321,7 @@ async fn stream_folds_into_a_response_that_keeps_reasoning_for_replay() {
 	let mut assistant = Message::assistant("");
 	assistant.tool_calls = Some(response.exchange.response["tool_calls"].clone());
 	assistant.provider_items = Some(response.exchange.response["output_items"].clone());
-	let input = build_input(&[assistant]);
+	let input = build_input(&[assistant], None).unwrap();
 	assert_eq!(input[0]["encrypted_content"], "enc");
 	assert_eq!(input[1]["call_id"], "call_1");
 	assert_eq!(input[1]["namespace"], TOOL_NAMESPACE);
@@ -341,7 +404,7 @@ async fn plan_usage_errors_lead_with_guidance_and_keep_the_raw_error() {
 
 #[test]
 fn tool_images_reach_the_chatgpt_plan_route() {
-	let input = build_input(&[shared::tests::tool_image_message("caption")]);
+	let input = build_input(&[shared::tests::tool_image_message("caption")], None).unwrap();
 	assert_eq!(input.len(), 1);
 	assert_eq!(input[0]["type"], "function_call_output");
 	assert_eq!(input[0]["call_id"], "call_image");
@@ -353,16 +416,16 @@ fn tool_images_reach_the_chatgpt_plan_route() {
 fn websocket_selection_is_explicit_and_http_can_be_selected_again() {
 	let params = ChatCompletionParams::new(&[Message::user("hello")], "gpt-6.1-sol", 0);
 	assert_eq!(params.chatgpt_transport, crate::ChatGptTransport::Http);
-	let http = build_request(&params);
+	let http = build_request(&params).unwrap();
 	let params = params.with_chatgpt_transport(crate::ChatGptTransport::WebSocket);
-	let ws = build_request(&params);
+	let ws = build_request(&params).unwrap();
 	assert_eq!(ws["type"], "response.create");
 	assert!(ws.get("stream").is_none());
 	for field in ["model", "input", "store", "include"] {
 		assert_eq!(http[field], ws[field]);
 	}
 	let params = params.with_chatgpt_transport(crate::ChatGptTransport::Http);
-	assert_eq!(build_request(&params), http);
+	assert_eq!(build_request(&params).unwrap(), http);
 }
 
 async fn merge_stream(body: &str) -> Result<Value> {

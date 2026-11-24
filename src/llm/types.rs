@@ -601,6 +601,11 @@ pub struct FunctionDefinition {
 	/// Cache control marker for Anthropic (optional)
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub cache_control: Option<serde_json::Value>,
+	/// Name of the string parameter that carries the tool's whole input as raw text.
+	/// Providers that support freeform tools send the tool as freeform text and pass
+	/// the text in this parameter. Other providers send the JSON function unchanged.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub freeform: Option<String>,
 }
 
 /// Provider-agnostic tool selection policy.

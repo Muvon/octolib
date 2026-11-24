@@ -292,7 +292,7 @@ fn test_messages_to_input() {
 		},
 	];
 
-	let input = messages_to_input(&messages, None, false);
+	let input = messages_to_input(&messages, None, false, None, None).unwrap();
 	assert_eq!(input.len(), 2);
 
 	// First message - content is plain string
@@ -321,7 +321,7 @@ fn test_messages_to_input_with_images() {
 		Message::user("What is in this image?").with_images(vec![image_attachment]),
 	];
 
-	let input = messages_to_input(&messages, None, false);
+	let input = messages_to_input(&messages, None, false, None, None).unwrap();
 	assert_eq!(input.len(), 2);
 
 	// System message remains a plain string.
@@ -353,7 +353,7 @@ fn test_messages_to_input_with_image_url_and_cache() {
 		.with_images(vec![image_attachment])
 		.with_cache_marker()];
 
-	let input = messages_to_input(&messages, None, true);
+	let input = messages_to_input(&messages, None, true, None, None).unwrap();
 	assert_eq!(input.len(), 1);
 
 	let content = &input[0]["content"];
@@ -383,7 +383,7 @@ fn test_ollama_compaction_tail_rebases_and_keeps_summary() {
 	let previous_id = resolve_previous_response_id(&messages, None);
 	assert_eq!(previous_id, None, "Ollama ids must start a fresh OpenAI chain");
 
-	let input = messages_to_input(&messages, previous_id.as_deref(), false);
+	let input = messages_to_input(&messages, previous_id.as_deref(), false, None, None).unwrap();
 	assert_eq!(input.len(), 4);
 	assert_eq!(input[2]["role"], "assistant");
 	assert_eq!(input[2]["content"], "Compacted Ollama conversation");
@@ -400,7 +400,7 @@ fn test_latest_openai_response_id_continues_exact_turn() {
 	let previous_id = resolve_previous_response_id(&messages, None);
 	assert_eq!(previous_id.as_deref(), Some("resp_latest"));
 
-	let input = messages_to_input(&messages, previous_id.as_deref(), false);
+	let input = messages_to_input(&messages, previous_id.as_deref(), false, None, None).unwrap();
 	assert_eq!(input.len(), 1);
 	assert_eq!(input[0]["role"], "user");
 	assert_eq!(input[0]["content"], "Follow-up");
@@ -412,7 +412,7 @@ fn test_invalid_explicit_previous_id_forces_rebase() {
 	let previous_id = resolve_previous_response_id(&messages, Some("chatcmpl-18".to_string()));
 
 	assert_eq!(previous_id, None);
-	let input = messages_to_input(&messages, previous_id.as_deref(), false);
+	let input = messages_to_input(&messages, previous_id.as_deref(), false, None, None).unwrap();
 	assert_eq!(input.len(), 1);
 	assert_eq!(input[0]["content"], "Fresh input");
 }
@@ -424,7 +424,7 @@ fn test_gpt_5_6_explicit_cache_breakpoint_wire_shape() {
 		Message::user("Variable request"),
 	];
 
-	let input = messages_to_input(&messages, None, true);
+	let input = messages_to_input(&messages, None, true, None, None).unwrap();
 	assert_eq!(count_explicit_cache_breakpoints(&input), 1);
 	assert_eq!(input[0]["content"][0]["type"], "input_text");
 	assert_eq!(input[0]["content"][0]["text"], "Stable instructions");
@@ -443,7 +443,7 @@ fn test_gpt_5_6_cached_assistant_uses_output_text() {
 	summary.name = Some("plan_compression".to_string());
 	summary.cached = true;
 
-	let input = messages_to_input(&[summary], None, true);
+	let input = messages_to_input(&[summary], None, true, None, None).unwrap();
 
 	assert_eq!(input[0]["role"], "assistant");
 	assert_eq!(input[0]["content"][0]["type"], "output_text");
@@ -460,7 +460,7 @@ fn test_explicit_cache_breakpoint_limit() {
 #[test]
 fn test_pre_gpt_5_6_keeps_cached_messages_in_legacy_shape() {
 	let messages = vec![Message::system("Stable instructions").with_cache_marker()];
-	let input = messages_to_input(&messages, None, false);
+	let input = messages_to_input(&messages, None, false, None, None).unwrap();
 
 	assert_eq!(input[0]["content"], "Stable instructions");
 	assert_eq!(count_explicit_cache_breakpoints(&input), 0);
@@ -525,7 +525,7 @@ fn test_messages_to_input_with_tool_response() {
 	];
 
 	// When there are NEW tool responses after assistant, send only those tool outputs
-	let input = messages_to_input(&messages, Some("resp_abc123"), false);
+	let input = messages_to_input(&messages, Some("resp_abc123"), false, None, None).unwrap();
 	assert_eq!(input.len(), 1); // Only the NEW tool response
 
 	// Tool response uses function_call_output format
@@ -536,6 +536,155 @@ fn test_messages_to_input_with_tool_response() {
 		tool_output["output"],
 		"{\"temperature\": \"22C\", \"condition\": \"sunny\"}"
 	);
+}
+
+#[test]
+fn freeform_tools_use_custom_grammar_and_keep_function_tools_unchanged() {
+	let function = FunctionDefinition {
+		name: "view".to_owned(),
+		description: "Read a file".to_owned(),
+		parameters: serde_json::json!({"type": "object"}),
+		cache_control: None,
+		freeform: None,
+	};
+	let custom = FunctionDefinition {
+		name: "code".to_owned(),
+		description: "Run a script".to_owned(),
+		parameters: serde_json::json!({"type": "object", "properties": {"script": {"type": "string"}}}),
+		cache_control: None,
+		freeform: Some("script".to_owned()),
+	};
+	assert_eq!(
+		serde_json::json!(function_tools(Some(&[function, custom])).unwrap()),
+		serde_json::json!([
+			{
+				"type": "custom",
+				"name": "code",
+				"description": "Run a script",
+				"format": {
+					"type": "grammar",
+					"syntax": "lark",
+					"definition": "start: plain_source\nplain_source: SOURCE\nSOURCE: /[\\s\\S]+/\n"
+				}
+			},
+			{
+				"type": "function",
+				"name": "view",
+				"description": "Read a file",
+				"strict": false,
+				"parameters": {"type": "object"}
+			}
+		])
+	);
+}
+
+#[test]
+fn freeform_history_rebuilds_calls_and_sends_only_results_on_continuation() {
+	let input = "const value = \"quoted\";\n\tvalue";
+	let mut assistant = Message::assistant("");
+	assistant.id = Some("resp_script".to_owned());
+	assistant.tool_calls = Some(serde_json::json!([
+		{"id": "call_code", "name": "code", "arguments": {"script": input}},
+		{"id": "call_view", "name": "code", "arguments": {"path": "a.rs"}},
+		{"id": "call_number", "name": "code", "arguments": {"script": 42}}
+	]));
+	let mut messages = [
+		assistant,
+		Message::tool("done", "call_code", "code"),
+		Message::tool("file", "call_view", "code"),
+		Message::tool("number", "call_number", "code"),
+	];
+	messages[1].name = None;
+	let tools = [FunctionDefinition {
+		name: "code".to_owned(),
+		description: "Run a script".to_owned(),
+		parameters: serde_json::json!({"type": "object", "properties": {"script": {"type": "string"}}}),
+		cache_control: None,
+		freeform: Some("script".to_owned()),
+	}];
+	let full = messages_to_input(&messages, None, false, Some(&tools), None).unwrap();
+	assert_eq!(
+		serde_json::json!(full),
+		serde_json::json!([
+			{"type": "custom_tool_call", "call_id": "call_code", "name": "code", "input": input},
+			{"type": "function_call", "call_id": "call_view", "name": "code", "arguments": "{\"path\":\"a.rs\"}"},
+			{"type": "function_call", "call_id": "call_number", "name": "code", "arguments": "{\"script\":42}"},
+			{"type": "custom_tool_call_output", "call_id": "call_code", "output": "done"},
+			{"type": "function_call_output", "call_id": "call_view", "output": "file"},
+			{"type": "function_call_output", "call_id": "call_number", "output": "number"}
+		])
+	);
+	let continued = messages_to_input(&messages, Some("resp_script"), false, Some(&tools), None).unwrap();
+	assert_eq!(continued.as_slice(), &full[3..]);
+}
+
+#[test]
+fn captured_calls_type_continuation_results_and_rebuilt_history() {
+	let tools = [FunctionDefinition {
+		name: "code".to_owned(),
+		description: "Run a script".to_owned(),
+		parameters: serde_json::json!({"type": "object", "properties": {"script": {"type": "string"}}}),
+		cache_control: None,
+		freeform: Some("script".to_owned()),
+	}];
+	let response = parse_responses_api_response(
+		serde_json::json!({"model": "gpt-4o"}),
+		serde_json::json!({
+			"id": "resp_script",
+			"output": [
+				{"type": "custom_tool_call", "id": "ctc_1", "call_id": "call_code", "name": "code", "input": "run()"},
+				{"type": "function_call", "call_id": "call_legacy", "name": "code", "arguments": "{\"script\":\"legacy\"}"}
+			],
+			"usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
+		}),
+		"openai",
+		0,
+		HashMap::new(),
+		Some(&tools),
+	)
+	.unwrap();
+	let mut assistant = Message::assistant("");
+	assistant.id = response.id;
+	assistant.tool_calls = Some(response.exchange.response["tool_calls"].clone());
+	assistant.provider_items = response.exchange.response.get("output_items").cloned();
+	let mut unnamed_result = Message::tool("done", "call_code", "code");
+	unnamed_result.name = None;
+	let messages = [
+		assistant,
+		unnamed_result,
+		Message::tool("legacy", "call_legacy", "code"),
+	];
+	let results = vec![
+		serde_json::json!({"type": "custom_tool_call_output", "call_id": "call_code", "output": "done"}),
+		serde_json::json!({"type": "function_call_output", "call_id": "call_legacy", "output": "legacy"}),
+	];
+	assert_eq!(
+		messages_to_input(&messages, Some("resp_script"), false, None, None).unwrap(),
+		results,
+	);
+
+	for tools in [None, Some(tools.as_slice())] {
+		let input = messages_to_input(&messages, None, false, tools, Some("chatgpt")).unwrap();
+		assert_eq!(
+			input[0],
+			serde_json::json!({"type": "custom_tool_call", "call_id": "call_code", "name": "code", "input": "run()"}),
+		);
+		assert_eq!(input[1]["type"], "function_call");
+		assert_eq!(&input[2..], results.as_slice());
+	}
+}
+
+#[test]
+fn continuation_rejects_a_captured_custom_call_without_its_call_id() {
+	let mut assistant = Message::assistant("");
+	assistant.id = Some("resp_script".to_owned());
+	assistant.provider_items = Some(serde_json::json!({
+		"provider": "chatgpt",
+		"items": [{"type": "custom_tool_call", "name": "code", "input": "run()"}]
+	}));
+	let messages = [assistant, Message::user("continue")];
+	let error = messages_to_input(&messages, Some("resp_script"), false, None, None).unwrap_err();
+	assert_eq!(error.to_string(), "Captured custom_tool_call is missing call_id");
 }
 
 #[test]
@@ -627,7 +776,7 @@ fn test_messages_to_input_continuation_without_tools() {
 	];
 
 	// Should send only the NEW user message, NOT the old tool result
-	let input = messages_to_input(&messages, Some("resp_second"), false);
+	let input = messages_to_input(&messages, Some("resp_second"), false, None, None).unwrap();
 	assert_eq!(input.len(), 1);
 
 	// Should be the new user message
@@ -710,7 +859,7 @@ fn test_messages_to_input_tool_result_then_user_after_cancel() {
 		},
 	];
 
-	let input = messages_to_input(&messages, Some("resp_x"), false);
+	let input = messages_to_input(&messages, Some("resp_x"), false, None, None).unwrap();
 	assert_eq!(input.len(), 2, "tool_result and follow-up user must both be sent");
 	assert_eq!(input[0]["type"], "function_call_output");
 	assert_eq!(input[0]["call_id"], "call_w");
@@ -1139,7 +1288,7 @@ fn tool_images_use_responses_output_blocks_in_replay_and_continuation() {
 	for text in ["caption", ""] {
 		let message = shared::tests::tool_image_message(text);
 		for previous_id in [None, Some("resp_previous")] {
-			let input = messages_to_input(std::slice::from_ref(&message), previous_id, false);
+			let input = messages_to_input(std::slice::from_ref(&message), previous_id, false, None, None).unwrap();
 			assert_eq!(input.len(), 1);
 			assert_eq!(input[0]["type"], "function_call_output");
 			assert_eq!(input[0]["call_id"], "call_image");
@@ -1149,7 +1298,7 @@ fn tool_images_use_responses_output_blocks_in_replay_and_continuation() {
 		}
 	}
 	let text = Message::tool("body", "call_text", "view").with_cache_marker();
-	let input = messages_to_input(&[text], None, true);
+	let input = messages_to_input(&[text], None, true, None, None).unwrap();
 	assert_eq!(input[0]["output"], "body");
 }
 

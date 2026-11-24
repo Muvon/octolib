@@ -36,7 +36,7 @@ fn message_outputs_join_with_newlines_and_set_content() {
 	});
 
 	let parsed =
-		parse_responses_api_response(json!({"model": "gpt-4o"}), response, "openai", 0, HashMap::new()).unwrap();
+		parse_responses_api_response(json!({"model": "gpt-4o"}), response, "openai", 0, HashMap::new(), None).unwrap();
 
 	assert_eq!(parsed.content, "hello\nworld");
 	assert!(parsed.tool_calls.is_none());
@@ -55,7 +55,7 @@ fn non_text_content_items_are_ignored() {
 	});
 
 	let parsed =
-		parse_responses_api_response(json!({"model": "gpt-4o"}), response, "openai", 0, HashMap::new()).unwrap();
+		parse_responses_api_response(json!({"model": "gpt-4o"}), response, "openai", 0, HashMap::new(), None).unwrap();
 
 	assert_eq!(parsed.content, "");
 }
@@ -71,7 +71,7 @@ fn unknown_output_types_are_skipped() {
 	});
 
 	let parsed =
-		parse_responses_api_response(json!({"model": "gpt-4o"}), response, "openai", 0, HashMap::new()).unwrap();
+		parse_responses_api_response(json!({"model": "gpt-4o"}), response, "openai", 0, HashMap::new(), None).unwrap();
 
 	assert_eq!(parsed.content, "ok");
 }
@@ -87,7 +87,7 @@ fn function_call_arguments_parse_from_string_and_object_forms() {
 	});
 
 	let parsed =
-		parse_responses_api_response(json!({"model": "gpt-4o"}), response, "openai", 0, HashMap::new()).unwrap();
+		parse_responses_api_response(json!({"model": "gpt-4o"}), response, "openai", 0, HashMap::new(), None).unwrap();
 
 	let calls = parsed.tool_calls.expect("tool calls parsed");
 	assert_eq!(calls.len(), 2, "parallel tool calls must all be kept");
@@ -107,7 +107,7 @@ fn malformed_string_arguments_fall_back_to_empty_object() {
 	});
 
 	let parsed =
-		parse_responses_api_response(json!({"model": "gpt-4o"}), response, "openai", 0, HashMap::new()).unwrap();
+		parse_responses_api_response(json!({"model": "gpt-4o"}), response, "openai", 0, HashMap::new(), None).unwrap();
 
 	let calls = parsed.tool_calls.expect("tool calls parsed");
 	assert_eq!(calls[0].arguments, json!({}));
@@ -123,7 +123,7 @@ fn function_call_missing_fields_is_dropped() {
 	});
 
 	let parsed =
-		parse_responses_api_response(json!({"model": "gpt-4o"}), response, "openai", 0, HashMap::new()).unwrap();
+		parse_responses_api_response(json!({"model": "gpt-4o"}), response, "openai", 0, HashMap::new(), None).unwrap();
 
 	assert!(parsed.tool_calls.is_none());
 }
@@ -144,7 +144,7 @@ fn reasoning_output_builds_a_thinking_block_with_reasoning_tokens() {
 	});
 
 	let parsed =
-		parse_responses_api_response(json!({"model": "gpt-4o"}), response, "openai", 0, HashMap::new()).unwrap();
+		parse_responses_api_response(json!({"model": "gpt-4o"}), response, "openai", 0, HashMap::new(), None).unwrap();
 
 	let thinking = parsed.thinking.expect("thinking block present");
 	assert_eq!(thinking.content, "thinking hard");
@@ -169,7 +169,7 @@ fn usage_splits_output_and_reports_clean_input_without_cache_tokens() {
 	});
 
 	let parsed =
-		parse_responses_api_response(json!({"model": "gpt-4o"}), response, "openai", 0, HashMap::new()).unwrap();
+		parse_responses_api_response(json!({"model": "gpt-4o"}), response, "openai", 0, HashMap::new(), None).unwrap();
 
 	let usage = parsed.exchange.usage.expect("usage present");
 	assert_eq!(usage.input_tokens, 50, "clean input excludes cache read+write");
@@ -187,7 +187,7 @@ fn plain_usage_costs_without_cache_and_keeps_full_input() {
 	});
 
 	let parsed =
-		parse_responses_api_response(json!({"model": "gpt-4o"}), response, "openai", 0, HashMap::new()).unwrap();
+		parse_responses_api_response(json!({"model": "gpt-4o"}), response, "openai", 0, HashMap::new(), None).unwrap();
 
 	let usage = parsed.exchange.usage.expect("usage present");
 	assert_eq!(usage.input_tokens, 100);
@@ -203,7 +203,7 @@ fn missing_model_in_request_body_leaves_cost_unset() {
 		"usage": usage_json(10, 5, 15)
 	});
 
-	let parsed = parse_responses_api_response(json!({}), response, "openai", 0, HashMap::new()).unwrap();
+	let parsed = parse_responses_api_response(json!({}), response, "openai", 0, HashMap::new(), None).unwrap();
 
 	let usage = parsed.exchange.usage.expect("usage present");
 	assert_eq!(usage.cost, None);
@@ -219,7 +219,8 @@ fn rate_limit_headers_are_attached_to_the_exchange() {
 	headers.insert("requests_limit".to_string(), "100".to_string());
 	headers.insert("tokens_remaining".to_string(), "9999".to_string());
 
-	let parsed = parse_responses_api_response(json!({"model": "gpt-4o"}), response, "openai", 42, headers).unwrap();
+	let parsed =
+		parse_responses_api_response(json!({"model": "gpt-4o"}), response, "openai", 42, headers, None).unwrap();
 
 	assert_eq!(parsed.exchange.provider, "openai");
 	let headers = parsed
@@ -233,6 +234,72 @@ fn rate_limit_headers_are_attached_to_the_exchange() {
 }
 
 #[test]
+fn custom_calls_map_raw_input_to_the_declared_parameter() {
+	let input = "const value = \"quoted\";\n\tvalue";
+	let response = json!({
+		"output": [
+			{"type": "function_call", "call_id": "call_view", "name": "view", "arguments": "{}"},
+			{"type": "custom_tool_call", "id": "ctc_1", "status": "completed", "call_id": "call_code", "name": "code", "input": input},
+			{"type": "function_call", "call_id": "call_read", "name": "view", "arguments": "{}"}
+		],
+		"usage": usage_json(10, 5, 15)
+	});
+	let tools = [FunctionDefinition {
+		name: "code".to_owned(),
+		description: "Run a script".to_owned(),
+		parameters: json!({"type": "object", "properties": {"script": {"type": "string"}}}),
+		cache_control: None,
+		freeform: Some("script".to_owned()),
+	}];
+	let parsed = parse_responses_api_response(
+		json!({"model": "gpt-4o"}),
+		response,
+		"openai",
+		0,
+		HashMap::new(),
+		Some(&tools),
+	)
+	.unwrap();
+	let calls = parsed.tool_calls.unwrap();
+	assert_eq!(calls.len(), 3);
+	assert_eq!(calls[0].id, "call_view");
+	assert_eq!(calls[1].id, "call_code");
+	assert_eq!(calls[1].name, "code");
+	assert_eq!(calls[1].arguments, json!({"script": input}));
+	assert_eq!(calls[2].id, "call_read");
+}
+
+#[test]
+fn custom_calls_require_a_declared_freeform_tool() {
+	let function = FunctionDefinition {
+		name: "view".to_owned(),
+		description: "Read a file".to_owned(),
+		parameters: json!({"type": "object"}),
+		cache_control: None,
+		freeform: None,
+	};
+	for name in ["unknown", "view"] {
+		let response = json!({
+			"output": [{"type": "custom_tool_call", "call_id": "call_1", "name": name, "input": "a.rs"}],
+			"usage": usage_json(10, 5, 15)
+		});
+		let error = parse_responses_api_response(
+			json!({"model": "gpt-4o"}),
+			response,
+			"openai",
+			0,
+			HashMap::new(),
+			Some(std::slice::from_ref(&function)),
+		)
+		.unwrap_err();
+		assert_eq!(
+			error.to_string(),
+			format!("Responses custom_tool_call references undeclared freeform tool '{name}'")
+		);
+	}
+}
+
+#[test]
 fn stateless_responses_keep_their_output_items_tagged_with_the_provider() {
 	let response = json!({
 		"output": [
@@ -243,8 +310,15 @@ fn stateless_responses_keep_their_output_items_tagged_with_the_provider() {
 		],
 		"usage": usage_json(10, 5, 15)
 	});
-	let stateful =
-		parse_responses_api_response(json!({"model": "gpt-5"}), response.clone(), "openai", 0, HashMap::new()).unwrap();
+	let stateful = parse_responses_api_response(
+		json!({"model": "gpt-5"}),
+		response.clone(),
+		"openai",
+		0,
+		HashMap::new(),
+		None,
+	)
+	.unwrap();
 	assert!(
 		stateful.exchange.response.get("output_items").is_none(),
 		"the server holds stateful history"
@@ -257,6 +331,7 @@ fn stateless_responses_keep_their_output_items_tagged_with_the_provider() {
 		"chatgpt",
 		0,
 		HashMap::new(),
+		None,
 	)
 	.unwrap();
 
@@ -284,7 +359,7 @@ fn structured_output_is_parsed_from_message_text() {
 	});
 
 	let parsed =
-		parse_responses_api_response(json!({"model": "gpt-4o"}), response, "openai", 0, HashMap::new()).unwrap();
+		parse_responses_api_response(json!({"model": "gpt-4o"}), response, "openai", 0, HashMap::new(), None).unwrap();
 
 	assert_eq!(parsed.structured_output, Some(json!({"answer": 42})));
 }

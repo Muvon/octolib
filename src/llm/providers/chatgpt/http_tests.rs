@@ -24,7 +24,7 @@ fn cache_key_names_the_session_so_the_plan_route_keeps_it() {
 	assert_eq!(request_headers_with_store(&params, &mut turn_states), None);
 
 	let params = params.with_prompt_cache_key("s-1");
-	assert_eq!(build_request(&params)["prompt_cache_key"], "s-1");
+	assert_eq!(build_request(&params).unwrap()["prompt_cache_key"], "s-1");
 	assert_eq!(
 		request_headers_with_store(&params, &mut turn_states)
 			.unwrap()

@@ -411,7 +411,7 @@ async fn default_transport_posts_responses_and_reads_authenticated_sse() {
 	});
 	let params = ChatCompletionParams::new(&[Message::system("rules"), Message::user("hello")], "gpt-6.1-sol", 0);
 	assert_eq!(params.chatgpt_transport, ChatGptTransport::Http);
-	let body = super::super::build_request(&params);
+	let body = super::super::build_request(&params).unwrap();
 	let captured = send_authenticated_at(
 		&path,
 		TOKEN_URL,

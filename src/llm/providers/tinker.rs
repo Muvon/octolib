@@ -101,9 +101,14 @@ const PRICING: &[PricingTuple] = &[
 		0.17,
 	),
 	// Inkling family — 256K extended-context variants
+	// Inkling 2 Mini lists $0.15 / $0.015 cached / $0.50 on both its ids (2026-11-24).
+	// Neither Inkling 2 model is on Tinker's serverless tier (Inkling and Inkling-Small
+	// only): their `:sampling-nvfp4` ids answer 400 "Sampling is not supported".
+	("thinkingmachines/inkling-2-mini:peft:262144", 0.15, 0.50, 0.15, 0.015),
 	("thinkingmachines/inkling-2-small:peft:262144", 0.30, 1.00, 0.30, 0.03),
 	("thinkingmachines/inkling-small:peft:262144", 1.16, 2.89, 1.16, 0.232),
 	("thinkingmachines/inkling:peft:262144", 3.74, 9.36, 3.74, 0.748),
+	("thinkingmachines/inkling-2-mini", 0.15, 0.50, 0.15, 0.015),
 	("thinkingmachines/inkling-2-small", 0.30, 1.00, 0.30, 0.03),
 	("thinkingmachines/inkling-small", 0.58, 1.44, 0.58, 0.116),
 	("thinkingmachines/inkling", 1.87, 4.68, 1.87, 0.374),
@@ -198,9 +203,11 @@ const CONTEXTS: &[(&str, usize)] = &[
 	("thinkingmachines/inkling-2-small:peft:262144:sampling-nvfp4", 262_144),
 	("thinkingmachines/inkling-small:peft:262144:sampling-nvfp4", 262_144),
 	("thinkingmachines/inkling:peft:262144:sampling-nvfp4", 262_144),
+	("thinkingmachines/inkling-2-mini:peft:262144", 262_144),
 	("thinkingmachines/inkling-2-small:peft:262144", 262_144),
 	("thinkingmachines/inkling-small:peft:262144", 262_144),
 	("thinkingmachines/inkling:peft:262144", 262_144),
+	("thinkingmachines/inkling-2-mini", 65_536),
 	("thinkingmachines/inkling-2-small", 65_536),
 	("thinkingmachines/inkling-small", 65_536),
 	("thinkingmachines/inkling", 65_536),

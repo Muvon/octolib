@@ -2429,6 +2429,14 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		pricing: pricing(0.03, 0.03, 0.00, 0.00),
 	},
 	ReferenceModelEntry {
+		// Inkling 2 Mini (Nov 20, 2026): open-weights 26.4B / 3.4B-active looped MoE
+		// with image input, 256K context on Tinker, the only host listing it; pricing
+		// from Tinker's models page (2026-11-24). Must precede inkling (substring match).
+		pattern: "inkling-2-mini",
+		capabilities: caps(true, false, false, 262_144),
+		pricing: pricing(0.15, 0.50, 0.00, 0.015),
+	},
+	ReferenceModelEntry {
 		// Inkling 2 Small: 594B / 17B-active MoE with vision, 256K context on
 		// Tinker, the only host listing it; pricing from Tinker's models page
 		// (2026-11-07). Must precede inkling-small and inkling (substring match).

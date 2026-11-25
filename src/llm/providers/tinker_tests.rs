@@ -147,6 +147,18 @@ fn test_pricing_ordering() {
 		assert_eq!(provider.get_max_input_tokens(model), context, "{model}");
 	}
 
+	// Inkling-2-Mini must not be captured by the Inkling pattern either
+	for (model, context) in [
+		("thinkingmachines/Inkling-2-Mini:peft:262144", 262_144),
+		("thinkingmachines/Inkling-2-Mini", 65_536),
+	] {
+		let pricing = provider.get_model_pricing(model).unwrap();
+		assert_eq!(pricing.input_price_per_1m, 0.15, "{model}");
+		assert_eq!(pricing.output_price_per_1m, 0.50, "{model}");
+		assert_eq!(pricing.cache_read_price_per_1m, 0.015, "{model}");
+		assert_eq!(provider.get_max_input_tokens(model), context, "{model}");
+	}
+
 	// `-base` suffix must not be captured by the instruct pattern
 	let base_suffix = provider.get_model_pricing("Qwen/Qwen3.5-9B-Base").unwrap();
 	assert_eq!(base_suffix.input_price_per_1m, 0.66);

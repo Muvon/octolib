@@ -275,12 +275,24 @@ const REFERENCE_MEDIA_MODELS: &[MediaPricingEntry] = &[
 	rule("openrouter", "black-forest-labs/flux.2-klein-4b", |body| {
 		per_image(first_and_extra(body.openrouter_megapixels(), 0.014, 0.001))
 	}),
-	// ── MiniMax (top-resolution pay-as-you-go rates, verified Oct 26, 2026) ──
+	// ── MiniMax (top-resolution pay-as-you-go rates, verified Nov 26, 2026) ──
 	// https://platform.minimax.io/docs/guides/pricing-paygo
+	// H3-Image bills by token (text $2.30, image $1.50 / $3.00, output $3.80 /
+	// $7.60 per 1M) and the native adapter prices the reported counts. The flat
+	// rate is the list page's 1K text-to-image example.
+	entry("minimax", "minimax-h3-image-highspeed", UsageUnit::Images, 0.035_29),
+	entry("minimax", "minimax-h3-image", UsageUnit::Images, 0.021_79),
+	entry("minimax", "minimax-h3-max-turbo", UsageUnit::VideoSeconds, 0.08),
+	entry("minimax", "minimax-h3-mg", UsageUnit::VideoSeconds, 0.12),
+	entry("minimax", "minimax-h3-nc", UsageUnit::VideoSeconds, 0.03),
+	// Speech-to-Text: $0.38 per hour.
+	entry("minimax", "asr-1.0", UsageUnit::AudioSeconds, 0.38 / 3_600.0),
 	entry("minimax", "minimax-h3-max", UsageUnit::VideoSeconds, 0.08),
 	entry("minimax", "minimax-h3-highspeed", UsageUnit::VideoSeconds, 0.06),
 	entry("minimax", "minimax-h3-lite", UsageUnit::VideoSeconds, 0.04),
 	entry("minimax", "minimax-h3", UsageUnit::VideoSeconds, 0.13),
+	// image-01-live shares image-01's per-image rate.
+	entry("minimax", "image-01-live", UsageUnit::Images, 0.0035),
 	entry("minimax", "image-01", UsageUnit::Images, 0.0035),
 	entry("minimax", "speech-2.8-hd", UsageUnit::Characters, 0.0001),
 	entry("minimax", "speech-2.8-turbo", UsageUnit::Characters, 0.00006),

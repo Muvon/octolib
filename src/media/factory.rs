@@ -116,6 +116,7 @@ impl MediaProviderFactory {
 			"cloudflare" => Ok(Box::new(CloudflareMediaProvider::new())),
 			"elevenlabs" => Ok(Box::new(ElevenLabsMediaProvider::new())),
 			"fal" => Ok(Box::new(FalMediaProvider::new())),
+			"minimax" => Ok(Box::new(MinimaxMediaProvider::new())),
 			"openrouter" => Ok(Box::new(OpenRouterMediaProvider::new())),
 			"replicate" => Ok(Box::new(ReplicateMediaProvider::new())),
 			other => Err(MediaError::UnsupportedProvider(other.to_string())),

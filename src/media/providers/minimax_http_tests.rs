@@ -485,6 +485,9 @@ async fn duration_and_resolution_limits_fail_before_http() {
 		("MiniMax-H3", 5.5),
 		("MiniMax-H3", f64::NAN),
 		("MiniMax-H3", f64::INFINITY),
+		("MiniMax-H3-Max-Turbo", 4.0),
+		("MiniMax-H3-MG", 3.0),
+		("MiniMax-H3-NC", 16.0),
 		("MiniMax-H3-Max", 4.0),
 		("MiniMax-H3-Lite", 3.0),
 		("MiniMax-H3-Highspeed", 16.0),
@@ -495,8 +498,10 @@ async fn duration_and_resolution_limits_fail_before_http() {
 		));
 	}
 	for (model, resolution) in [
-		("MiniMax-H3", "480P"),
 		("MiniMax-H3-Highspeed", "2K"),
+		("MiniMax-H3-Max-Turbo", "2K"),
+		("MiniMax-H3-MG", "480P"),
+		("MiniMax-H3-NC", "2K"),
 		("MiniMax-H3-Lite", "2K"),
 		("MiniMax-H3-Max", "2K"),
 		("MiniMax-H3", "1080P"),
@@ -518,10 +523,13 @@ async fn duration_and_resolution_limits_fail_before_http() {
 async fn each_video_model_accepts_its_resolution_and_duration_boundaries() {
 	let (mock, _env) = start_mock(vec![(200, json!({"task_id":"task-1"}).to_string())]);
 	for (model, resolutions, minimum) in [
-		("MiniMax-H3", vec!["768P", "2K"], 4.0),
-		("MiniMax-H3-Highspeed", vec!["768P"], 4.0),
+		("MiniMax-H3", vec!["480P", "768P", "2K"], 4.0),
+		("MiniMax-H3-Highspeed", vec!["480P", "768P"], 4.0),
 		("MiniMax-H3-Lite", vec!["480P", "768P"], 4.0),
 		("MiniMax-H3-Max", vec!["480P", "768P"], 5.0),
+		("MiniMax-H3-Max-Turbo", vec!["480P", "768P"], 5.0),
+		("MiniMax-H3-MG", vec!["768P", "2K"], 4.0),
+		("MiniMax-H3-NC", vec!["480P", "768P"], 4.0),
 	] {
 		for resolution in resolutions {
 			for seconds in [minimum, 15.0] {
@@ -533,7 +541,7 @@ async fn each_video_model_accepts_its_resolution_and_duration_boundaries() {
 			}
 		}
 	}
-	assert_eq!(mock.requests().len(), 14);
+	assert_eq!(mock.requests().len(), 30);
 }
 
 #[tokio::test]
@@ -545,20 +553,20 @@ async fn image_and_speech_limits_reject_before_http() {
 		let mut request = ImageGenerationRequest::new("castle").with_model("image-01");
 		request.count = Some(count);
 		assert!(matches!(
-			provider.submit_image(request).await,
+			provider.submit_image(request.clone()).await,
 			Err(MediaError::InvalidRequest(_))
 		));
 	}
 	let request = ImageGenerationRequest::new("世".repeat(1501)).with_model("image-01");
 	assert!(matches!(
-		provider.submit_image(request).await,
+		provider.submit_image(request.clone()).await,
 		Err(MediaError::InvalidRequest(_))
 	));
 	for (width, height) in [(504, 768), (2056, 768), (1025, 768)] {
 		let mut request = ImageGenerationRequest::new("castle").with_model("image-01");
 		request.geometry = Some(OutputGeometry::Dimensions { width, height });
 		assert!(matches!(
-			provider.submit_image(request).await,
+			provider.submit_image(request.clone()).await,
 			Err(MediaError::InvalidRequest(_))
 		));
 	}
@@ -724,14 +732,17 @@ async fn cancellation_and_immediate_polling_make_no_http_calls() {
 }
 
 #[test]
-fn minimax_is_registered_for_image_video_speech_only() {
+fn minimax_is_registered_for_image_video_speech_and_transcription() {
 	use crate::media::factory::MediaProviderFactory;
 	let (image, model) = MediaProviderFactory::get_image_provider_for_model("minimax:image-01").unwrap();
 	assert_eq!(image.name(), PROVIDER);
 	assert_eq!(model, "image-01");
 	assert!(MediaProviderFactory::get_video_provider_for_model("minimax:MiniMax-H3-Max").is_ok());
 	assert!(MediaProviderFactory::get_speech_provider_for_model("minimax:speech-2.8-turbo").is_ok());
-	assert!(MediaProviderFactory::create_transcription_provider("minimax").is_err());
+	let (transcription, model) = MediaProviderFactory::get_transcription_provider_for_model("minimax:asr-1.0").unwrap();
+	assert_eq!(transcription.name(), PROVIDER);
+	assert_eq!(model, "asr-1.0");
+	assert!(MediaProviderFactory::get_transcription_provider_for_model("minimax:speech-2.8-turbo").is_err());
 	assert!(MediaProviderFactory::supported_providers().contains(&PROVIDER));
 	assert!(MediaProviderFactory::get_video_provider_for_model("minimax:image-01").is_err());
 }
@@ -790,6 +801,9 @@ async fn video_without_duration_sends_five_seconds_for_every_h3_model() {
 		"MiniMax-H3-Highspeed",
 		"MiniMax-H3-Lite",
 		"MiniMax-H3-Max",
+		"MiniMax-H3-Max-Turbo",
+		"MiniMax-H3-MG",
+		"MiniMax-H3-NC",
 	] {
 		MinimaxMediaProvider::new()
 			.submit_video(VideoGenerationRequest::new("castle").with_model(model))
@@ -940,4 +954,617 @@ async fn speech_rejects_malformed_reported_characters_and_accepts_zero() {
 		.warnings
 		.iter()
 		.any(|warning| warning.code == WarningCode::UsageUnavailable));
+}
+
+/// Costs are sums of floats, so they are compared within a fraction of a cent.
+fn assert_usd(actual: Option<f64>, expected: f64) {
+	let actual = actual.expect("a priced MiniMax reply");
+	assert!((actual - expected).abs() < 1e-9, "cost {actual} is not {expected}");
+}
+
+fn h3_image_reply() -> String {
+	json!({
+		"created":1765823,
+		"request_id":"req-1",
+		"data":[{"url":"https://cdn.example.test/a.jpg","size":"1024x1024","output_format":"jpeg","revised_prompt":"a castle at dusk"}],
+		"usage":{"input_tokens":40,"output_tokens":4080,"total_tokens":4120,
+			"input_tokens_details":{"text_tokens":40,"image_tokens":0},
+			"output_tokens_details":{"image_tokens":4080}}
+	})
+	.to_string()
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn h3_image_sends_geometry_and_prices_the_reported_tokens() {
+	let (mock, _env) = start_mock(vec![(200, h3_image_reply())]);
+	let mut request = ImageGenerationRequest::new("castle").with_model("MiniMax-H3-Image");
+	request.count = Some(10);
+	request.geometry = Some(OutputGeometry::Dimensions {
+		width: 1024,
+		height: 768,
+	});
+	let result = MinimaxMediaProvider::new()
+		.submit_image(request)
+		.await
+		.unwrap()
+		.result
+		.unwrap();
+	let requests = mock.requests();
+	assert_eq!(requests[0].path, "/v1/images/generations");
+	let body: Value = serde_json::from_str(&requests[0].body).unwrap();
+	assert_eq!(
+		body,
+		json!({"model":"MiniMax-H3-Image", "prompt":"castle", "n":10, "response_format":"url", "size":"1024x768"})
+	);
+	let artifact = &result.artifacts[0];
+	assert_eq!(
+		artifact.source,
+		ArtifactSource::Url("https://cdn.example.test/a.jpg".to_string())
+	);
+	assert_eq!(artifact.media_type, "image/jpeg");
+	assert_eq!(
+		artifact.dimensions,
+		Some(Dimensions {
+			width: 1024,
+			height: 1024
+		})
+	);
+	let usage = result.usage.unwrap();
+	assert_eq!(usage.line_items.len(), 3);
+	// 40 text input tokens at $2.30 and 4080 output tokens at $3.80 per 1M.
+	assert_eq!(usage.estimated_cost, Some(0.015596));
+	assert_usd(usage.line_items[2].cost, 0.015504);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn h3_image_highspeed_takes_an_aspect_ratio_and_rejects_bad_geometry() {
+	let (mock, _env) = start_mock(vec![(200, h3_image_reply())]);
+	let mut request = ImageGenerationRequest::new("castle").with_model("MiniMax-H3-Image-Highspeed");
+	request.geometry = Some(OutputGeometry::AspectRatio { width: 21, height: 9 });
+	MinimaxMediaProvider::new().submit_image(request).await.unwrap();
+	let body: Value = serde_json::from_str(&mock.requests()[0].body).unwrap();
+	assert_eq!(body["aspect_ratio"], "21:9");
+	let provider = MinimaxMediaProvider::new();
+	for geometry in [
+		OutputGeometry::Dimensions {
+			width: 512,
+			height: 512,
+		},
+		OutputGeometry::Dimensions {
+			width: 4096,
+			height: 1024,
+		},
+		OutputGeometry::AspectRatio { width: 4, height: 1 },
+		OutputGeometry::AspectRatio { width: 0, height: 9 },
+	] {
+		let mut request = ImageGenerationRequest::new("castle").with_model("MiniMax-H3-Image");
+		request.geometry = Some(geometry);
+		assert!(matches!(
+			provider.submit_image(request.clone()).await,
+			Err(MediaError::InvalidRequest(_))
+		));
+	}
+	let request = ImageGenerationRequest::new("世".repeat(32001)).with_model("MiniMax-H3-Image");
+	assert!(matches!(
+		provider.submit_image(request.clone()).await,
+		Err(MediaError::InvalidRequest(_))
+	));
+	let mut request = ImageGenerationRequest::new("世".repeat(1501)).with_model("image-01");
+	request.count = Some(10);
+	assert!(matches!(
+		provider.submit_image(request.clone()).await,
+		Err(MediaError::InvalidRequest(_))
+	));
+	assert_eq!(mock.requests().len(), 1);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn h3_image_edit_uploads_references_and_deletes_them() {
+	let (mock, _env) = start_mock(vec![
+		(200, upload_reply(9)),
+		(200, h3_image_reply()),
+		(200, delete_reply(9)),
+	]);
+	let mut request = ImageGenerationRequest::new("castle at dusk").with_model("MiniMax-H3-Image");
+	request.mode = ImageGenerationMode::Edit;
+	request.source_images = vec![
+		png_frame(),
+		MediaSource::Url {
+			url: "https://example.test/ref.jpg".to_string(),
+			media_type: None,
+		},
+	];
+	MinimaxMediaProvider::new().submit_image(request).await.unwrap();
+	let requests = mock.requests();
+	assert_eq!(requests.len(), 3, "upload, edit, delete");
+	assert!(requests[0]
+		.body
+		.contains("name=\"purpose\"\r\n\r\nimage_generation_input"));
+	assert_eq!(requests[1].path, "/v1/images/edits");
+	let body: Value = serde_json::from_str(&requests[1].body).unwrap();
+	assert_eq!(
+		body["images"],
+		json!([{"image_url":"mm_file://9"}, {"image_url":"https://example.test/ref.jpg"}])
+	);
+	assert_eq!(requests[2].path, "/v1/files/delete");
+	assert!(requests[2].body.contains("image_generation_input"));
+
+	// image-01 still cannot edit, and an edit needs at least one image.
+	let mut request = ImageGenerationRequest::new("castle").with_model("image-01");
+	request.mode = ImageGenerationMode::Edit;
+	request.source_images = vec![png_frame()];
+	assert!(matches!(
+		MinimaxMediaProvider::new().submit_image(request).await,
+		Err(MediaError::UnsupportedTask { .. })
+	));
+	let mut request = ImageGenerationRequest::new("castle").with_model("MiniMax-H3-Image");
+	request.mode = ImageGenerationMode::Edit;
+	assert!(matches!(
+		MinimaxMediaProvider::new().submit_image(request).await,
+		Err(MediaError::InvalidRequest(_))
+	));
+	assert_eq!(mock.requests().len(), 3);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn h3_image_failed_items_are_filtered_and_all_failed_is_content_policy() {
+	let partial = json!({"request_id":"req-1","data":[
+		{"error":{"code":"1027","message":"generated image failed the safety check"}},
+		{"url":"https://cdn.example.test/a.jpg","size":"1024x1024","output_format":"png"}
+	]})
+	.to_string();
+	let (_mock, _env) = start_mock(vec![
+		(200, partial),
+		(
+			200,
+			json!({"request_id":"req-1","data":[
+				{"error":{"code":"1027","message":"blocked"}},
+				{"error":{"code":"1026","message":"prompt blocked"}}
+			]})
+			.to_string(),
+		),
+		(200, json!({"request_id":"req-1","data":[]}).to_string()),
+		(
+			200,
+			json!({"request_id":"req-1","data":[{"url":"https://cdn.example.test/a.jpg"}]}).to_string(),
+		),
+	]);
+	let provider = MinimaxMediaProvider::new();
+	let request = ImageGenerationRequest::new("castle").with_model("MiniMax-H3-Image");
+	let operation = provider.submit_image(request.clone()).await.unwrap();
+	let result = operation.result.unwrap();
+	assert_eq!(result.artifacts.len(), 1);
+	assert_eq!(result.safety.status, SafetyStatus::PartiallyFiltered);
+	assert_eq!(result.safety.filtered_count, 1);
+	assert!(result.safety.reasons[0].contains("1027"));
+	assert!(result
+		.warnings
+		.iter()
+		.any(|warning| warning.code == WarningCode::PartialOutput));
+	// No usage and no media type: the cost and the image are not fabricated.
+	assert_eq!(result.usage.unwrap().estimated_cost, None);
+
+	assert!(matches!(
+		provider.submit_image(request.clone()).await,
+		Err(MediaError::RemoteFailure(GenerationFailure {
+			category: FailureCategory::ContentPolicy,
+			..
+		}))
+	));
+	assert!(matches!(
+		provider.submit_image(request.clone()).await,
+		Err(MediaError::InvalidResponse { .. })
+	));
+	assert!(matches!(
+		provider.submit_image(request.clone()).await,
+		Err(MediaError::InvalidResponse { .. })
+	));
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn image_01_live_accepts_a_ratio_and_drops_dimensions_only_under_warn_policy() {
+	let (mock, _env) = start_mock(vec![(200, image_reply())]);
+	let mut request = ImageGenerationRequest::new("castle").with_model("image-01-live");
+	request.geometry = Some(OutputGeometry::Dimensions {
+		width: 1024,
+		height: 1024,
+	});
+	assert!(matches!(
+		MinimaxMediaProvider::new().submit_image(request.clone()).await,
+		Err(MediaError::UnsupportedParameter { .. })
+	));
+	request.request_options.unsupported_parameter_policy = UnsupportedParameterPolicy::WarnAndDrop;
+	let operation = MinimaxMediaProvider::new().submit_image(request).await.unwrap();
+	assert!(operation
+		.result
+		.unwrap()
+		.warnings
+		.iter()
+		.any(|warning| warning.parameter.as_deref() == Some("geometry")));
+	let mut request = ImageGenerationRequest::new("castle").with_model("image-01-live");
+	request.geometry = Some(OutputGeometry::AspectRatio { width: 9, height: 16 });
+	MinimaxMediaProvider::new().submit_image(request).await.unwrap();
+	let requests = mock.requests();
+	assert_eq!(requests.len(), 2);
+	let first: Value = serde_json::from_str(&requests[0].body).unwrap();
+	assert!(first.get("width").is_none() && first.get("height").is_none());
+	let second: Value = serde_json::from_str(&requests[1].body).unwrap();
+	assert_eq!(second["aspect_ratio"], "9:16");
+	assert_eq!(
+		shared::resolved_cost_estimate(PROVIDER, "image-01-live", None, None, None)
+			.unwrap()
+			.usd_per_unit,
+		0.0035
+	);
+}
+
+fn reference_video_request() -> VideoGenerationRequest {
+	let mut request = video_request("MiniMax-H3-Max-Turbo", 6.0);
+	request.mode = VideoGenerationMode::ReferenceToVideo;
+	request.reference_images = vec![
+		png_frame(),
+		MediaSource::Url {
+			url: "https://example.test/style.jpg".to_string(),
+			media_type: None,
+		},
+	];
+	request.source_video = Some(MediaSource::Bytes {
+		data: b"clip".to_vec(),
+		media_type: "video/mp4".to_string(),
+	});
+	request
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn reference_inputs_are_uploaded_tagged_with_roles_and_deleted() {
+	let (mock, _env) = start_mock(vec![
+		(200, upload_reply(1)),
+		(200, upload_reply(2)),
+		(200, json!({"task_id":"task-1"}).to_string()),
+		(200, delete_reply(1)),
+		(200, delete_reply(2)),
+	]);
+	let operation = MinimaxMediaProvider::new()
+		.submit_video(reference_video_request())
+		.await
+		.unwrap();
+	let handle = operation.handle.unwrap();
+	assert_eq!(handle.task, MediaTask::ReferenceToVideo);
+	// A reference task on Max-Turbo 768P bills its output at $0.08 per second.
+	assert_eq!(handle.cost_estimate.as_ref().unwrap().usd_per_unit, 0.08);
+	let requests = mock.requests();
+	assert_eq!(requests.len(), 5, "two uploads, create, two deletes");
+	assert!(requests[1].body.contains("filename=\"input.mp4\""));
+	let body: Value = serde_json::from_str(&requests[2].body).unwrap();
+	assert_eq!(body["ratio"], "adaptive");
+	assert_eq!(
+		body["content"],
+		json!([
+			{"type":"text", "text":"a castle"},
+			{"type":"image_url", "image_url":{"url":"mm_file://1"}, "role":"reference_image"},
+			{"type":"image_url", "image_url":{"url":"https://example.test/style.jpg"}, "role":"reference_image"},
+			{"type":"video_url", "video_url":{"url":"mm_file://2"}, "role":"reference_video"}
+		])
+	);
+	assert!(requests[3..].iter().all(|request| request.path == "/v1/files/delete"));
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn last_frame_and_reference_ratios_follow_each_models_contract() {
+	let (mock, _env) = start_mock(vec![
+		(200, json!({"task_id":"task-1"}).to_string()),
+		(200, json!({"task_id":"task-2"}).to_string()),
+		(200, json!({"task_id":"task-3"}).to_string()),
+	]);
+	let provider = MinimaxMediaProvider::new();
+	let mut request = video_request("MiniMax-H3", 5.0);
+	request.mode = VideoGenerationMode::ImageToVideo;
+	request.last_frame = Some(MediaSource::Url {
+		url: "https://example.test/last.png".to_string(),
+		media_type: None,
+	});
+	let operation = provider.submit_video(request).await.unwrap();
+	assert_eq!(operation.handle.unwrap().task, MediaTask::ImageToVideo);
+	let body: Value = serde_json::from_str(&mock.requests()[0].body).unwrap();
+	assert_eq!(body["ratio"], "adaptive");
+	assert_eq!(body["content"][1]["role"], "last_frame");
+
+	// Lite has no `adaptive` for reference tasks, so the default is a fixed ratio.
+	// URL inputs need no upload, so each request here is one create call.
+	let url_reference = || {
+		let mut request = reference_video_request();
+		request.reference_images = vec![MediaSource::Url {
+			url: "https://example.test/style.jpg".to_string(),
+			media_type: None,
+		}];
+		request.source_video = None;
+		request
+	};
+	let mut request = url_reference();
+	request.model = "MiniMax-H3-Lite".to_string();
+	provider.submit_video(request).await.unwrap();
+	let body: Value = serde_json::from_str(&mock.requests()[1].body).unwrap();
+	assert_eq!(body["ratio"], "16:9");
+
+	// A named ratio still overrides the default.
+	let mut request = url_reference();
+	request.geometry = Some(OutputGeometry::AspectRatio { width: 1, height: 1 });
+	provider.submit_video(request).await.unwrap();
+	let body: Value = serde_json::from_str(&mock.requests()[2].body).unwrap();
+	assert_eq!(body["ratio"], "1:1");
+	assert_eq!(mock.requests().len(), 3);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn mismatched_video_modes_and_inputs_are_refused_before_http() {
+	let (mock, _env) = start_mock(vec![(200, json!({"task_id":"unexpected"}).to_string())]);
+	let provider = MinimaxMediaProvider::new();
+	let mut frames_and_references = reference_video_request();
+	frames_and_references.first_frame = Some(MediaSource::Url {
+		url: "https://example.test/first.png".to_string(),
+		media_type: None,
+	});
+	let mut references_in_image_mode = reference_video_request();
+	references_in_image_mode.mode = VideoGenerationMode::ImageToVideo;
+	references_in_image_mode.first_frame = Some(png_frame());
+	let mut empty_reference = video_request("MiniMax-H3", 5.0);
+	empty_reference.mode = VideoGenerationMode::ReferenceToVideo;
+	let mut too_many_references = reference_video_request();
+	too_many_references.reference_images = vec![png_frame(); 10];
+	for request in [
+		frames_and_references,
+		references_in_image_mode,
+		empty_reference,
+		too_many_references,
+	] {
+		assert!(matches!(
+			provider.submit_video(request).await,
+			Err(MediaError::InvalidRequest(_))
+		));
+	}
+	let mut reference_in_text_mode = reference_video_request();
+	reference_in_text_mode.mode = VideoGenerationMode::TextToVideo;
+	assert!(matches!(
+		provider.submit_video(reference_in_text_mode).await,
+		Err(MediaError::InvalidRequest(_))
+	));
+	assert!(mock.requests().is_empty());
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn reference_input_video_and_extra_images_are_billed_from_reported_usage() {
+	let finished = |usage: Value| {
+		json!({"task":{
+			"id":"task-1", "model":"MiniMax-H3-Max", "status":"succeeded", "duration":6,
+			"resolution":"768P", "content":{"url":"https://cdn.example.test/out.mp4"}, "usage":usage
+		}})
+		.to_string()
+	};
+	let (mock, _env) = start_mock(vec![
+		(
+			200,
+			finished(json!({"output_seconds":6, "input_seconds":4, "input_image_count":7})),
+		),
+		(
+			200,
+			finished(json!({"output_seconds":6, "input_seconds":4, "input_image_count":2})),
+		),
+		(
+			200,
+			json!({"task":{"id":"task-1", "status":"succeeded", "duration":6, "content":{"url":"https://cdn.example.test/out.mp4"}, "usage":{"input_seconds":4}}}).to_string(),
+		),
+	]);
+	let mut handle = handle();
+	handle.model = "MiniMax-H3-Max".to_string();
+	handle.task = MediaTask::ReferenceToVideo;
+	handle.cost_estimate = Some(CostEstimate {
+		unit: UsageUnit::VideoSeconds,
+		usd_per_unit: 0.08,
+		quantity: Some(6.0),
+	});
+	let provider = MinimaxMediaProvider::new();
+	let usage = provider
+		.poll_video(&handle)
+		.await
+		.unwrap()
+		.result
+		.unwrap()
+		.usage
+		.unwrap();
+	// 6 s output at $0.08, 4 s input video at $0.143, 5 of 7 images at $0.074.
+	assert_usd(usage.estimated_cost, 0.48 + 0.572 + 5.0 * 0.074);
+	assert_eq!(usage.line_items.len(), 3);
+	assert_eq!(usage.line_items[0].quantity, 6.0);
+	assert_eq!(usage.line_items[1].unit, UsageUnit::VideoSeconds);
+	assert_eq!(usage.line_items[1].quantity, 4.0);
+	assert_eq!(usage.line_items[2].unit, UsageUnit::Images);
+	assert_eq!(usage.line_items[2].quantity, 5.0);
+	// Two images fall inside the free quota, so only the video is added.
+	let usage = provider
+		.poll_video(&handle)
+		.await
+		.unwrap()
+		.result
+		.unwrap()
+		.usage
+		.unwrap();
+	assert_eq!(usage.line_items.len(), 2);
+	assert_usd(usage.estimated_cost, 0.48 + 0.572);
+	// Without the resolution the input rate is unknown: the task still
+	// resolves, with the input quantities unpriced and no total.
+	let operation = provider.poll_video(&handle).await.unwrap();
+	assert_eq!(operation.status, OperationStatus::Succeeded);
+	let result = operation.result.unwrap();
+	let usage = result.usage.unwrap();
+	assert_eq!(usage.estimated_cost, None);
+	assert_eq!(usage.line_items.len(), 2);
+	assert!(result
+		.warnings
+		.iter()
+		.any(|warning| warning.code == WarningCode::CostUnavailable));
+	assert_eq!(mock.requests().len(), 3);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn speech_2_6_models_share_the_speech_endpoint() {
+	let (mock, _env) = start_mock(vec![(200, speech_reply()), (200, speech_reply())]);
+	for model in ["speech-2.6-hd", "speech-2.6-turbo"] {
+		let operation = MinimaxMediaProvider::new()
+			.submit_speech(SpeechSynthesisRequest::new("hello", "voice").with_model(model))
+			.await
+			.unwrap();
+		let result = operation.result.unwrap();
+		// The list page publishes no pay-as-you-go price for speech-2.6.
+		assert_eq!(result.usage.unwrap().estimated_cost, None);
+	}
+	for request in mock.requests() {
+		let body: Value = serde_json::from_str(&request.body).unwrap();
+		assert!(body["model"].as_str().unwrap().starts_with("speech-2.6"));
+	}
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn transcription_uploads_the_recording_and_prices_the_reported_duration() {
+	let (mock, _env) = start_mock(vec![
+		(200, json!({"text":"hello there","duration":26.325,"trace_id":"trace-1"}).to_string()),
+		(
+			200,
+			json!({"text":"hi","duration":1.5,"n_speakers":1,"trace_id":"trace-2",
+				"segments":[{"start":0.5,"end":1.25,"text":"hi","speaker":"S1"}]})
+			.to_string(),
+		),
+		(
+			200,
+			json!({"text":"hi","duration":1.5,
+				"segments":[{"start":0.5,"end":0.75,"text":"h","speaker":"S1"},{"start":0.75,"end":1.25,"text":"i","speaker":"S1"}]})
+			.to_string(),
+		),
+	]);
+	let audio = || MediaSource::Bytes {
+		data: b"RIFFwave".to_vec(),
+		media_type: "audio/wav".to_string(),
+	};
+	let mut request = TranscriptionRequest::new(audio()).with_model("asr-1.0");
+	request.language = Some("en".to_string());
+	let result = MinimaxMediaProvider::new()
+		.submit_transcription(request)
+		.await
+		.unwrap()
+		.result
+		.unwrap();
+	assert_eq!(result.text, "hello there");
+	assert!(result.segments.is_empty() && result.words.is_empty());
+	// $0.38 per hour of reported audio.
+	assert_usd(result.usage.unwrap().estimated_cost, 26.325 * 0.38 / 3_600.0);
+	let requests = mock.requests();
+	assert_eq!(requests[0].path, "/v1/speech_to_text");
+	assert_eq!(requests[0].method, "POST");
+	assert_eq!(requests[0].header("language"), Some("en"));
+	assert!(requests[0].body.contains("name=\"response_format\"\r\n\r\njson"));
+	assert!(requests[0].body.contains("filename=\"audio.wav\""));
+	assert!(!requests[0].body.contains("timestamp_level"));
+
+	let request = TranscriptionRequest::new(audio()).with_model("asr-1.0");
+	let mut request = request;
+	request.timestamp_granularities = vec![TimestampGranularity::Segment];
+	let result = MinimaxMediaProvider::new()
+		.submit_transcription(request)
+		.await
+		.unwrap()
+		.result
+		.unwrap();
+	assert_eq!(result.segments[0].text, "hi");
+	assert_eq!(result.segments[0].speaker.as_deref(), Some("S1"));
+	assert!(mock.requests()[1].body.contains("verbose_json"));
+
+	let mut request = TranscriptionRequest::new(audio()).with_model("asr-1.0");
+	request.timestamp_granularities = vec![TimestampGranularity::Word];
+	let result = MinimaxMediaProvider::new()
+		.submit_transcription(request)
+		.await
+		.unwrap()
+		.result
+		.unwrap();
+	assert_eq!(result.words.len(), 2);
+	assert!(result.words[0].word == "h");
+	assert!(mock.requests()[2].body.contains("timestamp_level"));
+
+	assert!(matches!(
+		MinimaxMediaProvider::new().poll_transcription(&handle()).await,
+		Err(MediaError::UnsupportedTask { .. })
+	));
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn transcription_refuses_other_models_urls_and_malformed_replies() {
+	let (mock, _env) = start_mock(vec![
+		(200, json!({"text":"hello"}).to_string()),
+		(200, json!({"duration":1.5}).to_string()),
+	]);
+	let provider = MinimaxMediaProvider::new();
+	let audio = MediaSource::Bytes {
+		data: b"RIFFwave".to_vec(),
+		media_type: "audio/wav".to_string(),
+	};
+	let mut request = TranscriptionRequest::new(audio.clone()).with_model("speech-2.8-hd");
+	request.prompt = Some("names".to_string());
+	// An unknown model is refused before its options are looked at.
+	assert!(matches!(
+		provider.submit_transcription(request).await,
+		Err(MediaError::UnsupportedTask { .. })
+	));
+	assert!(matches!(
+		provider
+			.submit_transcription(
+				TranscriptionRequest::new(MediaSource::Url {
+					url: "https://example.test/a.wav".to_string(),
+					media_type: None,
+				})
+				.with_model("asr-1.0")
+			)
+			.await,
+		Err(MediaError::InvalidRequest(_))
+	));
+	let mut request = TranscriptionRequest::new(audio).with_model("asr-1.0");
+	request.prompt = Some("names".to_string());
+	assert!(matches!(
+		provider.submit_transcription(request).await,
+		Err(MediaError::UnsupportedParameter { .. })
+	));
+	assert!(mock.requests().is_empty());
+
+	let request = TranscriptionRequest::new(MediaSource::Bytes {
+		data: b"RIFFwave".to_vec(),
+		media_type: "audio/wav".to_string(),
+	})
+	.with_model("asr-1.0");
+	// The duration is what MiniMax bills, so a reply without it is malformed.
+	assert!(matches!(
+		provider.submit_transcription(request).await,
+		Err(MediaError::InvalidResponse { .. })
+	));
+	assert!(matches!(
+		provider
+			.submit_transcription(
+				TranscriptionRequest::new(MediaSource::Bytes {
+					data: b"RIFFwave".to_vec(),
+					media_type: "audio/wav".to_string()
+				})
+				.with_model("asr-1.0")
+			)
+			.await,
+		Err(MediaError::InvalidResponse { .. })
+	));
 }

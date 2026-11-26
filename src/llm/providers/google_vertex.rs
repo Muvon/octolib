@@ -71,6 +71,9 @@ pub(super) const PRICING: &[PricingTuple] = &[
 	// Gemini 4 Hydrogen — no time-limited rate (verified Nov 17, 2026).
 	// Implicit caching only; flat rates at every context length.
 	("gemini-4-hydrogen", 1.50, 7.50, 1.50, 0.075),
+	// Gemini 4 Neon — GA Nov 18, 2026; flat rates at every context length, implicit
+	// caching only (pricing page, verified Nov 26, 2026).
+	("gemini-4-neon", 3.00, 15.00, 3.00, 0.15),
 	// Gemini 3.8 / 3.7 / 3.6 series — introductory pricing through Dec 31, 2026;
 	// standard rates from Jan 1, 2027: input $1.50, output $7.50, cache read $0.15
 	("gemini-3.8-flash", 0.75, 3.75, 0.75, 0.075),
@@ -79,8 +82,9 @@ pub(super) const PRICING: &[PricingTuple] = &[
 	// Gemini 3.5 series (gemini-flash-latest points here)
 	("gemini-3.5-flash-lite", 0.30, 2.50, 0.30, 0.03),
 	("gemini-3.5-flash", 1.50, 9.00, 1.50, 0.15),
-	// Gemini Omni Flash (gemini-omni-1.1-flash, gemini-omni-flash-preview): text
-	// output rate; video output bills $17.50. No context caching rate published.
+	// Gemini Omni Flash (gemini-omni-1.2-flash, gemini-omni-1.1-flash,
+	// gemini-omni-flash-preview): text output rate; video output bills $12.00 on
+	// 1.2 and $17.50 on 1.1. No context caching rate published.
 	(GEMINI_OMNI_PATTERN, 1.50, 9.00, 1.50, 1.50),
 	// Gemini Robotics-ER 2 (preview + streaming preview) — introductory pricing
 	// through Dec 31, 2026; standard rates from Jan 1, 2027: input $2.00,
@@ -90,6 +94,13 @@ pub(super) const PRICING: &[PricingTuple] = &[
 	(GEMINI_3_1_PRO_PATTERN, 2.00, 12.00, 2.00, 0.20),
 	("gemini-3.1-flash-lite", 0.25, 1.50, 0.25, 0.025),
 	(GEMINI_3_FLASH_PATTERN, 0.50, 3.00, 0.50, 0.05),
+	// Gemini image-generation models: text-token rates only (image output bills
+	// separately), no context caching. Each must precede the text model whose
+	// name it extends (pricing and model pages, verified Nov 26, 2026).
+	// Nano Banana 2.1 (GA Oct 6, 2026); images bill $30.00 per 1M tokens.
+	("gemini-nano-banana-2.1", 1.50, 7.50, 1.50, 1.50),
+	// Nano Banana, deprecated with shutdown on Mar 15, 2027; images bill $0.039 each.
+	("gemini-2.5-flash-image", 0.30, 2.50, 0.30, 0.30),
 	// Gemini 2.5 series
 	("gemini-2.5-flash-lite", 0.10, 0.40, 0.10, 0.01),
 	("gemini-2.5-flash", 0.30, 2.50, 0.30, 0.03),
@@ -260,7 +271,13 @@ pub(super) fn get_cached_input_limit(cache: &OnceCell<Vec<CachedModel>>, model: 
 /// Fallback input-token limits for Gemini models (shared with the google-studio provider)
 pub(super) fn gemini_max_input_tokens(model: &str) -> usize {
 	let normalized = normalize_model_name(model);
-	if normalized.contains("gemini-4") || normalized.contains("gemini-3") || normalized.contains("gemini-2") {
+	// Image-generation models have smaller windows than the text models whose
+	// names they extend (model pages, verified Nov 26, 2026).
+	if normalized.contains("gemini-2.5-flash-image") {
+		32_768
+	} else if normalized.contains("gemini-nano-banana-2.1") {
+		131_072
+	} else if normalized.contains("gemini-4") || normalized.contains("gemini-3") || normalized.contains("gemini-2") {
 		1_048_576 // Gemini 2.x/3.x/4.x has ~1M context
 	} else if normalized.contains("gemini-1.5") {
 		1_000_000 // Gemini 1.5 has 1M context

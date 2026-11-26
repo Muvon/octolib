@@ -263,6 +263,10 @@ fn november_2026_models_are_priced_on_the_aggregator_route() {
 	for (model, input, output, cache_read) in [
 		("google/gemini-4-hydrogen", 1.50, 7.50, 0.075),
 		("google/gemini-4-carbon", 2.00, 10.00, 0.10),
+		("google/gemini-4-neon", 3.00, 15.00, 0.15),
+		("google/gemini-omni-1.2-flash", 1.50, 9.00, 1.50),
+		("google/gemini-nano-banana-2.1", 1.50, 7.50, 1.50),
+		("google/gemini-2.5-flash-image", 0.30, 2.50, 0.30),
 		("tencent/hy4", 0.417, 1.2505, 0.021),
 		("tencent/hy4-flash", 0.04375, 0.175625, 0.001875),
 		("nex-agi/nex-n2.6", 0.12, 0.40, 0.024),

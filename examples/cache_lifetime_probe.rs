@@ -62,6 +62,7 @@ const TARGETS: &[(&str, usize)] = &[
 	("alibaba:qwen4-max", DEFAULT_PROMPT_TOKENS),
 	("alibaba:qwen3.7-plus", DEFAULT_PROMPT_TOKENS),
 	("google-studio:gemini-4-argon", DEFAULT_PROMPT_TOKENS),
+	("google-studio:gemini-4-neon", DEFAULT_PROMPT_TOKENS),
 	("google-studio:gemini-4-carbon", DEFAULT_PROMPT_TOKENS),
 	("google-studio:gemini-4-hydrogen", DEFAULT_PROMPT_TOKENS),
 	("google-studio:gemini-3.8-flash", DEFAULT_PROMPT_TOKENS),

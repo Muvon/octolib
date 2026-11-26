@@ -66,6 +66,8 @@ fn test_supports_model_before_cache() {
 	assert!(provider.supports_model("gemini-3.7-flash"));
 	assert!(provider.supports_model("gemini-3.8-flash"));
 	assert!(provider.supports_model("gemini-4-argon"));
+	assert!(provider.supports_model("gemini-4-neon"));
+	assert!(provider.supports_model("gemini-nano-banana-2.1"));
 	assert!(!provider.supports_model(""));
 }
 
@@ -81,6 +83,8 @@ fn test_default_capabilities() {
 	assert!(provider.supports_structured_output("any-model"));
 	assert_eq!(provider.get_max_input_tokens("gemini-3.6-flash"), 1_048_576);
 	assert_eq!(provider.get_max_input_tokens("gemini-4-argon"), 1_048_576);
+	assert_eq!(provider.get_max_input_tokens("gemini-4-neon"), 1_048_576);
+	assert_eq!(provider.get_max_input_tokens("gemini-nano-banana-2.1"), 131_072);
 }
 
 #[test]
@@ -90,6 +94,16 @@ fn test_model_pricing() {
 	let p = provider.get_model_pricing("gemini-4-argon").unwrap();
 	assert_eq!(p.input_price_per_1m, 2.00);
 	assert_eq!(p.output_price_per_1m, 10.00);
+
+	let p = provider.get_model_pricing("gemini-4-neon").unwrap();
+	assert_eq!(p.input_price_per_1m, 3.00);
+	assert_eq!(p.output_price_per_1m, 15.00);
+
+	// Image model: text-token rates, no cache discount
+	let p = provider.get_model_pricing("gemini-nano-banana-2.1").unwrap();
+	assert_eq!(p.input_price_per_1m, 1.50);
+	assert_eq!(p.output_price_per_1m, 7.50);
+	assert_eq!(p.cache_read_price_per_1m, 1.50);
 
 	let p = provider.get_model_pricing("gemini-3.8-flash").unwrap();
 	assert_eq!(p.input_price_per_1m, 0.75);

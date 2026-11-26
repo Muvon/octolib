@@ -656,6 +656,37 @@ fn november_2026_additions_resolve_with_documented_capabilities_and_pricing() {
 	}
 }
 
+/// Gemini models added Nov 26, 2026 from Google's pricing and model pages: 4 Neon,
+/// Omni 1.2 Flash, Nano Banana 2.1 and the deprecated Nano Banana.
+#[test]
+fn late_november_2026_gemini_models_resolve_with_documented_capabilities_and_pricing() {
+	for (model, capabilities, pricing) in [
+		(
+			"google/gemini-4-neon",
+			caps(true, true, true, 1_048_576),
+			pricing(3.00, 15.00, 3.00, 0.15),
+		),
+		(
+			"google/gemini-omni-1.2-flash",
+			caps(true, true, false, 131_072),
+			pricing(1.50, 9.00, 1.50, 1.50),
+		),
+		(
+			"google/gemini-nano-banana-2.1",
+			caps(true, true, false, 131_072),
+			pricing(1.50, 7.50, 1.50, 1.50),
+		),
+		(
+			"google/gemini-2.5-flash-image",
+			caps(true, false, false, 32_768),
+			pricing(0.30, 2.50, 0.30, 0.30),
+		),
+	] {
+		assert_same_capabilities(get_reference_capabilities(model).unwrap(), capabilities.unwrap());
+		assert_same_pricing(get_reference_pricing(model).unwrap(), pricing.unwrap());
+	}
+}
+
 /// qwen3-omni-flash must land on its own row, not on a qwen3.5 omni row.
 #[test]
 fn qwen3_omni_flash_resolves_to_its_own_pricing_row() {

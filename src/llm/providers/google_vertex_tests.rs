@@ -55,6 +55,12 @@ fn test_model_pricing() {
 	assert_eq!(p.output_price_per_1m, 7.50);
 	assert_eq!(p.cache_read_price_per_1m, 0.075);
 
+	// Flat rate, no time limit
+	let p = provider.get_model_pricing("gemini-4-neon").unwrap();
+	assert_eq!(p.input_price_per_1m, 3.00);
+	assert_eq!(p.output_price_per_1m, 15.00);
+	assert_eq!(p.cache_read_price_per_1m, 0.15);
+
 	let p = provider.get_model_pricing("gemini-3.1-pro").unwrap();
 	assert_eq!(p.input_price_per_1m, 2.00);
 	assert_eq!(p.output_price_per_1m, 12.00);
@@ -117,9 +123,34 @@ fn test_model_pricing() {
 }
 
 #[test]
+fn image_and_video_models_price_text_tokens_without_a_cache_rate() {
+	let provider = GoogleVertexProvider::new();
+
+	// Nano Banana 2.1: no context caching, so cache rates equal the input rate
+	let p = provider.get_model_pricing("gemini-nano-banana-2.1").unwrap();
+	assert_eq!(p.input_price_per_1m, 1.50);
+	assert_eq!(p.output_price_per_1m, 7.50);
+	assert_eq!(p.cache_read_price_per_1m, 1.50);
+	assert!(!provider.supports_caching("gemini-nano-banana-2.1"));
+
+	// Must resolve to its own row, not gemini-2.5-flash ($0.03 cache read)
+	let p = provider.get_model_pricing("gemini-2.5-flash-image").unwrap();
+	assert_eq!(p.input_price_per_1m, 0.30);
+	assert_eq!(p.output_price_per_1m, 2.50);
+	assert_eq!(p.cache_read_price_per_1m, 0.30);
+
+	let p = provider.get_model_pricing("gemini-omni-1.2-flash").unwrap();
+	assert_eq!(p.input_price_per_1m, 1.50);
+	assert_eq!(p.output_price_per_1m, 9.00);
+}
+
+#[test]
 fn test_max_input_tokens_fallback() {
 	let provider = GoogleVertexProvider::new();
 	assert_eq!(provider.get_max_input_tokens("gemini-4-argon"), 1_048_576);
+	assert_eq!(provider.get_max_input_tokens("gemini-4-neon"), 1_048_576);
+	assert_eq!(provider.get_max_input_tokens("gemini-nano-banana-2.1"), 131_072);
+	assert_eq!(provider.get_max_input_tokens("gemini-2.5-flash-image"), 32_768);
 	assert_eq!(provider.get_max_input_tokens("gemini-3-flash"), 1_048_576);
 	assert_eq!(provider.get_max_input_tokens("gemini-2.5-pro"), 1_048_576);
 	assert_eq!(provider.get_max_input_tokens("gemini-1.5-pro"), 1_000_000);
@@ -132,6 +163,7 @@ fn gemini_4_defaults_to_a_supported_vertex_location() {
 	assert_eq!(default_vertex_location("google/gemini-4-argon"), "global");
 	assert_eq!(default_vertex_location("gemini-4-carbon"), "global");
 	assert_eq!(default_vertex_location("gemini-4-hydrogen"), "global");
+	assert_eq!(default_vertex_location("gemini-4-neon"), "global");
 	assert_eq!(default_vertex_location("gemini-2.5-pro"), "us-central1");
 	assert_eq!(
 		default_vertex_api_url("project", "global"),

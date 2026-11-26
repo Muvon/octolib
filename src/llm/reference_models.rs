@@ -1014,6 +1014,19 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		pricing: pricing(0.50, 3.00, 0.50, 0.05),
 	},
 	ReferenceModelEntry {
+		// Nano Banana 2.1 (GA Oct 6, 2026): text-token rates only (images bill
+		// $30.00 per 1M tokens), no context caching.
+		pattern: "gemini-nano-banana-2.1",
+		capabilities: caps(true, true, false, 131_072),
+		pricing: pricing(1.50, 7.50, 1.50, 1.50),
+	},
+	ReferenceModelEntry {
+		// Nano Banana (deprecated, shutdown Mar 15, 2027): text-token rates only.
+		pattern: "gemini-2.5-flash-image",
+		capabilities: caps(true, false, false, 32_768),
+		pricing: pricing(0.30, 2.50, 0.30, 0.30),
+	},
+	ReferenceModelEntry {
 		pattern: "gemini-2.5-flash-lite",
 		capabilities: caps(true, true, true, 1_048_576),
 		pricing: pricing(0.10, 0.40, 0.10, 0.01),
@@ -1248,6 +1261,20 @@ const REFERENCE_MODELS: &[ReferenceModelEntry] = &[
 		capabilities: caps(true, true, true, 1_048_576),
 		// Matches providers/google_vertex.rs
 		pricing: pricing(1.50, 7.50, 1.50, 0.075),
+	},
+	ReferenceModelEntry {
+		pattern: "gemini-4-neon",
+		capabilities: caps(true, true, true, 1_048_576),
+		// Matches providers/google_vertex.rs
+		pricing: pricing(3.00, 15.00, 3.00, 0.15),
+	},
+	ReferenceModelEntry {
+		// Gemini Omni Flash (1.2 / 1.1 / preview): video generation and editing;
+		// text-token rates only (video output bills $12.00 on 1.2), no caching
+		// rate published. Matches providers/google_vertex.rs
+		pattern: "gemini-omni",
+		capabilities: caps(true, true, false, 131_072),
+		pricing: pricing(1.50, 9.00, 1.50, 1.50),
 	},
 	ReferenceModelEntry {
 		pattern: "gemini-3.8-flash",

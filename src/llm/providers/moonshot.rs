@@ -47,11 +47,31 @@
 //!   billed at the output price, so the caller's ReasoningEffort is forwarded.
 //! - Output is capped via `max_completion_tokens`; `max_tokens` is deprecated for K3.
 //! - `usage.completion_tokens_details.reasoning_tokens` reports reasoning tokens.
+//!
+//! Requests go to the Anthropic Messages endpoint Kimi documents for
+//! Claude-compatible clients — `https://api.moonshot.ai/anthropic/v1/messages`
+//! (the base URL the Claude SDK is pointed at is
+//! `https://api.moonshot.ai/anthropic`) — through the shared `anthropic_compat`
+//! layer. A `MOONSHOT_API_URL` override is sent exactly as it is: one whose path
+//! ends in `/messages` speaks Messages, any other is served by the Chat
+//! Completions code below, as every override was before. `MOONSHOT_API_MODE`
+//! (`anthropic` / `openai`) states the protocol for any URL and, with no URL,
+//! selects that protocol's default endpoint.
+//!
+//! The Messages contract is the vendor's own
+//! (<https://platform.kimi.ai/docs/api/messages>, checked 2026-11-26): bearer
+//! auth, base64 and URL image blocks on the visual models, Messages SSE and
+//! cache usage counters. The route is not live-probed from this checkout (no
+//! key is configured), so what it promises is what the contract states plus the
+//! requests the shared layer already sends to five other Messages endpoints.
+//! What differs per protocol is stated on [`ANTHROPIC_COMPAT`].
+use super::anthropic_compat::{self, AnthropicCompatConfig, ApiMode, Images, MessagesUsage};
 use super::shared;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
-	ChatCompletionParams, ProviderExchange, ProviderResponse, ReasoningEffort, TokenUsage, ToolCall,
+	ChatCompletionParams, ImageData, ProviderExchange, ProviderResponse, ReasoningEffort, TokenUsage, ToolCall,
+	VideoData,
 };
 use crate::llm::utils::{contains_ignore_ascii_case, is_model_in_pricing_table, PricingTuple};
 use anyhow::Result;
@@ -133,7 +153,102 @@ impl MoonshotProvider {
 
 pub(crate) const MOONSHOT_API_KEY_ENV: &str = "MOONSHOT_API_KEY";
 const MOONSHOT_API_URL_ENV: &str = "MOONSHOT_API_URL";
-const MOONSHOT_API_URL: &str = "https://api.moonshot.ai/v1/chat/completions";
+/// Messages endpoint, the default.
+const MOONSHOT_API_URL: &str = "https://api.moonshot.ai/anthropic/v1/messages";
+/// Chat Completions endpoint, for `MOONSHOT_API_MODE=openai`.
+const MOONSHOT_CHAT_API_URL: &str = "https://api.moonshot.ai/v1/chat/completions";
+const MOONSHOT_API_MODE_ENV: &str = "MOONSHOT_API_MODE";
+
+/// The protocol and URL for one request. A supplied URL is sent as it is,
+/// whatever the protocol: it is never rewritten. An explicit mode comes first,
+/// then the URL's own path; a URL naming neither endpoint was always served by
+/// Chat Completions, and with no URL the default is Messages.
+fn select_endpoint(mode: Option<&str>, api_url: Option<&str>) -> Result<(ApiMode, String)> {
+	// An empty variable is an unset one.
+	let mode = mode
+		.filter(|raw| !raw.is_empty())
+		.map(|raw| anthropic_compat::parse_api_mode(MOONSHOT_API_MODE_ENV, raw))
+		.transpose()?;
+	let api_url = api_url.filter(|api_url| !api_url.is_empty());
+	let mode = mode
+		.or_else(|| api_url.and_then(anthropic_compat::url_api_mode))
+		.unwrap_or(match api_url {
+			Some(_) => ApiMode::OpenAi,
+			None => ApiMode::Anthropic,
+		});
+	let api_url = api_url.map_or_else(
+		|| {
+			match mode {
+				ApiMode::Anthropic => MOONSHOT_API_URL,
+				ApiMode::OpenAi => MOONSHOT_CHAT_API_URL,
+			}
+			.to_owned()
+		},
+		str::to_owned,
+	);
+	Ok((mode, api_url))
+}
+
+/// The route a request would take right now, for the capability methods that
+/// differ per protocol. A configuration that cannot be resolved is reported as
+/// Messages: the request itself then fails with the configuration error.
+fn configured_mode() -> ApiMode {
+	select_endpoint(
+		env::var(MOONSHOT_API_MODE_ENV).ok().as_deref(),
+		env::var(MOONSHOT_API_URL_ENV).ok().as_deref(),
+	)
+	.map(|(mode, _)| mode)
+	.unwrap_or(ApiMode::Anthropic)
+}
+
+/// Cost of one Messages response, in USD. `input_tokens` is already cache-free;
+/// cache writes bill at the input rate (K3's 5-minute tier is its input price)
+/// and `output_tokens` includes thinking, which bills at the output rate.
+fn messages_cost(model: &str, usage: &MessagesUsage) -> Option<f64> {
+	let (input_price, output_price, _cache_write_price, cache_read_price) = get_pricing_tuple(model)?;
+	let per_million = |tokens: u64| tokens as f64 / 1_000_000.0;
+	Some(
+		per_million(usage.input_tokens) * input_price
+			+ per_million(usage.cache_write_tokens()) * input_price
+			+ per_million(usage.cache_read_tokens) * cache_read_price
+			+ per_million(usage.output_tokens) * output_price,
+	)
+}
+
+/// Moonshot on the shared Messages layer.
+///
+/// Images: every callable Kimi model takes inline image data. The contract
+/// lists a URL source too, but the live Messages endpoint rejects it —
+/// `kimi-k3` with a 1x1 PNG URL answered `400 invalid_request_error
+/// "unsupported image url"` on 2026-11-26 — so a URL image is refused here
+/// instead of being dropped or sent to fail.
+/// Video: Messages has no video block, so a video turn is refused here instead
+/// of being dropped, and `MOONSHOT_API_MODE=openai` keeps the Chat route that
+/// carries `video_url`.
+/// Schema: only kimi-k3.1-pro was probed to decode against a schema, and only
+/// on the Chat endpoint, so a schema takes the forced-tool path and is
+/// validated locally here.
+/// Thinking: the Messages contract documents `output_config.effort` with
+/// `low` / `high` / `max` (default `max`)
+/// (<https://platform.kimi.ai/docs/api/messages>), the same three values the
+/// Chat route maps onto, so a requested effort is forwarded with that map
+/// instead of being dropped. Models outside the Kimi K3 family keep their
+/// documented default (K2.6 thinks unless disabled).
+const ANTHROPIC_COMPAT: AnthropicCompatConfig = AnthropicCompatConfig {
+	provider_name: "moonshot",
+	images: |_| Images::Base64,
+	videos: |_| false,
+	enforces_response_schema: false,
+	thinking: |model, effort, request| {
+		let Some(effort) = effort.and_then(|effort| k3_reasoning_effort(model, Some(effort))) else {
+			return;
+		};
+		// The schema, when one was requested, is already in `output_config`.
+		request["output_config"]["effort"] = serde_json::json!(effort);
+	},
+	cost: messages_cost,
+	default_system: "",
+};
 /// See `cache_lifetime` for the measurement.
 const MEASURED_CACHE_LIFETIME: std::time::Duration = std::time::Duration::from_secs(4 * 60);
 
@@ -377,7 +492,7 @@ fn k3_reasoning_effort(model: &str, effort: Option<ReasoningEffort>) -> Option<&
 	}
 }
 
-fn convert_messages(messages: &[crate::llm::types::Message], model: &str) -> Vec<MoonshotMessage> {
+fn convert_messages(messages: &[crate::llm::types::Message], model: &str) -> Result<Vec<MoonshotMessage>> {
 	let messages = shared::chat_completion_messages(messages);
 	let messages = messages.as_ref();
 	let mut result = Vec::new();
@@ -405,31 +520,7 @@ fn convert_messages(messages: &[crate::llm::types::Message], model: &str) -> Vec
 					}));
 				}
 
-				if let Some(images) = &message.images {
-					for image in images {
-						if let crate::llm::types::ImageData::Base64(data) = &image.data {
-							content_parts.push(serde_json::json!({
-								"type": "image_url",
-								"image_url": {
-									"url": format!("data:{};base64,{}", image.media_type, data)
-								}
-							}));
-						}
-					}
-				}
-
-				if let Some(videos) = &message.videos {
-					for video in videos {
-						if let crate::llm::types::VideoData::Base64(data) = &video.data {
-							content_parts.push(serde_json::json!({
-								"type": "video_url",
-								"video_url": {
-									"url": format!("data:{};base64,{}", video.media_type, data)
-								}
-							}));
-						}
-					}
-				}
+				content_parts.extend(media_parts(message, model)?);
 
 				let content = if content_parts.is_empty() {
 					None
@@ -492,31 +583,7 @@ fn convert_messages(messages: &[crate::llm::types::Message], model: &str) -> Vec
 					"text": message.content
 				})];
 
-				if let Some(images) = &message.images {
-					for image in images {
-						if let crate::llm::types::ImageData::Base64(data) = &image.data {
-							content_parts.push(serde_json::json!({
-								"type": "image_url",
-								"image_url": {
-									"url": format!("data:{};base64,{}", image.media_type, data)
-								}
-							}));
-						}
-					}
-				}
-
-				if let Some(videos) = &message.videos {
-					for video in videos {
-						if let crate::llm::types::VideoData::Base64(data) = &video.data {
-							content_parts.push(serde_json::json!({
-								"type": "video_url",
-								"video_url": {
-									"url": format!("data:{};base64,{}", video.media_type, data)
-								}
-							}));
-						}
-					}
-				}
+				content_parts.extend(media_parts(message, model)?);
 
 				let content = if content_parts.len() == 1 {
 					Some(content_parts[0]["text"].clone())
@@ -545,7 +612,41 @@ fn convert_messages(messages: &[crate::llm::types::Message], model: &str) -> Vec
 		}
 	}
 
-	result
+	Ok(result)
+}
+
+/// Image and video blocks for a turn. A URL attachment is refused, never
+/// skipped: the Chat route cannot hand a URL to the model, and dropping it
+/// answered as though the caller's media had never been sent.
+fn media_parts(message: &crate::llm::types::Message, model: &str) -> Result<Vec<serde_json::Value>> {
+	let mut parts = Vec::new();
+	for image in message.images.as_deref().unwrap_or_default() {
+		match &image.data {
+			ImageData::Base64(data) => parts.push(serde_json::json!({
+				"type": "image_url",
+				"image_url": { "url": format!("data:{};base64,{}", image.media_type, data) }
+			})),
+			ImageData::Url(_) => {
+				return Err(anyhow::anyhow!(
+					"moonshot model {model} takes image data inline only: a URL image is refused rather than dropped"
+				))
+			}
+		}
+	}
+	for video in message.videos.as_deref().unwrap_or_default() {
+		match &video.data {
+			VideoData::Base64(data) => parts.push(serde_json::json!({
+				"type": "video_url",
+				"video_url": { "url": format!("data:{};base64,{}", video.media_type, data) }
+			})),
+			VideoData::Url(_) => {
+				return Err(anyhow::anyhow!(
+					"moonshot model {model} takes video data inline only: a URL video is refused rather than dropped"
+				))
+			}
+		}
+	}
+	Ok(parts)
 }
 
 fn extract_text_content(content: &Option<serde_json::Value>) -> String {
@@ -612,9 +713,22 @@ impl AiProvider for MoonshotProvider {
 	/// Only Kimi K3.1 Pro decodes against the schema: with `strict: true` and a
 	/// two-field object schema, a prompt demanding a JSON array got the object
 	/// on 5 of 5 K3.1 Pro calls and the array on 4 of 4 Kimi K3 calls (live,
-	/// 2026-10-26). The request shape is the same for both.
+	/// 2026-10-26, Chat endpoint). The Messages endpoint was not probed, so the
+	/// claim stays on the route that has the evidence and a Messages schema
+	/// takes the forced-tool path with local validation.
 	fn enforces_response_schema(&self, model: &str) -> bool {
-		contains_ignore_ascii_case(model, "kimi-k3.1")
+		configured_mode() == ApiMode::OpenAi && contains_ignore_ascii_case(model, "kimi-k3.1")
+	}
+
+	/// Video is a Chat Completions field (`video_url`) and the reference table
+	/// lists the Kimi models that take it; the Messages protocol has no video
+	/// block, so the capability follows the route instead of advertising a turn
+	/// that would be refused.
+	fn supports_video(&self, model: &str) -> bool {
+		configured_mode() == ApiMode::OpenAi
+			&& crate::llm::reference_models::get_reference_capabilities(model)
+				.map(|capabilities| capabilities.video)
+				.unwrap_or(false)
 	}
 
 	fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
@@ -643,11 +757,18 @@ impl AiProvider for MoonshotProvider {
 
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
 		let api_key = super::shared::resolve_api_key(self, &params)?;
+		let (mode, api_url) = select_endpoint(
+			env::var(MOONSHOT_API_MODE_ENV).ok().as_deref(),
+			env::var(MOONSHOT_API_URL_ENV).ok().as_deref(),
+		)?;
+		if mode == ApiMode::Anthropic {
+			return anthropic_compat::chat_completion(ANTHROPIC_COMPAT, api_key, api_url, params).await;
+		}
 
 		// Convert messages to Moonshot format
 		// NOTE: Moonshot uses AUTOMATIC context caching (like OpenAI)
 		// Manual caching via /v1/caching endpoint is deprecated (returns "model family is invalid")
-		let messages = convert_messages(&params.messages, &params.model);
+		let messages = convert_messages(&params.messages, &params.model)?;
 
 		// Kimi K3 caps output via `max_completion_tokens`; `max_tokens` is
 		// deprecated for K3 per the API docs. Older Kimi models keep max_tokens.
@@ -731,8 +852,8 @@ impl AiProvider for MoonshotProvider {
 				let api_key = api_key.clone();
 				let request = request.clone();
 				let extra_headers = extra_headers.clone();
+				let api_url = api_url.clone();
 				Box::pin(async move {
-					let api_url = env::var(MOONSHOT_API_URL_ENV).unwrap_or_else(|_| MOONSHOT_API_URL.to_string());
 					let req = client
 						.post(&api_url)
 						.bearer_auth(&api_key)

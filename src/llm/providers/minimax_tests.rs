@@ -206,79 +206,12 @@ fn test_provider_capabilities() {
 	assert!(provider.supports_video("MiniMax-M3.1-Flash-Preview"));
 	assert!(provider.supports_vision("MiniMax-M3.1-Flash"));
 }
-
-#[test]
-fn parallel_tool_results_share_one_user_message() {
-	let mut assistant = Message::assistant("");
-	assistant.tool_calls = Some(serde_json::json!([
-		{"id": "toolu_a", "name": "first", "arguments": {}, "meta": null},
-		{"id": "toolu_b", "name": "second", "arguments": {}, "meta": null}
-	]));
-
-	let messages = vec![
-		assistant,
-		Message::tool("result A", "toolu_a", "first"),
-		Message::tool("result B", "toolu_b", "second"),
-	];
-
-	let converted = convert_messages(&messages);
-	assert_eq!(converted.len(), 2);
-	assert_eq!(converted[0].role, "assistant");
-	assert_eq!(converted[1].role, "user");
-
-	let user_content = serde_json::to_value(&converted[1].content).unwrap();
-	let blocks = user_content.as_array().unwrap();
-	assert_eq!(blocks.len(), 2);
-	assert_eq!(blocks[0]["type"], "tool_result");
-	assert_eq!(blocks[0]["tool_use_id"], "toolu_a");
-	assert_eq!(blocks[1]["type"], "tool_result");
-	assert_eq!(blocks[1]["tool_use_id"], "toolu_b");
-}
-
-#[test]
-fn tool_results_merge_following_user_hint() {
-	let messages = vec![
-		Message::tool("result A", "toolu_a", "first"),
-		Message::tool("result B", "toolu_b", "second"),
-		Message::user("Please use those results."),
-	];
-
-	let converted = convert_messages(&messages);
-	assert_eq!(converted.len(), 1);
-	assert_eq!(converted[0].role, "user");
-
-	let content = serde_json::to_value(&converted[0].content).unwrap();
-	let blocks = content.as_array().unwrap();
-	assert_eq!(blocks.len(), 3);
-	assert_eq!(blocks[0]["tool_use_id"], "toolu_a");
-	assert_eq!(blocks[1]["tool_use_id"], "toolu_b");
-	assert_eq!(blocks[2]["type"], "text");
-	assert_eq!(blocks[2]["text"], "Please use those results.");
-}
-
-#[test]
-fn tool_images_stay_inside_the_matching_tool_result() {
-	for text in ["caption", ""] {
-		let converted = convert_messages(&[shared::tests::tool_image_message(text)]);
-		let value = serde_json::to_value(&converted).unwrap();
-		let result = &value[0]["content"][0];
-		assert_eq!(result["type"], "tool_result");
-		assert_eq!(result["tool_use_id"], "call_image");
-		let offset = usize::from(!text.is_empty());
-		assert_eq!(result["content"][offset]["source"]["data"], "aW1hZ2U=");
-		assert_eq!(
-			result["content"][offset + 1]["source"]["url"],
-			"https://example.com/screenshot.jpg"
-		);
-	}
-}
-
 #[tokio::test]
 #[serial_test::serial]
 async fn chat_completion_via_mock_http_splits_text_thinking_tools_and_cache() {
 	let body = r#"{"id":"mm-1","content":[{"type":"text","text":"final answer"},{"type":"thinking","thinking":"pondering deeply"},{"type":"tool_use","id":"t1","name":"get_weather","input":{"city":"Oslo"}}],"usage":{"input_tokens":10,"output_tokens":30,"cache_read_input_tokens":4,"cache_creation_input_tokens":2},"stop_reason":"tool_use"}"#;
 	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, body.to_string())]);
-	let _env = EnvGuard::new().set("MINIMAX_API_URL", mock.url.clone());
+	let _env = EnvGuard::new().set("MINIMAX_API_URL", format!("{}/v1/messages", mock.base_url()));
 
 	let provider = MinimaxProvider::new();
 	let params = ChatCompletionParams::new(&[], "MiniMax-M2.7", 10).with_api_key("mock-key".to_owned());
@@ -330,10 +263,267 @@ async fn chat_completion_via_mock_http_surfaces_http_error() {
 		400,
 		r#"{"error":{"message":"bad request"}}"#.to_string(),
 	)]);
-	let _env = EnvGuard::new().set("MINIMAX_API_URL", mock.url.clone());
+	let _env = EnvGuard::new().set("MINIMAX_API_URL", format!("{}/v1/messages", mock.base_url()));
 
 	let provider = MinimaxProvider::new();
 	let params = ChatCompletionParams::new(&[], "MiniMax-M2.7", 10).with_api_key("mock-key".to_owned());
 	let err = provider.chat_completion(params).await.expect_err("http error surfaces");
-	assert!(err.to_string().contains("MiniMax API error"), "unexpected error: {err}");
+	assert!(err.to_string().contains("minimax API error"), "unexpected error: {err}");
+}
+
+#[test]
+fn thinking_knobs_follow_the_model() {
+	let mut request = serde_json::json!({});
+	configure_thinking("MiniMax-M3", None, &mut request);
+	configure_thinking("MiniMax-M2.7", Some(ReasoningEffort::High), &mut request);
+	assert_eq!(
+		request,
+		serde_json::json!({}),
+		"no effort, or a model without knobs, sends nothing"
+	);
+
+	let mut request = serde_json::json!({});
+	configure_thinking("MiniMax-M3", Some(ReasoningEffort::Low), &mut request);
+	assert_eq!(request, serde_json::json!({ "thinking": { "type": "adaptive" } }));
+
+	let mut request = serde_json::json!({});
+	configure_thinking("MiniMax-M3.1-Flash", Some(ReasoningEffort::Max), &mut request);
+	assert_eq!(request, serde_json::json!({ "output_config": { "effort": "max" } }));
+}
+
+#[test]
+fn openai_thinking_follows_the_documented_switches() {
+	// With no effort requested nothing is sent: the endpoint thinks by default.
+	for model in ["MiniMax-M3", "MiniMax-M3.1-Flash", "MiniMax-M2.7"] {
+		let mut request = serde_json::json!({});
+		openai_thinking(model, None, &mut request);
+		assert_eq!(request, serde_json::json!({}), "{model}");
+	}
+
+	// M3.1-Flash tunes depth through reasoning_effort; `none` is a 400 there.
+	for (effort, expected) in [
+		(ReasoningEffort::None, "low"),
+		(ReasoningEffort::Low, "low"),
+		(ReasoningEffort::Medium, "medium"),
+		(ReasoningEffort::High, "high"),
+		(ReasoningEffort::XHigh, "xhigh"),
+		(ReasoningEffort::Max, "max"),
+	] {
+		let mut request = serde_json::json!({});
+		openai_thinking("MiniMax-M3.1-Flash", Some(effort), &mut request);
+		assert_eq!(request, serde_json::json!({ "reasoning_effort": expected }));
+	}
+
+	// M3 thinks adaptively unless disabled, and ignores reasoning_effort.
+	let mut request = serde_json::json!({});
+	openai_thinking("MiniMax-M3", Some(ReasoningEffort::High), &mut request);
+	assert_eq!(request, serde_json::json!({}));
+	let mut request = serde_json::json!({});
+	openai_thinking("MiniMax-M3", Some(ReasoningEffort::None), &mut request);
+	assert_eq!(request, serde_json::json!({ "thinking": { "type": "disabled" } }));
+
+	// M2.x documents neither knob.
+	let mut request = serde_json::json!({});
+	openai_thinking("MiniMax-M2.7", Some(ReasoningEffort::Max), &mut request);
+	assert_eq!(request, serde_json::json!({}));
+}
+
+#[test]
+fn the_default_endpoint_follows_the_mode() {
+	// (MINIMAX_API_MODE, MINIMAX_API_URL, the protocol and URL that follow)
+	for (mode, api_url, want_mode, want_url) in [
+		(None, None, ApiMode::Anthropic, MINIMAX_API_URL),
+		(Some(""), None, ApiMode::Anthropic, MINIMAX_API_URL),
+		(Some("anthropic"), None, ApiMode::Anthropic, MINIMAX_API_URL),
+		(Some(" OpenAI "), None, ApiMode::OpenAi, MINIMAX_CHAT_API_URL),
+		// A URL naming no endpoint was always served by Messages, and goes
+		// out exactly as configured.
+		(
+			None,
+			Some("https://proxy.example/v4"),
+			ApiMode::Anthropic,
+			"https://proxy.example/v4",
+		),
+	] {
+		assert_eq!(
+			select_endpoint(mode, api_url).expect("selected"),
+			(want_mode, want_url.to_owned()),
+			"mode {mode:?}, url {api_url:?}"
+		);
+	}
+	// An empty URL is no URL.
+	assert_eq!(
+		select_endpoint(Some("openai"), Some("")).expect("selected"),
+		(ApiMode::OpenAi, MINIMAX_CHAT_API_URL.to_owned())
+	);
+	assert_eq!(
+		select_endpoint(None, Some("https://proxy.example/v4")).expect("selected"),
+		(ApiMode::Anthropic, "https://proxy.example/v4".to_owned())
+	);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn openai_mode_speaks_chat_completions_on_the_configured_url() {
+	use crate::llm::types::Message;
+	let body = r#"{"id":"chatcmpl-1","object":"chat.completion","created":1,"model":"MiniMax-M3","choices":[{"index":0,"message":{"role":"assistant","content":"chat answer","reasoning_content":"pondering"},"finish_reason":"stop"}],"usage":{"total_tokens":19,"prompt_tokens":12,"completion_tokens":7,"prompt_tokens_details":{"cached_tokens":4}}}"#;
+	let messages_body = r#"{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"text","text":"messages answer"}],"stop_reason":"end_turn","usage":{"input_tokens":12,"output_tokens":7}}"#;
+	// (MINIMAX_API_MODE, path under the mock's origin, answer, whether Messages is spoken)
+	let cases = [
+		("", "/api/prefix/v1/messages", "messages answer", true),
+		("", "/api/prefix/chat/completions", "chat answer", false),
+		// A URL naming no endpoint was always served by Messages.
+		("", "/api/prefix/v4", "messages answer", true),
+		("openai", "/api/prefix/v1/messages", "chat answer", false),
+		("anthropic", "/api/prefix/chat/completions", "messages answer", true),
+	];
+	for (mode, path, answer, is_messages) in cases {
+		let mock = crate::test_support::mock_http::MockHttp::start(vec![(
+			200,
+			if is_messages { messages_body } else { body }.to_string(),
+		)]);
+		let _env = EnvGuard::new()
+			.set("MINIMAX_API_URL", format!("{}{path}", mock.base_url()))
+			.set("MINIMAX_API_MODE", mode);
+
+		let provider = MinimaxProvider::new();
+		let params =
+			ChatCompletionParams::new(&[Message::user("hi")], "MiniMax-M3", 100).with_api_key("mock-key".to_owned());
+		let response = provider.chat_completion(params).await.expect("completion");
+		assert_eq!(response.content, answer);
+		let request = &mock.requests()[0];
+		assert_eq!(request.method, "POST");
+		assert_eq!(request.path, path, "the URL is not rewritten");
+		assert_eq!(request.header("authorization"), Some("Bearer mock-key"));
+		assert_eq!(
+			request.header("anthropic-version").is_some(),
+			is_messages,
+			"path {path}"
+		);
+		let sent: serde_json::Value = serde_json::from_str(&request.body).expect("request json");
+		assert_eq!(sent["model"], "MiniMax-M3");
+		if !is_messages {
+			// Usage: 12 prompt of which 4 cached, 7 completion, some of it the
+			// returned reasoning; MiniMax-M3 per 1M: 0.30 input, 0.06 cache read,
+			// 1.20 output on every completion token, billed from PRICING.
+			assert_eq!(
+				response.thinking.as_ref().map(|thinking| thinking.content.as_str()),
+				Some("pondering")
+			);
+			let usage = response.exchange.usage.expect("usage");
+			assert_eq!(
+				(
+					usage.input_tokens,
+					usage.cache_read_tokens,
+					usage.output_tokens + usage.reasoning_tokens
+				),
+				(8, 4, 7)
+			);
+			let expected = (8.0 * 0.30 + 4.0 * 0.06 + 7.0 * 1.20) / 1_000_000.0;
+			assert!((usage.cost.expect("priced") - expected).abs() < 1e-12, "path {path}");
+			assert_eq!(sent["messages"][0]["role"], "user");
+			assert_eq!(sent["messages"][0]["content"], "hi");
+			assert_eq!(sent["stream"], true, "the endpoint documents stream_options");
+			assert_eq!(sent["stream_options"]["include_usage"], true);
+			for field in [
+				"thinking",
+				"reasoning_effort",
+				"response_format",
+				"parallel_tool_calls",
+				"system",
+			] {
+				assert!(sent.get(field).is_none(), "{field} must not be sent");
+			}
+		}
+	}
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn messages_keep_the_fallback_prompt_of_a_conversation_without_a_system_turn() {
+	use crate::llm::types::Message;
+	let body = r#"{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}"#;
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, body.to_string()), (200, body.to_string())]);
+	let _env = EnvGuard::new()
+		.set("MINIMAX_API_URL", format!("{}/v1/messages", mock.base_url()))
+		.set("MINIMAX_API_MODE", "");
+
+	let provider = MinimaxProvider::new();
+	provider
+		.chat_completion(
+			ChatCompletionParams::new(&[Message::user("hi")], "MiniMax-M3", 10).with_api_key("k".to_owned()),
+		)
+		.await
+		.expect("completion");
+	provider
+		.chat_completion(
+			ChatCompletionParams::new(&[Message::system("Be terse."), Message::user("hi")], "MiniMax-M3", 10)
+				.with_api_key("k".to_owned()),
+		)
+		.await
+		.expect("completion");
+	let first: serde_json::Value = serde_json::from_str(&mock.requests()[0].body).expect("request json");
+	let second: serde_json::Value = serde_json::from_str(&mock.requests()[1].body).expect("request json");
+	assert_eq!(first["system"], "You are a helpful assistant.");
+	assert_eq!(second["system"], "Be terse.");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn an_unknown_mode_is_refused_before_any_request() {
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, "{}".to_string())]);
+	let _env = EnvGuard::new()
+		.set("MINIMAX_API_URL", mock.url.clone())
+		.set("MINIMAX_API_MODE", "claude");
+
+	let provider = MinimaxProvider::new();
+	let params = ChatCompletionParams::new(&[], "MiniMax-M3", 10).with_api_key("mock-key".to_owned());
+	let error = provider.chat_completion(params).await.expect_err("refused");
+	assert!(
+		error.to_string().contains("MINIMAX_API_MODE must be"),
+		"unexpected error: {error}"
+	);
+	assert!(mock.requests().is_empty(), "nothing is sent");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn m3_reads_inline_images_and_m2_refuses_them() {
+	use crate::llm::types::{ImageAttachment, ImageData, Message, SourceType};
+	let image = Message::user("what is this?").with_images(vec![ImageAttachment {
+		data: ImageData::Base64("aW1hZ2U=".into()),
+		media_type: "image/png".into(),
+		source_type: SourceType::Url,
+		dimensions: None,
+		size_bytes: None,
+	}]);
+	let body = r#"{"id":"mm-1","content":[{"type":"text","text":"stripes"}],"stop_reason":"end_turn","usage":{"input_tokens":12,"output_tokens":2}}"#;
+	let provider = MinimaxProvider::new();
+
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, body.to_string())]);
+	let _env = EnvGuard::new().set("MINIMAX_API_URL", format!("{}/v1/messages", mock.base_url()));
+	let params =
+		ChatCompletionParams::new(std::slice::from_ref(&image), "MiniMax-M3", 10).with_api_key("mock-key".to_owned());
+	let response = provider.chat_completion(params).await.expect("M3 takes images");
+	assert_eq!(response.content, "stripes");
+	let requests = mock.requests();
+	assert_eq!(requests[0].header("authorization"), Some("Bearer mock-key"));
+	let request: serde_json::Value = serde_json::from_str(&requests[0].body).expect("request json");
+	assert_eq!(request["messages"][0]["content"][0]["type"], "text");
+	assert_eq!(request["messages"][0]["content"][1]["type"], "image");
+	assert_eq!(request["messages"][0]["content"][1]["source"]["data"], "aW1hZ2U=");
+
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, body.to_string())]);
+	let params = ChatCompletionParams::new(&[image], "MiniMax-M2.7", 10).with_api_key("mock-key".to_owned());
+	let error = provider
+		.chat_completion(params)
+		.await
+		.expect_err("M2.x has no image input");
+	assert!(
+		error
+			.to_string()
+			.contains("minimax model MiniMax-M2.7 does not accept image input"),
+		"unexpected error: {error}"
+	);
+	assert!(mock.requests().is_empty(), "a refused request is not sent");
 }

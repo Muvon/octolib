@@ -21,15 +21,25 @@
 //! - Any other OpenAI-compatible local server
 //!
 //! ## Configuration
-//! - `LOCAL_API_URL`: API endpoint (default: Ollama local)
+//! - `LOCAL_API_URL`: API endpoint (default: Ollama local), sent as it is
 //! - `LOCAL_API_KEY`: Optional API key
+//! - `LOCAL_API_MODE`: `anthropic` or `openai`, the protocol `LOCAL_API_URL`
+//!   speaks; with no URL, the Ollama endpoint of that protocol
+//! - `LOCAL_ANTHROPIC_MODELS`: comma-separated model IDs that speak the Anthropic
+//!   Messages protocol. The list is the strongest statement: a listed model
+//!   speaks Messages whatever `LOCAL_API_MODE` or the URL's path say, to
+//!   `LOCAL_API_URL` as it is, or to Ollama's Messages endpoint when no URL
+//!   is set. Unlisted models follow the mode, then the URL's path, then Chat
+//!   Completions.
 
+use super::anthropic_compat::{self, parse_api_mode, AnthropicCompatConfig, ApiMode, Images};
 use crate::llm::providers::openai_compat::{
-	chat_completion as openai_compat_chat_completion, get_api_url, get_optional_api_key, OpenAiCompatConfig,
+	chat_completion as openai_compat_chat_completion, get_optional_api_key, OpenAiCompatConfig,
 };
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderResponse};
 use anyhow::Result;
+use std::env;
 
 /// Local provider for local model servers
 #[derive(Debug, Clone)]
@@ -50,6 +60,71 @@ impl LocalProvider {
 pub(crate) const LOCAL_API_KEY_ENV: &str = "LOCAL_API_KEY";
 const LOCAL_API_URL_ENV: &str = "LOCAL_API_URL";
 const LOCAL_API_URL: &str = "http://localhost:11434/v1/chat/completions";
+/// Ollama's Anthropic-compatible endpoint (docs.ollama.com/api/messages).
+const LOCAL_MESSAGES_URL: &str = "http://localhost:11434/v1/messages";
+const LOCAL_API_MODE_ENV: &str = "LOCAL_API_MODE";
+const LOCAL_ANTHROPIC_MODELS_ENV: &str = "LOCAL_ANTHROPIC_MODELS";
+
+/// Whether `allowlist` (`LOCAL_ANTHROPIC_MODELS`) names `model`. Entries are
+/// matched whole, so `qwen3` does not opt in `qwen3:8b`.
+fn is_anthropic_model(allowlist: &str, model: &str) -> bool {
+	!model.is_empty() && allowlist.split(',').any(|entry| entry.trim() == model)
+}
+
+/// The protocol and URL for one request, with `LOCAL_ANTHROPIC_MODELS` read
+/// from the environment.
+fn select_local_endpoint(mode: Option<&str>, api_url: Option<&str>, model: &str) -> Result<(ApiMode, String)> {
+	// An empty variable is an unset one.
+	let mode = mode
+		.filter(|raw| !raw.is_empty())
+		.map(|raw| parse_api_mode(LOCAL_API_MODE_ENV, raw))
+		.transpose()?;
+	let api_url = api_url.filter(|api_url| !api_url.is_empty());
+	// A listed model speaks Messages over the mode and over the URL's path.
+	let mode = if is_anthropic_model(&env::var(LOCAL_ANTHROPIC_MODELS_ENV).unwrap_or_default(), model) {
+		ApiMode::Anthropic
+	} else {
+		// A URL that names no endpoint was always served as Chat Completions.
+		mode.or_else(|| api_url.and_then(anthropic_compat::url_api_mode))
+			.unwrap_or(ApiMode::OpenAi)
+	};
+	let api_url = api_url.map_or_else(
+		|| {
+			match mode {
+				ApiMode::Anthropic => LOCAL_MESSAGES_URL,
+				ApiMode::OpenAi => LOCAL_API_URL,
+			}
+			.to_owned()
+		},
+		str::to_owned,
+	);
+	Ok((mode, api_url))
+}
+
+/// Local servers are not known in advance, so media follows what the model
+/// tables say the model takes and the server is left to judge the rest.
+const ANTHROPIC_COMPAT: AnthropicCompatConfig = AnthropicCompatConfig {
+	provider_name: "local",
+	images: |model| {
+		if LocalProvider.supports_vision(model) {
+			Images::Base64AndUrl
+		} else {
+			Images::None
+		}
+	},
+	videos: |model| LocalProvider.supports_video(model),
+	enforces_response_schema: false,
+	thinking: |_, _, _| {},
+	cost: |model, usage| {
+		crate::llm::reference_models::calculate_reference_cost(
+			model,
+			usage.input_tokens,
+			usage.cache_read_tokens,
+			usage.output_tokens,
+		)
+	},
+	default_system: "",
+};
 
 #[async_trait::async_trait]
 impl AiProvider for LocalProvider {
@@ -79,7 +154,14 @@ impl AiProvider for LocalProvider {
 
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
 		let api_key = super::shared::resolve_api_key(self, &params)?;
-		let api_url = get_api_url(LOCAL_API_URL_ENV, LOCAL_API_URL);
+		let (mode, api_url) = select_local_endpoint(
+			env::var(LOCAL_API_MODE_ENV).ok().as_deref(),
+			env::var(LOCAL_API_URL_ENV).ok().as_deref(),
+			&params.model,
+		)?;
+		if mode == ApiMode::Anthropic {
+			return anthropic_compat::chat_completion(ANTHROPIC_COMPAT, api_key, api_url, params).await;
+		}
 		let model = params.model.clone();
 
 		let mut response = openai_compat_chat_completion(

@@ -14,6 +14,7 @@
 
 use super::*;
 use crate::llm::utils::is_model_in_pricing_table;
+use crate::test_support::env::EnvGuard;
 
 #[test]
 fn test_supports_model() {
@@ -433,6 +434,342 @@ fn test_cost_calculation() {
 	// Dated snapshots follow the same list-price tiers as the moving alias.
 	let snapshot_long = calculate_local_usage_cost("qwen3.7-plus-2026-05-26", 256_001, 0, 0, 100_000).unwrap();
 	assert!((snapshot_long - expected_long).abs() < 0.001);
+}
+
+#[test]
+fn the_default_endpoint_follows_the_mode() {
+	// (ALIBABA_API_MODE, ALIBABA_API_URL, the protocol and URL that follow)
+	for (mode, api_url, want_mode, want_url) in [
+		// With nothing configured the default is Chat Completions.
+		(None, None, ApiMode::OpenAi, ALIBABA_API_URL),
+		(Some(""), None, ApiMode::OpenAi, ALIBABA_API_URL),
+		(Some(" OpenAI "), None, ApiMode::OpenAi, ALIBABA_API_URL),
+		// A configured Messages base is taken at its word, exactly as given:
+		// the documented pay-as-you-go workspace shape, and a plan base.
+		(
+			None,
+			Some(WORKSPACE_MESSAGES_URL),
+			ApiMode::Anthropic,
+			WORKSPACE_MESSAGES_URL,
+		),
+		(None, Some(PLAN_MESSAGES_URL), ApiMode::Anthropic, PLAN_MESSAGES_URL),
+		// A URL naming no endpoint was always served by Chat Completions.
+		(
+			None,
+			Some("https://dashscope-intl.aliyuncs.com/compatible-mode/v1"),
+			ApiMode::OpenAi,
+			"https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+		),
+		// The explicit mode beats the URL's path, and the URL is not rewritten.
+		(
+			Some("openai"),
+			Some(WORKSPACE_MESSAGES_URL),
+			ApiMode::OpenAi,
+			WORKSPACE_MESSAGES_URL,
+		),
+		(
+			Some("anthropic"),
+			Some("https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions"),
+			ApiMode::Anthropic,
+			"https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions",
+		),
+	] {
+		assert_eq!(
+			select_endpoint(mode, api_url, None).expect("selected"),
+			(want_mode, want_url.to_owned()),
+			"mode {mode:?}, url {api_url:?}"
+		);
+	}
+}
+
+/// Model Studio's documented pay-as-you-go Messages base (per workspace).
+const WORKSPACE_MESSAGES_URL: &str = "https://ws-1234abcd.ap-southeast-1.maas.aliyuncs.com/apps/anthropic/v1/messages";
+/// A Token Plan / Coding Plan base (also `/apps/anthropic/v1/messages`), used
+/// here only as an example of an explicitly configured endpoint.
+const PLAN_MESSAGES_URL: &str = "https://plan.example/apps/anthropic/v1/messages";
+
+/// A workspace identity selects the official regional pay-as-you-go Messages
+/// base, unchanged in every part but the host label.
+#[test]
+fn a_configured_workspace_selects_the_payg_messages_default() {
+	assert_eq!(
+		select_endpoint(None, None, Some("ws-1234abcd")).expect("selected"),
+		(ApiMode::Anthropic, WORKSPACE_MESSAGES_URL.to_owned())
+	);
+	// No mode needed, and an empty identity is an unset one.
+	assert_eq!(
+		select_endpoint(Some(""), Some(""), Some("ws-1234abcd")).expect("selected"),
+		(ApiMode::Anthropic, WORKSPACE_MESSAGES_URL.to_owned())
+	);
+	// A URL is still the most specific configuration and is not rewritten.
+	assert_eq!(
+		select_endpoint(None, Some(PLAN_MESSAGES_URL), Some("ws-1234abcd")).expect("selected"),
+		(ApiMode::Anthropic, PLAN_MESSAGES_URL.to_owned())
+	);
+	// An explicit Chat mode keeps the Chat route, workspace or not.
+	assert_eq!(
+		select_endpoint(Some("openai"), None, Some("ws-1234abcd")).expect("selected"),
+		(ApiMode::OpenAi, ALIBABA_API_URL.to_owned())
+	);
+}
+
+/// Nothing that is not a single DNS label reaches the host, so no configured
+/// value can add a domain, a path or a port.
+#[test]
+fn workspace_ids_that_are_not_a_single_dns_label_are_refused() {
+	for workspace in [
+		"",
+		"ws.attacker.example",
+		"ws/../other",
+		"ws:8443",
+		"-ws",
+		"ws-",
+		"WS-UPPER",
+		"ws?x=1",
+		"ws#frag",
+		"ws id",
+		"ws@host",
+		"ws%2e",
+		"ws\\host",
+	] {
+		let error = payg_messages_url(workspace).expect_err("not a DNS label");
+		assert!(
+			error.to_string().contains("single DNS label"),
+			"unexpected error for {workspace:?}: {error}"
+		);
+	}
+	let long = "a".repeat(64);
+	assert!(payg_messages_url(&long).is_err(), "64 characters is not a label");
+	assert!(payg_messages_url(&"a".repeat(63)).is_ok(), "63 is the longest label");
+}
+
+/// Without an identity or a URL the safe existing Chat default stands, and an
+/// explicit Messages mode is refused instead of pointed at a guessed host.
+#[test]
+fn no_workspace_and_no_url_keep_the_chat_default() {
+	assert_eq!(
+		ALIBABA_API_URL,
+		"https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions"
+	);
+	assert_eq!(
+		select_endpoint(None, None, None).expect("selected"),
+		(ApiMode::OpenAi, ALIBABA_API_URL.to_owned())
+	);
+	let error = select_endpoint(Some("anthropic"), None, None).expect_err("no derivable host");
+	assert!(
+		error.to_string().contains("ALIBABA_API_URL") && error.to_string().contains("ALIBABA_WORKSPACE_ID"),
+		"the error names both variables that resolve it: {error}"
+	);
+	// The legacy generic path is never substituted for a missing URL.
+	assert!(!ALIBABA_API_URL.contains("claude-code-proxy"));
+}
+
+/// The Chat-only live probe and the Chat-only video field stay on the Chat
+/// route: a Messages turn must not advertise either.
+#[test]
+#[serial_test::serial]
+fn schema_and_video_claims_follow_the_route() {
+	let provider = AlibabaProvider::new();
+	let _env = EnvGuard::new()
+		.remove("ALIBABA_API_MODE")
+		.remove("ALIBABA_API_URL")
+		.remove("ALIBABA_WORKSPACE_ID");
+	assert!(provider.enforces_response_schema("qwen3.8-max"));
+	assert!(provider.supports_video("qwen3.8-max"));
+	assert!(provider.supports_vision("qwen3.8-max"));
+
+	let _env = _env.set("ALIBABA_WORKSPACE_ID", "ws-1234abcd");
+	assert!(
+		!provider.enforces_response_schema("qwen3.8-max"),
+		"Messages takes the forced-tool path: {enabled:?}",
+		enabled = provider.enforces_response_schema("qwen3.8-max")
+	);
+	assert!(!provider.supports_video("qwen3.8-max"));
+	assert!(!provider.supports_video("qwen3.6-flash"));
+	// Images and the context window are the same on both routes.
+	assert!(provider.supports_vision("qwen3.8-max"));
+	assert_eq!(provider.get_max_input_tokens("qwen3.8-max"), 1_000_000);
+}
+
+/// `output_config.effort` is documented per model family on the Messages
+/// contract; an effort floors to the nearest documented value and a family the
+/// contract does not list gets no knob at all.
+#[test]
+fn messages_effort_follows_the_documented_family_tiers() {
+	use ReasoningEffort::*;
+	let cases: [(&str, [&str; 5], &str); 5] = [
+		("qwen4-max", ["low", "high", "high", "xhigh", "xhigh"], "qwen4-max"),
+		("qwen3.8-max", ["low", "medium", "xhigh", "xhigh", "xhigh"], "qwen3.8"),
+		("glm-5.3", ["low", "high", "high", "max", "max"], "glm"),
+		("deepseek-v4-pro", ["high", "high", "high", "max", "max"], "deepseek"),
+		("kimi-k3.1-pro", ["low", "medium", "high", "high", "max"], "kimi"),
+	];
+	for (model, tiers, label) in cases {
+		for (effort, want) in [
+			(None, tiers[0]),
+			(Low, tiers[0]),
+			(Medium, tiers[1]),
+			(High, tiers[2]),
+			(XHigh, tiers[3]),
+			(Max, tiers[4]),
+		] {
+			assert_eq!(
+				messages_effort(model, effort),
+				Some(want),
+				"{label} {model} at {effort:?}"
+			);
+		}
+	}
+	assert_eq!(messages_effort("qwen3-coder-plus", High), Option::None);
+	assert_eq!(messages_effort("unknown-model", Max), Option::None);
+}
+
+/// The knob lands beside a requested schema in the same `output_config` object.
+#[test]
+fn the_thinking_hook_merges_with_a_requested_schema() {
+	let mut body = serde_json::json!({
+		"output_config": { "format": { "type": "json_schema", "schema": { "type": "object" } } }
+	});
+	(ANTHROPIC_COMPAT.thinking)("qwen4-max", Some(ReasoningEffort::Max), &mut body);
+	assert_eq!(body["output_config"]["effort"], "xhigh");
+	assert_eq!(body["output_config"]["format"]["type"], "json_schema");
+
+	let mut untouched = serde_json::json!({});
+	(ANTHROPIC_COMPAT.thinking)("qwen3-coder-plus", Some(ReasoningEffort::High), &mut untouched);
+	assert!(
+		untouched.get("output_config").is_none(),
+		"a family with no documented tier sends nothing: {untouched}"
+	);
+}
+#[test]
+fn an_unknown_mode_is_refused_before_any_request() {
+	let error = select_endpoint(Some("claude"), None, Some("ws-1234abcd")).expect_err("refused");
+	assert!(
+		error.to_string().contains("ALIBABA_API_MODE must be"),
+		"unexpected error: {error}"
+	);
+}
+
+#[test]
+fn messages_images_follow_the_reference_capabilities() {
+	assert_eq!((ANTHROPIC_COMPAT.images)("qwen3-vl-plus"), Images::Base64);
+	assert_eq!(
+		(ANTHROPIC_COMPAT.images)("deepseek-v4-pro"),
+		Images::None,
+		"a known text-only model refuses an image instead of dropping it"
+	);
+	assert_eq!(
+		(ANTHROPIC_COMPAT.images)("custom-model-not-in-the-table"),
+		Images::Base64,
+		"an unknown model is not refused on a guess"
+	);
+}
+
+const MESSAGES_BODY: &str = r#"{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"text","text":"hi from messages"}],"stop_reason":"end_turn","usage":{"input_tokens":1000000,"output_tokens":1000000}}"#;
+const CHAT_BODY: &str = r#"{"id":"chatcmpl-1","object":"chat.completion","created":1,"model":"qwen4-max","choices":[{"index":0,"message":{"role":"assistant","content":"chat answer"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1000000,"completion_tokens":1000000,"total_tokens":2000000}}"#;
+/// qwen4-max at 1M input and 1M output: $1.50 + $4.50.
+const QWEN4_MAX_MILLION_COST: f64 = 6.00;
+
+fn png_message() -> crate::llm::types::Message {
+	use crate::llm::types::{ImageAttachment, ImageData, Message, SourceType};
+	Message::user("what is this?").with_images(vec![ImageAttachment {
+		data: ImageData::Base64("aW1hZ2U=".into()),
+		media_type: "image/png".into(),
+		source_type: SourceType::Url,
+		dimensions: None,
+		size_bytes: None,
+	}])
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn messages_mode_speaks_messages_on_the_configured_url() {
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, MESSAGES_BODY.to_string())]);
+	let path = "/api/v2/apps/claude-code-proxy/v1/messages";
+	let _env = EnvGuard::new()
+		.set("ALIBABA_API_URL", format!("{}{path}", mock.base_url()))
+		.set("ALIBABA_API_MODE", "");
+
+	let params = ChatCompletionParams::new(&[png_message()], "qwen4-max", 100).with_api_key("mock-key".to_owned());
+	let response = AlibabaProvider::new()
+		.chat_completion(params)
+		.await
+		.expect("messages completion");
+
+	assert_eq!(response.content, "hi from messages");
+	let request = &mock.requests()[0];
+	assert_eq!(request.method, "POST");
+	assert_eq!(request.path, path, "the URL is not rewritten");
+	assert_eq!(request.header("authorization"), Some("Bearer mock-key"));
+	assert!(request.header("anthropic-version").is_some(), "Messages header");
+
+	let sent: serde_json::Value = serde_json::from_str(&request.body).expect("request json");
+	assert_eq!(sent["model"], "qwen4-max");
+	assert_eq!(sent["stream"], true);
+	assert_eq!(sent["messages"][0]["content"][1]["type"], "image");
+	assert_eq!(sent["messages"][0]["content"][1]["source"]["data"], "aW1hZ2U=");
+	for field in ["stream_options", "output_config", "thinking"] {
+		assert!(sent.get(field).is_none(), "{field} must not be sent");
+	}
+
+	let usage = response.exchange.usage.expect("usage");
+	assert_eq!((usage.input_tokens, usage.output_tokens), (1_000_000, 1_000_000));
+	assert_eq!(usage.cost, Some(QWEN4_MAX_MILLION_COST));
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn openai_mode_keeps_chat_completions_and_its_pricing() {
+	use crate::llm::types::Message;
+
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, CHAT_BODY.to_string())]);
+	let path = "/compatible-mode/v1/chat/completions";
+	let _env = EnvGuard::new()
+		.set("ALIBABA_API_URL", format!("{}{path}", mock.base_url()))
+		.set("ALIBABA_API_MODE", "openai");
+
+	let params = ChatCompletionParams::new(&[Message::user("hi")], "qwen4-max", 100).with_api_key("k".to_owned());
+	let response = AlibabaProvider::new()
+		.chat_completion(params)
+		.await
+		.expect("chat completion");
+
+	assert_eq!(response.content, "chat answer");
+	assert_eq!(mock.requests()[0].path, path, "the URL is unchanged");
+	let usage = response.exchange.usage.expect("usage");
+	assert_eq!(usage.cost, Some(QWEN4_MAX_MILLION_COST));
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn messages_refuse_video_before_any_request() {
+	use crate::llm::types::{Message, SourceType, VideoAttachment, VideoData};
+
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, MESSAGES_BODY.to_string())]);
+	let _env = EnvGuard::new()
+		.set(
+			"ALIBABA_API_URL",
+			format!("{}/api/v2/apps/claude-code-proxy/v1/messages", mock.base_url()),
+		)
+		.set("ALIBABA_API_MODE", "");
+
+	let clip = Message::user("watch").with_videos(vec![VideoAttachment {
+		data: VideoData::Base64("dmlkZW8=".into()),
+		media_type: "video/mp4".into(),
+		source_type: SourceType::Url,
+		dimensions: None,
+		size_bytes: None,
+		duration_secs: None,
+	}]);
+	let error = AlibabaProvider::new()
+		.chat_completion(ChatCompletionParams::new(&[clip], "qwen4-max", 10).with_api_key("k".to_owned()))
+		.await
+		.expect_err("Messages has no video block");
+	assert!(
+		error.to_string().contains("does not accept video input"),
+		"unexpected error: {error}"
+	);
+	assert!(mock.requests().is_empty(), "a refused request is not sent");
 }
 
 #[test]

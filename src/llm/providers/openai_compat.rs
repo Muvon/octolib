@@ -423,7 +423,8 @@ async fn chat_completion_raw(
 fn configure_streaming(provider: &str, api_url: &str, request: &mut serde_json::Value) -> Result<()> {
 	let include_usage = match provider {
 		"alibaba" | "amazon" | "byteplus" | "fireworks" | "google-studio" | "google-vertex" | "groq" | "inception"
-		| "isoquant" | "local" | "nvidia" | "ollama" | "opencode-zen" | "opencode-go" | "meta" | "reflection" => true,
+		| "isoquant" | "local" | "minimax" | "nvidia" | "ollama" | "opencode-zen" | "opencode-go" | "meta"
+		| "reflection" => true,
 		"cerebras" | "cloudflare" | "featherless" | "xiaomi" => false,
 		// No verified streaming contract for these endpoints yet.
 		"tinker" | "webwright" | "hetzner" => return Ok(()),
@@ -503,6 +504,13 @@ fn apply_reasoning_effort(
 		}
 		return;
 	}
+	// MiniMax's compatible endpoint documents a switch per model: M3.1-Flash
+	// takes `reasoning_effort` and answers 400 to `none`, M3 only `thinking`.
+	if provider_name.eq_ignore_ascii_case("minimax") {
+		super::minimax::openai_thinking(model, effort, request_body);
+		return;
+	}
+
 	match effort.map(|effort| shared::supported_reasoning_effort(provider_name, model, effort)) {
 		Some(ReasoningEffort::None) => {
 			// Thinking off. Model Studio's hybrid models (DeepSeek V4, GLM, Qwen3)

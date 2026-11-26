@@ -13,11 +13,18 @@
 // limitations under the License.
 
 use super::*;
+use crate::llm::types::Message;
 use crate::test_support::env::EnvGuard;
 
 #[test]
+#[serial_test::serial]
 fn only_kimi_k3_1_enforces_a_response_schema() {
 	let provider = MoonshotProvider::new();
+	// Moonshot's default endpoint is Messages, whose schema enforcement is
+	// unprobed; the Chat Completions probe is what the claim rests on.
+	let _env = EnvGuard::new()
+		.remove("MOONSHOT_API_URL")
+		.set("MOONSHOT_API_MODE", "openai");
 	assert!(provider.enforces_response_schema("kimi-k3.1-pro"));
 	for model in ["kimi-k3", "kimi-k2.6", "kimi-k2.7-code"] {
 		assert!(!provider.enforces_response_schema(model), "{model}");
@@ -198,6 +205,75 @@ fn test_k3_1_pro_capabilities() {
 	);
 }
 
+/// The Chat-only schema probe and the Chat-only video field stay on the Chat
+/// route: a Messages turn must not advertise either.
+#[test]
+#[serial_test::serial]
+fn schema_and_video_claims_follow_the_route() {
+	let provider = MoonshotProvider::new();
+	let _env = EnvGuard::new().remove("MOONSHOT_API_MODE").remove("MOONSHOT_API_URL");
+	// Moonshot defaults to Messages: no native schema claim, no video field.
+	assert!(!provider.enforces_response_schema("kimi-k3.1-pro"));
+	assert!(!provider.supports_video("kimi-k3"));
+
+	let _env = _env.set("MOONSHOT_API_MODE", "openai");
+	let chat_video = crate::llm::reference_models::get_reference_capabilities("kimi-k3")
+		.map(|capabilities| capabilities.video)
+		.unwrap_or(false);
+	assert!(
+		provider.enforces_response_schema("kimi-k3.1-pro"),
+		"Chat Completions is the probed route"
+	);
+	assert_eq!(provider.supports_video("kimi-k3"), chat_video);
+
+	let _env = _env.set("MOONSHOT_API_MODE", "anthropic");
+	assert!(
+		!provider.enforces_response_schema("kimi-k3.1-pro"),
+		"Messages takes the forced-tool path"
+	);
+	assert!(!provider.supports_video("kimi-k3"));
+	// Inline images and the context window are the same on both routes.
+	assert!(provider.supports_vision("kimi-k3"));
+	assert_eq!(provider.get_max_input_tokens("kimi-k3"), 1_048_576);
+	assert_eq!(provider.cache_lifetime("kimi-k3", false), Some(MEASURED_CACHE_LIFETIME));
+}
+
+/// The Messages contract documents `output_config.effort` with K3's own three
+/// values, so a requested effort is forwarded instead of dropped, and a model
+/// outside the K3 family sends no knob.
+#[test]
+fn the_messages_thinking_hook_forwards_the_k3_effort() {
+	let hook = ANTHROPIC_COMPAT.thinking;
+	for (effort, want) in [
+		(ReasoningEffort::Low, "low"),
+		(ReasoningEffort::Medium, "low"),
+		(ReasoningEffort::High, "high"),
+		(ReasoningEffort::XHigh, "high"),
+		(ReasoningEffort::Max, "max"),
+		(ReasoningEffort::None, "low"),
+	] {
+		let mut body = serde_json::json!({});
+		hook("kimi-k3", Some(effort), &mut body);
+		assert_eq!(body["output_config"]["effort"], want, "{effort:?}");
+	}
+
+	// A schema request keeps its format beside the effort.
+	let mut with_schema = serde_json::json!({
+		"output_config": { "format": { "type": "json_schema", "schema": { "type": "object" } } }
+	});
+	hook("kimi-k3.1-pro", Some(ReasoningEffort::High), &mut with_schema);
+	assert_eq!(with_schema["output_config"]["effort"], "high");
+	assert_eq!(with_schema["output_config"]["format"]["type"], "json_schema");
+
+	// No effort requested, or a model with no documented tier: nothing sent.
+	let mut unset = serde_json::json!({});
+	hook("kimi-k3", None, &mut unset);
+	assert!(unset.get("output_config").is_none(), "{unset}");
+	let mut k26 = serde_json::json!({});
+	hook("kimi-k2.6", Some(ReasoningEffort::Max), &mut k26);
+	assert!(k26.get("output_config").is_none(), "{k26}");
+}
+
 #[test]
 fn test_k3_reasoning_effort() {
 	// Only K3-series models get the reasoning_effort field
@@ -268,7 +344,7 @@ fn test_reasoning_content_serialization() {
 	};
 
 	// For thinking models, reasoning_content should be present
-	let converted = convert_messages(std::slice::from_ref(&msg_with_thinking), "kimi-k2.7-code");
+	let converted = convert_messages(std::slice::from_ref(&msg_with_thinking), "kimi-k2.7-code").expect("converted");
 	assert_eq!(converted.len(), 1);
 	assert!(converted[0].reasoning_content.is_some());
 	assert_eq!(
@@ -277,7 +353,7 @@ fn test_reasoning_content_serialization() {
 	);
 
 	// For Kimi K2 models, reasoning_content should be present
-	let converted = convert_messages(std::slice::from_ref(&msg_with_thinking), "kimi-k2.6");
+	let converted = convert_messages(std::slice::from_ref(&msg_with_thinking), "kimi-k2.6").expect("converted");
 	assert_eq!(converted.len(), 1);
 	assert!(converted[0].reasoning_content.is_some());
 
@@ -303,13 +379,13 @@ fn test_reasoning_content_serialization() {
 	};
 
 	// For thinking models, should have Some("") for tool calls even without thinking
-	let converted = convert_messages(std::slice::from_ref(&msg_no_thinking), "kimi-k3");
+	let converted = convert_messages(std::slice::from_ref(&msg_no_thinking), "kimi-k3").expect("converted");
 	assert_eq!(converted.len(), 1);
 	assert!(converted[0].reasoning_content.is_some());
 	assert_eq!(converted[0].reasoning_content.as_ref().unwrap(), "");
 
 	// For Kimi K2 models, should be Some("") even without thinking
-	let converted = convert_messages(std::slice::from_ref(&msg_no_thinking), "kimi-k2.6");
+	let converted = convert_messages(std::slice::from_ref(&msg_no_thinking), "kimi-k2.6").expect("converted");
 	assert_eq!(converted.len(), 1);
 	assert!(converted[0].reasoning_content.is_some());
 	assert_eq!(converted[0].reasoning_content.as_ref().unwrap(), "");
@@ -332,11 +408,11 @@ fn test_reasoning_content_serialization() {
 	};
 
 	// Regular assistant messages without tool calls: no reasoning_content
-	let converted = convert_messages(std::slice::from_ref(&regular_msg), "kimi-k2.7-code");
+	let converted = convert_messages(std::slice::from_ref(&regular_msg), "kimi-k2.7-code").expect("converted");
 	assert_eq!(converted.len(), 1);
 	assert!(converted[0].reasoning_content.is_none());
 
-	let converted = convert_messages(std::slice::from_ref(&regular_msg), "kimi-k2.6");
+	let converted = convert_messages(std::slice::from_ref(&regular_msg), "kimi-k2.6").expect("converted");
 	assert_eq!(converted.len(), 1);
 	assert!(converted[0].reasoning_content.is_none());
 
@@ -348,7 +424,7 @@ fn test_reasoning_content_serialization() {
 		}),
 		..regular_msg
 	};
-	let converted = convert_messages(&[regular_msg_with_thinking], "kimi-k2.7-code");
+	let converted = convert_messages(&[regular_msg_with_thinking], "kimi-k2.7-code").expect("converted");
 	assert_eq!(
 		converted[0].reasoning_content.as_deref(),
 		Some("I chose the first three numbers and retained two.")
@@ -371,7 +447,7 @@ fn test_reasoning_content_serialization() {
 		id: None,
 	};
 
-	let converted = convert_messages(&[tool_msg], "kimi-k3");
+	let converted = convert_messages(&[tool_msg], "kimi-k3").expect("converted");
 	assert_eq!(converted.len(), 1);
 	assert!(converted[0].reasoning_content.is_none());
 
@@ -559,8 +635,21 @@ fn test_k3_reasoning_effort_none_floors_to_low() {
 
 #[test]
 fn tool_images_follow_tool_results_without_losing_call_association() {
+	// The helper carries one inline image and one URL image. The URL image is
+	// refused instead of being dropped, so the refusal and the placement of the
+	// inline image are pinned separately.
 	let messages = [shared::tests::tool_image_message("")];
-	let value = serde_json::to_value(convert_messages(&messages, "kimi-k2.5")).unwrap();
+	let error = convert_messages(&messages, "kimi-k2.5").expect_err("URL images are refused");
+	assert!(
+		error.to_string().contains("takes image data inline only"),
+		"unexpected error: {error}"
+	);
+
+	let mut inline_only = messages[0].clone();
+	inline_only.images = Some(vec![messages[0].images.as_ref().expect("helper images")[0].clone()]);
+	let value =
+		serde_json::to_value(convert_messages(std::slice::from_ref(&inline_only), "kimi-k2.5").expect("converted"))
+			.unwrap();
 	assert_eq!(value[0]["role"], "tool");
 	assert_eq!(value[0]["tool_call_id"], "call_image");
 	assert_eq!(value[0]["content"], "");
@@ -604,4 +693,225 @@ fn cache_lifetime_is_the_measured_four_minutes_on_caching_models() {
 		Some(std::time::Duration::from_secs(240))
 	);
 	assert_eq!(provider.cache_lifetime("moonshot-v1-8k", false), None);
+}
+
+#[test]
+fn the_default_endpoint_follows_the_mode() {
+	// (MOONSHOT_API_MODE, MOONSHOT_API_URL, the protocol and URL that follow)
+	for (mode, api_url, want_mode, want_url) in [
+		(None, None, ApiMode::Anthropic, MOONSHOT_API_URL),
+		(Some(""), None, ApiMode::Anthropic, MOONSHOT_API_URL),
+		(Some("anthropic"), None, ApiMode::Anthropic, MOONSHOT_API_URL),
+		(Some(" OpenAI "), None, ApiMode::OpenAi, MOONSHOT_CHAT_API_URL),
+		// A URL naming an endpoint is taken at its word, exactly as given.
+		(
+			None,
+			Some("https://proxy.example/anthropic/v1/messages"),
+			ApiMode::Anthropic,
+			"https://proxy.example/anthropic/v1/messages",
+		),
+		// A URL naming no endpoint was always served by Chat Completions.
+		(
+			None,
+			Some("https://proxy.example/v4"),
+			ApiMode::OpenAi,
+			"https://proxy.example/v4",
+		),
+		// The explicit mode beats the URL's path, and the URL is not rewritten.
+		(
+			Some("anthropic"),
+			Some("https://proxy.example/v1/chat/completions"),
+			ApiMode::Anthropic,
+			"https://proxy.example/v1/chat/completions",
+		),
+		(
+			Some("openai"),
+			Some("https://proxy.example/anthropic/v1/messages"),
+			ApiMode::OpenAi,
+			"https://proxy.example/anthropic/v1/messages",
+		),
+	] {
+		assert_eq!(
+			select_endpoint(mode, api_url).expect("selected"),
+			(want_mode, want_url.to_owned()),
+			"mode {mode:?}, url {api_url:?}"
+		);
+	}
+	// An empty URL is no URL.
+	assert_eq!(
+		select_endpoint(Some("openai"), Some("")).expect("selected"),
+		(ApiMode::OpenAi, MOONSHOT_CHAT_API_URL.to_owned())
+	);
+}
+
+#[test]
+fn an_unknown_mode_is_refused_before_any_request() {
+	let error = select_endpoint(Some("claude"), None).expect_err("refused");
+	assert!(
+		error.to_string().contains("MOONSHOT_API_MODE must be"),
+		"unexpected error: {error}"
+	);
+}
+
+const MESSAGES_BODY: &str = r#"{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"text","text":"stripes"}],"stop_reason":"end_turn","usage":{"input_tokens":1000000,"output_tokens":1000000}}"#;
+const CHAT_BODY: &str = r#"{"id":"chatcmpl-1","object":"chat.completion","created":1,"model":"kimi-k3","choices":[{"index":0,"message":{"role":"assistant","content":"chat answer"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1000000,"completion_tokens":1000000,"total_tokens":2000000}}"#;
+/// kimi-k3 at 1M input and 1M output: $3.00 + $15.00.
+const K3_MILLION_COST: f64 = 18.00;
+
+fn png_message() -> crate::llm::types::Message {
+	use crate::llm::types::{ImageAttachment, ImageData, Message, SourceType};
+	Message::user("what is this?").with_images(vec![ImageAttachment {
+		data: ImageData::Base64("aW1hZ2U=".into()),
+		media_type: "image/png".into(),
+		source_type: SourceType::Url,
+		dimensions: None,
+		size_bytes: None,
+	}])
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn messages_mode_speaks_messages_on_the_configured_url() {
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, MESSAGES_BODY.to_string())]);
+	let path = "/anthropic/v1/messages";
+	let _env = EnvGuard::new()
+		.set("MOONSHOT_API_URL", format!("{}{path}", mock.base_url()))
+		.set("MOONSHOT_API_MODE", "");
+
+	let params = ChatCompletionParams::new(&[png_message()], "kimi-k3", 100).with_api_key("mock-key".to_owned());
+	let response = MoonshotProvider::new()
+		.chat_completion(params)
+		.await
+		.expect("messages completion");
+
+	assert_eq!(response.content, "stripes");
+	let request = &mock.requests()[0];
+	assert_eq!(request.method, "POST");
+	assert_eq!(request.path, path, "the URL is not rewritten");
+	assert_eq!(request.header("authorization"), Some("Bearer mock-key"));
+	assert!(request.header("anthropic-version").is_some(), "Messages header");
+
+	let sent: serde_json::Value = serde_json::from_str(&request.body).expect("request json");
+	assert_eq!(sent["model"], "kimi-k3");
+	assert_eq!(sent["stream"], true);
+	assert_eq!(sent["messages"][0]["content"][0]["type"], "text");
+	assert_eq!(sent["messages"][0]["content"][1]["type"], "image");
+	assert_eq!(sent["messages"][0]["content"][1]["source"]["data"], "aW1hZ2U=");
+	for field in ["stream_options", "output_config", "thinking", "reasoning_effort"] {
+		assert!(sent.get(field).is_none(), "{field} must not be sent");
+	}
+
+	// Usage is billed from the local table, thinking included in output.
+	let usage = response.exchange.usage.expect("usage");
+	assert_eq!(
+		(usage.input_tokens, usage.output_tokens, usage.reasoning_tokens),
+		(1_000_000, 1_000_000, 0)
+	);
+	assert_eq!(usage.cost, Some(K3_MILLION_COST));
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn openai_mode_beats_a_messages_path_and_still_prices_the_turn() {
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, CHAT_BODY.to_string())]);
+	let path = "/anthropic/v1/messages";
+	let _env = EnvGuard::new()
+		.set("MOONSHOT_API_URL", format!("{}{path}", mock.base_url()))
+		.set("MOONSHOT_API_MODE", "openai");
+
+	let params = ChatCompletionParams::new(&[Message::user("hi")], "kimi-k3", 100).with_api_key("k".to_owned());
+	let response = MoonshotProvider::new()
+		.chat_completion(params)
+		.await
+		.expect("chat completion");
+
+	assert_eq!(response.content, "chat answer");
+	let request = &mock.requests()[0];
+	assert_eq!(request.path, path, "the explicit mode wins, the URL is unchanged");
+	let sent: serde_json::Value = serde_json::from_str(&request.body).expect("request json");
+	assert_eq!(sent["stream_options"]["include_usage"], true);
+	let usage = response.exchange.usage.expect("usage");
+	assert_eq!(usage.cost, Some(K3_MILLION_COST));
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn messages_refuse_video_and_url_images_before_any_request() {
+	use crate::llm::types::{ImageAttachment, ImageData, SourceType, VideoAttachment, VideoData};
+
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, MESSAGES_BODY.to_string())]);
+	let _env = EnvGuard::new()
+		.set("MOONSHOT_API_URL", format!("{}/anthropic/v1/messages", mock.base_url()))
+		.set("MOONSHOT_API_MODE", "");
+	let provider = MoonshotProvider::new();
+
+	let clip = Message::user("watch").with_videos(vec![VideoAttachment {
+		data: VideoData::Base64("dmlkZW8=".into()),
+		media_type: "video/mp4".into(),
+		source_type: SourceType::Url,
+		dimensions: None,
+		size_bytes: None,
+		duration_secs: None,
+	}]);
+	let error = provider
+		.chat_completion(ChatCompletionParams::new(&[clip], "kimi-k3", 10).with_api_key("k".to_owned()))
+		.await
+		.expect_err("Messages has no video block");
+	assert!(
+		error.to_string().contains("does not accept video input"),
+		"unexpected error: {error}"
+	);
+
+	// The live Messages endpoint answered `400 unsupported image url` for a URL
+	// image on 2026-11-26, so it is refused locally rather than sent to fail.
+	let url_image = Message::user("look").with_images(vec![ImageAttachment {
+		data: ImageData::Url("https://example.com/a.png".into()),
+		media_type: "image/png".to_owned(),
+		source_type: SourceType::Url,
+		dimensions: None,
+		size_bytes: None,
+	}]);
+	let error = provider
+		.chat_completion(ChatCompletionParams::new(&[url_image], "kimi-k3", 10).with_api_key("k".to_owned()))
+		.await
+		.expect_err("a URL image is refused: the endpoint rejects it");
+	assert!(
+		error.to_string().contains("does not accept URL images"),
+		"unexpected error: {error}"
+	);
+	assert!(mock.requests().is_empty(), "a refused request is not sent");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn a_json_object_request_is_not_dropped_on_messages() {
+	use crate::llm::types::StructuredOutputRequest;
+
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, MESSAGES_BODY.to_string())]);
+	let _env = EnvGuard::new()
+		.set("MOONSHOT_API_URL", format!("{}/anthropic/v1/messages", mock.base_url()))
+		.set("MOONSHOT_API_MODE", "");
+
+	let params = ChatCompletionParams::new(&[Message::user("give me JSON")], "kimi-k3", 100)
+		.with_api_key("k".to_owned())
+		.with_structured_output(StructuredOutputRequest::json());
+	// The mock answers prose, so the guarantee now fails closed instead of
+	// silently returning it.
+	let error = MoonshotProvider::new()
+		.chat_completion(params)
+		.await
+		.expect_err("prose is not a JSON object");
+	assert!(
+		error.to_string().contains("no parseable structured output"),
+		"unexpected error: {error}"
+	);
+	let sent: serde_json::Value = serde_json::from_str(&mock.requests()[0].body).expect("request json");
+	assert_eq!(
+		sent["tools"][0]["name"], "emit_structured_response",
+		"the object guarantee is enforced through the shared schema path"
+	);
+	assert_eq!(
+		sent["tools"][0]["input_schema"],
+		serde_json::json!({ "type": "object" })
+	);
 }

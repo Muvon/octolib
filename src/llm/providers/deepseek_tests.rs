@@ -498,3 +498,181 @@ async fn chat_completion_via_mock_http_returns_content_and_usage() {
 	let req_body: serde_json::Value = serde_json::from_str(&requests[0].body).expect("request json");
 	assert_eq!(req_body["model"], "deepseek-flash");
 }
+
+#[test]
+fn thinking_knobs_on_the_messages_endpoint() {
+	let mut request = serde_json::json!({});
+	configure_thinking("deepseek-flash", None, &mut request);
+	assert_eq!(
+		request,
+		serde_json::json!({}),
+		"the endpoint's default (thinking on) stands"
+	);
+
+	for (effort, expected) in [
+		(ReasoningEffort::Low, "low"),
+		(ReasoningEffort::Medium, "low"),
+		(ReasoningEffort::High, "high"),
+		(ReasoningEffort::Max, "max"),
+	] {
+		let mut request = serde_json::json!({});
+		configure_thinking("deepseek-flash", Some(effort), &mut request);
+		assert_eq!(
+			request,
+			serde_json::json!({ "thinking": { "type": "enabled" }, "output_config": { "effort": expected } })
+		);
+	}
+
+	let mut request = serde_json::json!({});
+	configure_thinking("deepseek-v4-pro", Some(ReasoningEffort::None), &mut request);
+	assert_eq!(request, serde_json::json!({ "thinking": { "type": "disabled" } }));
+}
+
+#[test]
+fn the_default_endpoint_follows_the_mode() {
+	// (DEEPSEEK_API_MODE, no URL: the endpoint of that protocol)
+	for (mode, want_mode, want_url) in [
+		(None, ApiMode::Anthropic, DEEPSEEK_API_URL),
+		(Some(""), ApiMode::Anthropic, DEEPSEEK_API_URL),
+		(Some("anthropic"), ApiMode::Anthropic, DEEPSEEK_API_URL),
+		(Some(" OpenAI "), ApiMode::OpenAi, DEEPSEEK_CHAT_API_URL),
+	] {
+		assert_eq!(
+			select_endpoint(mode, None).expect("selected"),
+			(want_mode, want_url.to_owned()),
+			"mode {mode:?}"
+		);
+	}
+	// An empty URL is no URL.
+	assert_eq!(
+		select_endpoint(Some("openai"), Some("")).expect("selected"),
+		(ApiMode::OpenAi, DEEPSEEK_CHAT_API_URL.to_owned())
+	);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn each_protocol_is_sent_to_its_url_unchanged() {
+	use crate::llm::types::Message;
+	// (DEEPSEEK_API_MODE, path under the mock's origin, answer, whether Messages is spoken)
+	let messages_body = r#"{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"text","text":"messages answer"}],"stop_reason":"end_turn","usage":{"input_tokens":12,"output_tokens":7}}"#;
+	let chat_body = crate::test_support::mock_http::chat_completion_body("chat answer");
+	let cases = [
+		("", "/api/prefix/v1/messages", "messages answer", true),
+		("", "/api/prefix/chat/completions", "chat answer", false),
+		// A URL naming no endpoint was always served by Chat Completions.
+		("", "/api/prefix/v4", "chat answer", false),
+		// A mode states the protocol of the URL; the URL itself is not touched.
+		("anthropic", "/api/prefix/chat/completions", "messages answer", true),
+		("openai", "/api/prefix/v1/messages", "chat answer", false),
+	];
+	for (mode, path, answer, is_messages) in cases {
+		let mock = crate::test_support::mock_http::MockHttp::start(vec![(
+			200,
+			if is_messages { messages_body } else { chat_body.as_str() }.to_string(),
+		)]);
+		let _env = EnvGuard::new()
+			.set("DEEPSEEK_API_URL", format!("{}{path}", mock.base_url()))
+			.set("DEEPSEEK_API_MODE", mode);
+
+		let provider = DeepSeekProvider::new();
+		let params = ChatCompletionParams::new(&[Message::user("hi")], "deepseek-flash", 100)
+			.with_api_key("mock-key".to_owned());
+		let response = provider.chat_completion(params).await.expect("completion");
+		assert_eq!(response.content, answer);
+		// Both routes bill from the PRICING table.
+		assert!(response.exchange.usage.expect("usage").cost.is_some(), "path {path}");
+		let request = &mock.requests()[0];
+		assert_eq!(request.method, "POST");
+		assert_eq!(request.path, path, "the URL is not rewritten");
+		assert_eq!(request.header("authorization"), Some("Bearer mock-key"));
+		assert_eq!(
+			request.header("anthropic-version").is_some(),
+			is_messages,
+			"path {path}"
+		);
+		let body: serde_json::Value = serde_json::from_str(&request.body).expect("request json");
+		assert_eq!(body["model"], "deepseek-flash");
+		if is_messages {
+			assert_eq!(body["max_tokens"], 100);
+			assert_eq!(body["messages"][0]["content"][0]["text"], "hi");
+		} else {
+			assert_eq!(body["messages"][0]["content"], "hi");
+		}
+	}
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn an_unknown_mode_is_refused_before_any_request() {
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, "{}".to_string())]);
+	let _env = EnvGuard::new()
+		.set("DEEPSEEK_API_URL", mock.url.clone())
+		.set("DEEPSEEK_API_MODE", "claude");
+
+	let provider = DeepSeekProvider::new();
+	let params = ChatCompletionParams::new(&[], "deepseek-flash", 10).with_api_key("mock-key".to_owned());
+	let error = provider.chat_completion(params).await.expect_err("refused");
+	assert!(
+		error.to_string().contains("DEEPSEEK_API_MODE must be"),
+		"unexpected error: {error}"
+	);
+	assert!(mock.requests().is_empty(), "nothing is sent");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn messages_endpoint_refuses_images_the_model_or_endpoint_does_not_take() {
+	use crate::llm::types::{ImageAttachment, ImageData, Message, SourceType};
+	let body = r#"{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"text","text":"stripes"}],"stop_reason":"end_turn","usage":{"input_tokens":12,"output_tokens":2}}"#;
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, body.to_string())]);
+	let _env = EnvGuard::new().set("DEEPSEEK_API_URL", format!("{}/v1/messages", mock.base_url()));
+
+	let attachment = |data: ImageData| ImageAttachment {
+		data,
+		media_type: "image/png".into(),
+		source_type: SourceType::Url,
+		dimensions: None,
+		size_bytes: None,
+	};
+	let inline = Message::user("what is this?").with_images(vec![attachment(ImageData::Base64("aW1hZ2U=".into()))]);
+	let linked = Message::user("what is this?")
+		.with_images(vec![attachment(ImageData::Url("https://example.com/a.png".into()))]);
+	let provider = DeepSeekProvider::new();
+
+	for (messages, model, refused) in [
+		(vec![inline.clone()], "deepseek-v4-pro", "image input"),
+		(vec![linked], "deepseek-flash", "URL images"),
+	] {
+		let params = ChatCompletionParams::new(&messages, model, 10).with_api_key("mock-key".to_owned());
+		let error = provider.chat_completion(params).await.expect_err("unsupported image");
+		assert!(
+			error
+				.to_string()
+				.contains(&format!("deepseek model {model} does not accept {refused}")),
+			"unexpected error: {error}"
+		);
+	}
+	assert!(mock.requests().is_empty(), "a refused request is not sent");
+
+	let params = ChatCompletionParams::new(&[inline], "deepseek-flash", 10).with_api_key("mock-key".to_owned());
+	let response = provider
+		.chat_completion(params)
+		.await
+		.expect("Flash reads inline images");
+	assert_eq!(response.content, "stripes");
+	assert!(
+		response.exchange.usage.expect("usage").cost.is_some(),
+		"cost from the pricing table"
+	);
+	let requests = mock.requests();
+	assert_eq!(requests[0].path, "/v1/messages");
+	assert_eq!(requests[0].header("authorization"), Some("Bearer mock-key"));
+	let request: serde_json::Value = serde_json::from_str(&requests[0].body).expect("request json");
+	assert_eq!(request["messages"][0]["content"][0]["type"], "text");
+	assert_eq!(request["messages"][0]["content"][1]["type"], "image");
+	assert!(
+		request.get("reasoning_effort").is_none(),
+		"the Chat API field is not sent here"
+	);
+}

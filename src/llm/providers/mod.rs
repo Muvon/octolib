@@ -17,6 +17,7 @@
 pub mod alibaba;
 pub mod amazon;
 pub mod anthropic;
+mod anthropic_compat;
 pub mod byteplus;
 pub mod cerebras;
 pub mod chatgpt;

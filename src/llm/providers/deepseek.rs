@@ -41,11 +41,20 @@
 //! Thinking is enabled by default (effort "high"); effort is controlled via
 //! the top-level `reasoning_effort` field: "low" | "high" | "max"
 //! (<https://api-docs.deepseek.com/guides/thinking_mode>).
+//!
+//! Requests go to the Anthropic Messages endpoint
+//! (<https://api-docs.deepseek.com/guides/anthropic_api>) through the shared
+//! `anthropic_compat` layer. A `DEEPSEEK_API_URL` override is sent as it is:
+//! one whose path ends in `/messages` speaks Messages, any other is served by
+//! the Chat Completions code below, as before. `DEEPSEEK_API_MODE=anthropic`
+//! or `openai` states the protocol for any URL and, with no URL, selects that
+//! protocol's default endpoint.
 
+use super::anthropic_compat::{self, AnthropicCompatConfig, ApiMode, Images};
 use crate::llm::providers::shared;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
-use crate::llm::types::{ChatCompletionParams, ProviderExchange, ProviderResponse, TokenUsage};
+use crate::llm::types::{ChatCompletionParams, ProviderExchange, ProviderResponse, ReasoningEffort, TokenUsage};
 use crate::llm::utils::{contains_ignore_ascii_case, is_model_in_pricing_table, PricingTuple};
 use anyhow::Result;
 
@@ -213,7 +222,88 @@ impl DeepSeekProvider {
 
 pub(crate) const DEEPSEEK_API_KEY_ENV: &str = "DEEPSEEK_API_KEY";
 const DEEPSEEK_API_URL_ENV: &str = "DEEPSEEK_API_URL";
-const DEEPSEEK_API_URL: &str = "https://api.deepseek.com/chat/completions";
+/// Messages endpoint, the default.
+const DEEPSEEK_API_URL: &str = "https://api.deepseek.com/anthropic/v1/messages";
+/// Chat Completions endpoint, for `DEEPSEEK_API_MODE=openai`.
+const DEEPSEEK_CHAT_API_URL: &str = "https://api.deepseek.com/chat/completions";
+const DEEPSEEK_API_MODE_ENV: &str = "DEEPSEEK_API_MODE";
+
+/// The protocol and URL for one request. A supplied URL is sent as it is,
+/// whatever the protocol: it is never rewritten. An explicit mode comes
+/// first, then the URL's own path; a URL naming neither endpoint was always
+/// served by Chat Completions, and with no URL the default is Messages.
+fn select_endpoint(mode: Option<&str>, api_url: Option<&str>) -> Result<(ApiMode, String)> {
+	// An empty variable is an unset one.
+	let mode = mode
+		.filter(|raw| !raw.is_empty())
+		.map(|raw| anthropic_compat::parse_api_mode(DEEPSEEK_API_MODE_ENV, raw))
+		.transpose()?;
+	let api_url = api_url.filter(|api_url| !api_url.is_empty());
+	let mode = mode
+		.or_else(|| api_url.and_then(anthropic_compat::url_api_mode))
+		.unwrap_or(match api_url {
+			Some(_) => ApiMode::OpenAi,
+			None => ApiMode::Anthropic,
+		});
+	let api_url = api_url.map_or_else(
+		|| {
+			match mode {
+				ApiMode::Anthropic => DEEPSEEK_API_URL,
+				ApiMode::OpenAi => DEEPSEEK_CHAT_API_URL,
+			}
+			.to_owned()
+		},
+		str::to_owned,
+	);
+	Ok((mode, api_url))
+}
+
+/// Thinking knobs on the Messages endpoint. The Chat API's `reasoning_effort`
+/// field is not sent: the endpoint took `thinking` and `output_config.effort`
+/// on deepseek-flash (2026-11-26).
+fn configure_thinking(_model: &str, effort: Option<ReasoningEffort>, request: &mut serde_json::Value) {
+	// No effort asked for: the endpoint's own default (thinking on) stands.
+	let Some(effort) = effort else {
+		return;
+	};
+	if effort == ReasoningEffort::None {
+		request["thinking"] = serde_json::json!({ "type": "disabled" });
+		return;
+	}
+	if let Some(reasoning_effort) = map_reasoning_effort(Some(effort)) {
+		request["output_config"] = serde_json::json!({ "effort": reasoning_effort });
+	}
+	request["thinking"] = serde_json::json!({ "type": "enabled" });
+}
+
+/// DeepSeek on the shared Messages layer. Inline images are taken by the
+/// vision models and refused for the others: DeepSeek Flash read a striped
+/// test image correctly here (2026-11-26). URL images are not probed, so
+/// they are refused. Only `json_object` is documented, so a schema takes
+/// the forced-tool path.
+const ANTHROPIC_COMPAT: AnthropicCompatConfig = AnthropicCompatConfig {
+	provider_name: "deepseek",
+	images: |model| {
+		if contains_ignore_ascii_case(model, "deepseek-v4-pro") {
+			Images::None
+		} else {
+			Images::Base64
+		}
+	},
+	videos: |_| false,
+	enforces_response_schema: false,
+	thinking: configure_thinking,
+	cost: |model, usage| {
+		calculate_cost_with_cache(
+			pricing_table_at(std::time::SystemTime::now()),
+			model,
+			usage.input_tokens,
+			usage.cache_read_tokens,
+			usage.output_tokens,
+		)
+	},
+	default_system: "",
+};
 
 // DeepSeek API request/response structures
 #[derive(Serialize, Debug, Clone)]
@@ -508,6 +598,13 @@ impl AiProvider for DeepSeekProvider {
 
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
 		let api_key = super::shared::resolve_api_key(self, &params)?;
+		let (mode, api_url) = select_endpoint(
+			env::var(DEEPSEEK_API_MODE_ENV).ok().as_deref(),
+			env::var(DEEPSEEK_API_URL_ENV).ok().as_deref(),
+		)?;
+		if mode == ApiMode::Anthropic {
+			return anthropic_compat::chat_completion(ANTHROPIC_COMPAT, api_key, api_url, params).await;
+		}
 		let request = build_request(&params);
 
 		let start_time = std::time::Instant::now();
@@ -520,8 +617,8 @@ impl AiProvider for DeepSeekProvider {
 				let api_key = api_key.clone();
 				let request = request.clone();
 				let extra_headers = extra_headers.clone();
+				let api_url = api_url.clone();
 				Box::pin(async move {
-					let api_url = env::var(DEEPSEEK_API_URL_ENV).unwrap_or_else(|_| DEEPSEEK_API_URL.to_string());
 					let req = client
 						.post(&api_url)
 						.bearer_auth(&api_key)

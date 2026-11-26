@@ -344,7 +344,8 @@ async fn messages_providers_accumulate_text_and_bill_final_usage() {
 			json!({"type":"message_stop"}),
 		];
 		let mock = MockHttp::start(vec![(200, wire(&events, false))]);
-		let _env = EnvGuard::new().set(env, &mock.url);
+		// A Messages path: MiniMax reads the protocol off the URL's path.
+		let _env = EnvGuard::new().set(env, format!("{}/v1/messages", mock.base_url()));
 		let mut params = ChatCompletionParams::new(&[], model, 100).with_api_key("mock-key".to_owned());
 		params.max_retries = 0;
 		let response = provider

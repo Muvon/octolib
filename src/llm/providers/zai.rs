@@ -64,6 +64,22 @@
 //!
 //! GLM-4 series:
 //! - GLM-4-32B-0414-128K: Input $0.10/1M, Output $0.10/1M
+//!
+//! # Endpoints
+//!
+//! With no configuration, a model that takes images goes to Chat
+//! Completions (<https://docs.z.ai/api-reference/llm/chat-completion>) for
+//! every turn of a conversation, and one that takes neither goes to the
+//! Messages endpoint (<https://docs.z.ai/api-reference/anthropic-messages>).
+//! `ZAI_API_URL` names another endpoint and is sent as it is: one whose path
+//! ends in `/messages` speaks Messages, one ending in `/chat/completions`
+//! (or any other) is served by the Chat Completions code below, as before.
+//! `ZAI_API_MODE=anthropic` or `openai` states the protocol for any URL and,
+//! with no URL, selects that protocol's default endpoint. Messages takes
+//! neither images nor videos there, and Chat Completions takes no videos: both
+//! are refused rather than dropped.
+
+use super::anthropic_compat::{self, AnthropicCompatConfig, ApiMode, Images};
 use super::shared;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
@@ -187,12 +203,77 @@ impl ZaiProvider {
 	pub fn new() -> Self {
 		Self
 	}
+
+	/// The protocol and URL for one request. The protocol is the model's, not
+	/// this turn's: with no mode and no URL, a model that takes images stays
+	/// on Chat Completions for every turn of a conversation, and one that takes
+	/// none goes to Messages. Reading the media out of the payload
+	/// instead moved a conversation's endpoint when its first image arrived —
+	/// losing the prefix cache and the signed thinking block on that turn, and
+	/// moving back once compaction dropped the image (glm-4.6v described a
+	/// striped test image wrongly twice through Messages and correctly through
+	/// Chat, 2026-11-26). A URL that names no endpoint was always served by Chat
+	/// Completions. A supplied URL is sent as it is, whatever the protocol: it is
+	/// never rewritten.
+	fn select_endpoint(&self, mode: Option<&str>, api_url: Option<&str>, model: &str) -> Result<(ApiMode, String)> {
+		let reads_images = self.supports_vision(model);
+		// An empty variable is an unset one.
+		let mode = mode
+			.filter(|raw| !raw.is_empty())
+			.map(|raw| anthropic_compat::parse_api_mode(ZAI_API_MODE_ENV, raw))
+			.transpose()?;
+		let api_url = api_url.filter(|api_url| !api_url.is_empty());
+		let mode = mode
+			.or_else(|| api_url.and_then(anthropic_compat::url_api_mode))
+			.unwrap_or(match (api_url, reads_images) {
+				(Some(_), _) | (None, true) => ApiMode::OpenAi,
+				(None, false) => ApiMode::Anthropic,
+			});
+		let api_url = api_url.map_or_else(
+			|| {
+				match mode {
+					ApiMode::Anthropic => ZAI_MESSAGES_API_URL,
+					ApiMode::OpenAi => ZAI_API_URL,
+				}
+				.to_owned()
+			},
+			str::to_owned,
+		);
+		Ok((mode, api_url))
+	}
 }
+
+/// Z.ai's binary thinking switch, as on its Chat API. The level knobs of the
+/// Chat API are not sent here.
+fn configure_thinking(model: &str, effort: Option<ReasoningEffort>, request: &mut serde_json::Value) {
+	match effort.map(|effort| shared::supported_reasoning_effort("zai", model, effort)) {
+		Some(ReasoningEffort::None) => request["thinking"] = serde_json::json!({ "type": "disabled" }),
+		Some(_) => request["thinking"] = serde_json::json!({ "type": "enabled" }),
+		None => {}
+	}
+}
+
+/// Z.ai on the shared Messages layer. It takes neither images nor videos
+/// there (see `ZaiProvider::select_endpoint`), and its JSON mode is
+/// `json_object` only, so a schema takes the forced-tool path.
+const ANTHROPIC_COMPAT: AnthropicCompatConfig = AnthropicCompatConfig {
+	provider_name: "zai",
+	images: |_| Images::None,
+	videos: |_| false,
+	enforces_response_schema: false,
+	thinking: configure_thinking,
+	cost: |model, usage| calculate_cost(model, usage.input_tokens, usage.cache_read_tokens, usage.output_tokens),
+	default_system: "",
+};
 
 // Constants
 pub(crate) const ZAI_API_KEY_ENV: &str = "ZAI_API_KEY";
 const ZAI_API_URL_ENV: &str = "ZAI_API_URL";
+const ZAI_API_MODE_ENV: &str = "ZAI_API_MODE";
+/// Chat Completions endpoint, for conversations with images.
 const ZAI_API_URL: &str = "https://api.z.ai/api/paas/v4/chat/completions";
+/// Messages endpoint for text conversations.
+const ZAI_MESSAGES_API_URL: &str = "https://api.z.ai/api/anthropic/v1/messages";
 // Z.ai API request/response structures
 #[derive(Serialize, Debug)]
 struct ZaiRequest {
@@ -343,9 +424,14 @@ impl AiProvider for ZaiProvider {
             || normalized.contains("glm-ocr")
 	}
 
-	fn supports_video(&self, model: &str) -> bool {
-		let normalized = normalize_model_name(model);
-		normalized.contains("glm-5.4") || normalized.contains("glm-5.3-flash")
+	/// What this adapter can deliver, not what the vendor lists: both routes
+	/// reject video — Messages through `ANTHROPIC_COMPAT.videos`, Chat in
+	/// `chat_completion` before the request is sent — so a true here would let a
+	/// caller attach a video only to get an error. Every model once listed as
+	/// video-capable (glm-5.4, glm-5.3-flash) also takes images, which
+	/// `supports_vision` keeps reporting.
+	fn supports_video(&self, _model: &str) -> bool {
+		false
 	}
 
 	fn supports_structured_output(&self, _model: &str) -> bool {
@@ -398,7 +484,25 @@ impl AiProvider for ZaiProvider {
 
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
 		let api_key = shared::resolve_api_key(self, &params)?;
-		let api_url = env::var(ZAI_API_URL_ENV).unwrap_or_else(|_| ZAI_API_URL.to_string());
+		let (mode, api_url) = self.select_endpoint(
+			env::var(ZAI_API_MODE_ENV).ok().as_deref(),
+			env::var(ZAI_API_URL_ENV).ok().as_deref(),
+			&params.model,
+		)?;
+		if mode == ApiMode::Anthropic {
+			return anthropic_compat::chat_completion(ANTHROPIC_COMPAT, api_key, api_url, params).await;
+		}
+		// The Chat request below carries text and images only.
+		if params
+			.messages
+			.iter()
+			.any(|message| message.videos.as_ref().is_some_and(|videos| !videos.is_empty()))
+		{
+			return Err(anyhow::anyhow!(
+				"zai model {} does not accept video input on its Chat Completions endpoint",
+				params.model
+			));
+		}
 
 		// Convert messages to Z.ai format
 		let messages = convert_messages(&params.messages);

@@ -12,19 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! MiniMax provider implementation (Anthropic-compatible API)
+//! MiniMax provider implementation. Requests go to the Anthropic-compatible
+//! Messages endpoint (<https://platform.minimax.io/docs/api-reference/text-anthropic-api>)
+//! through the shared `anthropic_compat` layer.
+//!
+//! `MINIMAX_API_URL` names another endpoint and is sent as it is: one whose
+//! path ends in `/messages` speaks Messages, any other did so before and
+//! still does. `MINIMAX_API_MODE=anthropic` or `openai` states the protocol
+//! for any URL and, with no URL, selects that protocol's default endpoint.
 
+use super::anthropic_compat::{self, AnthropicCompatConfig, ApiMode, Images, MessagesUsage};
+use super::openai_compat::{chat_completion as openai_compat_chat_completion, OpenAiCompatConfig};
 use super::shared;
-use crate::llm::retry;
 use crate::llm::traits::AiProvider;
-use crate::llm::types::{
-	ChatCompletionParams, ImageData, Message, ProviderExchange, ProviderResponse, ReasoningEffort, ThinkingBlock,
-	TokenUsage, ToolCall, VideoData,
-};
+use crate::llm::types::{ChatCompletionParams, ProviderResponse, ReasoningEffort};
 use crate::llm::utils::{get_model_pricing, is_model_in_pricing_table, normalize_model_name, PricingTuple};
 use anyhow::Result;
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::env;
 
 /// MiniMax pricing constants (per 1M tokens in USD)
@@ -90,6 +95,48 @@ fn thinking_value(model: &str, effort: ReasoningEffort) -> Option<serde_json::Va
 	(is_m3_model(model) && effort != ReasoningEffort::None).then(|| serde_json::json!({ "type": "adaptive" }))
 }
 
+/// Thinking knobs for a requested effort on the Chat Completions endpoint
+/// (platform.minimax.io/docs/api-reference/text-chat-openai, read 2026-11-26).
+/// With no effort requested nothing is sent: the API thinks by default. M3.1
+/// Flash takes `reasoning_effort` (`none` is a 400 there, so it runs at
+/// `low`); M3 takes `thinking: {"type": "disabled"}` to skip thinking and its
+/// `adaptive` default otherwise; M2.x takes neither knob.
+pub(crate) fn openai_thinking(model: &str, effort: Option<ReasoningEffort>, request: &mut Value) {
+	let Some(effort) = effort else {
+		return;
+	};
+	if let Some(effort) = effort_value(model, effort) {
+		request["reasoning_effort"] = serde_json::json!(effort);
+	}
+	if is_m3_model(model) && effort == ReasoningEffort::None {
+		request["thinking"] = serde_json::json!({ "type": "disabled" });
+	}
+}
+
+/// Thinking knobs for a requested effort on the shared Messages layer.
+fn configure_thinking(model: &str, effort: Option<ReasoningEffort>, request: &mut Value) {
+	let Some(effort) = effort else {
+		return;
+	};
+	if let Some(effort) = effort_value(model, effort) {
+		request["output_config"] = serde_json::json!({ "effort": effort });
+	}
+	if let Some(thinking) = thinking_value(model, effort) {
+		request["thinking"] = thinking;
+	}
+}
+
+/// Cost of one Messages response, in USD.
+fn messages_cost(model: &str, usage: &MessagesUsage) -> Option<f64> {
+	calculate_minimax_cost(
+		model,
+		usage.input_tokens,
+		usage.output_tokens,
+		usage.cache_write_tokens(),
+		usage.cache_read_tokens,
+	)
+}
+
 /// Token usage breakdown for cache-aware pricing
 struct CacheTokenUsage {
 	regular_input_tokens: u64,
@@ -136,26 +183,24 @@ fn calculate_cost_with_cache(model: &str, usage: CacheTokenUsage) -> Option<f64>
 	Some(regular_input_cost + cache_creation_cost + cache_read_cost + output_cost)
 }
 
-/// Helper function to calculate cost for MiniMax models
-/// This is used by the helper function for individual token counts
+/// Cost from the API's token counters. `input_tokens` is already clean: it
+/// holds neither cache reads nor cache writes.
 fn calculate_minimax_cost(
 	model: &str,
-	input_tokens: u32,
-	output_tokens: u32,
-	cache_creation_tokens: u32,
-	cache_read_tokens: u32,
+	input_tokens: u64,
+	output_tokens: u64,
+	cache_creation_tokens: u64,
+	cache_read_tokens: u64,
 ) -> Option<f64> {
-	// input_tokens from API is ALREADY clean (non-cached regular tokens)
-	let regular_input_tokens = input_tokens;
-
-	let usage = CacheTokenUsage {
-		regular_input_tokens: regular_input_tokens as u64,
-		cache_creation_tokens: cache_creation_tokens as u64,
-		cache_read_tokens: cache_read_tokens as u64,
-		output_tokens: output_tokens as u64,
-	};
-
-	calculate_cost_with_cache(model, usage)
+	calculate_cost_with_cache(
+		model,
+		CacheTokenUsage {
+			regular_input_tokens: input_tokens,
+			cache_creation_tokens,
+			cache_read_tokens,
+			output_tokens,
+		},
+	)
 }
 
 #[derive(Debug, Clone, Default)]
@@ -171,6 +216,71 @@ impl MinimaxProvider {
 pub(crate) const MINIMAX_API_KEY_ENV: &str = "MINIMAX_API_KEY";
 const MINIMAX_API_URL_ENV: &str = "MINIMAX_API_URL";
 const MINIMAX_API_URL: &str = "https://api.minimax.io/anthropic/v1/messages";
+
+/// MiniMax on the shared Messages layer. The endpoint ignores `response_format`,
+/// so a schema takes the forced-tool path and is validated locally.
+const ANTHROPIC_COMPAT: AnthropicCompatConfig = AnthropicCompatConfig {
+	provider_name: "minimax",
+	// MiniMax-M3 (including M3.1-Flash) is natively multimodal; M2.x takes text only.
+	images: |model| {
+		if normalize_model_name(model).contains("minimax-m3") {
+			Images::Base64AndUrl
+		} else {
+			Images::None
+		}
+	},
+	videos: |model| normalize_model_name(model).contains("minimax-m3"),
+	enforces_response_schema: false,
+	thinking: configure_thinking,
+	cost: messages_cost,
+	// MiniMax's own client sends this when a conversation has no system turn.
+	default_system: "You are a helpful assistant.",
+};
+
+/// Chat Completions endpoint for `MINIMAX_API_MODE=openai`
+/// (platform.minimax.io/docs/api-reference/text-chat-openai, read 2026-11-26).
+const MINIMAX_CHAT_API_URL: &str = "https://api.minimax.io/v1/chat/completions";
+const MINIMAX_API_MODE_ENV: &str = "MINIMAX_API_MODE";
+
+/// MiniMax on the shared Chat Completions layer. The endpoint documents no
+/// `response_format`, so a schema takes the forced-tool path, as on Messages.
+const OPENAI_COMPAT: OpenAiCompatConfig = OpenAiCompatConfig {
+	provider_name: "minimax",
+	usage_fallback_cost: None,
+	// The API returns no cost: the PRICING table bills every response.
+	use_response_cost: false,
+	enforces_response_schema: false,
+	supports_required_tool_choice: false,
+	// The endpoint documents neither `tool_choice` nor `parallel_tool_calls`.
+	supports_parallel_tool_calls: false,
+};
+
+/// The protocol and URL for one request. A supplied URL is sent as it is,
+/// whatever the protocol: it is never rewritten. An explicit mode comes
+/// first, then the URL's own path; a URL naming neither endpoint was always
+/// served by Messages, which is also the default.
+fn select_endpoint(mode: Option<&str>, api_url: Option<&str>) -> Result<(ApiMode, String)> {
+	// An empty variable is an unset one.
+	let mode = mode
+		.filter(|raw| !raw.is_empty())
+		.map(|raw| anthropic_compat::parse_api_mode(MINIMAX_API_MODE_ENV, raw))
+		.transpose()?;
+	let api_url = api_url.filter(|api_url| !api_url.is_empty());
+	let mode = mode
+		.or_else(|| api_url.and_then(anthropic_compat::url_api_mode))
+		.unwrap_or(ApiMode::Anthropic);
+	let api_url = api_url.map_or_else(
+		|| {
+			match mode {
+				ApiMode::Anthropic => MINIMAX_API_URL,
+				ApiMode::OpenAi => MINIMAX_CHAT_API_URL,
+			}
+			.to_owned()
+		},
+		str::to_owned,
+	);
+	Ok((mode, api_url))
+}
 
 #[async_trait]
 impl AiProvider for MinimaxProvider {
@@ -205,6 +315,13 @@ impl AiProvider for MinimaxProvider {
 		normalize_model_name(model).contains("minimax-m3")
 	}
 
+	/// Thinking blocks the model returned go back unchanged on the next turn:
+	/// MiniMax requires the complete assistant content in multi-turn tool
+	/// conversations, and it is context the model reads and bills.
+	fn replays_thinking(&self, _model: &str) -> bool {
+		true
+	}
+
 	fn supports_structured_output(&self, _model: &str) -> bool {
 		false // MiniMax uses Anthropic-compat endpoint which ignores response_format
 	}
@@ -234,490 +351,29 @@ impl AiProvider for MinimaxProvider {
 	}
 
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-		let api_key = super::shared::resolve_api_key(self, &params)?;
-
-		// Convert messages to Anthropic format (MiniMax uses same format)
-		let minimax_messages = convert_messages(&params.messages);
-
-		// Extract system message if present
-		let system_message = params
-			.messages
-			.iter()
-			.find(|m| m.role == "system")
-			.map(|m| m.content.clone())
-			.unwrap_or_else(|| "You are a helpful assistant.".to_string());
-
-		let system_cached = params.messages.iter().any(|m| m.role == "system" && m.cached);
-
-		// Create the request body
-		let mut request_body = serde_json::json!({
-			"stream": true,
-			"model": params.model,
-			"messages": minimax_messages,
-		});
-		// Add max_tokens if specified (0 means don't include it in request)
-		if params.max_tokens > 0 {
-			request_body["max_tokens"] = serde_json::json!(params.max_tokens);
+		let api_key = shared::resolve_api_key(self, &params)?;
+		let (mode, api_url) = select_endpoint(
+			env::var(MINIMAX_API_MODE_ENV).ok().as_deref(),
+			env::var(MINIMAX_API_URL_ENV).ok().as_deref(),
+		)?;
+		if mode == ApiMode::Anthropic {
+			return anthropic_compat::chat_completion(ANTHROPIC_COMPAT, api_key, api_url, params).await;
 		}
-
-		if let Some(effort) = params
-			.reasoning_effort
-			.and_then(|effort| effort_value(&params.model, effort))
-		{
-			request_body["output_config"] = serde_json::json!({ "effort": effort });
+		let model = params.model.clone();
+		let mut response = openai_compat_chat_completion(OPENAI_COMPAT, api_key, api_url, params).await?;
+		let usage = response.exchange.usage.as_mut().filter(|usage| usage.cost.is_none());
+		if let Some(usage) = usage {
+			usage.cost = calculate_minimax_cost(
+				&model,
+				usage.input_tokens,
+				usage.billable_output_tokens(),
+				usage.cache_write_tokens,
+				usage.cache_read_tokens,
+			);
 		}
-
-		if let Some(thinking) = params
-			.reasoning_effort
-			.and_then(|effort| thinking_value(&params.model, effort))
-		{
-			request_body["thinking"] = thinking;
-		}
-
-		// Add system message with cache control if needed
-		if system_cached {
-			request_body["system"] = serde_json::json!([{
-				"type": "text",
-				"text": system_message,
-				"cache_control": {
-					"type": "ephemeral"
-				}
-			}]);
-		} else {
-			request_body["system"] = serde_json::json!(system_message);
-		}
-
-		// Add tools if available (Anthropic format)
-		if let Some(tools) = &params.tools {
-			if !tools.is_empty() {
-				// Sort tools by name for consistent ordering
-				let mut sorted_tools = tools.clone();
-				sorted_tools.sort_by(|a, b| a.name.cmp(&b.name));
-
-				let minimax_tools = sorted_tools
-					.iter()
-					.map(|f| {
-						let mut tool = serde_json::json!({
-							"name": f.name,
-							"description": f.description,
-							"input_schema": f.parameters
-						});
-
-						// Add cache control if present
-						if let Some(ref cache_control) = f.cache_control {
-							tool["cache_control"] = cache_control.clone();
-						}
-
-						tool
-					})
-					.collect::<Vec<_>>();
-
-				request_body["tools"] = serde_json::json!(minimax_tools);
-			}
-		}
-
-		// Execute the request with retry logic
-		let api_url = env::var(MINIMAX_API_URL_ENV).unwrap_or_else(|_| MINIMAX_API_URL.to_string());
-
-		let response = execute_minimax_request(
-			api_key,
-			api_url,
-			request_body,
-			params.max_retries,
-			params.retry_timeout,
-			params.request_timeout,
-			params.stream_timeout,
-			params.cancellation_token.as_ref(),
-			params.extra_headers.clone(),
-			params.api_key.as_ref(),
-			params.retry_observer.as_ref(),
-		)
-		.await?;
-
 		Ok(response)
 	}
 }
-
-// MiniMax API structures (same as Anthropic)
-#[derive(Serialize, Deserialize, Debug)]
-struct MinimaxMessage {
-	role: String,
-	content: Vec<MinimaxContent>,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(tag = "type")]
-enum MinimaxContent {
-	#[serde(rename = "text")]
-	Text {
-		text: String,
-		#[serde(skip_serializing_if = "Option::is_none")]
-		cache_control: Option<serde_json::Value>,
-	},
-	#[serde(rename = "image")]
-	Image { source: serde_json::Value },
-	#[serde(rename = "video")]
-	Video { source: serde_json::Value },
-	#[serde(rename = "tool_result")]
-	ToolResult {
-		tool_use_id: String,
-		content: serde_json::Value,
-		#[serde(skip_serializing_if = "Option::is_none")]
-		cache_control: Option<serde_json::Value>,
-	},
-	#[serde(rename = "tool_use")]
-	ToolUse {
-		id: String,
-		name: String,
-		input: serde_json::Value,
-	},
-}
-
-#[derive(Deserialize, Debug)]
-struct MinimaxResponse {
-	id: String,
-	content: Vec<MinimaxResponseContent>,
-	usage: MinimaxUsage,
-	#[serde(default)]
-	stop_reason: Option<String>,
-}
-
-#[derive(Deserialize, Debug)]
-#[serde(tag = "type")]
-enum MinimaxResponseContent {
-	#[serde(rename = "text")]
-	Text { text: String },
-	#[serde(rename = "thinking")]
-	Thinking { thinking: String },
-	#[serde(rename = "tool_use")]
-	ToolUse {
-		id: String,
-		name: String,
-		input: serde_json::Value,
-	},
-}
-
-#[derive(Deserialize, Debug)]
-struct MinimaxUsage {
-	input_tokens: u64,
-	output_tokens: u64,
-	#[serde(default)]
-	cache_creation_input_tokens: Option<u64>,
-	#[serde(default)]
-	cache_read_input_tokens: Option<u64>,
-}
-
-// Convert our session messages to MiniMax format (same as Anthropic)
-fn convert_messages(messages: &[Message]) -> Vec<MinimaxMessage> {
-	let mut result = Vec::new();
-	let mut index = 0;
-
-	while index < messages.len() {
-		let message = &messages[index];
-
-		// Skip system messages - they're handled separately
-		if message.role == "system" {
-			index += 1;
-			continue;
-		}
-
-		match message.role.as_str() {
-			"tool" => {
-				let mut content = Vec::new();
-
-				while index < messages.len() && messages[index].role == "tool" {
-					let tool_message = &messages[index];
-					let tool_call_id = tool_message.tool_call_id.as_deref().unwrap_or("");
-
-					content.push(MinimaxContent::ToolResult {
-						tool_use_id: tool_call_id.to_string(),
-						content: shared::anthropic_tool_content(tool_message),
-						cache_control: shared::maybe_ephemeral_cache_control(tool_message.cached),
-					});
-					index += 1;
-				}
-
-				if index < messages.len() && messages[index].role == "user" {
-					append_regular_content(&messages[index], &mut content);
-					index += 1;
-				}
-
-				result.push(MinimaxMessage {
-					role: "user".to_string(),
-					content,
-				});
-			}
-			"assistant" if message.tool_calls.is_some() => {
-				// Assistant message with tool calls - reconstruct tool_use blocks
-				let mut content = Vec::new();
-
-				// Add text content if not empty
-				if !message.content.trim().is_empty() {
-					content.push(MinimaxContent::Text {
-						text: message.content.clone(),
-						cache_control: shared::maybe_ephemeral_cache_control(message.cached),
-					});
-				}
-
-				// Add tool_use blocks from stored tool_calls in unified GenericToolCall format
-				for call in shared::parse_generic_tool_calls_lossy(message.tool_calls.as_ref(), "minimax") {
-					content.push(MinimaxContent::ToolUse {
-						id: call.id,
-						name: call.name,
-						input: call.arguments,
-					});
-				}
-
-				result.push(MinimaxMessage {
-					role: message.role.clone(),
-					content,
-				});
-				index += 1;
-			}
-			_ => {
-				// Handle regular user and assistant messages
-				let mut content = Vec::new();
-				append_regular_content(message, &mut content);
-
-				// Skip messages with no content blocks — an empty array is invalid
-				if !content.is_empty() {
-					result.push(MinimaxMessage {
-						role: message.role.clone(),
-						content,
-					});
-				}
-				index += 1;
-			}
-		}
-	}
-
-	result
-}
-
-fn append_regular_content(message: &Message, content: &mut Vec<MinimaxContent>) {
-	// Skip empty text blocks — Anthropic-compatible APIs reject them
-	if !message.content.trim().is_empty() {
-		content.push(MinimaxContent::Text {
-			text: message.content.clone(),
-			cache_control: shared::maybe_ephemeral_cache_control(message.cached),
-		});
-	}
-
-	// Add image attachments (MiniMax-M3 multimodal)
-	if let Some(images) = &message.images {
-		for image in images {
-			let source = match &image.data {
-				ImageData::Base64(data) => serde_json::json!({
-					"type": "base64",
-					"media_type": image.media_type,
-					"data": data,
-				}),
-				ImageData::Url(url) => serde_json::json!({
-					"type": "url",
-					"url": url,
-				}),
-			};
-			content.push(MinimaxContent::Image { source });
-		}
-	}
-
-	// Add video attachments (MiniMax-M3 multimodal)
-	if let Some(videos) = &message.videos {
-		for video in videos {
-			let source = match &video.data {
-				VideoData::Base64(data) => serde_json::json!({
-					"type": "base64",
-					"media_type": video.media_type,
-					"data": data,
-				}),
-				VideoData::Url(url) => serde_json::json!({
-					"type": "url",
-					"url": url,
-				}),
-			};
-			content.push(MinimaxContent::Video { source });
-		}
-	}
-}
-
-// Execute a single MiniMax HTTP request with smart retry delay calculation
-#[allow(clippy::too_many_arguments)]
-async fn execute_minimax_request(
-	api_key: String,
-	api_url: String,
-	request_body: serde_json::Value,
-	max_retries: u32,
-	base_timeout: std::time::Duration,
-	request_timeout: Option<std::time::Duration>,
-	stream_timeout: Option<std::time::Duration>,
-	cancellation_token: Option<&tokio::sync::watch::Receiver<bool>>,
-	extra_headers: Option<std::collections::HashMap<String, String>>,
-	per_call_api_key: Option<&crate::llm::types::PerCallApiKey>,
-	retry_observer: Option<&crate::llm::retry::RetryObserver>,
-) -> Result<ProviderResponse> {
-	let start_time = std::time::Instant::now();
-
-	let response = retry::retry_provider_request(
-		|| {
-			let client = shared::http_client();
-			let extra_headers = extra_headers.clone();
-			let api_key = api_key.clone();
-			let api_url = api_url.clone();
-			let request_body = request_body.clone();
-			Box::pin(async move {
-				let req = client
-					.post(&api_url)
-					.header("Content-Type", "application/json")
-					.bearer_auth(&api_key)
-					.header("anthropic-version", "2023-06-01")
-					.json(&request_body);
-
-				let captured = super::streaming::send_and_read(
-					req,
-					request_timeout,
-					stream_timeout,
-					extra_headers.as_ref(),
-					super::streaming::Format::Messages,
-				)
-				.await?;
-
-				// Return Err for retryable HTTP errors so the retry loop catches them
-				if retry::is_retryable_status(captured.status.as_u16()) {
-					return Err(retry::retryable_status_error(
-						&captured,
-						format!("MiniMax API error {}: {}", captured.status, captured.body),
-					));
-				}
-
-				Ok(captured)
-			})
-		},
-		max_retries,
-		base_timeout,
-		cancellation_token,
-		per_call_api_key,
-		retry_observer,
-	)
-	.await?;
-
-	let request_time_ms = start_time.elapsed().as_millis() as u64;
-
-	if !response.status.is_success() {
-		return Err(anyhow::anyhow!(
-			"MiniMax API error {}: {}",
-			response.status,
-			response.body
-		));
-	}
-
-	let minimax_response: MinimaxResponse = shared::parse_response(&response.body, per_call_api_key)?;
-
-	// Extract content, thinking blocks, and tool calls
-	let mut content_parts = Vec::new();
-	let mut thinking_parts = Vec::new();
-	let mut tool_calls = Vec::new();
-
-	for content in minimax_response.content {
-		match content {
-			MinimaxResponseContent::Text { text } => {
-				content_parts.push(text);
-			}
-			MinimaxResponseContent::Thinking { thinking } => {
-				thinking_parts.push(thinking);
-			}
-			MinimaxResponseContent::ToolUse { id, name, input } => {
-				// Create generic ToolCall for processing
-				tool_calls.push(ToolCall {
-					id: id.clone(),
-					name: name.clone(),
-					arguments: input,
-				});
-			}
-		}
-	}
-
-	// Final content is only the text parts (thinking is separate)
-	let final_content = content_parts.join("\n");
-
-	// Extract thinking as a separate ThinkingBlock
-	let (thinking, reasoning_tokens) = if thinking_parts.is_empty() {
-		(None, 0)
-	} else {
-		let thinking_content = thinking_parts.join("\n\n");
-		// Estimate reasoning tokens from content length (4 chars per token)
-		let estimated = (thinking_content.len() / 4) as u64;
-		(
-			Some(ThinkingBlock {
-				content: thinking_content,
-				tokens: estimated,
-			}),
-			estimated,
-		)
-	};
-
-	// Calculate cost with proper cache pricing
-	let cache_read_tokens = minimax_response.usage.cache_read_input_tokens.unwrap_or(0);
-
-	let cache_creation_tokens = minimax_response.usage.cache_creation_input_tokens.unwrap_or(0);
-
-	// CRITICAL: input_tokens from API is ALREADY clean (non-cached)
-	// According to Anthropic/MiniMax docs:
-	// - input_tokens = regular non-cached tokens only
-	// - cache_creation_input_tokens = tokens written to cache (separate)
-	// - cache_read_input_tokens = tokens read from cache (separate)
-	let input_tokens_clean = minimax_response.usage.input_tokens;
-
-	let cost = calculate_minimax_cost(
-		request_body["model"].as_str().unwrap_or(""),
-		minimax_response.usage.input_tokens as u32,
-		minimax_response.usage.output_tokens as u32,
-		cache_creation_tokens as u32,
-		cache_read_tokens as u32,
-	);
-
-	// MiniMax bills thinking inside output_tokens and exposes no reasoning field,
-	// so the estimate is carved out of output rather than reported alongside it.
-	let (output_tokens, reasoning_tokens) =
-		TokenUsage::split_output(minimax_response.usage.output_tokens, reasoning_tokens);
-
-	let usage = TokenUsage {
-		input_tokens: input_tokens_clean,          // CLEAN input (no cache)
-		cache_read_tokens,                         // Tokens read from cache
-		cache_write_tokens: cache_creation_tokens, // Tokens written to cache
-		output_tokens,
-		reasoning_tokens, // Estimated from thinking content
-		// input_tokens is already cache-free, so cache reads and writes are their
-		// own terms in the total.
-		total_tokens: input_tokens_clean
-			+ cache_read_tokens
-			+ cache_creation_tokens
-			+ minimax_response.usage.output_tokens,
-		cost,
-		request_time_ms: Some(request_time_ms),
-	};
-
-	// Create response JSON that stores tool_calls in unified GenericToolCall format
-	let mut response_json: serde_json::Value = shared::parse_response(&response.body, per_call_api_key)?;
-
-	// Store tool_calls in unified GenericToolCall format for conversation history
-	shared::set_response_tool_calls(&mut response_json, &tool_calls, None);
-
-	let exchange = ProviderExchange::new(request_body, response_json, Some(usage), "minimax");
-
-	// Try to parse structured output if it was requested
-	let structured_output = shared::parse_structured_output_from_text(&final_content);
-
-	Ok(ProviderResponse {
-		content: final_content,
-		thinking, // Extract thinking separately
-		exchange,
-		tool_calls: if tool_calls.is_empty() { None } else { Some(tool_calls) },
-		finish_reason: minimax_response.stop_reason,
-		structured_output,
-		id: Some(minimax_response.id),
-	})
-}
-
 #[cfg(test)]
 #[path = "minimax_tests.rs"]
 mod tests;

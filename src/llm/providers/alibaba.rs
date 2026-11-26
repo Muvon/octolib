@@ -14,26 +14,48 @@
 
 //! Alibaba Cloud Model Studio (DashScope) provider implementation.
 //!
-//! Uses the OpenAI-compatible endpoint at:
-//! `https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions`
+//! With no configuration, requests go to the OpenAI-compatible endpoint at
+//! `https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions`.
 //!
-//! Hosts the Qwen family plus third-party models (DeepSeek, GLM) at Alibaba's
-//! own rates. Mainland China accounts, Token Plan subscriptions and dedicated
-//! workspace deployments use a different host — override `ALIBABA_API_URL`
-//! with the full endpoint including `/chat/completions`.
+//! Messages is available through the shared `anthropic_compat` layer. Model
+//! Studio has no single public Messages host: the documented pay-as-you-go base
+//! is per workspace
+//! (`https://{WorkspaceId}.ap-southeast-1.maas.aliyuncs.com/apps/anthropic/v1/messages`,
+//! <https://www.alibabacloud.com/help/en/model-studio/anthropic-api-messages>),
+//! and Token Plan and Coding Plan have their own `/apps/anthropic/v1/messages`
+//! bases. Two configurations are supported:
+//!
+//! - `ALIBABA_WORKSPACE_ID` (one DNS label, validated before it enters the URL)
+//!   selects the official regional pay-as-you-go Messages base, and Messages
+//!   then becomes the default for that account.
+//! - `ALIBABA_API_URL` names the full endpoint — the form a Token Plan, Coding
+//!   Plan, mainland-China or dedicated deployment needs. It is sent exactly as
+//!   configured and is never redirected, and its path decides the protocol
+//!   unless `ALIBABA_API_MODE` overrides it.
+//!
+//! With neither set, the safe Chat Completions default stands and
+//! `ALIBABA_API_MODE=anthropic` is refused before a request is sent. Nothing is
+//! derived from the key, the account or the region, and the legacy generic
+//! `dashscope-intl` `/api/v2/apps/claude-code-proxy` path is not substituted.
+//!
+//! Hosts the Qwen family plus third-party models (DeepSeek, GLM, Kimi) at
+//! Alibaba's own rates.
 //!
 //! PRICING UPDATE: September 2026
 //! Source: <https://www.alibabacloud.com/help/en/model-studio/model-pricing>
 //!
 //! Configuration:
 //! - `ALIBABA_API_KEY`: Required API key
-//! - `ALIBABA_API_URL`: Optional endpoint override (Token Plan, China, workspace)
+//! - `ALIBABA_WORKSPACE_ID`: Optional workspace identity for the pay-as-you-go
+//!   Messages default
+//! - `ALIBABA_API_URL`: Optional full endpoint override (Token Plan, China, workspace)
+//! - `ALIBABA_API_MODE`: `openai` or `anthropic`; without a URL, `anthropic`
+//!   needs `ALIBABA_WORKSPACE_ID`
 
-use crate::llm::providers::openai_compat::{
-	chat_completion as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
-};
+use super::anthropic_compat::{self, AnthropicCompatConfig, ApiMode, Images, MessagesUsage};
+use crate::llm::providers::openai_compat::{chat_completion as openai_compat_chat_completion, OpenAiCompatConfig};
 use crate::llm::traits::AiProvider;
-use crate::llm::types::{ChatCompletionParams, ProviderResponse};
+use crate::llm::types::{ChatCompletionParams, ProviderResponse, ReasoningEffort};
 use crate::llm::utils::{contains_ignore_ascii_case, normalize_model_name, PricingTuple};
 use anyhow::Result;
 use std::env;
@@ -56,7 +78,183 @@ impl AlibabaProvider {
 
 pub(crate) const ALIBABA_API_KEY_ENV: &str = "ALIBABA_API_KEY";
 const ALIBABA_API_URL_ENV: &str = "ALIBABA_API_URL";
+const ALIBABA_API_MODE_ENV: &str = "ALIBABA_API_MODE";
+/// Optional workspace identity: with it and no URL, the documented regional
+/// pay-as-you-go Messages base is selected instead of Chat Completions.
+pub(crate) const ALIBABA_WORKSPACE_ID_ENV: &str = "ALIBABA_WORKSPACE_ID";
+/// Chat Completions endpoint, the default when no workspace is configured.
 const ALIBABA_API_URL: &str = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions";
+
+/// The documented regional pay-as-you-go Messages base
+/// (<https://www.alibabacloud.com/help/en/model-studio/anthropic-api-messages>).
+/// The workspace identity is one DNS label, so it is validated as one before it
+/// enters the URL: no dot, slash, colon, query, fragment, userinfo or space can
+/// reach the host, and nothing here accepts or re-parses a full URL.
+const PAYG_MESSAGES_HOST_SUFFIX: &str = "ap-southeast-1.maas.aliyuncs.com";
+const PAYG_MESSAGES_PATH: &str = "/apps/anthropic/v1/messages";
+
+fn validate_workspace_id(workspace: &str) -> Result<()> {
+	let label_ok = !workspace.is_empty()
+		&& workspace.len() <= 63
+		&& !workspace.starts_with('-')
+		&& !workspace.ends_with('-')
+		&& workspace
+			.bytes()
+			.all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-');
+	if !label_ok {
+		return Err(crate::errors::ProviderError::ConfigurationError {
+			message: format!(
+				"{ALIBABA_WORKSPACE_ID_ENV} must be a single DNS label (lowercase letters, digits and hyphens, 1-63 characters, no dot or slash), got {workspace:?}"
+			),
+		}
+		.into());
+	}
+	Ok(())
+}
+
+fn payg_messages_url(workspace: &str) -> Result<String> {
+	validate_workspace_id(workspace)?;
+	Ok(format!(
+		"https://{workspace}.{PAYG_MESSAGES_HOST_SUFFIX}{PAYG_MESSAGES_PATH}"
+	))
+}
+
+/// The protocol and URL for one request. A supplied URL is sent as it is,
+/// whatever the protocol: it is never rewritten and never redirected elsewhere.
+/// Precedence: `ALIBABA_API_URL`, then `ALIBABA_API_MODE`, then
+/// `ALIBABA_WORKSPACE_ID`, then the Chat Completions default.
+///
+/// A workspace identity selects the official regional pay-as-you-go Messages
+/// base, so Messages is the default for an account that states its workspace.
+/// Token Plan and Coding Plan bases are per plan and are not derived from it:
+/// those accounts set the full Messages URL in `ALIBABA_API_URL`. With neither a
+/// workspace nor a URL the safe existing Chat Completions default stands, and
+/// `ALIBABA_API_MODE=anthropic` alone is refused rather than pointed at a
+/// guessed or legacy host.
+fn select_endpoint(mode: Option<&str>, api_url: Option<&str>, workspace: Option<&str>) -> Result<(ApiMode, String)> {
+	// An empty variable is an unset one.
+	let mode = mode
+		.filter(|raw| !raw.is_empty())
+		.map(|raw| anthropic_compat::parse_api_mode(ALIBABA_API_MODE_ENV, raw))
+		.transpose()?;
+	let api_url = api_url.filter(|api_url| !api_url.is_empty());
+	let workspace = workspace.filter(|workspace| !workspace.is_empty());
+	if let Some(api_url) = api_url {
+		// An explicit URL is used unchanged; its path decides the protocol
+		// unless an explicit mode overrides it.
+		let mode = mode
+			.or_else(|| anthropic_compat::url_api_mode(api_url))
+			.unwrap_or(ApiMode::OpenAi);
+		return Ok((mode, api_url.to_owned()));
+	}
+	match (mode, workspace) {
+		(Some(ApiMode::OpenAi), _) => Ok((ApiMode::OpenAi, ALIBABA_API_URL.to_owned())),
+		(_, Some(workspace)) => Ok((ApiMode::Anthropic, payg_messages_url(workspace)?)),
+		(Some(ApiMode::Anthropic), None) => Err(crate::errors::ProviderError::ConfigurationError {
+			message: format!(
+				"ALIBABA_API_MODE=anthropic needs {ALIBABA_API_URL_ENV} or {ALIBABA_WORKSPACE_ID_ENV}: Model Studio's Messages endpoint is per workspace or per plan, so no default host can be selected without one"
+			),
+		}
+		.into()),
+		(None, None) => Ok((ApiMode::OpenAi, ALIBABA_API_URL.to_owned())),
+	}
+}
+
+/// The route a request would take right now, for the capability methods that
+/// differ per protocol. A configuration that cannot be resolved is reported as
+/// Chat Completions: the request itself then fails with the configuration error.
+fn configured_mode() -> ApiMode {
+	select_endpoint(
+		env::var(ALIBABA_API_MODE_ENV).ok().as_deref(),
+		env::var(ALIBABA_API_URL_ENV).ok().as_deref(),
+		env::var(ALIBABA_WORKSPACE_ID_ENV).ok().as_deref(),
+	)
+	.map(|(mode, _)| mode)
+	.unwrap_or(ApiMode::OpenAi)
+}
+
+/// Cost of one Messages response, in USD: the same table and long-context tier
+/// as the Chat route, with `output_tokens` covering thinking.
+fn messages_cost(model: &str, usage: &MessagesUsage) -> Option<f64> {
+	calculate_local_usage_cost(
+		model,
+		usage.input_tokens,
+		usage.cache_write_tokens(),
+		usage.cache_read_tokens,
+		usage.output_tokens,
+	)
+}
+
+/// Alibaba on the shared Messages layer, used for a configured Messages URL or
+/// a configured workspace identity.
+///
+/// Images: inline data for every model the reference table does not call
+/// text-only, refused for the ones it does. A live Token Plan Messages call on
+/// 2026-11-26 with `qwen3.8-max` took the base64 block and rejected only the
+/// 1x1 test image on size (`height or width must be larger than 10`), so the
+/// block itself is accepted there; a URL image is unproven on that route and
+/// is refused rather than dropped. Video: Messages has no video block, so a
+/// video turn is refused instead of being dropped — the Chat route, and its
+/// `video_url`, stay available. Schema: `output_config.format` is unprobed on
+/// this endpoint, so a schema takes the forced-tool path and is validated
+/// locally. Thinking: `output_config.effort` is the documented knob here
+/// (`thinking.budget_tokens` is deprecated by the contract), mapped per model
+/// family and clamped to the values the contract lists.
+const ANTHROPIC_COMPAT: AnthropicCompatConfig = AnthropicCompatConfig {
+	provider_name: "alibaba",
+	images: |model| match crate::llm::reference_models::get_reference_capabilities(model) {
+		Some(capabilities) if !capabilities.vision => Images::None,
+		_ => Images::Base64,
+	},
+	videos: |_| false,
+	enforces_response_schema: false,
+	thinking: |model, effort, request| {
+		let Some(effort) = effort.and_then(|effort| messages_effort(model, effort)) else {
+			return;
+		};
+		// The schema, when one was requested, is already in `output_config`.
+		request["output_config"]["effort"] = serde_json::json!(effort);
+	},
+	cost: messages_cost,
+	default_system: "",
+};
+
+/// `output_config.effort` values the Model Studio Messages contract lists for
+/// each model family
+/// (<https://www.alibabacloud.com/help/en/model-studio/anthropic-api-messages>),
+/// from lowest to highest. A family the contract does not list sends no knob,
+/// and an effort floors to the nearest documented value at or below it — the
+/// same rule the Chat route applies. `ReasoningEffort::None` floors too: this
+/// route documents no way to switch reasoning off.
+fn messages_effort(model: &str, effort: ReasoningEffort) -> Option<&'static str> {
+	let model = normalize_model_name(model);
+	// qwen4-max: low, high (default), xhigh; "medium maps to high, max maps to
+	// xhigh" — applied here rather than sent, so no undocumented value travels.
+	// qwen3.8 / qwen3.7 series: low, medium, xhigh; high and max map to xhigh.
+	// glm-5.x: low, high, max; any other value is refused by the endpoint.
+	// deepseek-v4: high, max; low and medium map to high, xhigh maps to max.
+	// kimi-k3.1-pro: low, medium, high, max.
+	let tiers: [&'static str; 5] = if model.starts_with("qwen4-max") {
+		["low", "high", "high", "xhigh", "xhigh"]
+	} else if model.starts_with("qwen3.8") || model.starts_with("qwen3.7") {
+		["low", "medium", "xhigh", "xhigh", "xhigh"]
+	} else if model.starts_with("glm-5") {
+		["low", "high", "high", "max", "max"]
+	} else if model.starts_with("deepseek-v4") {
+		["high", "high", "high", "max", "max"]
+	} else if model.starts_with("kimi-k3.1") {
+		["low", "medium", "high", "high", "max"]
+	} else {
+		return None;
+	};
+	Some(match effort {
+		ReasoningEffort::None | ReasoningEffort::Low => tiers[0],
+		ReasoningEffort::Medium => tiers[1],
+		ReasoningEffort::High => tiers[2],
+		ReasoningEffort::XHigh => tiers[3],
+		ReasoningEffort::Max => tiers[4],
+	})
+}
 
 // Model Studio international pricing (per 1M tokens in USD) - Oct 2026; rows added
 // since carry their own date.
@@ -238,10 +436,16 @@ impl AiProvider for AlibabaProvider {
 	}
 
 	fn supports_caching(&self, _model: &str) -> bool {
+		// Implicit context caching is documented on both routes: the Messages
+		// endpoint reports the same `cache_creation_input_tokens` /
+		// `cache_read_input_tokens` counters.
 		true
 	}
 
-	/// See `MEASURED_CACHE_LIFETIMES` for the evidence.
+	/// See `MEASURED_CACHE_LIFETIMES` for the evidence. The measurements were
+	/// taken on a Token Plan host; the implicit cache they describe is a
+	/// property of the account's host and applies to the Messages route there
+	/// too, which needs no cache markers of its own.
 	fn cache_lifetime(&self, model: &str, _use_long_cache: bool) -> Option<std::time::Duration> {
 		if SHORT_CACHE_MODELS
 			.iter()
@@ -258,13 +462,23 @@ impl AiProvider for AlibabaProvider {
 
 	/// GLM and qwen4-max read every prior turn's reasoning back (see
 	/// `preserves_historical_thinking`), so it occupies context the model
-	/// reads and bills.
+	/// reads and bills. Both routes send the same history back.
 	fn replays_thinking(&self, model: &str) -> bool {
 		preserves_historical_thinking(model)
 	}
 
-	// supports_vision, supports_video, get_max_input_tokens are resolved via
-	// reference capabilities (trait defaults)
+	// supports_vision and get_max_input_tokens come from the reference table:
+	// inline images and the context window are the same on both routes.
+
+	/// Video is a Chat Completions field (`video_url`). The Messages protocol
+	/// has no video block, so a video turn is refused there and the capability
+	/// says so, instead of advertising a turn that cannot be served.
+	fn supports_video(&self, model: &str) -> bool {
+		configured_mode() == ApiMode::OpenAi
+			&& crate::llm::reference_models::get_reference_capabilities(model)
+				.map(|capabilities| capabilities.video)
+				.unwrap_or(false)
+	}
 
 	/// Alibaba supports native JSON Schema for selected Qwen families. Other
 	/// hosted models use shared forced-tool enforcement plus local validation.
@@ -272,8 +486,12 @@ impl AiProvider for AlibabaProvider {
 		true
 	}
 
+	/// The live probe behind `natively_enforces_response_schema` ran on the Chat
+	/// endpoint only, and the Messages contract's `output_config.format` is
+	/// unprobed here, so the claim stays on the route that has the evidence:
+	/// a Messages schema takes the forced-tool path with local validation.
 	fn enforces_response_schema(&self, model: &str) -> bool {
-		natively_enforces_response_schema(model)
+		configured_mode() == ApiMode::OpenAi && natively_enforces_response_schema(model)
 	}
 
 	fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
@@ -290,7 +508,14 @@ impl AiProvider for AlibabaProvider {
 
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
 		let api_key = super::shared::resolve_api_key(self, &params)?;
-		let api_url = get_api_url(ALIBABA_API_URL_ENV, ALIBABA_API_URL);
+		let (mode, api_url) = select_endpoint(
+			env::var(ALIBABA_API_MODE_ENV).ok().as_deref(),
+			env::var(ALIBABA_API_URL_ENV).ok().as_deref(),
+			env::var(ALIBABA_WORKSPACE_ID_ENV).ok().as_deref(),
+		)?;
+		if mode == ApiMode::Anthropic {
+			return anthropic_compat::chat_completion(ANTHROPIC_COMPAT, api_key, api_url, params).await;
+		}
 		let model = params.model.clone();
 		let mut response = openai_compat_chat_completion(
 			OpenAiCompatConfig {

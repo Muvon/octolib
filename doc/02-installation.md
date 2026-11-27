@@ -60,6 +60,7 @@ Each provider requires its specific API key:
 export OPENAI_API_KEY="your_openai_api_key"
 export ANTHROPIC_API_KEY="your_anthropic_api_key"
 export OPENROUTER_API_KEY="your_openrouter_api_key"
+export LLMTR_API_KEY="your_llmtr_api_key"
 export CEREBRAS_API_KEY="your_cerebras_api_key"
 export GROQ_API_KEY="your_groq_api_key"
 export NVIDIA_API_KEY="your_nvidia_api_key"

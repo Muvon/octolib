@@ -71,6 +71,7 @@ Cross-provider tool call standardization:
 - OpenAI
 - Anthropic
 - OpenRouter
+- LLMTR
 - Cerebras
 - Groq (with prompt caching)
 - BytePlus (Seed models, with prompt caching)

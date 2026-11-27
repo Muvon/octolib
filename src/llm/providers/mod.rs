@@ -31,6 +31,7 @@ pub mod groq;
 pub mod hetzner;
 pub mod inception;
 pub mod isoquant;
+pub mod llmtr;
 pub mod local;
 pub mod meta;
 pub mod minimax;
@@ -76,6 +77,7 @@ pub use hetzner::HetznerProvider;
 #[allow(deprecated)]
 pub use inception::InceptionProvider;
 pub use isoquant::IsoquantProvider;
+pub use llmtr::LlmtrProvider;
 pub use local::LocalProvider;
 pub use meta::MetaProvider;
 pub use minimax::MinimaxProvider;

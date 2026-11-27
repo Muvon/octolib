@@ -153,6 +153,10 @@ name = "local_chat"
 required-features = ["llm"]
 
 [[example]]
+name = "llmtr_chat"
+required-features = ["llm"]
+
+[[example]]
 name = "meta_chat"
 required-features = ["llm"]
 

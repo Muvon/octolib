@@ -44,6 +44,8 @@ fn test_provider_setup_credentials() {
 	assert!(info("google-vertex").extra_env.is_empty());
 	assert_eq!(info("chatgpt").api_key_env, None);
 	assert!(info("chatgpt").extra_env.is_empty());
+	assert_eq!(info("llmtr").api_key_env, Some("LLMTR_API_KEY"));
+	assert!(info("llmtr").extra_env.is_empty());
 	assert_eq!(info("local").api_key_env, Some("LOCAL_API_KEY"));
 	assert_eq!(info("ollama").api_key_env, Some("OLLAMA_API_KEY"));
 	assert_eq!(info("octohub").api_key_env, Some("OCTOHUB_API_KEY"));
@@ -91,6 +93,7 @@ fn test_provider_setup_omits_pricing_patterns_and_remote_catalogs() {
 		"chatgpt",
 		"local",
 		"ollama",
+		"llmtr",
 		"nvidia",
 		"opencode-zen",
 		"opencode-go",
@@ -102,6 +105,7 @@ fn test_provider_setup_omits_pricing_patterns_and_remote_catalogs() {
 		Some("https://openrouter.ai/api/v1/models")
 	);
 	assert_eq!(info("ollama").models_url, Some("https://ollama.com/v1/models"));
+	assert_eq!(info("llmtr").models_url, Some("https://llmtr.com/v1/models"));
 	assert_eq!(
 		info("opencode-zen").models_url,
 		Some("https://opencode.ai/zen/v1/models")
@@ -229,6 +233,7 @@ fn test_supported_providers() {
 	assert!(providers.contains(&"groq"));
 	assert!(providers.contains(&"inception"));
 	assert!(providers.contains(&"isoquant"));
+	assert!(providers.contains(&"llmtr"));
 	assert!(providers.contains(&"reflection"));
 	assert!(providers.contains(&"meta"));
 	assert!(providers.contains(&"xai"));
@@ -268,6 +273,7 @@ fn test_create_provider() {
 	assert!(ProviderFactory::create_provider("groq").is_ok());
 	assert!(ProviderFactory::create_provider("inception").is_ok());
 	assert!(ProviderFactory::create_provider("isoquant").is_ok());
+	assert!(ProviderFactory::create_provider("llmtr").is_ok());
 	assert!(ProviderFactory::create_provider("reflection").is_ok());
 	assert!(ProviderFactory::create_provider("xai").is_ok());
 	assert!(ProviderFactory::create_provider("xiaomi").is_ok());
@@ -282,6 +288,7 @@ fn test_create_provider() {
 	assert!(ProviderFactory::create_provider("MiniMax").is_ok());
 	assert!(ProviderFactory::create_provider("MOONSHOT").is_ok());
 	assert!(ProviderFactory::create_provider("NVIDIA").is_ok());
+	assert!(ProviderFactory::create_provider("LLMTR").is_ok());
 	assert!(ProviderFactory::create_provider("OLLAMA").is_ok());
 	assert!(ProviderFactory::create_provider("CEREBRAS").is_ok());
 	assert!(ProviderFactory::create_provider("XAI").is_ok());
@@ -325,6 +332,12 @@ fn test_provider_capabilities() {
 	assert!(nvidia.supports_model("nvidia/llama-3.1-nemotron-ultra-253b-v1"));
 	assert!(nvidia.supports_model("deepseek-ai/deepseek-v3.2"));
 	assert!(!nvidia.supports_caching("any-model"));
+
+	let llmtr = ProviderFactory::create_provider("llmtr").unwrap();
+	assert_eq!(llmtr.name(), "llmtr");
+	assert!(llmtr.supports_model("qwen/qwen3.8-27b-free"));
+	assert!(!llmtr.supports_caching("any-model"));
+	assert!(!llmtr.enforces_response_schema("any-model"));
 }
 
 #[test]
@@ -400,6 +413,14 @@ fn test_get_provider_for_model() {
 	let (provider, model) = result.unwrap();
 	assert_eq!(provider.name(), "nvidia");
 	assert_eq!(model, "nvidia/llama-3.1-nemotron-ultra-253b-v1");
+
+	// Test LLMTR provider (OpenAI-compatible gateway)
+	let result = ProviderFactory::get_provider_for_model("llmtr:qwen/qwen3.8-27b-free");
+	assert!(result.is_ok());
+	let (provider, model) = result.unwrap();
+	assert_eq!(provider.name(), "llmtr");
+	assert_eq!(model, "qwen/qwen3.8-27b-free");
+	assert!(provider.supports_model(&model));
 
 	// Test Groq provider
 	let result = ProviderFactory::get_provider_for_model("groq:llama-3.3-70b-versatile");

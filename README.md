@@ -1,6 +1,6 @@
 # Octolib
 
-> One `provider:model` string — 31 AI providers, one trait, cost tracking built in.
+> One `provider:model` string — 32 AI providers, one trait, cost tracking built in.
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Crates.io](https://img.shields.io/crates/v/octolib.svg)](https://crates.io/crates/octolib)
@@ -16,7 +16,7 @@ Pricing and capability tables ship inside the crate, so every response reports t
 
 ## ✨ Key Features
 
-- **🔌 33 providers, one interface** — OpenAI, Anthropic, xAI, OpenRouter, Google Vertex & Studio, Amazon Bedrock, DeepSeek, Moonshot (Kimi), MiniMax, Z.ai, BytePlus, Alibaba Model Studio, Groq, Cerebras, NVIDIA NIM, Together, Featherless, Fireworks, Hetzner, Inception Labs, Isoquant, Meta, Reflection AI, Tinker, OpenCode Zen/Go, OctoHub, Cloudflare Workers AI, Ollama, WebWright, Local, and CLI proxies (Codex, Claude, Gemini, Cursor)
+- **🔌 34 providers, one interface** — OpenAI, Anthropic, xAI, OpenRouter, LLMTR, Google Vertex & Studio, Amazon Bedrock, DeepSeek, Moonshot (Kimi), MiniMax, Z.ai, BytePlus, Alibaba Model Studio, Groq, Cerebras, NVIDIA NIM, Together, Featherless, Fireworks, Hetzner, Inception Labs, Isoquant, Meta, Reflection AI, Tinker, OpenCode Zen/Go, OctoHub, Cloudflare Workers AI, Ollama, WebWright, Local, and CLI proxies (Codex, Claude, Gemini, Cursor)
 - **💰 Cost tracking with zero config** — per-model pricing tables ship in the crate; every response carries input, output, cache, and reasoning tokens with USD cost
 - **🧰 Tool calling** — one `ToolCall` format across providers, with JSON Schema parameter validation and multi-turn conversations
 - **📋 Structured output** — JSON and JSON Schema modes, validated locally even when the upstream doesn't enforce them
@@ -366,7 +366,7 @@ async fn tool_calling_example() -> anyhow::Result<()> {
 ```
 
 **Tool Calling Features:**
-- ✅ Cross-provider support (OpenAI, Anthropic, xAI, Google Vertex, Google Studio, Amazon, OpenRouter, MiniMax, Moonshot, Z.ai, Alibaba, Hetzner, OpenCode, OctoHub, and other OpenAI-compatible providers)
+- ✅ Cross-provider support (OpenAI, Anthropic, xAI, Google Vertex, Google Studio, Amazon, OpenRouter, LLMTR, MiniMax, Moonshot, Z.ai, Alibaba, Hetzner, OpenCode, OctoHub, and other OpenAI-compatible providers)
 - ✅ Automatic parameter validation via JSON Schema
 - ✅ Multi-turn conversations with tool results
 - ✅ Parallel tool execution support
@@ -605,6 +605,7 @@ Capabilities marked "Per-model" are resolved per model from the provider's capab
 | **xAI** | Grok 4.5/4.3/4.20/Build, encrypted reasoning | ✅ JSON + Schema | ✅ | ✅ | ✅ |
 | **Anthropic** | Claude models, thinking blocks, OAuth support | ❌ | ✅ | ✅ | ✅ |
 | **OpenRouter** | Multi-provider proxy | ✅ JSON + Schema | ✅ | ✅ | ✅ |
+| **LLMTR** | OpenAI-compatible gateway | Per-model | Per-model | ✅ | ❌ |
 | **Google Vertex** | Enterprise, service-account auth | ❌ | ✅ | ✅ | ❌ |
 | **Google Studio** | Gemini API, API-key auth | ✅ JSON + Schema | ✅ | ✅ | ✅ |
 | **Amazon Bedrock** | Cloud AI services | ❌ | ✅ | ✅ | ❌ |

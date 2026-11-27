@@ -17,10 +17,10 @@
 use crate::llm::providers::{
 	AlibabaProvider, AmazonBedrockProvider, AnthropicProvider, BytePlusProvider, CerebrasProvider, ChatGptProvider,
 	CliProvider, CloudflareWorkersAiProvider, DeepSeekProvider, FeatherlessProvider, FireworksProvider,
-	GoogleStudioProvider, GoogleVertexProvider, GroqProvider, HetznerProvider, IsoquantProvider, LocalProvider,
-	MetaProvider, MinimaxProvider, MoonshotProvider, NvidiaProvider, OctoHubProvider, OllamaProvider, OpenAiProvider,
-	OpenCodeGoProvider, OpenCodeZenProvider, OpenRouterProvider, ReflectionProvider, TinkerProvider, TogetherProvider,
-	WebWrightProvider, XaiProvider, XiaomiProvider, ZaiProvider,
+	GoogleStudioProvider, GoogleVertexProvider, GroqProvider, HetznerProvider, IsoquantProvider, LlmtrProvider,
+	LocalProvider, MetaProvider, MinimaxProvider, MoonshotProvider, NvidiaProvider, OctoHubProvider, OllamaProvider,
+	OpenAiProvider, OpenCodeGoProvider, OpenCodeZenProvider, OpenRouterProvider, ReflectionProvider, TinkerProvider,
+	TogetherProvider, WebWrightProvider, XaiProvider, XiaomiProvider, ZaiProvider,
 };
 // Deprecated: Inception is removed entirely from octolib on 2026-12-28; the
 // factory route stays supported until then.
@@ -122,6 +122,7 @@ impl ProviderFactory {
             #[allow(deprecated)]
             "inception" => Ok(Box::new(InceptionProvider::new())),
             "isoquant" => Ok(Box::new(IsoquantProvider::new())),
+            "llmtr" => Ok(Box::new(LlmtrProvider::new())),
             "meta" => Ok(Box::new(MetaProvider::new())),
             "minimax" => Ok(Box::new(MinimaxProvider::new())),
             "moonshot" | "kimi" => Ok(Box::new(MoonshotProvider::new())),
@@ -139,7 +140,7 @@ impl ProviderFactory {
             "cli" => Err(anyhow::anyhow!(
                 "CLI provider requires a model string like 'cli:<backend>/<model>'. Use ProviderFactory::get_provider_for_model instead."
             )),
-            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported: openai, chatgpt, anthropic, openrouter, cerebras, local, ollama, google-vertex, google-studio, groq, alibaba, amazon, cloudflare, deepseek, featherless, fireworks, hetzner, inception, isoquant, meta, minimax, moonshot, nvidia, octohub, opencode-zen, opencode-go, reflection, tinker, together, webwright, xai, xiaomi, zai, byteplus, cli", provider_name))
+            _ => Err(anyhow::anyhow!("Unsupported provider: {}. Supported: openai, chatgpt, anthropic, openrouter, cerebras, local, ollama, google-vertex, google-studio, groq, alibaba, amazon, cloudflare, deepseek, featherless, fireworks, hetzner, inception, isoquant, llmtr, meta, minimax, moonshot, nvidia, octohub, opencode-zen, opencode-go, reflection, tinker, together, webwright, xai, xiaomi, zai, byteplus, cli", provider_name))
         }
 	}
 
@@ -186,6 +187,7 @@ impl ProviderFactory {
 			"hetzner",
 			"inception",
 			"isoquant",
+			"llmtr",
 			"meta",
 			"minimax",
 			"moonshot",
@@ -211,8 +213,9 @@ impl ProviderFactory {
 	pub fn provider_setup_info() -> Vec<ProviderSetupInfo> {
 		use crate::llm::providers::{
 			alibaba, amazon, anthropic, byteplus, cerebras, cloudflare, deepseek, featherless, fireworks,
-			google_studio, google_vertex, groq, hetzner, inception, isoquant, local, meta, minimax, moonshot, nvidia,
-			octohub, ollama, openai, opencode, openrouter, reflection, tinker, together, webwright, xai, xiaomi, zai,
+			google_studio, google_vertex, groq, hetzner, inception, isoquant, llmtr, local, meta, minimax, moonshot,
+			nvidia, octohub, ollama, openai, opencode, openrouter, reflection, tinker, together, webwright, xai,
+			xiaomi, zai,
 		};
 
 		vec![
@@ -307,6 +310,10 @@ impl ProviderFactory {
 				&[],
 				isoquant::KNOWN_MODELS.iter().map(|row| row.0),
 			),
+			ProviderSetupInfo {
+				models_url: Some(llmtr::LLMTR_MODELS_URL),
+				..ProviderSetupInfo::new("llmtr", Some(llmtr::LLMTR_API_KEY_ENV), &[], [])
+			},
 			ProviderSetupInfo::new(
 				"meta",
 				Some(meta::META_API_KEY_ENV),

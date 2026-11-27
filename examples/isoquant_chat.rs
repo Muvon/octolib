@@ -17,6 +17,7 @@
 //! Usage:
 //! ```bash
 //! export ISOQUANT_API_KEY="your_key"
+//! export ISOQUANT_API_MODE=anthropic  # or openai, for Chat Completions
 //! cargo run --example isoquant_chat
 //! cargo run --example isoquant_chat -- isoquant:deepseek-v4.1-flash-1017-fast
 //! ```

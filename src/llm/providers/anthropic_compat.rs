@@ -14,7 +14,7 @@
 
 //! Shared request and response layer for endpoints that speak the Anthropic
 //! Messages protocol without being Anthropic: MiniMax, Z.ai, DeepSeek, Moonshot,
-//! Alibaba and local servers.
+//! Alibaba, Isoquant and local servers.
 //!
 //! The split mirrors `openai_compat`: [`chat_completion`] wraps one raw turn
 //! in the schema enforcement, and a provider states what differs on its
@@ -125,9 +125,32 @@ pub(crate) async fn chat_completion(
 	api_url: String,
 	params: ChatCompletionParams,
 ) -> Result<ProviderResponse> {
+	chat_completion_as(config, Auth::Bearer, api_key, api_url, params).await
+}
+
+/// [`chat_completion`] with the key in `x-api-key`, the header Anthropic's own
+/// Messages contract names, and no `Authorization` header. For an endpoint that
+/// documents only that one.
+pub(crate) async fn chat_completion_with_x_api_key(
+	config: AnthropicCompatConfig,
+	api_key: String,
+	api_url: String,
+	params: ChatCompletionParams,
+) -> Result<ProviderResponse> {
+	chat_completion_as(config, Auth::ApiKey, api_key, api_url, params).await
+}
+
+async fn chat_completion_as(
+	config: AnthropicCompatConfig,
+	auth: Auth,
+	api_key: String,
+	api_url: String,
+	params: ChatCompletionParams,
+) -> Result<ProviderResponse> {
 	crate::llm::schema_enforcement::chat_completion_enforced(
 		&MessagesTransport {
 			config,
+			auth,
 			api_key,
 			api_url,
 		},
@@ -155,8 +178,18 @@ fn json_object_as_object_schema(mut params: ChatCompletionParams) -> ChatComplet
 	params
 }
 
+/// The header an endpoint reads its key from.
+#[derive(Debug, Clone, Copy)]
+enum Auth {
+	/// `Authorization: Bearer`, what every endpoint here reads.
+	Bearer,
+	/// `x-api-key`, the header Anthropic's own Messages contract names.
+	ApiKey,
+}
+
 struct MessagesTransport {
 	config: AnthropicCompatConfig,
+	auth: Auth,
 	api_key: String,
 	api_url: String,
 }
@@ -180,12 +213,20 @@ impl AiProvider for MessagesTransport {
 	}
 
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
-		chat_completion_raw(self.config, self.api_key.clone(), self.api_url.clone(), params).await
+		chat_completion_raw(
+			self.config,
+			self.auth,
+			self.api_key.clone(),
+			self.api_url.clone(),
+			params,
+		)
+		.await
 	}
 }
 
 async fn chat_completion_raw(
 	config: AnthropicCompatConfig,
+	auth: Auth,
 	api_key: String,
 	api_url: String,
 	params: ChatCompletionParams,
@@ -267,7 +308,7 @@ async fn chat_completion_raw(
 
 	(config.thinking)(&params.model, params.reasoning_effort, &mut request_body);
 
-	execute_request(config, api_key, api_url, request_body, params).await
+	execute_request(config, auth, api_key, api_url, request_body, params).await
 }
 
 fn requested_schema(params: &ChatCompletionParams) -> Option<Value> {
@@ -280,6 +321,7 @@ fn requested_schema(params: &ChatCompletionParams) -> Option<Value> {
 
 async fn execute_request(
 	config: AnthropicCompatConfig,
+	auth: Auth,
 	api_key: String,
 	api_url: String,
 	request_body: Value,
@@ -303,14 +345,18 @@ async fn execute_request(
 					.header(reqwest::header::CONTENT_TYPE, "application/json")
 					.header("anthropic-version", ANTHROPIC_VERSION)
 					.body(request_body.to_string());
-				// Every endpoint here reads a bearer token; a local server takes none.
+				// A local server takes no key at all. The others read it from the
+				// header their contract names, and from no other.
 				let request = if api_key.is_empty() {
 					request
 				} else {
-					request.header(
-						reqwest::header::AUTHORIZATION,
-						shared::sensitive_header(&format!("Bearer {api_key}"))?,
-					)
+					match auth {
+						Auth::Bearer => request.header(
+							reqwest::header::AUTHORIZATION,
+							shared::sensitive_header(&format!("Bearer {api_key}"))?,
+						),
+						Auth::ApiKey => request.header("x-api-key", shared::sensitive_header(&api_key)?),
+					}
 				};
 
 				let captured = super::streaming::send_and_read(

@@ -210,6 +210,7 @@ fn the_configuration_guide_names_each_mode_variable() {
 		"DEEPSEEK_API_MODE",
 		"MINIMAX_API_MODE",
 		"ZAI_API_MODE",
+		"ISOQUANT_API_MODE",
 		"LOCAL_API_MODE",
 	] {
 		assert!(guide.contains(&format!("`{mode_env}`")), "{mode_env} is undocumented");
@@ -337,6 +338,30 @@ async fn request_shape_keeps_system_turns_verbatim_and_sends_bearer_auth() {
 	assert_eq!(
 		request["system"],
 		json!([{ "type": "text", "text": "only turn", "cache_control": { "type": "ephemeral" } }])
+	);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn x_api_key_sends_the_key_in_its_own_header_only() {
+	let mock = MockHttp::start(vec![(200, text_body("ok"))]);
+	let params = ChatCompletionParams::new(&[Message::user("hi")], "m", 0);
+
+	chat_completion_with_x_api_key(TEST, "secret-key".to_owned(), mock.url.clone(), params)
+		.await
+		.expect("completion");
+
+	let requests = mock.requests();
+	assert_eq!(requests[0].header("x-api-key"), Some("secret-key"));
+	assert_eq!(requests[0].header("authorization"), None);
+	assert_eq!(requests[0].header("anthropic-version"), Some(ANTHROPIC_VERSION));
+	assert_eq!(
+		requests[0]
+			.headers
+			.iter()
+			.filter(|(name, _)| name == "x-api-key")
+			.count(),
+		1
 	);
 }
 

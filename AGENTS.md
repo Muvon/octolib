@@ -187,6 +187,7 @@ every provider is behind Cloudflare, nor a guarantee against slow time-to-first-
 | Reflection | Chat SSE with requested usage; [streaming guide](https://developers.reflection.ai/streaming.md) documents `include_usage`, `[DONE]`, in-band errors and padding; verified live on Beam (2026-11-07). |
 | Meta | Chat SSE with requested usage; [streaming and usage recipe](https://dev.meta.ai/docs/cookbook/streaming-responses). |
 | Xiaomi | Chat SSE without undocumented `stream_options`; [Chat API](https://mimo.mi.com/docs/en-US/api/chat/openai-api) specifies streamed usage. |
+| Xiaomi Messages | Messages SSE on the documented `/anthropic` base; [Messages API](https://mimo.mi.com/static/docs/api/chat/anthropic-api-post.md) lists `message_start`, `content_block_start/delta/stop`, `message_delta` and `message_stop` with `thinking_delta`, `text_delta` and `input_json_delta`. |
 | Ollama | Chat SSE with requested usage on `/v1/chat/completions`; [OpenAI compatibility](https://docs.ollama.com/api/openai-compatibility). A native `/api/chat` URL override stays non-streaming because its protocol is NDJSON. |
 | Local | Same OpenAI Chat SSE contract as Ollama/other compatible local servers; native `/api/chat` overrides stay buffered. Custom servers must support the requested protocol. |
 | OpenCode Zen / Go | Chat SSE with requested usage; [inference API](https://opencode.ai/v2/docs/console/api/inference/) describes terminal usage and cost. Existing configured base URLs are retained. |

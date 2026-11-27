@@ -14,7 +14,7 @@
 
 //! Shared request and response layer for endpoints that speak the Anthropic
 //! Messages protocol without being Anthropic: MiniMax, Z.ai, DeepSeek, Moonshot,
-//! Alibaba, Isoquant and local servers.
+//! Alibaba, Isoquant, Xiaomi and local servers.
 //!
 //! The split mirrors `openai_compat`: [`chat_completion`] wraps one raw turn
 //! in the schema enforcement, and a provider states what differs on its

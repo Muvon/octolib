@@ -18,6 +18,12 @@
 //! ```bash
 //! export XIAOMI_API_KEY="your_key"
 //! cargo run --example xiaomi_chat
+//!
+//! # Anthropic Messages instead of Chat Completions, same models
+//! export XIAOMI_API_MODE=anthropic
+//! # Token Plan: name the cluster's base and use its tp- key
+//! export XIAOMI_API_URL=https://token-plan-sgp.xiaomimimo.com/anthropic
+//! cargo run --example xiaomi_chat
 //! ```
 
 use octolib::llm::{ChatCompletionParams, Message, ProviderFactory};

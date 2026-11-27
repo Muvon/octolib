@@ -43,9 +43,12 @@ fn test_model_capabilities() {
 }
 
 #[test]
+#[serial_test::serial]
 fn test_chat_features() {
+	let _env = EnvGuard::new().remove("XIAOMI_API_MODE").remove("XIAOMI_API_URL");
 	let provider = XiaomiProvider::new();
-	// Native json_schema constrains decoding (live, 2026-10-26)
+	// Native json_schema constrains decoding (live, 2026-10-26) on the default
+	// Chat Completions route
 	assert!(provider.supports_structured_output("mimo-v2.6-pro"));
 	assert!(provider.enforces_response_schema("mimo-v2.6-pro"));
 	assert!(!provider.supports_required_tool_choice("mimo-v2.6-pro"));
@@ -75,7 +78,9 @@ fn test_pricing() {
 }
 
 #[test]
+#[serial_test::serial]
 fn cache_lifetime_is_the_measured_hour() {
+	let _env = EnvGuard::new().remove("XIAOMI_API_MODE").remove("XIAOMI_API_URL");
 	let provider = XiaomiProvider::new();
 	assert_eq!(
 		provider.cache_lifetime("mimo-v2.6-pro", false),

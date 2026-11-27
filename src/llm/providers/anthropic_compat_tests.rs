@@ -211,6 +211,7 @@ fn the_configuration_guide_names_each_mode_variable() {
 		"MINIMAX_API_MODE",
 		"ZAI_API_MODE",
 		"ISOQUANT_API_MODE",
+		"XIAOMI_API_MODE",
 		"LOCAL_API_MODE",
 	] {
 		assert!(guide.contains(&format!("`{mode_env}`")), "{mode_env} is undocumented");

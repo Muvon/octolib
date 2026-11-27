@@ -193,14 +193,14 @@ fn test_reasoning_effort_floors_to_glm_5_3_supported_levels() {
 /// other models get `thinking: disabled`.
 #[test]
 fn test_no_reasoning_floors_glm_5_3_and_disables_other_models() {
-	let enabled = || Some(serde_json::json!({ "type": "enabled" }));
+	let preserved = || Some(serde_json::json!({ "type": "enabled", "clear_thinking": false }));
 	assert_eq!(
 		thinking_fields("glm-5.3", Some(ReasoningEffort::None)),
-		(enabled(), Some("low"))
+		(preserved(), Some("low"))
 	);
 	assert_eq!(
 		thinking_fields("glm-5.3-flash", Some(ReasoningEffort::None)),
-		(enabled(), Some("low"))
+		(preserved(), Some("low"))
 	);
 	assert_eq!(
 		thinking_fields("glm-5.2", Some(ReasoningEffort::None)),
@@ -208,9 +208,68 @@ fn test_no_reasoning_floors_glm_5_3_and_disables_other_models() {
 	);
 	assert_eq!(
 		thinking_fields("glm-5.3", Some(ReasoningEffort::High)),
-		(enabled(), Some("high"))
+		(preserved(), Some("high"))
 	);
-	assert_eq!(thinking_fields("glm-5.3", None), (None, None));
+	// No effort requested: the model's own default level, thinking preserved.
+	assert_eq!(thinking_fields("glm-5.3", None), (preserved(), None));
+}
+
+/// Preserved Thinking is asked for only where Z.ai documents thinking on by
+/// default — the GLM-4.7 and GLM-5 text series — and only while it is on.
+#[test]
+fn preserved_thinking_covers_the_documented_models_only() {
+	let preserved = serde_json::json!({ "type": "enabled", "clear_thinking": false });
+	for model in [
+		"glm-5.4",
+		"glm-5.3",
+		"glm-5.3-flash",
+		"glm-5.3-flashx",
+		"glm-5.2",
+		"glm-5.1",
+		"glm-5-turbo",
+		"glm-5",
+		"glm-4.7",
+		"glm-4.7-flash",
+		"GLM-4.7",
+	] {
+		assert_eq!(
+			thinking_fields(model, None),
+			(Some(preserved.clone()), None),
+			"{model}: an unset effort keeps the default level and preserves thinking"
+		);
+		assert_eq!(
+			thinking_fields(model, Some(ReasoningEffort::High)).0,
+			Some(preserved.clone()),
+			"{model}: a requested level preserves thinking too"
+		);
+	}
+
+	// An explicit disable stays a plain disable.
+	for model in ["glm-5.2", "glm-4.7"] {
+		assert_eq!(
+			thinking_fields(model, Some(ReasoningEffort::None)),
+			(Some(serde_json::json!({ "type": "disabled" })), None)
+		);
+	}
+
+	// Not documented: hybrid-by-default GLM-4.6, the vision models and the
+	// GLM-4/4.5 generation keep the upstream default, and get no clear_thinking
+	// even with a level requested.
+	for model in [
+		"glm-4.6",
+		"glm-5v-turbo",
+		"glm-4.6v",
+		"glm-4.5",
+		"glm-ocr",
+		"glm-4-32b-0414-128k",
+	] {
+		assert_eq!(thinking_fields(model, None), (None, None), "{model}: upstream default");
+		assert_eq!(
+			thinking_fields(model, Some(ReasoningEffort::High)),
+			(Some(serde_json::json!({ "type": "enabled" })), Some("high")),
+			"{model}: no clear_thinking without documentation"
+		);
+	}
 }
 
 #[test]
@@ -283,12 +342,16 @@ fn historical_reasoning_is_preserved_for_zai() {
 	older.thinking = Some(think("old reasoning"));
 	let mut newer = Message::assistant("newer");
 	newer.thinking = Some(think("current reasoning"));
+	// A stored block on a turn that never reasoned is not the model's history.
+	let mut misfiled = Message::tool("result", "call_x", "lookup");
+	misfiled.thinking = Some(think("not the model's"));
 
 	let out = serde_json::to_value(convert_messages(&[
 		Message::user("go"),
 		older,
 		Message::user("again"),
 		newer,
+		misfiled,
 	]))
 	.unwrap();
 
@@ -296,6 +359,11 @@ fn historical_reasoning_is_preserved_for_zai() {
 	// it to save context breaks the chain and the model re-derives.
 	assert_eq!(out[1]["reasoning_content"], "old reasoning");
 	assert_eq!(out[3]["reasoning_content"], "current reasoning");
+	// `reasoning_content` is an assistant-turn field: user and tool turns
+	// never carry one, whatever a caller stored on them.
+	for index in [0, 2, 4] {
+		assert!(out[index].get("reasoning_content").is_none(), "turn {index}");
+	}
 }
 
 #[test]
@@ -731,4 +799,249 @@ async fn messages_endpoint_gets_the_thinking_switch_and_bills_from_the_pricing_t
 	let requests = mock.requests();
 	let request: serde_json::Value = serde_json::from_str(&requests[0].body).expect("request json");
 	assert_eq!(request["thinking"], serde_json::json!({ "type": "disabled" }));
+}
+
+/// An assistant turn as a caller stores it: generic tool calls plus the
+/// response's reasoning.
+fn assistant_turn(
+	calls: Vec<crate::llm::tool_calls::GenericToolCall>,
+	thinking: &crate::llm::types::ThinkingBlock,
+) -> crate::llm::types::Message {
+	crate::llm::types::Message {
+		tool_calls: Some(serde_json::to_value(calls).expect("tool calls")),
+		thinking: Some(thinking.clone()),
+		..crate::llm::types::Message::assistant("")
+	}
+}
+
+/// Z.ai Chat SSE: reasoning and one tool call, each split across deltas, the
+/// usage chunk after the `finish_reason` chunk, then `[DONE]`.
+fn chat_tool_stream(reasoning: [&str; 2], call_id: &str, arguments: [&str; 2]) -> String {
+	let events = [
+		serde_json::json!({"id":"z-1","object":"chat.completion","created":1,"model":"glm-4.7","choices":[{"index":0,"delta":{"role":"assistant","content":"","reasoning_content":reasoning[0]}}]}),
+		serde_json::json!({"choices":[{"index":0,"delta":{"reasoning_content":reasoning[1]}}]}),
+		serde_json::json!({"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":call_id,"type":"function","function":{"name":"lookup","arguments":arguments[0]}}]}}]}),
+		serde_json::json!({"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":arguments[1]}}]},"finish_reason":"tool_calls"}]}),
+		serde_json::json!({"choices":[],"usage":{"prompt_tokens":100,"completion_tokens":20,"total_tokens":120}}),
+	];
+	let mut body = events
+		.iter()
+		.map(|event| format!("data: {event}\n\n"))
+		.collect::<String>();
+	body.push_str("data: [DONE]\n\n");
+	body
+}
+
+/// Every assistant turn's streamed reasoning goes back with its own tool call
+/// across consecutive tool cycles, in order, and an unset effort sends the
+/// model's default level with Preserved Thinking asked for.
+#[tokio::test]
+#[serial_test::serial]
+async fn chat_tool_cycles_replay_each_assistant_reasoning_in_order() {
+	use crate::llm::tool_calls::ProviderToolCalls;
+	use crate::llm::types::Message;
+
+	let answer = r#"{"id":"z-3","object":"chat.completion","created":1,"model":"glm-4.7","choices":[{"index":0,"message":{"role":"assistant","content":"Paris: 18C"},"finish_reason":"stop"}],"usage":{"prompt_tokens":300,"completion_tokens":5,"total_tokens":305}}"#;
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![
+		(
+			200,
+			chat_tool_stream(["plan ", "then act"], "call_a", [r#"{"city":"#, r#""Paris"}"#]),
+		),
+		(
+			200,
+			chat_tool_stream(["second ", "thought"], "call_b", [r#"{"unit":"#, r#""celsius"}"#]),
+		),
+		(200, answer.to_string()),
+	]);
+	let _env = EnvGuard::new().set("ZAI_API_URL", mock.url.clone());
+	let provider = ZaiProvider::new();
+	let mut history = vec![Message::user("Weather in Paris?")];
+
+	// Cycle one: the streamed fragments assemble into one assistant turn.
+	let params = ChatCompletionParams::new(&history, "glm-4.7", 100).with_api_key("mock-key".to_owned());
+	let first = provider.chat_completion(params).await.expect("first completion");
+	assert_eq!(
+		first.thinking.as_ref().map(|thinking| thinking.content.as_str()),
+		Some("plan then act")
+	);
+	let first_calls = ProviderToolCalls::extract_from_exchange(&first.exchange)
+		.expect("tool calls")
+		.expect("a call")
+		.to_generic_tool_calls();
+	assert_eq!(first_calls[0].id, "call_a");
+	assert_eq!(first_calls[0].arguments, serde_json::json!({"city": "Paris"}));
+	history.push(assistant_turn(first_calls, first.thinking.as_ref().expect("thinking")));
+	history.push(Message::tool("18C", "call_a", "lookup"));
+
+	// Cycle two follows the first consecutively: no answer in between.
+	let params = ChatCompletionParams::new(&history, "glm-4.7", 100).with_api_key("mock-key".to_owned());
+	let second = provider.chat_completion(params).await.expect("second completion");
+	assert_eq!(
+		second.thinking.as_ref().map(|thinking| thinking.content.as_str()),
+		Some("second thought")
+	);
+	let second_calls = ProviderToolCalls::extract_from_exchange(&second.exchange)
+		.expect("tool calls")
+		.expect("a call")
+		.to_generic_tool_calls();
+	assert_eq!(second_calls[0].id, "call_b");
+	history.push(assistant_turn(
+		second_calls,
+		second.thinking.as_ref().expect("thinking"),
+	));
+	history.push(Message::tool("celsius", "call_b", "lookup"));
+
+	let params = ChatCompletionParams::new(&history, "glm-4.7", 100).with_api_key("mock-key".to_owned());
+	let third = provider.chat_completion(params).await.expect("third completion");
+	assert_eq!(third.content, "Paris: 18C");
+
+	let requests = mock.requests();
+	assert_eq!(requests.len(), 3);
+	for request in &requests {
+		let body: serde_json::Value = serde_json::from_str(&request.body).expect("request json");
+		assert_eq!(body["stream"], true);
+		assert_eq!(
+			body["thinking"],
+			serde_json::json!({ "type": "enabled", "clear_thinking": false })
+		);
+		assert!(
+			body.get("reasoning_effort").is_none(),
+			"an unset effort invents no level"
+		);
+	}
+	// The second request carried exactly the history known at the time.
+	let second: serde_json::Value = serde_json::from_str(&requests[1].body).expect("request json");
+	assert_eq!(second["messages"].as_array().expect("messages").len(), 3);
+	assert_eq!(second["messages"][1]["reasoning_content"], "plan then act");
+
+	let last: serde_json::Value = serde_json::from_str(&requests[2].body).expect("request json");
+	let turns = last["messages"].as_array().expect("messages");
+	let roles: Vec<&str> = turns.iter().map(|turn| turn["role"].as_str().expect("role")).collect();
+	assert_eq!(roles, ["user", "assistant", "tool", "assistant", "tool"]);
+	// Each assistant turn replays its own reasoning, next to its own call.
+	assert_eq!(turns[1]["reasoning_content"], "plan then act");
+	assert_eq!(turns[1]["tool_calls"][0]["id"], "call_a");
+	assert_eq!(
+		turns[1]["tool_calls"][0]["function"]["arguments"],
+		r#"{"city":"Paris"}"#
+	);
+	assert_eq!(turns[2]["role"], "tool");
+	assert_eq!(turns[2]["tool_call_id"], "call_a");
+	assert_eq!(turns[2]["content"], "18C");
+	assert_eq!(turns[3]["reasoning_content"], "second thought");
+	assert_eq!(turns[3]["tool_calls"][0]["id"], "call_b");
+	assert_eq!(turns[4]["tool_call_id"], "call_b");
+	assert_eq!(turns[4]["content"], "celsius");
+	for index in [0, 2, 4] {
+		assert!(turns[index].get("reasoning_content").is_none(), "turn {index}");
+	}
+}
+
+/// Messages SSE events framed on the wire, as the accumulator reads them.
+fn messages_sse(events: &[serde_json::Value]) -> String {
+	events
+		.iter()
+		.map(|event| {
+			format!(
+				"event: {}\ndata: {event}\n\n",
+				event["type"].as_str().unwrap_or_default()
+			)
+		})
+		.collect()
+}
+
+/// Messages sends back the captured thinking block with its signature, first
+/// and unchanged, and never a `clear_thinking` it has no documentation for.
+#[tokio::test]
+#[serial_test::serial]
+async fn messages_replays_signed_thinking_verbatim_and_sends_no_clear_thinking() {
+	use crate::llm::tool_calls::{GenericToolCall, ProviderToolCalls};
+	use crate::llm::types::Message;
+
+	let events = [
+		serde_json::json!({"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"glm-5.3","content":[],"usage":{"input_tokens":10,"output_tokens":1}}}),
+		serde_json::json!({"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}),
+		serde_json::json!({"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"weigh "}}),
+		serde_json::json!({"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"options"}}),
+		serde_json::json!({"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"sig-"}}),
+		serde_json::json!({"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"1"}}),
+		serde_json::json!({"type":"content_block_stop","index":0}),
+		serde_json::json!({"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"call_a","name":"lookup","input":{}}}),
+		serde_json::json!({"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"city\":\"Paris\"}"}}),
+		serde_json::json!({"type":"content_block_stop","index":1}),
+		serde_json::json!({"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"output_tokens":40}}),
+		serde_json::json!({"type":"message_stop"}),
+	];
+	let answer = r#"{"id":"msg_2","type":"message","role":"assistant","model":"glm-5.3","content":[{"type":"text","text":"Paris: 18C"}],"stop_reason":"end_turn","usage":{"input_tokens":30,"output_tokens":5}}"#;
+	let mock =
+		crate::test_support::mock_http::MockHttp::start(vec![(200, messages_sse(&events)), (200, answer.to_string())]);
+	let _env = EnvGuard::new().set("ZAI_API_URL", format!("{}/v1/messages", mock.base_url()));
+	let provider = ZaiProvider::new();
+	let mut history = vec![Message::user("Weather in Paris?")];
+
+	let params = ChatCompletionParams::new(&history, "glm-5.3", 100).with_api_key("mock-key".to_owned());
+	let first = provider.chat_completion(params).await.expect("first completion");
+	assert_eq!(
+		first.thinking.as_ref().map(|thinking| thinking.content.as_str()),
+		Some("weigh options")
+	);
+	let calls = ProviderToolCalls::extract_from_exchange(&first.exchange)
+		.expect("tool calls")
+		.expect("a call")
+		.to_generic_tool_calls();
+	assert_eq!(calls[0].id, "call_a");
+	assert_eq!(calls[0].arguments, serde_json::json!({"city": "Paris"}));
+	let blocks = first.exchange.response["output_items"]["items"].clone();
+	assert_eq!(blocks[0]["signature"], "sig-1");
+
+	// The caller stores the captured blocks with the turn, as for native Anthropic.
+	let mut assistant = assistant_turn(calls, first.thinking.as_ref().expect("thinking"));
+	assistant.provider_items = Some(first.exchange.response["output_items"].clone());
+	history.push(assistant);
+	history.push(Message::tool("18C", "call_a", "lookup"));
+	let params = ChatCompletionParams::new(&history, "glm-5.3", 100).with_api_key("mock-key".to_owned());
+	let second = provider.chat_completion(params).await.expect("second completion");
+	assert_eq!(second.content, "Paris: 18C");
+
+	let requests = mock.requests();
+	assert_eq!(requests.len(), 2);
+	for request in &requests {
+		let body: serde_json::Value = serde_json::from_str(&request.body).expect("request json");
+		// An unset effort is the upstream default: no switch at all.
+		assert!(body.get("thinking").is_none(), "nothing is sent for an unset effort");
+		assert!(
+			!request.body.contains("clear_thinking"),
+			"clear_thinking is a Chat Completions field"
+		);
+	}
+	let replay: serde_json::Value = serde_json::from_str(&requests[1].body).expect("request json");
+	let turns = replay["messages"].as_array().expect("messages");
+	assert_eq!(turns.len(), 3);
+	// Signed thinking first, then the call, exactly as they came.
+	assert_eq!(turns[1], serde_json::json!({ "role": "assistant", "content": blocks }));
+	assert_eq!(turns[1]["content"][0]["type"], "thinking");
+	assert_eq!(turns[1]["content"][0]["thinking"], "weigh options");
+	assert_eq!(turns[1]["content"][0]["signature"], "sig-1");
+	assert_eq!(turns[1]["content"][1]["type"], "tool_use");
+	assert_eq!(turns[1]["content"][1]["id"], "call_a");
+	assert_eq!(turns[1]["content"][1]["input"], serde_json::json!({"city": "Paris"}));
+	assert_eq!(turns[2]["role"], "user");
+	assert_eq!(turns[2]["content"][0]["type"], "tool_result");
+	assert_eq!(turns[2]["content"][0]["tool_use_id"], "call_a");
+	assert_eq!(turns[2]["content"][0]["content"], "18C");
+
+	// A turn stored without its captured blocks has no signature to return: it
+	// is rebuilt from text and calls, and no thinking block is invented for it.
+	let plain = assistant_turn(
+		vec![GenericToolCall {
+			id: "call_a".to_string(),
+			name: "lookup".to_string(),
+			arguments: serde_json::json!({"city": "Paris"}),
+			meta: None,
+		}],
+		first.thinking.as_ref().expect("thinking"),
+	);
+	let rebuilt = anthropic_compat::convert_messages(&[plain], ANTHROPIC_COMPAT, "glm-5.3").expect("convert");
+	assert_eq!(rebuilt[0]["content"].as_array().expect("blocks").len(), 1);
+	assert_eq!(rebuilt[0]["content"][0]["type"], "tool_use");
 }

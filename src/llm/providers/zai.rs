@@ -244,7 +244,9 @@ impl ZaiProvider {
 }
 
 /// Z.ai's binary thinking switch, as on its Chat API. The level knobs of the
-/// Chat API are not sent here.
+/// Chat API are not sent here, and neither is `clear_thinking`: Z.ai documents
+/// it for Chat Completions only, with no Messages equivalent (OpenAPI, Nov
+/// 2026), so preserved thinking on this route is the endpoint's own default.
 fn configure_thinking(model: &str, effort: Option<ReasoningEffort>, request: &mut serde_json::Value) {
 	match effort.map(|effort| shared::supported_reasoning_effort("zai", model, effort)) {
 		Some(ReasoningEffort::None) => request["thinking"] = serde_json::json!({ "type": "disabled" }),
@@ -557,13 +559,14 @@ impl AiProvider for ZaiProvider {
 
 /// Convert generic conversation messages to Z.ai's OpenAI-compatible wire format.
 ///
-/// Historical `reasoning_content` is sent back deliberately. Z.ai documents it as
-/// required — "you must return the complete, unmodified reasoning_content back to
-/// the API" — and Preserved Thinking, which retains reasoning from previous
-/// assistant turns, is on by default for the coding-plan endpoint. Dropping it to
-/// save context breaks the reasoning chain and the model re-derives: measured on
-/// rust/tokio, thinking rose 44k -> 114k tokens and the sequence went from 31.8
-/// to 56.6 minutes for the same 5/5 result.
+/// Historical `reasoning_content` is sent back deliberately, from assistant
+/// turns only. Z.ai documents it as required — "you must return the complete,
+/// unmodified reasoning_content back to the API" — and Preserved Thinking, which
+/// retains reasoning from previous assistant turns, is on by default for the
+/// coding-plan endpoint and asked for on the standard one (`thinking_fields`).
+/// Dropping it to save context breaks the reasoning chain and the model
+/// re-derives: measured on rust/tokio, thinking rose 44k -> 114k tokens and the
+/// sequence went from 31.8 to 56.6 minutes for the same 5/5 result.
 fn convert_messages(messages: &[crate::llm::types::Message]) -> Vec<ZaiMessage> {
 	let messages = shared::chat_completion_messages(messages);
 	let messages = messages.as_ref();
@@ -593,7 +596,11 @@ fn convert_messages(messages: &[crate::llm::types::Message]) -> Vec<ZaiMessage> 
 			ZaiMessage {
 				role: msg.role.clone(),
 				content: Some(content),
-				reasoning_content: msg.thinking.as_ref().map(|t| t.content.clone()),
+				// An assistant-turn field: a stored block on any other role is
+				// not the model's own history.
+				reasoning_content: (msg.role == "assistant")
+					.then(|| msg.thinking.as_ref().map(|t| t.content.clone()))
+					.flatten(),
 				tool_calls: msg.tool_calls.as_ref().map(convert_tool_calls),
 				// Tool results must reference the matching assistant tool call. Without
 				// this field Z.ai cannot associate the returned content with the call.
@@ -895,19 +902,44 @@ fn reasoning_effort_value(model: &str, effort: ReasoningEffort) -> &'static str 
 	}
 }
 
+/// Whether `model` is one Z.ai documents with thinking on by default and
+/// Preserved Thinking available on Chat Completions: the GLM-4.7 and GLM-5
+/// text series (Thinking Mode guide, Nov 25, 2026). GLM-4.6 is hybrid by
+/// default there, and the GLM-5V, 4.6V, 4.5V and OCR vision models and the
+/// GLM-4/4.5 generation are not listed, so they keep the upstream default.
+fn preserves_thinking(model: &str) -> bool {
+	let model = normalize_model_name(model);
+	!model.contains("glm-5v") && (model.contains("glm-5") || model.contains("glm-4.7"))
+}
+
 /// Z.ai `thinking` and `reasoning_effort` for a requested effort. GLM hybrid
 /// thinking models (4.5/4.6/4.7/5.x) accept `thinking: { "type": "enabled" |
 /// "disabled" }`; any non-None effort enables it and the level goes through
 /// `reasoning_effort`. Models without hybrid thinking (e.g. glm-4-32b, glm-ocr)
 /// ignore the field.
+///
+/// With no effort requested, the models in [`preserves_thinking`] get
+/// `thinking: { "type": "enabled", "clear_thinking": false }` and no level:
+/// thinking is their documented default, and `clear_thinking` — true before
+/// GLM-5.4 on the standard endpoint — would drop the `reasoning_content`
+/// replayed from earlier turns (see `convert_messages`). Every other model is
+/// sent nothing and keeps the upstream default.
 fn thinking_fields(model: &str, effort: Option<ReasoningEffort>) -> (Option<serde_json::Value>, Option<&'static str>) {
 	match effort.map(|effort| shared::supported_reasoning_effort("zai", model, effort)) {
 		Some(ReasoningEffort::None) => (Some(serde_json::json!({ "type": "disabled" })), None),
-		Some(effort) => (
-			Some(serde_json::json!({ "type": "enabled" })),
-			Some(reasoning_effort_value(model, effort)),
-		),
+		Some(effort) => (Some(thinking_on(model)), Some(reasoning_effort_value(model, effort))),
+		None if preserves_thinking(model) => (Some(thinking_on(model)), None),
 		None => (None, None),
+	}
+}
+
+/// `thinking` for a request that leaves thinking on: Preserved Thinking asked
+/// for where documented, bare `enabled` elsewhere.
+fn thinking_on(model: &str) -> serde_json::Value {
+	if preserves_thinking(model) {
+		serde_json::json!({ "type": "enabled", "clear_thinking": false })
+	} else {
+		serde_json::json!({ "type": "enabled" })
 	}
 }
 

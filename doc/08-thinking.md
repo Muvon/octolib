@@ -17,7 +17,7 @@ thinking switched off wherever the provider has a switch:
 |----------|-------------------------------------|
 | Alibaba Model Studio (DeepSeek V4, GLM, Qwen3, Qwen4) | `enable_thinking: false`, no `reasoning_effort` |
 | DeepSeek (native) | `thinking: {"type": "disabled"}` |
-| Z.AI | `thinking: {"type": "disabled"}` (omitted for GLM-5.3, which rejects it) |
+| Z.AI | `thinking: {"type": "disabled"}`; GLM-5.3 and GLM-5.3-Flash cannot switch thinking off and run at `thinking: {"type": "enabled"}` with `reasoning_effort: "low"` |
 | OpenRouter | `reasoning: {"enabled": false}` for optional reasoning; the catalog's lowest effort for mandatory reasoning |
 | Google Studio / Vertex, Gemini 4 Argon | `extra_body.google.thinking_config.thinking_level: "low"` (thinking cannot be disabled) |
 | Google Studio, Gemini 4 Hydrogen | `reasoning_effort: "none"` (thinking is reduced, not disabled) |
@@ -151,6 +151,46 @@ let response = provider.chat_completion(params).await?;
 `grok-4.5` accepts low, medium, and high effort. Grok 4.20 multi-agent also
 accepts xhigh; the provider maps the generic Max level to xhigh. Fixed
 reasoning/non-reasoning variants do not receive an undocumented effort field.
+
+### Z.AI
+
+Z.AI has two routes, chosen per model (see `ZaiProvider::select_endpoint`):
+vision models go to Chat Completions, text-only models to the Anthropic-compatible
+Messages endpoint; `ZAI_API_MODE` or `ZAI_API_URL` moves either.
+
+**Chat Completions.** Thinking is on by default for the GLM-4.7 and GLM-5 text
+series, and Octolib asks for Preserved Thinking there: with the effort unset or
+set to a level, the request carries
+`thinking: {"type": "enabled", "clear_thinking": false}`, and a
+`reasoning_effort` only when one was requested (GLM-5.3 and GLM-5.3-Flash
+accept `low`, `high` and `max` only; intermediate levels floor to the next
+one). Z.AI clears earlier turns' `reasoning_content` by default before GLM-5.4
+on the standard endpoint, which would discard the reasoning Octolib replays.
+GLM-4.6 (hybrid by default), the vision models and the GLM-4/4.5 generation are
+not documented for it: an unset effort sends nothing there, and a requested one
+sends `thinking: {"type": "enabled"}` without `clear_thinking`.
+
+Explicit `ReasoningEffort::None` sends `thinking: {"type": "disabled"}`; GLM-5.3
+and GLM-5.3-Flash cannot switch thinking off, so they run at
+`reasoning_effort: "low"` instead.
+
+**Messages.** The binary `thinking` switch only. `clear_thinking` is documented
+for Chat Completions alone, so it is not sent here; preserved thinking on this
+route is the endpoint's own default and is not guaranteed for models before
+GLM-5.4.
+
+**Replay.** `replays_thinking` is true for every model. On Chat Completions each
+assistant turn's `reasoning_content` goes back complete and in order, next to its
+own tool calls, across consecutive tool cycles; user and tool turns never carry
+one. On Messages a signed thinking block goes back only as the caller stored it:
+keep `response.exchange.response["output_items"]` as `Message.provider_items`
+and the captured blocks are returned verbatim, thinking first. A turn stored
+without them is rebuilt from its text and tool calls, with no thinking block — a
+signature is never invented.
+
+Sources, reviewed November 27, 2026:
+[Thinking Mode](https://docs.z.ai/guides/capabilities/thinking-mode),
+[Chat Completions `thinking`](https://docs.z.ai/api-reference/llm/chat-completion).
 
 ### MiniMax
 

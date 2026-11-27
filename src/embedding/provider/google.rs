@@ -114,28 +114,23 @@ impl GoogleProvider {
 		let mut all_embeddings = Vec::new();
 
 		for text in texts {
-			let response = http_client()
-				.post(format!(
-					"https://generativelanguage.googleapis.com/v1beta/models/{}:embedContent?key={}",
-					model, google_api_key
-				))
-				.header("Content-Type", "application/json")
-				.json(&json!({
-					"content": {
-						"parts": [{
-							"text": text
-						}]
-					}
-				}))
-				.send()
-				.await?;
-
-			if !response.status().is_success() {
-				let error_text = response.text().await?;
-				return Err(anyhow::anyhow!("Google API error: {}", error_text));
-			}
-
-			let response_json: Value = response.json().await?;
+			let response_json: Value = super::request::send_json(
+				"google",
+				http_client()
+					.post(format!(
+						"https://generativelanguage.googleapis.com/v1beta/models/{}:embedContent?key={}",
+						model, google_api_key
+					))
+					.header("Content-Type", "application/json")
+					.json(&json!({
+						"content": {
+							"parts": [{
+								"text": text
+							}]
+						}
+					})),
+			)
+			.await?;
 
 			let embedding = response_json["embedding"]["values"]
 				.as_array()

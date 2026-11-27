@@ -161,20 +161,15 @@ impl VoyageProvider {
 			request_body["input_type"] = json!(input_type_str);
 		}
 
-		let response = http_client()
-			.post("https://api.voyageai.com/v1/embeddings")
-			.header("Authorization", format!("Bearer {}", voyage_api_key))
-			.header("Content-Type", "application/json")
-			.json(&request_body)
-			.send()
-			.await?;
-
-		if !response.status().is_success() {
-			let error_text = response.text().await?;
-			return Err(anyhow::anyhow!("Voyage API error: {}", error_text));
-		}
-
-		let response_json: Value = response.json().await?;
+		let response_json: Value = super::request::send_json(
+			"voyage",
+			http_client()
+				.post("https://api.voyageai.com/v1/embeddings")
+				.header("Authorization", format!("Bearer {}", voyage_api_key))
+				.header("Content-Type", "application/json")
+				.json(&request_body),
+		)
+		.await?;
 
 		let embeddings = response_json["data"]
 			.as_array()

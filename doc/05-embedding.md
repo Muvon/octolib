@@ -90,6 +90,16 @@ async fn batch_example() -> anyhow::Result<()> {
 }
 ```
 
+## HTTP failures and retries
+
+Network embedding providers retry HTTP 408, 409, 429 and 5xx responses, connection failures and interrupted responses. Each HTTP request has at most five attempts and a five-minute deadline, including backoff. Existing per-attempt client timeouts still apply. Local FastEmbed and HuggingFace inference are unchanged.
+
+Retries use `retry-after-ms`, `Retry-After` (seconds or an HTTP date), Google's `RetryInfo`, or the delay in an OpenAI rate-limit message. Without a usable server delay, backoff is 1, 2, 4 and 8 seconds. Up to 250 ms of jitter is added. A delay that exceeds the remaining deadline returns the error instead of retrying early.
+
+Invalid input, authentication failures and OpenAI's `insufficient_quota` / billing errors return immediately. HTTP failures retain the provider, status and response body in `ProviderError::ApiError`; callers can downcast the returned `anyhow::Error`. After a provider error, retrying a whole multi-request batch can replay completed requests and multiply these retry limits. Callers should return that error to the user instead.
+
+Only the failed HTTP request is retried. If its response was lost after the server processed it, that request may still be charged again.
+
 ## 🔧 Provider Configuration
 
 ### Environment Variables

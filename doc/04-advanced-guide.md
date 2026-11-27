@@ -7,6 +7,7 @@
 | OpenAI | ✅ Full Support | Chat, Vision, Tools, Structured Output, Caching |
 | Anthropic | ✅ Full Support | Claude Models, Vision, Tools, Caching |
 | OpenRouter | ✅ Full Support | Multi-Provider Proxy, Vision, Caching, Structured Output |
+| LLMTR | ✅ Supported | OpenAI-Compatible Gateway, Tools, Reference Pricing |
 | Groq | ✅ Full Support | Fast Inference, Structured Output, Caching |
 | BytePlus | ✅ Full Support | Seed Models, Structured Output, Caching |
 | Alibaba Model Studio | ✅ Full Support | Qwen Models + Resold DeepSeek/GLM, Vision, Video, Tools, Thinking, Caching |
@@ -82,6 +83,7 @@ Each provider requires its specific API key:
 - `OPENAI_API_KEY`: OpenAI API key
 - `ANTHROPIC_API_KEY`: Anthropic API key
 - `OPENROUTER_API_KEY`: OpenRouter API key
+- `LLMTR_API_KEY`: LLMTR API key
 - `GROQ_API_KEY`: Groq API key
 - `BYTEPLUS_API_KEY`: BytePlus API key
 - `ALIBABA_API_KEY`: Alibaba Cloud Model Studio (DashScope) API key
@@ -104,6 +106,7 @@ All providers support custom API URLs via environment variables. If not set, def
 | OpenAI | `OPENAI_API_KEY` | `OPENAI_API_URL` | `https://api.openai.com/v1/chat/completions` |
 | Anthropic | `ANTHROPIC_API_KEY` | `ANTHROPIC_API_URL` | `https://api.anthropic.com/v1/messages` |
 | OpenRouter | `OPENROUTER_API_KEY` | `OPENROUTER_API_URL` | `https://openrouter.ai/api/v1/chat/completions` |
+| LLMTR | `LLMTR_API_KEY` | `LLMTR_API_URL` | `https://llmtr.com/v1/chat/completions` |
 | Groq | `GROQ_API_KEY` | `GROQ_API_URL` | `https://api.groq.com/openai/v1/chat/completions` |
 | BytePlus | `BYTEPLUS_API_KEY` | `BYTEPLUS_API_URL` | `https://ark.ap-southeast.bytepluses.com/api/v3/chat/completions` |
 | Alibaba Model Studio | `ALIBABA_API_KEY` | `ALIBABA_API_URL` | `https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions` |

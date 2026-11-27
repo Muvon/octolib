@@ -622,7 +622,7 @@ Capabilities marked "Per-model" are resolved per model from the provider's capab
 | **Featherless** | Open-weight models, subscription billing | ✅ JSON + Schema | ❌ | ❌ | ❌ |
 | **Hetzner** | Open-weight models, free while experimental | ✅ JSON + Schema | Per-model | ✅ | ❌ |
 | **Inception Labs** | Mercury diffusion LLMs | ✅ JSON + Schema | ❌ | ✅ | ✅ |
-| **Isoquant** | Models read from its catalog, zero data retention required; Anthropic Messages (preferred) or OpenAI Chat Completions | ✅ JSON + Schema | Per-model | ✅ | ✅ (auto) |
+| **Isoquant** | Models read from its public catalog, zero data retention required on inference; Anthropic Messages (preferred) or OpenAI Chat Completions | ✅ JSON + Schema | Per-model | ✅ | ✅ (Chat Completions) |
 | **Meta** | Muse Spark models, 1M-token context | ✅ JSON + Schema | ✅ | ✅ | ✅ |
 | **Reflection AI** | Beam reasoning model, 1M-token context | ✅ JSON + Schema | ❌ | ✅ | ✅ (auto) |
 | **Tinker** | Inkling family, sampler checkpoints | ❌ | ❌ | ✅ | ❌ |

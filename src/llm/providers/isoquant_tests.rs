@@ -290,6 +290,21 @@ fn catalog_url_sits_beside_either_endpoint() {
 		models_url("http://localhost:8080/v1"),
 		"http://localhost:8080/v1/models"
 	);
+	// Only the path counts: trailing slashes are trimmed and the query, with
+	// whatever credentials it carries, stays off the catalog request.
+	assert_eq!(
+		models_url("http://localhost:8080/v1/messages/?api_key=secret"),
+		"http://localhost:8080/v1/models"
+	);
+	assert_eq!(
+		models_url("http://localhost:8080/v1/chat/completions/?key=secret#frag"),
+		"http://localhost:8080/v1/models"
+	);
+	assert_eq!(models_url("http://localhost:8080/"), "http://localhost:8080/models");
+	assert_eq!(
+		models_url("http://localhost:8080/custom?x=1"),
+		"http://localhost:8080/custom/models"
+	);
 }
 
 #[test]
@@ -300,18 +315,23 @@ fn endpoint_follows_the_mode_then_the_url() {
 
 	for (mode, api_url, expected_mode, expected_url) in [
 		(None, None, ApiMode::Anthropic, MESSAGES_URL),
-		(Some("openai"), None, ApiMode::OpenAi, CHAT_COMPLETIONS_URL),
-		(Some(" Anthropic "), None, ApiMode::Anthropic, MESSAGES_URL),
+		(Some(ApiMode::OpenAi), None, ApiMode::OpenAi, CHAT_COMPLETIONS_URL),
+		(Some(ApiMode::Anthropic), None, ApiMode::Anthropic, MESSAGES_URL),
 		(None, Some(messages), ApiMode::Anthropic, messages),
 		(None, Some(completions), ApiMode::OpenAi, completions),
 		// A custom URL naming neither endpoint keeps the protocol it always had.
 		(None, Some(custom), ApiMode::OpenAi, custom),
 		// The mode overrides what the URL names; the URL is sent as written.
-		(Some("anthropic"), Some(completions), ApiMode::Anthropic, completions),
-		(Some("openai"), Some(messages), ApiMode::OpenAi, messages),
+		(
+			Some(ApiMode::Anthropic),
+			Some(completions),
+			ApiMode::Anthropic,
+			completions,
+		),
+		(Some(ApiMode::OpenAi), Some(messages), ApiMode::OpenAi, messages),
 	] {
 		assert_eq!(
-			select_endpoint(mode, api_url, DEEPSEEK).expect("endpoint"),
+			select_endpoint(mode, api_url, DEEPSEEK),
 			(expected_mode, expected_url.to_owned()),
 			"mode {mode:?}, url {api_url:?}"
 		);
@@ -319,12 +339,75 @@ fn endpoint_follows_the_mode_then_the_url() {
 }
 
 #[test]
-fn an_unknown_mode_is_refused_before_any_request() {
-	let error = select_endpoint(Some("claude"), None, DEEPSEEK).expect_err("refused");
-	assert_eq!(
-		error.to_string(),
-		"Configuration error: ISOQUANT_API_MODE must be `anthropic` or `openai`, got `claude`"
+fn messages_never_claims_a_required_tool_choice() {
+	let models = parse_catalog(catalog_fixture());
+	let dual = &models[3];
+	let listed = dual.chat.expect("chat api");
+	let unlisted = dual.messages.expect("messages api");
+	assert!(takes_required_tool_choice(listed, ApiMode::OpenAi));
+	assert!(!takes_required_tool_choice(listed, ApiMode::Anthropic));
+	// A catalog entry listing `required` for Messages is not honored by the transport.
+	let claiming = IsoquantApi {
+		required_tool_choice: true,
+		..unlisted
+	};
+	assert!(takes_required_tool_choice(claiming, ApiMode::OpenAi));
+	assert!(!takes_required_tool_choice(claiming, ApiMode::Anthropic));
+	assert!(!takes_required_tool_choice(unlisted, ApiMode::Anthropic));
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn an_invalid_mode_makes_no_request() {
+	let mock = MockHttp::start(vec![]);
+	let _env = EnvGuard::new()
+		.set("ISOQUANT_API_MODE", "claude")
+		.set("ISOQUANT_API_URL", messages_url(&mock));
+	let refused = "Configuration error: ISOQUANT_API_MODE must be `anthropic` or `openai`, got `claude`";
+
+	let params = ChatCompletionParams::new(&[], DEEPSEEK, 10).with_api_key("mock-key".to_owned());
+	let error = IsoquantProvider::new()
+		.chat_completion(params)
+		.await
+		.expect_err("refused");
+	assert_eq!(error.to_string(), refused);
+
+	let error = preload().await.expect_err("refused");
+	assert_eq!(error.to_string(), refused);
+
+	assert!(
+		mock.requests().is_empty(),
+		"neither the catalog nor a completion was requested: {:?}",
+		mock.requests()
 	);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn a_completion_url_goes_out_as_written_and_discovery_takes_only_its_path() {
+	let mock = MockHttp::start(vec![(200, message_body())]);
+	// A trailing slash and a query: the completion keeps both, the catalog is
+	// read beside the path alone, so the query's credential is not forwarded.
+	let _env = EnvGuard::new().set(
+		"ISOQUANT_API_URL",
+		format!("{}/v1/messages/?api_key=secret", mock.base_url()),
+	);
+	let params = ChatCompletionParams::new(&[], DEEPSEEK, 4096).with_api_key("mock-key".to_owned());
+	IsoquantProvider::new()
+		.chat_completion(params)
+		.await
+		.expect("messages completion");
+
+	let request = completion_request(&mock);
+	assert_eq!(request.path, "/v1/messages/?api_key=secret");
+	assert_eq!(request.header("x-api-key"), Some("mock-key"));
+	let catalog_paths: Vec<String> = mock
+		.requests()
+		.into_iter()
+		.filter(|request| request.method == "GET")
+		.map(|request| request.path)
+		.collect();
+	assert_eq!(catalog_paths, ["/v1/models"]);
 }
 
 #[test]
@@ -338,7 +421,7 @@ fn an_unpinned_standard_endpoint_prefers_messages_unless_the_catalog_serves_chat
 
 	for model in [DEEPSEEK, GLM] {
 		assert_eq!(
-			select_endpoint(None, None, model).expect("endpoint"),
+			select_endpoint(None, None, model),
 			(ApiMode::Anthropic, MESSAGES_URL.to_owned()),
 			"{model}"
 		);

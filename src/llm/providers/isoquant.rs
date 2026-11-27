@@ -38,10 +38,12 @@
 //! with no reasoning level sent. Messages takes nothing else from a model's
 //! name; Chat Completions keeps the reference tables it always fell back to.
 //!
-//! Every request sends `Isoquant-ZDR: required`, which requires zero data
-//! retention. Isoquant still records usage and billing metadata. The key
+//! Every inference request sends `Isoquant-ZDR: required`, which requires zero
+//! data retention. Isoquant still records usage and billing metadata. The key
 //! travels in `x-api-key` on Messages, as Isoquant documents it, and in
-//! `Authorization: Bearer` on Chat Completions.
+//! `Authorization: Bearer` on Chat Completions. The public catalog
+//! (`GET /v1/models`, model metadata only) is read without the key or that
+//! header.
 //!
 //! Configuration:
 //! - `ISOQUANT_API_KEY`: Required API key
@@ -284,13 +286,23 @@ fn parse_catalog(entries: Vec<CatalogEntry>) -> Vec<IsoquantModel> {
 		.collect()
 }
 
-/// The catalog path beside either endpoint.
+/// The catalog path beside either completion URL: its path up to a terminal
+/// `/messages` or `/chat/completions` segment, then `/models`. Only the path
+/// counts, so the completion URL's query is not forwarded, whatever it carries.
 fn models_url(api_url: &str) -> String {
-	let base = api_url
+	let Ok(mut url) = reqwest::Url::parse(api_url) else {
+		// Nothing reqwest could request either; the string form reaches the error.
+		return format!("{api_url}/models");
+	};
+	let path = url.path().trim_end_matches('/');
+	let base = path
 		.strip_suffix(CHAT_COMPLETIONS_PATH)
-		.or_else(|| api_url.strip_suffix(MESSAGES_PATH))
-		.unwrap_or(api_url);
-	format!("{base}/models")
+		.or_else(|| path.strip_suffix(MESSAGES_PATH))
+		.unwrap_or(path);
+	url.set_path(&format!("{base}/models"));
+	url.set_query(None);
+	url.set_fragment(None);
+	url.to_string()
 }
 
 async fn fetch_catalog(url: &str) -> Result<Vec<IsoquantModel>> {
@@ -329,6 +341,7 @@ async fn load_catalog(api_url: &str) -> Result<()> {
 /// same lazily, and a failure leaves `KNOWN_MODELS` in charge until the next
 /// attempt.
 pub async fn preload() -> Result<()> {
+	configured_mode_env()?;
 	load_catalog(&env::var(ISOQUANT_API_URL_ENV).unwrap_or_else(|_| CHAT_COMPLETIONS_URL.to_string())).await
 }
 
@@ -386,13 +399,19 @@ fn standard_url(mode: ApiMode) -> &'static str {
 	}
 }
 
+/// The mode variable, parsed once. An invalid value is refused before any
+/// request goes out, the catalog fetch included.
+fn configured_mode_env() -> Result<Option<ApiMode>> {
+	env::var(ISOQUANT_API_MODE_ENV)
+		.ok()
+		.map(|raw| anthropic_compat::parse_api_mode(ISOQUANT_API_MODE_ENV, &raw))
+		.transpose()
+}
+
 /// The endpoint a request goes to and the protocol it speaks there: the mode
 /// variable, then the URL's own path, then (for the standard endpoint only)
 /// the catalog. The URL is used exactly as configured.
-fn select_endpoint(mode_env: Option<&str>, api_url_env: Option<&str>, model: &str) -> Result<(ApiMode, String)> {
-	let mode_env = mode_env
-		.map(|raw| anthropic_compat::parse_api_mode(ISOQUANT_API_MODE_ENV, raw))
-		.transpose()?;
+fn select_endpoint(mode_env: Option<ApiMode>, api_url_env: Option<&str>, model: &str) -> (ApiMode, String) {
 	let mode = mode_env
 		.or_else(|| api_url_env.and_then(anthropic_compat::url_api_mode))
 		.unwrap_or_else(|| match api_url_env {
@@ -402,20 +421,22 @@ fn select_endpoint(mode_env: Option<&str>, api_url_env: Option<&str>, model: &st
 			None => preferred_mode(known_model(model)),
 		});
 	let api_url = api_url_env.map_or_else(|| standard_url(mode).to_owned(), str::to_owned);
-	Ok((mode, api_url))
+	(mode, api_url)
 }
 
 /// The protocol the configured endpoint speaks for a model. The capability
 /// methods report what is true on it. An unusable configuration is refused by
 /// the request itself; the capabilities then say no more than Chat Completions.
 fn configured_mode(model: &str) -> ApiMode {
-	select_endpoint(
-		env::var(ISOQUANT_API_MODE_ENV).ok().as_deref(),
-		env::var(ISOQUANT_API_URL_ENV).ok().as_deref(),
-		model,
-	)
-	.map(|(mode, _)| mode)
-	.unwrap_or(ApiMode::OpenAi)
+	let mode_env = configured_mode_env().ok().flatten();
+	select_endpoint(mode_env, env::var(ISOQUANT_API_URL_ENV).ok().as_deref(), model).0
+}
+
+/// Whether a route can force a tool call. The catalog's word counts on Chat
+/// Completions only: the Messages transport here has no required tool choice,
+/// whatever an entry lists.
+fn takes_required_tool_choice(api: IsoquantApi, mode: ApiMode) -> bool {
+	mode == ApiMode::OpenAi && api.required_tool_choice
 }
 
 /// What the configured protocol takes for the model, or `None` when nothing is
@@ -555,7 +576,7 @@ impl AiProvider for IsoquantProvider {
 	}
 
 	fn supports_required_tool_choice(&self, model: &str) -> bool {
-		configured_api(model).is_some_and(|api| api.required_tool_choice)
+		configured_api(model).is_some_and(|api| takes_required_tool_choice(api, configured_mode(model)))
 	}
 
 	fn get_max_input_tokens(&self, model: &str) -> usize {
@@ -578,6 +599,8 @@ impl AiProvider for IsoquantProvider {
 
 	async fn chat_completion(&self, mut params: ChatCompletionParams) -> Result<ProviderResponse> {
 		let api_key = super::shared::resolve_api_key(self, &params)?;
+		// The mode is validated before any request goes out, the catalog fetch included.
+		let mode_env = configured_mode_env()?;
 		let api_url_env = env::var(ISOQUANT_API_URL_ENV).ok();
 
 		// A failed load is retried on the next call; `KNOWN_MODELS` serves this one.
@@ -586,11 +609,8 @@ impl AiProvider for IsoquantProvider {
 		}
 
 		let model = params.model.clone();
-		let (mode, api_url) = select_endpoint(
-			env::var(ISOQUANT_API_MODE_ENV).ok().as_deref(),
-			api_url_env.as_deref(),
-			&model,
-		)?;
+		// The catalog decides the route only when nothing pins it, so it loads first.
+		let (mode, api_url) = select_endpoint(mode_env, api_url_env.as_deref(), &model);
 		protect_request_headers(&mut params, mode);
 
 		if mode == ApiMode::Anthropic {

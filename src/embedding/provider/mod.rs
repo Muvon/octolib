@@ -52,6 +52,8 @@ pub mod fastembed;
 pub mod huggingface;
 pub mod onnx;
 
+mod request;
+
 // Always available provider modules
 pub mod google;
 pub mod jina;

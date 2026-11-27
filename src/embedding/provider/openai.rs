@@ -123,20 +123,15 @@ impl OpenAIProvider {
 			"encoding_format": "float"
 		});
 
-		let response = http_client()
-			.post("https://api.openai.com/v1/embeddings")
-			.header("Authorization", format!("Bearer {}", openai_api_key))
-			.header("Content-Type", "application/json")
-			.json(&request_body)
-			.send()
-			.await?;
-
-		if !response.status().is_success() {
-			let error_text = response.text().await?;
-			return Err(anyhow::anyhow!("OpenAI API error: {}", error_text));
-		}
-
-		let response_json: Value = response.json().await?;
+		let response_json: Value = super::request::send_json(
+			"openai",
+			http_client()
+				.post("https://api.openai.com/v1/embeddings")
+				.header("Authorization", format!("Bearer {}", openai_api_key))
+				.header("Content-Type", "application/json")
+				.json(&request_body),
+		)
+		.await?;
 
 		let embeddings = response_json["data"]
 			.as_array()

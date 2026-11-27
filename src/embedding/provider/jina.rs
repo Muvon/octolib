@@ -150,17 +150,17 @@ impl JinaProvider {
 		let est_tokens: u64 = texts.iter().map(|t| crate::embedding::count_tokens(t) as u64).sum();
 		let jina_api_key = std::env::var("JINA_API_KEY").context("JINA_API_KEY environment variable not set")?;
 
-		let response = http_client()
-			.post("https://api.jina.ai/v1/embeddings")
-			.header("Authorization", format!("Bearer {}", jina_api_key))
-			.json(&json!({
-				"input": texts,
-				"model": model,
-			}))
-			.send()
-			.await?;
-
-		let response_json: Value = response.json().await?;
+		let response_json: Value = super::request::send_json(
+			"jina",
+			http_client()
+				.post("https://api.jina.ai/v1/embeddings")
+				.header("Authorization", format!("Bearer {}", jina_api_key))
+				.json(&json!({
+					"input": texts,
+					"model": model,
+				})),
+		)
+		.await?;
 
 		let embeddings = response_json["data"]
 			.as_array()

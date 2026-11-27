@@ -114,33 +114,18 @@ impl OctoHubEmbeddingProvider {
 			req = req.header("Authorization", format!("Bearer {}", key));
 		}
 
-		let response = req
-			.json(&body)
-			.send()
+		super::request::send_json("octohub", req.json(&body))
 			.await
-			.with_context(|| format!("Failed to connect to OctoHub at {}", url))?;
-
-		if !response.status().is_success() {
-			let status = response.status().as_u16();
-			let error_text = response.text().await.unwrap_or_default();
-			// A rejected credential is the one failure the user can act on, so
-			// say how: `octomind login` both obtains the key and stores it.
-			if status == 401 || status == 403 {
-				let hint = match Self::api_key() {
-                    Some(k) if !k.trim().is_empty() => "the stored OctoHub key was rejected (revoked, or replaced by a newer login) — run `octomind login` to sign in again",
-                    _ => "no OctoHub key is set — run `octomind login` to sign in",
-                };
-				return Err(anyhow::anyhow!(
-					"OctoHub embedding API error ({status}): {hint}. Server said: {error_text}"
-				));
-			}
-			return Err(anyhow::anyhow!("OctoHub embedding API error ({status}): {error_text}"));
-		}
-
-		response
-			.json()
-			.await
-			.context("Failed to parse OctoHub embedding response")
+			.map_err(|error| {
+				if matches!(
+					error.downcast_ref::<crate::errors::ProviderError>(),
+					Some(crate::errors::ProviderError::ApiError { status: 401 | 403, .. })
+				) {
+					error.context("OctoHub key missing or rejected — run `octomind login` to sign in again")
+				} else {
+					error
+				}
+			})
 	}
 
 	fn parse_single(response: &Value) -> Result<Vec<f32>> {

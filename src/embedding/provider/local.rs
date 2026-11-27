@@ -159,26 +159,9 @@ impl EmbeddingProvider for LocalEmbeddingProvider {
 			req = req.header("Authorization", format!("Bearer {}", key));
 		}
 
-		let response = req
-			.json(&body)
-			.send()
-			.await
-			.with_context(|| format!("Failed to connect to local embedding server at {}", url))?;
-
-		if !response.status().is_success() {
-			let status = response.status();
-			let error_text = response.text().await.unwrap_or_default();
-			return Err(anyhow::anyhow!(
-				"Local embedding API error ({}): {}",
-				status,
-				error_text
-			));
-		}
-
-		let result: LocalEmbeddingResponse = response
-			.json()
-			.await
-			.context("Failed to parse local embedding response")?;
+		let response = super::request::send_json("local", req.json(&body)).await?;
+		let result: LocalEmbeddingResponse =
+			serde_json::from_value(response).context("Failed to parse local embedding response")?;
 
 		let mut embeddings: Vec<(usize, Vec<f32>)> = result.data.into_iter().map(|d| (d.index, d.embedding)).collect();
 		embeddings.sort_by_key(|(i, _)| *i);

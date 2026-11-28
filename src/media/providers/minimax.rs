@@ -875,7 +875,7 @@ impl TranscriptionProvider for MinimaxMediaProvider {
 		self.descriptor(model, MediaTask::SpeechToText)
 	}
 
-	/// https://platform.minimax.io/docs/api-reference/speech-to-text-create
+	/// <https://platform.minimax.io/docs/api-reference/speech-to-text-create>
 	async fn submit_transcription(&self, request: TranscriptionRequest) -> MediaResult<Operation<TranscriptionResult>> {
 		validate_request(&request.model, TRANSCRIPTION_MODEL, MediaTask::SpeechToText)?;
 		validate_options(&request.provider_options, false)?;

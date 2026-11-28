@@ -137,6 +137,10 @@ name = "cache_lifetime_probe"
 required-features = ["llm"]
 
 [[example]]
+name = "endpoint_mode_canary"
+required-features = ["llm"]
+
+[[example]]
 name = "isoquant_chat"
 required-features = ["llm"]
 

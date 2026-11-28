@@ -64,7 +64,7 @@
 //! cache usage counters. The route is not live-probed from this checkout (no
 //! key is configured), so what it promises is what the contract states plus the
 //! requests the shared layer already sends to five other Messages endpoints.
-//! What differs per protocol is stated on [`ANTHROPIC_COMPAT`].
+//! What differs per protocol is stated on `ANTHROPIC_COMPAT`.
 use super::anthropic_compat::{self, AnthropicCompatConfig, ApiMode, Images, MessagesUsage};
 use super::shared::{self, CacheMarker};
 use crate::llm::retry;

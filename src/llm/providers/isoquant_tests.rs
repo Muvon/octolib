@@ -515,21 +515,11 @@ fn unprobed_models_do_not_claim_schema_enforcement() {
 }
 
 #[test]
-#[serial_test::serial]
-fn cache_lifetime_is_measured_per_protocol_and_model() {
-	let _env = EnvGuard::new().set("ISOQUANT_API_MODE", "openai");
+fn cache_lifetime_is_the_measured_floor_of_both_protocols() {
 	let provider = IsoquantProvider::new();
 	assert_eq!(
 		provider.cache_lifetime(DEEPSEEK, false),
-		Some(std::time::Duration::from_secs(3600))
-	);
-	assert_eq!(provider.cache_lifetime(GLM, false), None);
-	assert_eq!(provider.cache_lifetime("model-released-tomorrow", false), None);
-
-	let _env = EnvGuard::new().set("ISOQUANT_API_MODE", "anthropic");
-	assert_eq!(
-		provider.cache_lifetime(DEEPSEEK, false),
-		Some(std::time::Duration::from_secs(1200))
+		Some(std::time::Duration::from_secs(300))
 	);
 	assert_eq!(
 		provider.cache_lifetime(GLM, false),

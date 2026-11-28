@@ -275,7 +275,7 @@ pub(crate) const ZAI_API_KEY_ENV: &str = "ZAI_API_KEY";
 const ZAI_API_URL_ENV: &str = "ZAI_API_URL";
 const ZAI_API_MODE_ENV: &str = "ZAI_API_MODE";
 /// See `cache_lifetime`.
-const MESSAGES_CACHE_LIFETIME: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+const MEASURED_CACHE_LIFETIME: std::time::Duration = std::time::Duration::from_secs(10 * 60);
 /// Chat Completions endpoint, for conversations with images.
 const ZAI_API_URL: &str = "https://api.z.ai/api/paas/v4/chat/completions";
 /// Messages endpoint for text conversations.
@@ -415,22 +415,13 @@ impl AiProvider for ZaiProvider {
 		true
 	}
 
-	/// The idle gap measured to still hit, per protocol. Chat Completions: see
-	/// `supports_caching`. Messages, measured 2026-11-28 on `/api/anthropic` with a
-	/// coding plan key: unique ~8k-token glm-5.3 prompts, two samples per delay, hit
-	/// on every sample up to 10m and missed both at 15m.
-	fn cache_lifetime(&self, model: &str, _use_long_cache: bool) -> Option<std::time::Duration> {
-		let (mode, _) = self
-			.select_endpoint(
-				env::var(ZAI_API_MODE_ENV).ok().as_deref(),
-				env::var(ZAI_API_URL_ENV).ok().as_deref(),
-				model,
-			)
-			.ok()?;
-		Some(match mode {
-			ApiMode::Anthropic => MESSAGES_CACHE_LIFETIME,
-			ApiMode::OpenAi => crate::llm::config::CacheTTL::long().to_duration(),
-		})
+	/// The idle gap measured to still hit. The hour in `supports_caching` no longer
+	/// holds: re-measured 2026-11-28 with the same prompts, two samples per delay,
+	/// glm-5.3 hit on every sample up to 10m on both routes. At 15m Messages
+	/// (`/api/anthropic`) missed both samples and Chat Completions one; Chat missed
+	/// both at 20m.
+	fn cache_lifetime(&self, _model: &str, _use_long_cache: bool) -> Option<std::time::Duration> {
+		Some(MEASURED_CACHE_LIFETIME)
 	}
 
 	fn supports_vision(&self, model: &str) -> bool {

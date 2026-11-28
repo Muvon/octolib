@@ -119,10 +119,9 @@ pub(crate) const KNOWN_MODELS: &[(&str, f64, f64, f64, &[&str])] = &[
 /// way on 2026-11-27 with the same result, but that route has no per-model
 /// flag (`ANTHROPIC_COMPAT`), so it claims nothing.
 const SCHEMA_ENFORCING_MODELS: &[&str] = &["deepseek-v4.1-flash-1017-fast", "glm-5.3-flash"];
-/// Cache lifetimes measured per protocol; see `cache_lifetime`.
-const CHAT_CACHE_LIFETIMES: &[(&str, Duration)] = &[("deepseek-v4.1-flash-1017-fast", Duration::from_secs(60 * 60))];
-const MESSAGES_CACHE_LIFETIMES: &[(&str, Duration)] = &[
-	("deepseek-v4.1-flash-1017-fast", Duration::from_secs(20 * 60)),
+/// Cache lifetimes measured on both protocols; see `cache_lifetime`.
+const MEASURED_CACHE_LIFETIMES: &[(&str, Duration)] = &[
+	("deepseek-v4.1-flash-1017-fast", Duration::from_secs(5 * 60)),
 	("glm-5.3-flash", Duration::from_secs(3 * 60)),
 ];
 
@@ -581,16 +580,13 @@ impl AiProvider for IsoquantProvider {
 	/// delay, two samples per delay. Chat Completions, 2026-11-07, ~3.5k tokens:
 	/// deepseek-v4.1-flash-1017-fast hit on every sample from 1m to 60m. glm-5.3-flash
 	/// missed one sample at 1m and every sample from 15m, so it has no lifetime it is
-	/// known to survive. Messages, 2026-11-28, ~8k tokens: deepseek hit on every sample
-	/// up to 20m, missed one at 30m and both at 60m; glm-5.3-flash hit up to 3m and
-	/// missed both at 5m.
+	/// known to survive. Both routes, 2026-11-28, ~8k tokens: glm-5.3-flash hit on
+	/// every sample up to 3m and missed both at 5m. deepseek hit on every sample up to
+	/// 20m on Messages, but on Chat Completions it missed both at 7m and hit both again
+	/// at 10m and 15m. Its hits depend on routing, so it gets the 5m both routes held.
 	fn cache_lifetime(&self, model: &str, _use_long_cache: bool) -> Option<Duration> {
-		let lifetimes = match configured_mode(model) {
-			ApiMode::OpenAi => CHAT_CACHE_LIFETIMES,
-			ApiMode::Anthropic => MESSAGES_CACHE_LIFETIMES,
-		};
 		let normalized = normalize_model_name(model);
-		lifetimes
+		MEASURED_CACHE_LIFETIMES
 			.iter()
 			.find(|(id, _)| normalized == *id)
 			.map(|(_, lifetime)| *lifetime)

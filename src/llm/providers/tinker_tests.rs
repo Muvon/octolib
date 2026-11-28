@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::*;
+use crate::llm::types::Message;
 use crate::test_support::env::EnvGuard;
 
 #[test]
@@ -229,17 +230,211 @@ fn test_october_2026_checkpoints_use_the_published_rates() {
 }
 
 #[test]
+#[serial_test::serial]
 fn test_conservative_capabilities() {
 	let provider = TinkerProvider::new();
+	let _env = EnvGuard::new().remove("TINKER_API_MODE").remove("TINKER_API_URL");
 	assert_eq!(provider.name(), "tinker");
 	assert!(provider.supports_caching("thinkingmachines/Inkling"));
+	assert!(!provider.supports_structured_output("thinkingmachines/Inkling"));
+	assert!(!provider.enforces_response_schema("thinkingmachines/Inkling"));
+}
+
+/// Images and the measured cache lifetime belong to one route each: Inkling
+/// images to Messages, the 2026-11-07 cache measurement to Chat Completions.
+#[test]
+#[serial_test::serial]
+fn vision_and_cache_lifetime_follow_the_route() {
+	let provider = TinkerProvider::new();
+	let _env = EnvGuard::new().remove("TINKER_API_MODE").remove("TINKER_API_URL");
+	// Messages is the default.
+	assert!(provider.supports_vision("inkling"));
+	assert!(provider.supports_vision("thinkingmachines/Inkling-Small:peft:262144:sampling-nvfp4"));
+	assert!(!provider.supports_vision("openai/gpt-oss-120b"));
+	assert_eq!(provider.cache_lifetime("openai/gpt-oss-120b", false), None);
+
+	let _env = _env.set("TINKER_API_MODE", "openai");
+	assert!(!provider.supports_vision("inkling"));
 	assert_eq!(
 		provider.cache_lifetime("openai/gpt-oss-120b", false),
 		Some(std::time::Duration::from_secs(3600))
 	);
-	assert!(!provider.supports_vision("thinkingmachines/Inkling"));
-	assert!(!provider.supports_structured_output("thinkingmachines/Inkling"));
-	assert!(!provider.enforces_response_schema("thinkingmachines/Inkling"));
+}
+
+#[test]
+fn endpoint_selection_follows_mode_then_url_path() {
+	assert_eq!(
+		select_endpoint(None, None).expect("selected"),
+		(ApiMode::Anthropic, TINKER_MESSAGES_API_URL.to_owned())
+	);
+	assert_eq!(
+		select_endpoint(Some("openai"), None).expect("selected"),
+		(ApiMode::OpenAi, TINKER_CHAT_API_URL.to_owned())
+	);
+	let chat = "https://proxy.example/v1/chat/completions";
+	assert_eq!(
+		select_endpoint(None, Some(chat)).expect("selected"),
+		(ApiMode::OpenAi, chat.to_owned())
+	);
+	let messages = "https://proxy.example/v1/messages";
+	assert_eq!(
+		select_endpoint(None, Some(messages)).expect("selected"),
+		(ApiMode::Anthropic, messages.to_owned())
+	);
+	// A URL naming neither endpoint keeps Chat Completions, as before the option.
+	let custom = "https://proxy.example/inference";
+	assert_eq!(
+		select_endpoint(None, Some(custom)).expect("selected"),
+		(ApiMode::OpenAi, custom.to_owned())
+	);
+	// An explicit mode wins over the path, and the URL is not rewritten.
+	assert_eq!(
+		select_endpoint(Some("anthropic"), Some(chat)).expect("selected"),
+		(ApiMode::Anthropic, chat.to_owned())
+	);
+	// Empty variables are unset ones.
+	assert_eq!(
+		select_endpoint(Some(""), Some("")).expect("selected"),
+		(ApiMode::Anthropic, TINKER_MESSAGES_API_URL.to_owned())
+	);
+	let error = select_endpoint(Some("claude"), None).expect_err("refused");
+	assert!(
+		error.to_string().contains("TINKER_API_MODE must be"),
+		"unexpected error: {error}"
+	);
+}
+
+#[test]
+fn the_messages_thinking_hook_follows_the_probed_ladders() {
+	let effort = |model: &str, effort| {
+		let mut body = serde_json::json!({});
+		messages_thinking(model, Some(effort), &mut body);
+		body
+	};
+	let inkling = "thinkingmachines/Inkling:peft:262144:sampling-nvfp4";
+	for (level, want) in [
+		(ReasoningEffort::Low, "low"),
+		(ReasoningEffort::Medium, "medium"),
+		(ReasoningEffort::High, "high"),
+		(ReasoningEffort::XHigh, "xhigh"),
+		(ReasoningEffort::Max, "xhigh"),
+	] {
+		assert_eq!(effort(inkling, level)["output_config"]["effort"], want, "{level:?}");
+	}
+	assert_eq!(
+		effort(inkling, ReasoningEffort::None),
+		serde_json::json!({ "thinking": { "type": "disabled" } })
+	);
+
+	// gpt-oss answers 400 to xhigh, max and disabled thinking.
+	for (level, want) in [
+		(ReasoningEffort::Low, "low"),
+		(ReasoningEffort::Medium, "medium"),
+		(ReasoningEffort::High, "high"),
+		(ReasoningEffort::XHigh, "high"),
+		(ReasoningEffort::Max, "high"),
+	] {
+		assert_eq!(
+			effort("openai/gpt-oss-120b", level)["output_config"]["effort"],
+			want,
+			"{level:?}"
+		);
+	}
+	assert_eq!(
+		effort("openai/gpt-oss-120b", ReasoningEffort::None),
+		serde_json::json!({})
+	);
+
+	// Unprobed families send nothing: Nemotron takes a boolean on Chat Completions.
+	for level in [ReasoningEffort::None, ReasoningEffort::High] {
+		assert_eq!(
+			effort("nvidia/nvidia-nemotron-3-super-120b-a12b-bf16", level),
+			serde_json::json!({}),
+			"{level:?}"
+		);
+	}
+
+	let mut unset = serde_json::json!({});
+	messages_thinking(inkling, None, &mut unset);
+	assert_eq!(unset, serde_json::json!({}), "an unset effort sends nothing");
+}
+
+/// Usage as the live endpoint reported it on 2026-11-28: the uncached prompt in
+/// `cache_creation_input_tokens`, `input_tokens` 0.
+const MESSAGES_BODY: &str = r#"{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"thinking","thinking":"bands","signature":""},{"type":"text","text":"red green blue"}],"stop_reason":"end_turn","usage":{"input_tokens":0,"cache_creation_input_tokens":1000000,"cache_read_input_tokens":1000000,"output_tokens":1000000}}"#;
+/// Inkling serverless at 1M uncached input, 1M cached input and 1M output:
+/// $1.00 + $0.17 + $4.05.
+const INKLING_MILLION_COST: f64 = 5.22;
+
+fn png_message() -> Message {
+	use crate::llm::types::{ImageAttachment, ImageData, SourceType};
+	Message::user("what colours?").with_images(vec![ImageAttachment {
+		data: ImageData::Base64("aW1hZ2U=".into()),
+		media_type: "image/png".into(),
+		source_type: SourceType::Url,
+		dimensions: None,
+		size_bytes: None,
+	}])
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn messages_is_the_default_protocol_with_x_api_key() {
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, MESSAGES_BODY.to_string())]);
+	let path = "/services/tinker-prod/anthropic/api/v1/messages";
+	let _env = EnvGuard::new()
+		.set("TINKER_API_URL", format!("{}{path}", mock.base_url()))
+		.set("TINKER_API_MODE", "");
+
+	let params = ChatCompletionParams::new(&[png_message()], "inkling", 100)
+		.with_api_key("mock-key".to_owned())
+		.with_reasoning_effort(ReasoningEffort::None);
+	let response = TinkerProvider::new()
+		.chat_completion(params)
+		.await
+		.expect("messages completion");
+
+	assert_eq!(response.content, "red green blue");
+	let request = &mock.requests()[0];
+	assert_eq!(request.path, path, "the URL is not rewritten");
+	assert_eq!(request.header("x-api-key"), Some("mock-key"));
+	assert_eq!(request.header("authorization"), None);
+
+	let sent: serde_json::Value = serde_json::from_str(&request.body).expect("request json");
+	assert_eq!(sent["model"], "thinkingmachines/Inkling:peft:262144:sampling-nvfp4");
+	assert_eq!(sent["stream"], true);
+	assert_eq!(sent["messages"][0]["content"][1]["type"], "image");
+	assert_eq!(sent["messages"][0]["content"][1]["source"]["type"], "base64");
+	assert_eq!(sent["thinking"]["type"], "disabled");
+
+	let usage = response.exchange.usage.expect("usage");
+	assert_eq!(
+		(usage.input_tokens, usage.cache_write_tokens, usage.cache_read_tokens),
+		(0, 1_000_000, 1_000_000)
+	);
+	let cost = usage.cost.expect("cost");
+	assert!((cost - INKLING_MILLION_COST).abs() < 1e-9, "cost {cost}");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn messages_refuse_images_for_models_outside_inkling_before_any_request() {
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, MESSAGES_BODY.to_string())]);
+	let _env = EnvGuard::new()
+		.set("TINKER_API_URL", format!("{}/v1/messages", mock.base_url()))
+		.remove("TINKER_API_MODE");
+
+	let error = TinkerProvider::new()
+		.chat_completion(
+			ChatCompletionParams::new(&[png_message()], "openai/gpt-oss-120b", 10).with_api_key("k".to_owned()),
+		)
+		.await
+		.expect_err("gpt-oss takes no images on Messages");
+	assert!(
+		error.to_string().contains("does not accept image input"),
+		"unexpected error: {error}"
+	);
+	assert!(mock.requests().is_empty(), "a refused request is not sent");
 }
 
 #[tokio::test]
@@ -249,7 +444,9 @@ async fn request_omits_sampling_fields() {
 		200,
 		crate::test_support::mock_http::chat_completion_body("ok"),
 	)]);
-	let _env = EnvGuard::new().set("TINKER_API_URL", mock.url.clone());
+	let _env = EnvGuard::new()
+		.set("TINKER_API_URL", mock.url.clone())
+		.remove("TINKER_API_MODE");
 	let params = ChatCompletionParams::new(&[], "inkling", 10).with_api_key("mock-key".to_owned());
 	TinkerProvider::new()
 		.chat_completion(params)

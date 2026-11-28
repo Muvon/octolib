@@ -51,7 +51,7 @@ src/
 │       ├── inception.rs           → Native — PRICING table (Mercury diffusion LLMs, strict catalogue)
 │       ├── isoquant.rs             → Proxy — delegates to openai_compat (models read from `/v1/models`, zero data retention required)
 │       ├── reflection.rs           → Native — PRICING table (Beam, always reasons, strict catalogue)
-│       ├── tinker.rs               → Proxy — delegates to openai_compat (Inkling family + sampler checkpoints)
+│       ├── tinker.rs               → Proxy — Messages via anthropic_compat by default, Chat via openai_compat with TINKER_API_MODE=openai (Inkling family + sampler checkpoints)
 │       ├── opencode.rs             → Proxy — Zen + Go providers, delegates to openai_compat (shared OPENCODE_API_KEY)
 │       ├── fireworks.rs            → Proxy — delegates to openai_compat (auto prefix-cache)
 │       └── cli/                    → CLI proxy: claude, codex, cursor, gemini, generic backends
@@ -192,7 +192,7 @@ every provider is behind Cloudflare, nor a guarantee against slow time-to-first-
 | Local | Same OpenAI Chat SSE contract as Ollama/other compatible local servers; native `/api/chat` overrides stay buffered. Custom servers must support the requested protocol. |
 | OpenCode Zen / Go | Chat SSE with requested usage; [inference API](https://opencode.ai/v2/docs/console/api/inference/) describes terminal usage and cost. Existing configured base URLs are retained. |
 | ChatGPT | Already defaults to HTTP/SSE with its own terminal-event/retry/session handling; optional WebSocket transport unchanged. |
-| Tinker | Buffered: [compatible-API docs](https://tinker-docs.thinkingmachines.ai/tinker/compatible-apis/openai/) did not establish a streaming contract in this review. |
+| Tinker | Messages SSE by default; [Anthropic-compatible API](https://tinker-docs.thinkingmachines.ai/tinker/compatible-apis/anthropic/) documents standard SSE with `thinking_delta`, `text_delta` and `input_json_delta`; verified live on Inkling and gpt-oss-120b (2026-11-28). Chat Completions (`TINKER_API_MODE=openai`) stays buffered: its [docs](https://tinker-docs.thinkingmachines.ai/tinker/compatible-apis/openai/) did not establish a streaming contract. |
 | Hetzner | Buffered: [experimental docs](https://experiments.hetzner.com/docs/inference) require JavaScript and did not yield a verifiable stream/usage contract. |
 | WebWright | Buffered: [public API overview](https://webwright.ai/about) establishes compatibility, but the linked quickstart could not be retrieved; stream/usage behavior remains unverified. |
 | OctoHub | Existing `/v1/completions` JSON contract in `octohub.rs`; unchanged. |

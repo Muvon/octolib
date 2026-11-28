@@ -14,7 +14,12 @@
 
 //! Tinker provider implementation (Thinking Machines).
 //!
-//! Uses Tinker's OpenAI-compatible inference endpoint (beta) at:
+//! Requests go to Tinker's Anthropic Messages endpoint (beta) by default:
+//! `https://tinker.thinkingmachines.dev/services/tinker-prod/anthropic/api/v1/messages`
+//! (<https://tinker-docs.thinkingmachines.ai/tinker/compatible-apis/anthropic/>).
+//! It takes images on Inkling models, also inside tool results, and streams;
+//! the OpenAI-compatible endpoint documents neither. `TINKER_API_MODE=openai`
+//! keeps that endpoint:
 //! `https://tinker.thinkingmachines.dev/services/tinker-prod/oai/api/v1/chat/completions`
 //!
 //! Serves the Inkling family plus open-weight checkpoints (Nemotron, GLM,
@@ -26,29 +31,30 @@
 //! INFERENCE ids (`...:peft:262144:sampling-nvfp4`), which is the tier this
 //! endpoint serves — the bare `thinkingmachines/Inkling` spelling is the same
 //! model in the TRAINING table, at a different rate and window.
-//! Reasoning: the server separates chain-of-thought into `reasoning_content`
-//! by default (`separate_reasoning` defaults to true since June 2026), which
-//! the shared compat layer already parses. `reasoning_effort` accepts the
-//! full OpenAI ladder including "xhigh" (0.99).
+//! Reasoning on Chat Completions: the server separates chain-of-thought into
+//! `reasoning_content` by default (`separate_reasoning` defaults to true since
+//! June 2026), which the shared compat layer already parses. `reasoning_effort`
+//! accepts the full OpenAI ladder including "xhigh" (0.99).
 //!
-//! The endpoint is a beta meant for testing and low-traffic use, not
-//! production. Vision and structured output are not documented for it, so
-//! both are reported as unsupported. Prompt caching is automatic and reported
-//! in `prompt_tokens_details.cached_tokens`; see `supports_caching`.
+//! The endpoints are a beta meant for testing and low-traffic use, not
+//! production. Structured output is documented on neither, so it is reported
+//! as unsupported. Prompt caching is automatic; see `supports_caching`.
 //!
-//! Source: <https://tinker-docs.thinkingmachines.ai/tinker/compatible-apis/openai/>
+//! Sources: <https://tinker-docs.thinkingmachines.ai/tinker/compatible-apis/anthropic/>,
+//! <https://tinker-docs.thinkingmachines.ai/tinker/compatible-apis/openai/>
 //! Pricing: <https://tinker-docs.thinkingmachines.ai/tinker/models/>
 //!
 //! Configuration:
 //! - `TINKER_API_KEY`: Required API key
-//! - `TINKER_API_URL`: Optional endpoint override
+//! - `TINKER_API_URL`: Optional endpoint override, sent as written
+//! - `TINKER_API_MODE`: `anthropic` or `openai`, the protocol `TINKER_API_URL`
+//!   speaks; without it the URL's path decides
 
-use crate::llm::providers::openai_compat::{
-	chat_completion as openai_compat_chat_completion, get_api_url, OpenAiCompatConfig,
-};
+use super::anthropic_compat::{self, AnthropicCompatConfig, ApiMode, Images, MessagesUsage};
+use crate::llm::providers::openai_compat::{chat_completion as openai_compat_chat_completion, OpenAiCompatConfig};
 use crate::llm::traits::AiProvider;
-use crate::llm::types::{ChatCompletionParams, ModelPricing, ProviderResponse};
-use crate::llm::utils::{get_model_pricing, normalize_model_name, PricingTuple};
+use crate::llm::types::{ChatCompletionParams, ModelPricing, ProviderResponse, ReasoningEffort};
+use crate::llm::utils::{contains_ignore_ascii_case, get_model_pricing, normalize_model_name, PricingTuple};
 use anyhow::Result;
 use std::env;
 
@@ -64,7 +70,139 @@ impl TinkerProvider {
 
 pub(crate) const TINKER_API_KEY_ENV: &str = "TINKER_API_KEY";
 const TINKER_API_URL_ENV: &str = "TINKER_API_URL";
-const TINKER_API_URL: &str = "https://tinker.thinkingmachines.dev/services/tinker-prod/oai/api/v1/chat/completions";
+const TINKER_API_MODE_ENV: &str = "TINKER_API_MODE";
+/// Messages endpoint, the default.
+const TINKER_MESSAGES_API_URL: &str =
+	"https://tinker.thinkingmachines.dev/services/tinker-prod/anthropic/api/v1/messages";
+/// Chat Completions endpoint, for `TINKER_API_MODE=openai`.
+const TINKER_CHAT_API_URL: &str =
+	"https://tinker.thinkingmachines.dev/services/tinker-prod/oai/api/v1/chat/completions";
+
+/// The protocol and URL for one request. A supplied URL is sent as it is,
+/// whatever the protocol: it is never rewritten. An explicit mode comes first,
+/// then the URL's own path; a URL naming neither endpoint was always served by
+/// Chat Completions, and with no URL the default is Messages.
+fn select_endpoint(mode: Option<&str>, api_url: Option<&str>) -> Result<(ApiMode, String)> {
+	// An empty variable is an unset one.
+	let mode = mode
+		.filter(|raw| !raw.is_empty())
+		.map(|raw| anthropic_compat::parse_api_mode(TINKER_API_MODE_ENV, raw))
+		.transpose()?;
+	let api_url = api_url.filter(|api_url| !api_url.is_empty());
+	let mode = mode
+		.or_else(|| api_url.and_then(anthropic_compat::url_api_mode))
+		.unwrap_or(match api_url {
+			Some(_) => ApiMode::OpenAi,
+			None => ApiMode::Anthropic,
+		});
+	let api_url = api_url.map_or_else(
+		|| {
+			match mode {
+				ApiMode::Anthropic => TINKER_MESSAGES_API_URL,
+				ApiMode::OpenAi => TINKER_CHAT_API_URL,
+			}
+			.to_owned()
+		},
+		str::to_owned,
+	);
+	Ok((mode, api_url))
+}
+
+/// The route a request would take right now, for the capability methods that
+/// differ per protocol. A configuration that cannot be resolved is reported as
+/// Messages: the request itself then fails with the configuration error.
+fn configured_mode() -> ApiMode {
+	select_endpoint(
+		env::var(TINKER_API_MODE_ENV).ok().as_deref(),
+		env::var(TINKER_API_URL_ENV).ok().as_deref(),
+	)
+	.map(|(mode, _)| mode)
+	.unwrap_or(ApiMode::Anthropic)
+}
+
+/// The Inkling family, the only models the Messages contract takes images for
+/// ("on Inkling models only"). Live on 2026-11-28, Inkling and Inkling-Small read
+/// a base64 PNG in a user turn and inside a `tool_result`; gpt-oss-120b answered
+/// 400 "Image input is not supported for this model", and a URL source is not
+/// supported.
+fn is_inkling(model: &str) -> bool {
+	contains_ignore_ascii_case(model, "inkling")
+}
+
+/// Thinking knobs on Messages, probed live on 2026-11-28. Inkling and
+/// Inkling-Small took every `output_config.effort` level and
+/// `thinking: {"type": "disabled"}`; `max` goes as `xhigh`, which the contract
+/// says it behaves as. gpt-oss-120b took `low|medium|high` and answered 400 to
+/// `xhigh`, `max` and disabled thinking ("This model accepts one of: low, medium,
+/// high"), so it clamps to that ladder and an off request sends nothing. Every
+/// other model sends nothing: the contract says "Not all models support effort"
+/// and answers 400 to those, Nemotron takes a boolean on Chat Completions, and
+/// this account could not sample the rest on Messages to probe them.
+fn messages_thinking(model: &str, effort: Option<ReasoningEffort>, request: &mut serde_json::Value) {
+	let Some(effort) = effort else {
+		return;
+	};
+	let value = if is_inkling(model) {
+		match effort {
+			ReasoningEffort::None => {
+				request["thinking"] = serde_json::json!({ "type": "disabled" });
+				return;
+			}
+			ReasoningEffort::Low => "low",
+			ReasoningEffort::Medium => "medium",
+			ReasoningEffort::High => "high",
+			ReasoningEffort::XHigh | ReasoningEffort::Max => "xhigh",
+		}
+	} else if contains_ignore_ascii_case(model, "gpt-oss") {
+		match effort {
+			ReasoningEffort::None => return,
+			ReasoningEffort::Low => "low",
+			ReasoningEffort::Medium => "medium",
+			ReasoningEffort::High | ReasoningEffort::XHigh | ReasoningEffort::Max => "high",
+		}
+	} else {
+		return;
+	};
+	// The schema, when one was requested, is already in `output_config`.
+	request["output_config"]["effort"] = serde_json::json!(value);
+}
+
+/// Cost of one Messages response, in USD, from the same table as the Chat
+/// route. Live on 2026-11-28 the endpoint reported every uncached prompt token
+/// as `cache_creation_input_tokens` and `input_tokens` as 0; Tinker has no
+/// cache-write fee (cache_write = input in `PRICING`), so either counter bills
+/// at the input rate. `output_tokens` includes thinking.
+fn messages_cost(model: &str, usage: &MessagesUsage) -> Option<f64> {
+	tinker_model_pricing(model).map(|pricing| {
+		pricing.calculate_cost(
+			usage.input_tokens,
+			usage.cache_write_tokens(),
+			usage.cache_read_tokens,
+			usage.output_tokens,
+		)
+	})
+}
+
+/// Tinker on the shared Messages layer. Live on 2026-11-28 (Inkling,
+/// Inkling-Small, gpt-oss-120b): text, tool calls, a replayed tool turn with
+/// its thinking block (signature empty), SSE streaming and prefix-cache reads
+/// all worked. Video has no block here. Schema: undocumented, so it takes the
+/// forced-tool path and is validated locally.
+const ANTHROPIC_COMPAT: AnthropicCompatConfig = AnthropicCompatConfig {
+	provider_name: "tinker",
+	images: |model| {
+		if is_inkling(model) {
+			Images::Base64
+		} else {
+			Images::None
+		}
+	},
+	videos: |_| false,
+	enforces_response_schema: false,
+	thinking: messages_thinking,
+	cost: messages_cost,
+	default_system: "",
+};
 
 /// (model, input, output, cache_write, cache_read) per 1M tokens, from
 /// <https://tinker-docs.thinkingmachines.ai/tinker/models/> (Sep 2026,
@@ -246,8 +384,8 @@ const CONTEXTS: &[(&str, usize)] = &[
 ];
 
 /// The short names resolve to the SERVERLESS INFERENCE ids, not the bare base
-/// ids. This provider only ever does inference — it has one endpoint, the
-/// OpenAI-compatible chat completion route, which is the serverless offering —
+/// ids. This provider only ever does inference — both of its endpoints are the
+/// serverless offering —
 /// and the models page lists a different id per table for the same model name:
 /// "Inkling" is `thinkingmachines/Inkling:peft:262144:sampling-nvfp4` under
 /// Serverless Inference and `thinkingmachines/Inkling` under Training. The bare
@@ -305,19 +443,18 @@ impl AiProvider for TinkerProvider {
 		true
 	}
 
-	/// Measured 2026-11-07: unique 3.5k-8k-token prompts re-sent once after an idle
-	/// delay, two samples per delay, hit on every sample from 1m to 60m on gpt-oss-120b,
-	/// gpt-oss-20b, `inkling` (the serverless id) and Inkling-2-Small. The upper bound
-	/// is not measured.
+	/// Measured 2026-11-07 on Chat Completions: unique 3.5k-8k-token prompts re-sent
+	/// once after an idle delay, two samples per delay, hit on every sample from 1m to
+	/// 60m on gpt-oss-120b, gpt-oss-20b, `inkling` (the serverless id) and
+	/// Inkling-2-Small. The upper bound is not measured. Messages is not measured.
 	fn cache_lifetime(&self, _model: &str, _use_long_cache: bool) -> Option<std::time::Duration> {
-		Some(crate::llm::config::CacheTTL::long().to_duration())
+		(configured_mode() == ApiMode::OpenAi).then(|| crate::llm::config::CacheTTL::long().to_duration())
 	}
 
-	fn supports_vision(&self, _model: &str) -> bool {
-		// Image input through the OpenAI-compat endpoint is not documented
-		// (only the SDK renderers handle images). Don't advertise what we
-		// can't verify.
-		false
+	/// Images reach Inkling models on Messages only: the OpenAI-compatible
+	/// endpoint documents no image input (only the SDK renderers handle images).
+	fn supports_vision(&self, model: &str) -> bool {
+		configured_mode() == ApiMode::Anthropic && is_inkling(model)
 	}
 
 	fn supports_structured_output(&self, _model: &str) -> bool {
@@ -335,8 +472,15 @@ impl AiProvider for TinkerProvider {
 
 	async fn chat_completion(&self, mut params: ChatCompletionParams) -> Result<ProviderResponse> {
 		let api_key = super::shared::resolve_api_key(self, &params)?;
-		let api_url = get_api_url(TINKER_API_URL_ENV, TINKER_API_URL);
+		let (mode, api_url) = select_endpoint(
+			env::var(TINKER_API_MODE_ENV).ok().as_deref(),
+			env::var(TINKER_API_URL_ENV).ok().as_deref(),
+		)?;
 		params.model = resolve_model(&params.model).to_string();
+		if mode == ApiMode::Anthropic {
+			// The Messages contract names `x-api-key`.
+			return anthropic_compat::chat_completion_with_x_api_key(ANTHROPIC_COMPAT, api_key, api_url, params).await;
+		}
 		let model = params.model.clone();
 
 		let mut response = openai_compat_chat_completion(

@@ -14,12 +14,24 @@
 
 //! Content-based line IDs shared by source readers and filesystem editors.
 
-/// FNV-1a hash of line content folded to 8 bits (2 hex chars).
+/// Characters a line hash is written in: ASCII letters and no digits, so an id
+/// like `12:xx` never reads as a time or a `line:col` pair such as `12:30`.
+/// Letters also cost GPT tokenizers fewer tokens per id than hex did (measured
+/// on 16,602 lines of octolib with `cl100k_base` and `o200k_base`).
+const HASH_ALPHABET: &[u8; 52] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+/// Characters in a line hash.
+pub const LINE_HASH_LEN: usize = 2;
+
+/// Distinct line hashes: 52 × 52.
+const HASH_VALUES: u64 = (HASH_ALPHABET.len() * HASH_ALPHABET.len()) as u64;
+
+/// FNV-1a hash of line content mapped onto [`HASH_VALUES`].
 /// Content-only — position lives in the id's number part, so a line keeps its
 /// hash when it moves and a stale-id error can report where the content went.
-/// 8 bits means a changed line keeps its hash with probability 1/256 — accepted
-/// trade-off for id brevity (the position check catches gross drift anyway).
-fn fnv1a_8(content: &str) -> u8 {
+/// A changed line keeps its hash with probability 1/2704 — accepted trade-off
+/// for id brevity (the position check catches gross drift anyway).
+fn fnv1a_hash_value(content: &str) -> u32 {
 	const FNV_OFFSET: u32 = 2166136261;
 	const FNV_PRIME: u32 = 16777619;
 
@@ -29,14 +41,19 @@ fn fnv1a_8(content: &str) -> u8 {
 		hash = hash.wrapping_mul(FNV_PRIME);
 	}
 
-	// Fold 32 -> 16 -> 8 via XOR
-	let h16 = ((hash >> 16) ^ (hash & 0xFFFF)) as u16;
-	((h16 >> 8) ^ (h16 & 0xFF)) as u8
+	// Multiply-shift takes the value from the high bits, which FNV-1a mixes best,
+	// and needs no division.
+	((u64::from(hash) * HASH_VALUES) >> 32) as u32
 }
 
-/// 2-char hex content hash of a single line.
+/// 2-letter content hash of a single line.
 pub fn line_hash(content: &str) -> String {
-	format!("{:02x}", fnv1a_8(content))
+	let value = fnv1a_hash_value(content) as usize;
+	let base = HASH_ALPHABET.len();
+	let mut hash = String::with_capacity(LINE_HASH_LEN);
+	hash.push(HASH_ALPHABET[value / base] as char);
+	hash.push(HASH_ALPHABET[value % base] as char);
+	hash
 }
 
 /// Composite id "N:hh" for a 1-indexed line with the given content.
@@ -55,6 +72,22 @@ pub fn format_line(line_1idx: usize, content: &str) -> String {
 	format!("{}{LINE_ID_SEPARATOR}{}", line_id(line_1idx, content), content)
 }
 
+/// The line number and hash of a line id such as `12:xx`, or `None` for text of
+/// any other shape. It checks the shape only; whether the hash is the content's
+/// own is the caller's check.
+pub fn parse_line_id(id: &str) -> Option<(usize, &str)> {
+	let (number, hash) = id.split_once(':')?;
+	// `usize::from_str` takes a leading `+`, which an id never has.
+	if number.is_empty() || !number.bytes().all(|b| b.is_ascii_digit()) {
+		return None;
+	}
+	if hash.len() != LINE_HASH_LEN || !hash.bytes().all(|b| HASH_ALPHABET.contains(&b)) {
+		return None;
+	}
+	let line_1idx: usize = number.parse().ok().filter(|n| *n > 0)?;
+	Some((line_1idx, hash))
+}
+
 /// The line number and content of a line [`format_line`] rendered, or `None` for
 /// any other text. The hash has to be the content's own: a numbered line another
 /// program printed (`7:be careful` from `grep -n`) has the same shape, and only
@@ -62,12 +95,7 @@ pub fn format_line(line_1idx: usize, content: &str) -> String {
 /// trimmed away still parses.
 pub fn parse_line(rendered: &str) -> Option<(usize, &str)> {
 	let (id, content) = rendered.split_once(LINE_ID_SEPARATOR).unwrap_or((rendered, ""));
-	let (number, hash) = id.split_once(':')?;
-	// `usize::from_str` takes a leading `+`, which an id never has.
-	if number.is_empty() || !number.bytes().all(|b| b.is_ascii_digit()) {
-		return None;
-	}
-	let line_1idx: usize = number.parse().ok().filter(|n| *n > 0)?;
+	let (line_1idx, hash) = parse_line_id(id)?;
 	(line_hash(content) == hash).then_some((line_1idx, content))
 }
 

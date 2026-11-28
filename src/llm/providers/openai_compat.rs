@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::shared;
+use super::shared::{self, CacheMarker};
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::ReasoningEffort as Effort;
@@ -32,6 +32,9 @@ pub(crate) struct OpenAiCompatConfig {
 	/// Send `parallel_tool_calls: true` with tool requests. False for hosts
 	/// whose routing rejects the parameter.
 	pub supports_parallel_tool_calls: bool,
+	/// The marker a cached message carries on its last content part. `None`
+	/// sends no marker, for hosts that cache implicitly or document none.
+	pub cache_marker: Option<CacheMarker>,
 }
 
 pub(crate) fn get_optional_api_key(env_name: &str) -> String {
@@ -351,7 +354,12 @@ async fn chat_completion_raw(
 	tool_choice: Option<ToolChoice>,
 	params: ChatCompletionParams,
 ) -> Result<ProviderResponse> {
-	let messages = convert_messages(&params.messages, config.provider_name, &params.model);
+	let messages = convert_messages(
+		&params.messages,
+		config.provider_name,
+		&params.model,
+		config.cache_marker,
+	);
 
 	let mut request_body = serde_json::json!({
 		"model": params.model,
@@ -754,9 +762,33 @@ struct CompletionTokensDetails {
 struct PromptTokensDetails {
 	#[serde(default)]
 	cached_tokens: u64,
+	/// Model Studio's explicit-cache write, counted inside `prompt_tokens`.
+	#[serde(default)]
+	cache_creation_input_tokens: u64,
 }
 
-fn convert_messages(messages: &[Message], provider_name: &str, model: &str) -> Vec<OpenAiCompatMessage> {
+/// Text content with the cache marker on its last part. Content without text
+/// stays as it is: a marker needs a block to sit on.
+fn mark_cache_breakpoint(content: serde_json::Value, marker: CacheMarker) -> serde_json::Value {
+	let mut parts = match content {
+		serde_json::Value::String(text) if !text.trim().is_empty() => {
+			vec![serde_json::json!({ "type": "text", "text": text })]
+		}
+		serde_json::Value::Array(parts) if !parts.is_empty() => parts,
+		other => return other,
+	};
+	if let Some(last) = parts.last_mut() {
+		last["cache_control"] = marker.value();
+	}
+	serde_json::Value::Array(parts)
+}
+
+fn convert_messages(
+	messages: &[Message],
+	provider_name: &str,
+	model: &str,
+	cache_marker: Option<CacheMarker>,
+) -> Vec<OpenAiCompatMessage> {
 	let messages = shared::chat_completion_messages(messages);
 	let messages = messages.as_ref();
 	let mut result = Vec::new();
@@ -800,6 +832,7 @@ fn convert_messages(messages: &[Message], provider_name: &str, model: &str) -> V
 			.filter(|items| items["provider"] == provider_name && message.role == "assistant")
 			.and_then(|items| items["items"][0].get("extra_content"))
 			.cloned();
+		let converted_before = result.len();
 		match message.role.as_str() {
 			"tool" => {
 				result.push(OpenAiCompatMessage {
@@ -924,6 +957,14 @@ fn convert_messages(messages: &[Message], provider_name: &str, model: &str) -> V
 			}
 			_ => {
 				tracing::warn!("Unknown message role: {}", message.role);
+			}
+		}
+		if let Some(marker) = cache_marker.filter(|_| message.cached) {
+			if let Some(converted) = result[converted_before..].last_mut() {
+				converted.content = converted
+					.content
+					.take()
+					.map(|content| mark_cache_breakpoint(content, marker));
 			}
 		}
 	}
@@ -1146,11 +1187,11 @@ async fn execute_request(
 		.and_then(|u| u.total_tokens)
 		.unwrap_or(input_tokens.saturating_add(output_tokens));
 
-	let cache_read_tokens = api_response
+	let (cache_read_tokens, cache_write_tokens) = api_response
 		.usage
 		.as_ref()
-		.and_then(|u| u.prompt_tokens_details.as_ref().map(|d| d.cached_tokens))
-		.unwrap_or(0);
+		.and_then(|u| u.prompt_tokens_details.as_ref())
+		.map_or((0, 0), |d| (d.cached_tokens, d.cache_creation_input_tokens));
 
 	let reasoning_tokens = api_response
 		.usage
@@ -1182,9 +1223,11 @@ async fn execute_request(
 	{
 		let (output_tokens, reasoning_tokens) = TokenUsage::split_output(output_tokens, reasoning_tokens);
 		Some(TokenUsage {
-			input_tokens: input_tokens.saturating_sub(cache_read_tokens),
+			input_tokens: input_tokens
+				.saturating_sub(cache_read_tokens)
+				.saturating_sub(cache_write_tokens),
 			cache_read_tokens,
-			cache_write_tokens: 0,
+			cache_write_tokens,
 			output_tokens,
 			reasoning_tokens,
 			total_tokens,

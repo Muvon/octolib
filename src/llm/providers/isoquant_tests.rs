@@ -308,6 +308,31 @@ fn catalog_url_sits_beside_either_endpoint() {
 }
 
 #[test]
+fn catalog_url_drops_userinfo_query_and_fragment() {
+	assert_eq!(
+		models_url("https://user:pass@api.example/v1/messages?key=x#f"),
+		"https://api.example/v1/models"
+	);
+}
+
+#[test]
+#[serial_test::serial]
+fn empty_mode_and_url_variables_behave_like_unset() {
+	let unset = EnvGuard::new().remove("ISOQUANT_API_MODE").remove("ISOQUANT_API_URL");
+	let expected = (configured_mode_env().unwrap(), api_url_env());
+	let expected_endpoint = select_endpoint(expected.0, expected.1.as_deref(), DEEPSEEK);
+	drop(unset);
+
+	let _env = EnvGuard::new().set("ISOQUANT_API_MODE", "").set("ISOQUANT_API_URL", "");
+	let mode = configured_mode_env().unwrap();
+	let url = api_url_env();
+	assert_eq!(mode, None);
+	assert_eq!(url, None);
+	assert_eq!(select_endpoint(mode, url.as_deref(), DEEPSEEK), expected_endpoint);
+	assert_eq!(configured_mode(DEEPSEEK), expected_endpoint.0);
+}
+
+#[test]
 fn endpoint_follows_the_mode_then_the_url() {
 	let messages = "http://localhost:8080/v1/messages?beta=true";
 	let completions = "http://localhost:8080/v1/chat/completions/";

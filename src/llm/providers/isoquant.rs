@@ -53,10 +53,11 @@
 
 use crate::llm::providers::anthropic_compat::{self, AnthropicCompatConfig, ApiMode, Images};
 use crate::llm::providers::openai_compat::{chat_completion as openai_compat_chat_completion, OpenAiCompatConfig};
+use crate::llm::providers::shared::CacheMarker;
 use crate::llm::reference_models::{get_reference_capabilities, get_reference_pricing};
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ModelPricing, ProviderResponse, ReasoningEffort};
-use crate::llm::utils::normalize_model_name;
+use crate::llm::utils::{contains_ignore_ascii_case, normalize_model_name};
 use anyhow::{anyhow, Context, Result};
 use serde::Deserialize;
 use std::env;
@@ -287,8 +288,10 @@ fn parse_catalog(entries: Vec<CatalogEntry>) -> Vec<IsoquantModel> {
 }
 
 /// The catalog path beside either completion URL: its path up to a terminal
-/// `/messages` or `/chat/completions` segment, then `/models`. Only the path
-/// counts, so the completion URL's query is not forwarded, whatever it carries.
+/// `/messages` or `/chat/completions` segment, then `/models`. Only scheme,
+/// host and path count: the completion URL's query, fragment and userinfo are
+/// not forwarded, whatever credentials they carry, because the catalog read
+/// is keyless.
 fn models_url(api_url: &str) -> String {
 	let Ok(mut url) = reqwest::Url::parse(api_url) else {
 		// Nothing reqwest could request either; the string form reaches the error.
@@ -302,6 +305,9 @@ fn models_url(api_url: &str) -> String {
 	url.set_path(&format!("{base}/models"));
 	url.set_query(None);
 	url.set_fragment(None);
+	// Both setters fail only for cannot-be-a-base URLs; for one, there is no userinfo to clear.
+	let _ = url.set_username("");
+	let _ = url.set_password(None);
 	url.to_string()
 }
 
@@ -342,7 +348,7 @@ async fn load_catalog(api_url: &str) -> Result<()> {
 /// attempt.
 pub async fn preload() -> Result<()> {
 	configured_mode_env()?;
-	load_catalog(&env::var(ISOQUANT_API_URL_ENV).unwrap_or_else(|_| CHAT_COMPLETIONS_URL.to_string())).await
+	load_catalog(api_url_env().as_deref().unwrap_or(CHAT_COMPLETIONS_URL)).await
 }
 
 fn find_model<'a>(models: &'a [IsoquantModel], model: &str) -> Option<&'a IsoquantModel> {
@@ -399,11 +405,19 @@ fn standard_url(mode: ApiMode) -> &'static str {
 	}
 }
 
+/// A variable counts as set only when non-empty, like every other provider.
+fn non_empty_env(name: &str) -> Option<String> {
+	env::var(name).ok().filter(|raw| !raw.is_empty())
+}
+
+fn api_url_env() -> Option<String> {
+	non_empty_env(ISOQUANT_API_URL_ENV)
+}
+
 /// The mode variable, parsed once. An invalid value is refused before any
 /// request goes out, the catalog fetch included.
 fn configured_mode_env() -> Result<Option<ApiMode>> {
-	env::var(ISOQUANT_API_MODE_ENV)
-		.ok()
+	non_empty_env(ISOQUANT_API_MODE_ENV)
 		.map(|raw| anthropic_compat::parse_api_mode(ISOQUANT_API_MODE_ENV, &raw))
 		.transpose()
 }
@@ -429,7 +443,7 @@ fn select_endpoint(mode_env: Option<ApiMode>, api_url_env: Option<&str>, model: 
 /// the request itself; the capabilities then say no more than Chat Completions.
 fn configured_mode(model: &str) -> ApiMode {
 	let mode_env = configured_mode_env().ok().flatten();
-	select_endpoint(mode_env, env::var(ISOQUANT_API_URL_ENV).ok().as_deref(), model).0
+	select_endpoint(mode_env, api_url_env().as_deref(), model).0
 }
 
 /// Whether a route can force a tool call. The catalog's word counts on Chat
@@ -510,6 +524,8 @@ const ANTHROPIC_COMPAT: AnthropicCompatConfig = AnthropicCompatConfig {
 		})
 	},
 	default_system: "",
+	requires_max_tokens: true,
+	cache_marker: Some(CacheMarker::Ephemeral),
 };
 
 /// Isoquant provider
@@ -541,6 +557,14 @@ impl AiProvider for IsoquantProvider {
 	fn supports_video(&self, _model: &str) -> bool {
 		// input_modalities: ["text", "image"] on both protocols
 		false
+	}
+
+	/// Measured on Messages on 2026-11-28: sending a turn back with its thinking
+	/// block raised `input_tokens` on glm-5.3-flash (263 against 250 without it),
+	/// while deepseek-v4.1-flash-1017-fast counted 204 either way. Chat
+	/// Completions was not measured.
+	fn replays_thinking(&self, model: &str) -> bool {
+		configured_mode(model) == ApiMode::Anthropic && contains_ignore_ascii_case(model, "glm")
 	}
 
 	fn supports_caching(&self, model: &str) -> bool {
@@ -601,7 +625,7 @@ impl AiProvider for IsoquantProvider {
 		let api_key = super::shared::resolve_api_key(self, &params)?;
 		// The mode is validated before any request goes out, the catalog fetch included.
 		let mode_env = configured_mode_env()?;
-		let api_url_env = env::var(ISOQUANT_API_URL_ENV).ok();
+		let api_url_env = api_url_env();
 
 		// A failed load is retried on the next call; `KNOWN_MODELS` serves this one.
 		if let Err(error) = load_catalog(api_url_env.as_deref().unwrap_or(CHAT_COMPLETIONS_URL)).await {
@@ -630,6 +654,7 @@ impl AiProvider for IsoquantProvider {
 				enforces_response_schema: self.enforces_response_schema(&model),
 				supports_required_tool_choice: self.supports_required_tool_choice(&model),
 				supports_parallel_tool_calls: true,
+				cache_marker: None,
 			},
 			api_key,
 			api_url,

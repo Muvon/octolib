@@ -80,7 +80,7 @@
 //! are refused rather than dropped.
 
 use super::anthropic_compat::{self, AnthropicCompatConfig, ApiMode, Images};
-use super::shared;
+use super::shared::{self, CacheMarker};
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
@@ -266,6 +266,8 @@ const ANTHROPIC_COMPAT: AnthropicCompatConfig = AnthropicCompatConfig {
 	thinking: configure_thinking,
 	cost: |model, usage| calculate_cost(model, usage.input_tokens, usage.cache_read_tokens, usage.output_tokens),
 	default_system: "",
+	requires_max_tokens: false,
+	cache_marker: Some(CacheMarker::Ephemeral),
 };
 
 // Constants

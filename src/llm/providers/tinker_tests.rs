@@ -240,25 +240,23 @@ fn test_conservative_capabilities() {
 	assert!(!provider.enforces_response_schema("thinkingmachines/Inkling"));
 }
 
-/// Images and the measured cache lifetime belong to one route each: Inkling
-/// images to Messages, the 2026-11-07 cache measurement to Chat Completions.
+/// Images belong to Messages only; the cache lifetime was measured on both
+/// routes and is the same.
 #[test]
 #[serial_test::serial]
-fn vision_and_cache_lifetime_follow_the_route() {
+fn vision_follows_the_route_and_cache_lifetime_does_not() {
 	let provider = TinkerProvider::new();
+	let hour = Some(std::time::Duration::from_secs(3600));
 	let _env = EnvGuard::new().remove("TINKER_API_MODE").remove("TINKER_API_URL");
 	// Messages is the default.
 	assert!(provider.supports_vision("inkling"));
 	assert!(provider.supports_vision("thinkingmachines/Inkling-Small:peft:262144:sampling-nvfp4"));
 	assert!(!provider.supports_vision("openai/gpt-oss-120b"));
-	assert_eq!(provider.cache_lifetime("openai/gpt-oss-120b", false), None);
+	assert_eq!(provider.cache_lifetime("openai/gpt-oss-120b", false), hour);
 
 	let _env = _env.set("TINKER_API_MODE", "openai");
 	assert!(!provider.supports_vision("inkling"));
-	assert_eq!(
-		provider.cache_lifetime("openai/gpt-oss-120b", false),
-		Some(std::time::Duration::from_secs(3600))
-	);
+	assert_eq!(provider.cache_lifetime("openai/gpt-oss-120b", false), hour);
 }
 
 #[test]

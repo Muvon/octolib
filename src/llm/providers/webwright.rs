@@ -154,6 +154,7 @@ impl AiProvider for WebWrightProvider {
 				// that accepts `parallel_tool_calls`; sending it returns 404
 				// "No endpoints found that can handle the requested parameters".
 				supports_parallel_tool_calls: false,
+				cache_marker: None,
 			},
 			api_key,
 			api_url,

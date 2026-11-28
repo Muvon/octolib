@@ -24,6 +24,7 @@ src/
 │   ├── reference_capabilities.rs   → Baseline capabilities (vision, video, structured_output, context window)
 │   └── providers/
 │       ├── openai_compat.rs        → Shared OpenAI-compatible request/response layer; auto-passes reasoning_effort; also OpenAiCompatConfig, get_optional_api_key, get_api_url (internal, not pub)
+│       ├── anthropic_compat.rs     → Shared Anthropic Messages layer for non-Anthropic hosts (`AnthropicCompatConfig`: images, video, thinking, cost, `requires_max_tokens`, `cache_marker`); `ApiMode`, `parse_api_mode`, `url_api_mode` pick the protocol per provider
 │       ├── shared.rs               → Shared HTTP client access, cache control helpers, tool call parsers
 │       ├── streaming.rs            → Internal SSE framing and Chat/Messages/Responses accumulation
 │       ├── openai.rs               → Native — PRICING table, Responses API, OAuth support
@@ -167,12 +168,12 @@ every provider is behind Cloudflare, nor a guarantee against slow time-to-first-
 | xAI | Responses SSE; [streaming guide](https://docs.x.ai/developers/model-capabilities/text/streaming). Preserve encrypted reasoning and continuation IDs. |
 | Anthropic | Messages SSE; [streaming protocol](https://platform.claude.com/docs/en/build-with-claude/streaming), including cumulative usage, input JSON, thinking and signature deltas. |
 | MiniMax | Messages SSE on the existing Anthropic endpoint; [Anthropic compatibility](https://platform.minimax.io/docs/api-reference/text-anthropic-api). |
-| DeepSeek | Chat SSE with `stream_options.include_usage`; [Chat API](https://api-docs.deepseek.com/api/create-chat-completion). |
-| Moonshot/Kimi | Chat SSE with `stream_options.include_usage`; [Chat API](https://platform.kimi.ai/docs/api/chat). |
-| Z.ai | Chat SSE; [Chat API](https://docs.z.ai/api-reference/llm/chat-completion) documents `[DONE]`; do not add undocumented `stream_options`. |
+| DeepSeek | Messages SSE by default ([Anthropic API](https://api-docs.deepseek.com/guides/anthropic_api)); Chat SSE with `stream_options.include_usage` with `DEEPSEEK_API_MODE=openai` ([Chat API](https://api-docs.deepseek.com/api/create-chat-completion)). |
+| Moonshot/Kimi | Messages SSE by default ([Messages API](https://platform.kimi.ai/docs/api/messages)); Chat SSE with `stream_options.include_usage` with `MOONSHOT_API_MODE=openai` ([Chat API](https://platform.kimi.ai/docs/api/chat)). |
+| Z.ai | Messages SSE by default for text models; vision models stay on Chat SSE ([Chat API](https://docs.z.ai/api-reference/llm/chat-completion) documents `[DONE]`; do not add undocumented `stream_options`). |
 | OpenRouter | Chat SSE; final usage is automatic, existing `usage.include` retained; [comments, final usage and in-band errors](https://openrouter.ai/docs/api_reference/streaming). |
 | Together | Chat SSE with final usage; [Chat API](https://docs.together.ai/reference/chat-completions). Uses the common strict accumulator, not a lossy line parser. |
-| Alibaba | Chat SSE with requested usage; [streaming output](https://www.alibabacloud.com/help/en/model-studio/stream). |
+| Alibaba | Chat SSE with requested usage by default ([streaming output](https://www.alibabacloud.com/help/en/model-studio/stream)); Messages SSE on a workspace or plan `/apps/anthropic/v1/messages` URL ([Messages API](https://www.alibabacloud.com/help/en/model-studio/anthropic-api-messages)). |
 | Amazon Bedrock | The adapter uses **OpenAI Chat Completions**, not binary ConverseStream; [Bedrock Chat API](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-completions.html). Chat SSE with requested usage. |
 | BytePlus | Chat SSE with requested usage; [Chat API](https://docs.byteplus.com/en/docs/modelark/chat-api). |
 | NVIDIA | Chat SSE with requested usage; [NIM API](https://docs.api.nvidia.com/nim/reference/minimaxai-minimax-m3-1-flash-infer). Model-specific endpoints can differ. |
@@ -183,13 +184,13 @@ every provider is behind Cloudflare, nor a guarantee against slow time-to-first-
 | Fireworks | Chat SSE with requested usage; [Chat API](https://docs.fireworks.ai/api-reference/post-chatcompletions). |
 | Featherless | Chat SSE; final usage is automatic, including cost where billed per request; [completion protocol](https://featherless.ai/docs/completions). |
 | Inception | Chat SSE with requested usage; [Chat API](https://docs.inceptionlabs.ai/api-reference/chat/create-a-chat-completion). Do not enable the separate diffusion-preview mode. |
-| Isoquant | Chat SSE with requested usage; [API reference](https://isoquant.ai/docs) lists `stream_options.include_usage` and `[DONE]`; verified live on both models (2026-11-07). |
+| Isoquant | Messages SSE by default; Chat SSE with requested usage with `ISOQUANT_API_MODE=openai`; [API reference](https://isoquant.ai/docs) lists `stream_options.include_usage` and `[DONE]`; Chat verified live on both models (2026-11-07). |
 | Reflection | Chat SSE with requested usage; [streaming guide](https://developers.reflection.ai/streaming.md) documents `include_usage`, `[DONE]`, in-band errors and padding; verified live on Beam (2026-11-07). |
 | Meta | Chat SSE with requested usage; [streaming and usage recipe](https://dev.meta.ai/docs/cookbook/streaming-responses). |
 | Xiaomi | Chat SSE without undocumented `stream_options`; [Chat API](https://mimo.mi.com/docs/en-US/api/chat/openai-api) specifies streamed usage. |
 | Xiaomi Messages | Messages SSE on the documented `/anthropic` base; [Messages API](https://mimo.mi.com/static/docs/api/chat/anthropic-api-post.md) lists `message_start`, `content_block_start/delta/stop`, `message_delta` and `message_stop` with `thinking_delta`, `text_delta` and `input_json_delta`. |
 | Ollama | Chat SSE with requested usage on `/v1/chat/completions`; [OpenAI compatibility](https://docs.ollama.com/api/openai-compatibility). A native `/api/chat` URL override stays non-streaming because its protocol is NDJSON. |
-| Local | Same OpenAI Chat SSE contract as Ollama/other compatible local servers; native `/api/chat` overrides stay buffered. Custom servers must support the requested protocol. |
+| Local | Same OpenAI Chat SSE contract as Ollama/other compatible local servers; native `/api/chat` overrides stay buffered. `LOCAL_API_MODE=anthropic` speaks Messages SSE ([Ollama Anthropic compatibility](https://docs.ollama.com/api/anthropic-compatibility)). Custom servers must support the requested protocol. |
 | OpenCode Zen / Go | Chat SSE with requested usage; [inference API](https://opencode.ai/v2/docs/console/api/inference/) describes terminal usage and cost. Existing configured base URLs are retained. |
 | ChatGPT | Already defaults to HTTP/SSE with its own terminal-event/retry/session handling; optional WebSocket transport unchanged. |
 | Tinker | Messages SSE by default; [Anthropic-compatible API](https://tinker-docs.thinkingmachines.ai/tinker/compatible-apis/anthropic/) documents standard SSE with `thinking_delta`, `text_delta` and `input_json_delta`; verified live on Inkling and gpt-oss-120b (2026-11-28). Chat Completions (`TINKER_API_MODE=openai`) stays buffered: its [docs](https://tinker-docs.thinkingmachines.ai/tinker/compatible-apis/openai/) did not establish a streaming contract. |

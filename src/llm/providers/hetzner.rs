@@ -128,6 +128,7 @@ impl AiProvider for HetznerProvider {
 				enforces_response_schema: true,
 				supports_required_tool_choice: false,
 				supports_parallel_tool_calls: true,
+				cache_marker: None,
 			},
 			api_key,
 			api_url,

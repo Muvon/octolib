@@ -23,7 +23,7 @@
 
 use super::anthropic_compat::{self, AnthropicCompatConfig, ApiMode, Images, MessagesUsage};
 use super::openai_compat::{chat_completion as openai_compat_chat_completion, OpenAiCompatConfig};
-use super::shared;
+use super::shared::{self, CacheMarker};
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderResponse, ReasoningEffort};
 use crate::llm::utils::{get_model_pricing, is_model_in_pricing_table, normalize_model_name, PricingTuple};
@@ -235,6 +235,8 @@ const ANTHROPIC_COMPAT: AnthropicCompatConfig = AnthropicCompatConfig {
 	cost: messages_cost,
 	// MiniMax's own client sends this when a conversation has no system turn.
 	default_system: "You are a helpful assistant.",
+	requires_max_tokens: false,
+	cache_marker: Some(CacheMarker::Ephemeral),
 };
 
 /// Chat Completions endpoint for `MINIMAX_API_MODE=openai`
@@ -253,6 +255,7 @@ const OPENAI_COMPAT: OpenAiCompatConfig = OpenAiCompatConfig {
 	supports_required_tool_choice: false,
 	// The endpoint documents neither `tool_choice` nor `parallel_tool_calls`.
 	supports_parallel_tool_calls: false,
+	cache_marker: None,
 };
 
 /// The protocol and URL for one request. A supplied URL is sent as it is,

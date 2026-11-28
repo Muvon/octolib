@@ -33,12 +33,14 @@
 //!   Completions.
 
 use super::anthropic_compat::{self, parse_api_mode, AnthropicCompatConfig, ApiMode, Images};
+use super::shared::CacheMarker;
 use crate::llm::providers::openai_compat::{
 	chat_completion as openai_compat_chat_completion, get_optional_api_key, OpenAiCompatConfig,
 };
 use crate::llm::traits::AiProvider;
-use crate::llm::types::{ChatCompletionParams, ProviderResponse};
+use crate::llm::types::{ChatCompletionParams, ProviderResponse, ReasoningEffort};
 use anyhow::Result;
+use serde_json::{json, Value};
 use std::env;
 
 /// Local provider for local model servers
@@ -101,20 +103,44 @@ fn select_local_endpoint(mode: Option<&str>, api_url: Option<&str>, model: &str)
 	Ok((mode, api_url))
 }
 
+/// Ollama's Anthropic-compatible endpoint takes `thinking.type`
+/// (`enabled`/`disabled`) and `output_config.effort`, whose values are
+/// model-defined (https://docs.ollama.com/api/anthropic-compatibility). No
+/// local server was available to probe it, so this follows the doc only.
+/// `XHigh` and `Max` send `high`, the ladder the Chat route sends for `local`.
+fn write_local_thinking(_model: &str, effort: Option<ReasoningEffort>, request: &mut Value) {
+	let effort = match effort {
+		None => return,
+		Some(ReasoningEffort::None) => {
+			request["thinking"] = json!({ "type": "disabled" });
+			return;
+		}
+		Some(ReasoningEffort::Low) => "low",
+		Some(ReasoningEffort::Medium) => "medium",
+		Some(ReasoningEffort::High | ReasoningEffort::XHigh | ReasoningEffort::Max) => "high",
+	};
+	// Index assignment keeps an `output_config.format` already in the request.
+	request["output_config"]["effort"] = json!(effort);
+}
+
 /// Local servers are not known in advance, so media follows what the model
 /// tables say the model takes and the server is left to judge the rest.
 const ANTHROPIC_COMPAT: AnthropicCompatConfig = AnthropicCompatConfig {
 	provider_name: "local",
 	images: |model| {
 		if LocalProvider.supports_vision(model) {
-			Images::Base64AndUrl
+			// Ollama's Messages endpoint takes inline data only: its docs list URL
+			// images as "not supported" (docs.ollama.com/api/anthropic-compatibility)
+			// and ollama.com/v1/messages answered `400 invalid image source type:
+			// url. Only base64 images are supported.` live on 2026-11-28.
+			Images::Base64
 		} else {
 			Images::None
 		}
 	},
 	videos: |model| LocalProvider.supports_video(model),
 	enforces_response_schema: false,
-	thinking: |_, _, _| {},
+	thinking: write_local_thinking,
 	cost: |model, usage| {
 		crate::llm::reference_models::calculate_reference_cost(
 			model,
@@ -124,6 +150,8 @@ const ANTHROPIC_COMPAT: AnthropicCompatConfig = AnthropicCompatConfig {
 		)
 	},
 	default_system: "",
+	requires_max_tokens: true,
+	cache_marker: Some(CacheMarker::Ephemeral),
 };
 
 #[async_trait::async_trait]
@@ -172,6 +200,7 @@ impl AiProvider for LocalProvider {
 				enforces_response_schema: false,
 				supports_required_tool_choice: false,
 				supports_parallel_tool_calls: true,
+				cache_marker: None,
 			},
 			api_key,
 			api_url,

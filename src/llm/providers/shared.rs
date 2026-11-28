@@ -328,9 +328,27 @@ pub(super) fn ephemeral_cache_control_with_ttl(ttl: Option<&str>) -> serde_json:
 	}
 }
 
-/// Return ephemeral cache control metadata when a message is marked cached.
-pub(super) fn maybe_ephemeral_cache_control(cached: bool) -> Option<serde_json::Value> {
-	cached.then(ephemeral_cache_control)
+/// The `cache_control` marker a cached block carries on an endpoint that takes
+/// one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CacheMarker {
+	/// `{"type":"ephemeral"}`: the endpoint's default lifetime.
+	Ephemeral,
+	/// `{"type":"ephemeral","ttl":"1h"}`.
+	EphemeralHour,
+}
+
+impl CacheMarker {
+	pub(crate) fn ttl(self) -> Option<&'static str> {
+		match self {
+			Self::Ephemeral => None,
+			Self::EphemeralHour => Some("1h"),
+		}
+	}
+
+	pub(crate) fn value(self) -> serde_json::Value {
+		ephemeral_cache_control_with_ttl(self.ttl())
+	}
 }
 
 /// Return cache control with optional TTL when message is cached.

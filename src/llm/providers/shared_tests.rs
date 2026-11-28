@@ -101,12 +101,13 @@ async fn test_multi_credential_and_managed_providers_reject_per_call_keys() {
 }
 
 #[test]
-fn test_maybe_ephemeral_cache_control() {
-	assert!(maybe_ephemeral_cache_control(false).is_none());
+fn cache_markers_render_their_ttl() {
+	assert_eq!(CacheMarker::Ephemeral.value(), serde_json::json!({"type": "ephemeral"}));
 	assert_eq!(
-		maybe_ephemeral_cache_control(true),
-		Some(serde_json::json!({"type": "ephemeral"}))
+		CacheMarker::EphemeralHour.value(),
+		serde_json::json!({"type": "ephemeral", "ttl": "1h"})
 	);
+	assert_eq!(maybe_cache_control_with_ttl(false, Some("1h")), None);
 }
 
 /// GLM-5.3 has no off level on any verified host, nor do Model Studio's

@@ -223,3 +223,34 @@ async fn an_unknown_mode_is_refused_before_any_request() {
 	);
 	assert!(mock.requests().is_empty(), "nothing is sent");
 }
+
+#[tokio::test]
+#[serial_test::serial]
+async fn messages_refuse_url_images_before_any_request() {
+	use crate::llm::types::{ImageAttachment, ImageData, SourceType};
+
+	let mock = MockHttp::start(vec![(200, "{}".to_string())]);
+	let _env = EnvGuard::new()
+		.set("LOCAL_API_URL", format!("{}/v1/messages", mock.base_url()))
+		.set("LOCAL_ANTHROPIC_MODELS", "")
+		.set("LOCAL_API_MODE", "");
+
+	// Ollama answered `400 invalid image source type: url` on 2026-11-28, so a
+	// URL image is refused locally rather than sent to fail.
+	let url_image = Message::user("look").with_images(vec![ImageAttachment {
+		data: ImageData::Url("https://example.com/a.png".into()),
+		media_type: "image/png".to_owned(),
+		source_type: SourceType::Url,
+		dimensions: None,
+		size_bytes: None,
+	}]);
+	let error = LocalProvider::new()
+		.chat_completion(ChatCompletionParams::new(&[url_image], "gemma-3-27b", 10).with_api_key("k".to_owned()))
+		.await
+		.expect_err("a URL image is refused");
+	assert!(
+		error.to_string().contains("does not accept URL images"),
+		"unexpected error: {error}"
+	);
+	assert!(mock.requests().is_empty(), "a refused request is not sent");
+}

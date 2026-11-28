@@ -154,3 +154,46 @@ fn anthropic_models_are_matched_whole() {
 	assert!(!is_anthropic_model(allowlist, ""));
 	assert!(!is_anthropic_model("", "qwen3"), "an unset flag opts nobody in");
 }
+
+#[test]
+fn messages_thinking_maps_every_effort() {
+	let sent = |effort: Option<ReasoningEffort>| {
+		let mut request = json!({ "model": "m" });
+		(ANTHROPIC_COMPAT.thinking)("m", effort, &mut request);
+		request
+	};
+	assert_eq!(sent(None), json!({ "model": "m" }), "an unset effort sends nothing");
+	assert_eq!(
+		sent(Some(ReasoningEffort::None)),
+		json!({ "model": "m", "thinking": { "type": "disabled" } })
+	);
+	for (effort, want) in [
+		(ReasoningEffort::Low, "low"),
+		(ReasoningEffort::Medium, "medium"),
+		(ReasoningEffort::High, "high"),
+		(ReasoningEffort::XHigh, "high"),
+		(ReasoningEffort::Max, "high"),
+	] {
+		assert_eq!(
+			sent(Some(effort)),
+			json!({ "model": "m", "output_config": { "effort": want } }),
+			"{effort:?}"
+		);
+	}
+}
+
+#[test]
+fn messages_thinking_keeps_an_existing_output_format() {
+	let mut request = json!({ "output_config": { "format": { "type": "json_schema" } } });
+	(ANTHROPIC_COMPAT.thinking)("m", Some(ReasoningEffort::Medium), &mut request);
+	assert_eq!(
+		request["output_config"],
+		json!({ "format": { "type": "json_schema" }, "effort": "medium" })
+	);
+}
+
+#[test]
+fn messages_take_base64_images_only() {
+	assert_eq!((ANTHROPIC_COMPAT.images)("gemma-3-27b"), Images::Base64);
+	assert_eq!((ANTHROPIC_COMPAT.images)("llama-3.1-8b"), Images::None);
+}

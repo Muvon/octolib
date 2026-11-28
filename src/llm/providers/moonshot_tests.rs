@@ -272,6 +272,7 @@ fn the_messages_thinking_hook_forwards_the_k3_effort() {
 	let mut k26 = serde_json::json!({});
 	hook("kimi-k2.6", Some(ReasoningEffort::Max), &mut k26);
 	assert!(k26.get("output_config").is_none(), "{k26}");
+	assert!(k26.get("thinking").is_none(), "{k26}");
 }
 
 #[test]
@@ -665,7 +666,9 @@ fn tool_images_follow_tool_results_without_losing_call_association() {
 async fn chat_completion_via_mock_http_returns_content_and_usage() {
 	let body = r#"{"id":"ms-1","object":"chat.completion","created":1,"model":"kimi-k3","choices":[{"index":0,"message":{"role":"assistant","content":"moonshot mocked answer"},"finish_reason":"stop","logprobs":null}],"usage":{"prompt_tokens":12,"completion_tokens":7,"total_tokens":19}}"#;
 	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, body.to_string())]);
-	let _env = EnvGuard::new().set("MOONSHOT_API_URL", mock.url.clone());
+	let _env = EnvGuard::new()
+		.set("MOONSHOT_API_URL", mock.url.clone())
+		.remove("MOONSHOT_API_MODE");
 
 	let provider = MoonshotProvider::new();
 	let params = ChatCompletionParams::new(&[], "kimi-k3", 10).with_api_key("mock-key".to_owned());

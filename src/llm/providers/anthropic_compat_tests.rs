@@ -41,6 +41,8 @@ const TEST: AnthropicCompatConfig = AnthropicCompatConfig {
 		)
 	},
 	default_system: "",
+	requires_max_tokens: false,
+	cache_marker: Some(CacheMarker::Ephemeral),
 };
 
 /// TEST with the fallback prompt MiniMax sends for a conversation without a
@@ -911,5 +913,107 @@ async fn a_streamed_tool_use_without_an_id_is_refused_too() {
 	assert!(
 		error.to_string().contains("without a string id"),
 		"unexpected error: {error}"
+	);
+}
+
+/// TEST for an endpoint that refuses a request without `max_tokens`.
+const REQUIRES_MAX_TOKENS: AnthropicCompatConfig = AnthropicCompatConfig {
+	requires_max_tokens: true,
+	..TEST
+};
+
+#[tokio::test]
+async fn a_required_max_tokens_of_zero_is_refused_before_any_request() {
+	let mock = MockHttp::start(vec![(200, text_body("ok"))]);
+	let error = complete(
+		REQUIRES_MAX_TOKENS,
+		&mock,
+		ChatCompletionParams::new(&[Message::user("hi")], "m", 0),
+	)
+	.await
+	.expect_err("max_tokens is required");
+	assert!(
+		error.to_string().contains("requires max_tokens above 0"),
+		"unexpected error: {error}"
+	);
+	assert!(mock.requests().is_empty(), "a refused request is not sent");
+
+	// An endpoint that takes the omission still gets no field.
+	let mock = MockHttp::start(vec![(200, text_body("ok"))]);
+	complete(TEST, &mock, ChatCompletionParams::new(&[Message::user("hi")], "m", 0))
+		.await
+		.expect("completion");
+	let sent: Value = serde_json::from_str(&mock.requests()[0].body).expect("request json");
+	assert!(sent.get("max_tokens").is_none());
+}
+
+/// A pre-warm carries Octomind's `max_tokens: 0`; every endpoint here needs a
+/// positive value, so it asks for one token and drops the schema a single token
+/// cannot satisfy.
+#[tokio::test]
+async fn a_prewarm_asks_for_one_token_without_a_schema() {
+	let mock = MockHttp::start(vec![(200, text_body("o"))]);
+	let mut params = ChatCompletionParams::new(&[Message::user("hi")], "m", 0)
+		.with_structured_output(StructuredOutputRequest::json_schema(json!({ "type": "object" })));
+	params.cache_prewarm = true;
+	complete(REQUIRES_MAX_TOKENS, &mock, params).await.expect("prewarm");
+
+	let sent: Value = serde_json::from_str(&mock.requests()[0].body).expect("request json");
+	assert_eq!(sent["max_tokens"], CACHE_PREWARM_MAX_TOKENS);
+	assert!(sent.get("tools").is_none(), "no forced schema tool: {sent}");
+	assert!(sent.get("output_config").is_none(), "{sent}");
+}
+
+/// TEST for an endpoint whose contract has no `cache_control`.
+const NO_CACHE_CONTROL: AnthropicCompatConfig = AnthropicCompatConfig {
+	cache_marker: None,
+	..TEST
+};
+
+/// TEST for an endpoint that takes the one-hour TTL.
+const HOUR_CACHE: AnthropicCompatConfig = AnthropicCompatConfig {
+	cache_marker: Some(CacheMarker::EphemeralHour),
+	..TEST
+};
+
+#[tokio::test]
+async fn cache_breakpoints_carry_the_endpoint_marker_or_nothing() {
+	let mut system = Message::system("rules");
+	system.cached = true;
+	let mut user = Message::user("hi");
+	user.cached = true;
+	// A caller TTL the endpoint was never shown to take.
+	user.cache_ttl = Some("1h".to_owned());
+	let tool = FunctionDefinition {
+		name: "lookup".to_owned(),
+		description: "Look something up".to_owned(),
+		parameters: json!({ "type": "object", "properties": {} }),
+		cache_control: Some(json!({ "type": "ephemeral", "ttl": "1h" })),
+		freeform: None,
+	};
+	let params = || ChatCompletionParams::new(&[system.clone(), user.clone()], "m", 10).with_tools(vec![tool.clone()]);
+	let sent = |mock: &MockHttp| -> Value { serde_json::from_str(&mock.requests()[0].body).expect("request json") };
+
+	let mock = MockHttp::start(vec![(200, text_body("ok"))]);
+	complete(TEST, &mock, params()).await.expect("completion");
+	let body = sent(&mock);
+	let marker = json!({ "type": "ephemeral" });
+	assert_eq!(body["system"][0]["cache_control"], marker);
+	assert_eq!(body["messages"][0]["content"][0]["cache_control"], marker);
+	assert_eq!(body["tools"][0]["cache_control"], marker);
+
+	let mock = MockHttp::start(vec![(200, text_body("ok"))]);
+	complete(HOUR_CACHE, &mock, params()).await.expect("completion");
+	let body = sent(&mock);
+	let marker = json!({ "type": "ephemeral", "ttl": "1h" });
+	assert_eq!(body["system"][0]["cache_control"], marker);
+	assert_eq!(body["tools"][0]["cache_control"], marker);
+
+	let mock = MockHttp::start(vec![(200, text_body("ok"))]);
+	complete(NO_CACHE_CONTROL, &mock, params()).await.expect("completion");
+	assert!(
+		!mock.requests()[0].body.contains("cache_control"),
+		"{}",
+		mock.requests()[0].body
 	);
 }

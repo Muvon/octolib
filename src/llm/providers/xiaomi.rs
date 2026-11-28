@@ -178,18 +178,6 @@ fn configured_mode() -> ApiMode {
 	.0
 }
 
-/// Xiaomi's prompt cache is automatic and its Messages contract has no
-/// `cache_control` field, so a caller's breakpoints stay out of the request, as
-/// they already do on Chat Completions. Read hits are still reported and billed.
-fn drop_cache_breakpoints(params: &mut ChatCompletionParams) {
-	for message in &mut params.messages {
-		message.cached = false;
-	}
-	for tool in params.tools.iter_mut().flatten() {
-		tool.cache_control = None;
-	}
-}
-
 /// Xiaomi on the shared Messages layer. Its contract
 /// (<https://mimo.mi.com/static/docs/api/chat/anthropic-api-post.md>) reads the
 /// key from `Authorization: Bearer` and takes an image as a URL or inline data
@@ -232,6 +220,10 @@ const ANTHROPIC_COMPAT: AnthropicCompatConfig = AnthropicCompatConfig {
 		})
 	},
 	default_system: "",
+	requires_max_tokens: false,
+	// The prompt cache is automatic and the contract has no `cache_control`
+	// field; read hits are still reported and billed.
+	cache_marker: None,
 };
 
 #[async_trait::async_trait]
@@ -322,7 +314,6 @@ impl AiProvider for XiaomiProvider {
 		let model = params.model.clone();
 
 		if mode == ApiMode::Anthropic {
-			drop_cache_breakpoints(&mut params);
 			return anthropic_compat::chat_completion(ANTHROPIC_COMPAT, api_key, api_url, params).await;
 		}
 
@@ -334,6 +325,7 @@ impl AiProvider for XiaomiProvider {
 				enforces_response_schema: true,
 				supports_required_tool_choice: false,
 				supports_parallel_tool_calls: true,
+				cache_marker: None,
 			},
 			api_key,
 			api_url,

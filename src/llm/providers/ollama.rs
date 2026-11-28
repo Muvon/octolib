@@ -170,6 +170,7 @@ impl AiProvider for OllamaProvider {
 				enforces_response_schema: false,
 				supports_required_tool_choice: true,
 				supports_parallel_tool_calls: true,
+				cache_marker: None,
 			},
 			api_key,
 			api_url,

@@ -567,6 +567,7 @@ async fn compatible_adapter_validates_assembled_json_and_preserves_billing() {
 			enforces_response_schema: true,
 			supports_required_tool_choice: true,
 			supports_parallel_tool_calls: true,
+			cache_marker: None,
 		},
 		"mock-key".to_owned(),
 		mock.url.clone(),

@@ -67,7 +67,7 @@ fn test_gemini_thought_signature_round_trip() {
 		thinking: None,
 		id: None,
 	};
-	let converted = convert_messages(std::slice::from_ref(&msg), "local", "test-model");
+	let converted = convert_messages(std::slice::from_ref(&msg), "local", "test-model", None);
 	let json = serde_json::to_value(&converted[0]).unwrap();
 	assert_eq!(
 		json["tool_calls"][0]["extra_content"]["google"]["thought_signature"],
@@ -86,7 +86,7 @@ fn test_gemini_thought_signature_round_trip() {
 		tool_calls: Some(plain),
 		..msg
 	};
-	let converted = convert_messages(std::slice::from_ref(&msg_plain), "local", "test-model");
+	let converted = convert_messages(std::slice::from_ref(&msg_plain), "local", "test-model", None);
 	let json = serde_json::to_value(&converted[0]).unwrap();
 	assert!(json["tool_calls"][0].get("extra_content").is_none());
 }
@@ -130,7 +130,7 @@ fn test_ollama_reasoning_is_stored_and_replayed() {
 		id: None,
 	};
 
-	let converted = convert_messages(&[history], "ollama", "glm-5.2");
+	let converted = convert_messages(&[history], "ollama", "glm-5.2", None);
 	let json = serde_json::to_value(&converted[0]).unwrap();
 	assert_eq!(
 		json.get("reasoning").and_then(serde_json::Value::as_str),
@@ -160,12 +160,12 @@ fn test_ollama_reasoning_replays_only_on_last_assistant() {
 	};
 	let messages = [assistant("one"), assistant("two")];
 
-	let converted = convert_messages(&messages, "ollama", "glm-5.2");
+	let converted = convert_messages(&messages, "ollama", "glm-5.2", None);
 	assert!(converted[0].reasoning.is_none());
 	assert_eq!(converted[1].reasoning.as_deref(), Some("thinking for two"));
 
 	// Kimi preserve-thinking models keep reasoning on every assistant turn.
-	let converted = convert_messages(&messages, "ollama", "kimi-k2.7-code");
+	let converted = convert_messages(&messages, "ollama", "kimi-k2.7-code", None);
 	assert_eq!(converted[0].reasoning.as_deref(), Some("thinking for one"));
 	assert_eq!(converted[1].reasoning.as_deref(), Some("thinking for two"));
 }
@@ -200,7 +200,7 @@ fn test_alibaba_deepseek_sends_no_reasoning_fields() {
 	};
 	let messages = [assistant("one"), assistant("two")];
 
-	let converted = convert_messages(&messages, "alibaba", "deepseek-v4-flash-0731");
+	let converted = convert_messages(&messages, "alibaba", "deepseek-v4-flash-0731", None);
 	assert!(converted
 		.iter()
 		.all(|message| message.reasoning.is_none() && message.reasoning_content.is_none()));
@@ -230,7 +230,7 @@ fn test_alibaba_glm_replays_every_reasoning_turn_as_reasoning_content() {
 		Message::assistant("done").with_thinking(thinking("answer")),
 	];
 
-	let converted = convert_messages(&messages, "alibaba", "glm-5.3");
+	let converted = convert_messages(&messages, "alibaba", "glm-5.3", None);
 	let json: Vec<serde_json::Value> = converted
 		.iter()
 		.map(|message| serde_json::to_value(message).unwrap())
@@ -246,7 +246,7 @@ fn test_alibaba_glm_replays_every_reasoning_turn_as_reasoning_content() {
 	assert!(json.iter().all(|message| message.get("reasoning").is_none()));
 
 	// The field is Model Studio's: the same GLM model on Ollama keeps Ollama's rule.
-	let converted = convert_messages(&messages, "ollama", "glm-5.3");
+	let converted = convert_messages(&messages, "ollama", "glm-5.3", None);
 	assert!(converted.iter().all(|message| message.reasoning_content.is_none()));
 }
 
@@ -834,7 +834,7 @@ fn test_openai_compat_transport_drops_thinking_by_default() {
 fn tool_images_follow_plain_tool_content_in_an_attributed_user_turn() {
 	for text in ["caption", ""] {
 		let messages = [shared::tests::tool_image_message(text)];
-		let value = serde_json::to_value(convert_messages(&messages, "openai", "vision-model")).unwrap();
+		let value = serde_json::to_value(convert_messages(&messages, "openai", "vision-model", None)).unwrap();
 		assert_eq!(value.as_array().unwrap().len(), 2);
 		assert_eq!(value[0]["role"], "tool");
 		assert_eq!(value[0]["tool_call_id"], "call_image");
@@ -940,7 +940,7 @@ fn test_xiaomi_replays_every_reasoning_turn_as_reasoning_content() {
 		Message::assistant("done").with_thinking(thinking("answer")),
 	];
 
-	let converted = convert_messages(&messages, "xiaomi", "mimo-v2.6-pro");
+	let converted = convert_messages(&messages, "xiaomi", "mimo-v2.6-pro", None);
 	let replayed: Vec<Option<&str>> = converted
 		.iter()
 		.map(|message| message.reasoning_content.as_deref())
@@ -964,7 +964,7 @@ fn test_reflection_sends_reasoning_content_on_every_assistant_turn() {
 		Message::assistant("third").with_thinking(thinking("")),
 	];
 
-	let converted = convert_messages(&messages, "reflection", "Beam-1.0-501B-A23B");
+	let converted = convert_messages(&messages, "reflection", "Beam-1.0-501B-A23B", None);
 	let replayed: Vec<Option<&str>> = converted
 		.iter()
 		.map(|message| message.reasoning_content.as_deref())
@@ -1158,6 +1158,7 @@ async fn google_argon_stream_round_trips_tools_text_signatures_and_usage() {
 				enforces_response_schema: true,
 				supports_required_tool_choice: false,
 				supports_parallel_tool_calls: true,
+				cache_marker: None,
 			},
 			"mock-key".to_owned(),
 			mock.url.clone(),
@@ -1187,7 +1188,8 @@ async fn google_argon_stream_round_trips_tools_text_signatures_and_usage() {
 		let mut history = Message::assistant(&response.content);
 		history.tool_calls = Some(serde_json::to_value(calls).unwrap());
 		history.provider_items = response.exchange.response.get("output_items").cloned();
-		let replay = serde_json::to_value(convert_messages(&[history.clone()], provider, "gemini-4-argon")).unwrap();
+		let replay =
+			serde_json::to_value(convert_messages(&[history.clone()], provider, "gemini-4-argon", None)).unwrap();
 		assert_eq!(
 			replay[0]["tool_calls"][0]["extra_content"]["google"]["thought_signature"],
 			"tool-signature"
@@ -1198,12 +1200,13 @@ async fn google_argon_stream_round_trips_tools_text_signatures_and_usage() {
 			"text-signature"
 		);
 		history.tool_calls = None;
-		let replay = serde_json::to_value(convert_messages(&[history.clone()], provider, "gemini-4-argon")).unwrap();
+		let replay =
+			serde_json::to_value(convert_messages(&[history.clone()], provider, "gemini-4-argon", None)).unwrap();
 		assert_eq!(
 			replay[0]["extra_content"]["google"]["thought_signature"],
 			"text-signature"
 		);
-		let other = serde_json::to_value(convert_messages(&[history], "local", "test")).unwrap();
+		let other = serde_json::to_value(convert_messages(&[history], "local", "test", None)).unwrap();
 		assert!(other[0].get("extra_content").is_none());
 		let request: serde_json::Value = serde_json::from_str(&mock.requests()[0].body).unwrap();
 		assert_eq!(request["stream_options"]["include_usage"], true);
@@ -1235,6 +1238,7 @@ async fn sampling_fields_are_absent_from_the_request() {
 			enforces_response_schema: false,
 			supports_required_tool_choice: false,
 			supports_parallel_tool_calls: true,
+			cache_marker: None,
 		},
 		"mock-key".to_owned(),
 		mock.url.clone(),
@@ -1246,4 +1250,66 @@ async fn sampling_fields_are_absent_from_the_request() {
 	for field in ["temperature", "top_p", "top_k"] {
 		assert!(body.get(field).is_none(), "{field} must not be sent");
 	}
+}
+
+#[test]
+fn a_cache_marker_goes_on_the_last_part_of_cached_messages_only() {
+	let mut system = Message::system("rules");
+	system.cached = true;
+	let plain = Message::user("no breakpoint");
+	let mut tool = Message::tool("result", "call_1", "lookup");
+	tool.cached = true;
+	let messages = [system, plain, tool];
+
+	let marked = serde_json::to_value(convert_messages(
+		&messages,
+		"alibaba",
+		"qwen4-max",
+		Some(CacheMarker::EphemeralHour),
+	))
+	.unwrap();
+	let hour = serde_json::json!({ "type": "ephemeral", "ttl": "1h" });
+	assert_eq!(
+		marked[0]["content"],
+		serde_json::json!([{ "type": "text", "text": "rules", "cache_control": hour }])
+	);
+	assert_eq!(marked[1]["content"], "no breakpoint");
+	assert_eq!(marked[2]["content"][0]["cache_control"], hour);
+
+	let unmarked = serde_json::to_value(convert_messages(&messages, "alibaba", "qwen4-max", None)).unwrap();
+	assert_eq!(unmarked[0]["content"], "rules");
+}
+
+/// Model Studio counts an explicit-cache write inside `prompt_tokens`.
+#[tokio::test]
+async fn a_reported_cache_write_leaves_input_clean() {
+	use crate::test_support::mock_http::MockHttp;
+	let body = serde_json::json!({
+		"choices": [{ "index": 0, "message": { "role": "assistant", "content": "ok" }, "finish_reason": "stop" }],
+		"usage": { "prompt_tokens": 100, "completion_tokens": 1, "prompt_tokens_details": { "cached_tokens": 30, "cache_creation_input_tokens": 60 } }
+	});
+	let mock = MockHttp::start(vec![(200, body.to_string())]);
+	let mut params = ChatCompletionParams::new(&[Message::user("hi")], "test-model", 10);
+	params.max_retries = 0;
+	let response = chat_completion(
+		OpenAiCompatConfig {
+			provider_name: "local",
+			usage_fallback_cost: None,
+			use_response_cost: false,
+			enforces_response_schema: false,
+			supports_required_tool_choice: false,
+			supports_parallel_tool_calls: true,
+			cache_marker: None,
+		},
+		"mock-key".to_owned(),
+		mock.url.clone(),
+		params,
+	)
+	.await
+	.unwrap();
+	let usage = response.exchange.usage.expect("usage");
+	assert_eq!(
+		(usage.input_tokens, usage.cache_read_tokens, usage.cache_write_tokens),
+		(10, 30, 60)
+	);
 }

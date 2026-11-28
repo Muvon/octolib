@@ -51,7 +51,7 @@
 //! protocol's default endpoint.
 
 use super::anthropic_compat::{self, AnthropicCompatConfig, ApiMode, Images};
-use crate::llm::providers::shared;
+use crate::llm::providers::shared::{self, CacheMarker};
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderExchange, ProviderResponse, ReasoningEffort, TokenUsage};
@@ -303,6 +303,8 @@ const ANTHROPIC_COMPAT: AnthropicCompatConfig = AnthropicCompatConfig {
 		)
 	},
 	default_system: "",
+	requires_max_tokens: false,
+	cache_marker: Some(CacheMarker::Ephemeral),
 };
 
 // DeepSeek API request/response structures

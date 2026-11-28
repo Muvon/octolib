@@ -17,12 +17,13 @@
 //! API and the library's own provider code; the protocol is chosen by the
 //! environment exactly as a user configures it.
 //!
-//! usage: `cargo run --example endpoint_mode_canary -- <provider:model> <text|image|image-url|tool|schema|json> [none|low|high|max]`
+//! usage: `cargo run --example endpoint_mode_canary -- <provider:model> <text|image|image-url|tool|tool-image|tool-loop|schema|json> [none|low|high|max]`
 
 use octolib::llm::factory::ProviderFactory;
+use octolib::llm::tool_calls::{GenericToolCall, ProviderToolCalls};
 use octolib::llm::types::{
-	ChatCompletionParams, FunctionDefinition, ImageAttachment, ImageData, Message, ReasoningEffort, SourceType,
-	StructuredOutputRequest,
+	ChatCompletionParams, FunctionDefinition, ImageAttachment, ImageData, Message, ProviderResponse, ReasoningEffort,
+	SourceType, StructuredOutputRequest,
 };
 
 /// Served unchanged at [`RED_PNG_URL`] for the URL form of the image scenario.
@@ -129,6 +130,134 @@ fn base64(bytes: &[u8]) -> String {
 	out
 }
 
+const WEATHER_PROMPT: &str = "What is the weather in Oslo right now? Call the tool.";
+
+fn weather_tool() -> FunctionDefinition {
+	FunctionDefinition {
+		name: "get_weather".to_owned(),
+		description: "Current weather for a city".to_owned(),
+		parameters: serde_json::json!({
+			"type": "object",
+			"properties": { "city": { "type": "string" } },
+			"required": ["city"]
+		}),
+		cache_control: None,
+		freeform: None,
+	}
+}
+
+fn stripes_attachment() -> ImageAttachment {
+	ImageAttachment {
+		data: ImageData::Base64(stripes_png()),
+		media_type: "image/png".to_owned(),
+		source_type: SourceType::Url,
+		dimensions: None,
+		size_bytes: None,
+	}
+}
+
+fn describe_tools(response: &ProviderResponse) -> Option<String> {
+	response.tool_calls.as_ref().map(|calls| {
+		calls
+			.iter()
+			.map(|call| format!("{}{}", call.name, call.arguments))
+			.collect::<Vec<_>>()
+			.join(",")
+	})
+}
+
+fn print_ok(label: &str, response: &ProviderResponse) {
+	let usage = response.exchange.usage.as_ref();
+	println!(
+		"CANARY ok {label} | content={:?} | thinking={} chars | tools={:?} | in={} cache_read={} out={} reasoning={} cost={:?}",
+		response.content.chars().take(160).collect::<String>(),
+		response.thinking.as_ref().map_or(0, |thinking| thinking.content.chars().count()),
+		describe_tools(response),
+		usage.map_or(0, |usage| usage.input_tokens),
+		usage.map_or(0, |usage| usage.cache_read_tokens),
+		usage.map_or(0, |usage| usage.output_tokens),
+		usage.map_or(0, |usage| usage.reasoning_tokens),
+		usage.and_then(|usage| usage.cost),
+	);
+}
+
+/// Rebuild the assistant message the way a caller stores it: content, tool
+/// calls in the library's generic form, thinking, and the provider's ordered
+/// output items, so the next request replays the turn exactly.
+fn assistant_from_response(response: &ProviderResponse) -> Result<Message, String> {
+	let mut message = Message::assistant(&response.content);
+	let generic_calls = ProviderToolCalls::extract_from_exchange(&response.exchange)
+		.map_err(|error| format!("extracting tool calls: {error:#}"))?
+		.map(|calls| calls.to_generic_tool_calls());
+	if let Some(calls) = generic_calls {
+		message.tool_calls = Some(serde_json::to_value(calls).map_err(|error| error.to_string())?);
+	}
+	message.thinking = response.thinking.clone();
+	message.provider_items = response.exchange.response.get("output_items").cloned();
+	message.id = response.id.clone();
+	Ok(message)
+}
+
+/// Two turns: the tool request, then the same history plus the replayed
+/// assistant turn and tool results. Returns whether the canary failed.
+async fn run_tool_loop(
+	provider: &dyn octolib::llm::traits::AiProvider,
+	model_name: &str,
+	effort: Option<ReasoningEffort>,
+	label: &str,
+) -> bool {
+	let build = |messages: &[Message]| {
+		let params = ChatCompletionParams::new(messages, model_name, 2048)
+			.with_max_retries(0)
+			.with_tools(vec![weather_tool()]);
+		match effort {
+			Some(effort) => params.with_reasoning_effort(effort),
+			None => params,
+		}
+	};
+	let mut history = vec![Message::user(WEATHER_PROMPT)];
+
+	let first = match provider.chat_completion(build(&history)).await {
+		Ok(response) => response,
+		Err(error) => {
+			println!("CANARY ERR {label} turn=1 | {error:#}");
+			return true;
+		}
+	};
+	print_ok(&format!("{label} turn=1"), &first);
+	let Some(calls) = first.tool_calls.clone().filter(|calls| !calls.is_empty()) else {
+		println!("CANARY FAIL {label} turn=1 | expected a tool call");
+		return true;
+	};
+
+	let assistant = match assistant_from_response(&first) {
+		Ok(message) => message,
+		Err(why) => {
+			println!("CANARY FAIL {label} turn=1 | {why}");
+			return true;
+		}
+	};
+	history.push(assistant);
+	for call in &calls {
+		history.push(Message::tool("Oslo: 4C, light rain.", &call.id, &call.name));
+	}
+
+	match provider.chat_completion(build(&history)).await {
+		Ok(second) => {
+			print_ok(&format!("{label} turn=2"), &second);
+			if second.content.trim().is_empty() {
+				println!("CANARY FAIL {label} turn=2 | empty text after the tool result");
+				return true;
+			}
+			false
+		}
+		Err(error) => {
+			println!("CANARY ERR {label} turn=2 | {error:#}");
+			true
+		}
+	}
+}
+
 /// The answer must name the three bands in the order they appear. A 200 with
 /// an unrelated word would otherwise pass, which is exactly the failure this
 /// canary exists to catch.
@@ -151,7 +280,7 @@ async fn main() {
 	let args: Vec<String> = std::env::args().skip(1).collect();
 	if args.len() < 2 {
 		println!(
-			"usage: endpoint_mode_canary <provider:model> <text|image|image-url|tool|schema|json> [none|low|high|max]"
+			"usage: endpoint_mode_canary <provider:model> <text|image|image-url|tool|tool-image|tool-loop|schema|json> [none|low|high|max]"
 		);
 		std::process::exit(2);
 	}
@@ -187,28 +316,42 @@ async fn main() {
 			};
 			let image = Message::user(prompt).with_images(vec![ImageAttachment {
 				data,
-				media_type: "image/png".to_owned(),
-				source_type: SourceType::Url,
-				dimensions: None,
-				size_bytes: None,
+				..stripes_attachment()
 			}]);
 			params = ChatCompletionParams::new(&[image], &model_name, 2048).with_max_retries(0);
 		}
 		"tool" => {
+			params = ChatCompletionParams::new(&[Message::user(WEATHER_PROMPT)], &model_name, 2048)
+				.with_max_retries(0)
+				.with_tools(vec![weather_tool()]);
+		}
+		// A tool result that carries an image: the user asks for a screenshot, the
+		// assistant calls the tool, and the result returns text plus the stripes.
+		"tool-image" => {
+			let call = GenericToolCall {
+				id: "call_canary_1".to_owned(),
+				name: "take_screenshot".to_owned(),
+				arguments: serde_json::json!({}),
+				meta: None,
+			};
+			let mut assistant = Message::assistant("");
+			assistant.tool_calls = serde_json::to_value(vec![&call]).ok();
+			let result =
+				Message::tool("Screenshot captured.", &call.id, &call.name).with_images(vec![stripes_attachment()]);
 			params = ChatCompletionParams::new(
-				&[Message::user("What is the weather in Oslo right now? Call the tool.")],
+				&[
+					Message::user("Take a screenshot, then name the three vertical colour bands left to right."),
+					assistant,
+					result,
+				],
 				&model_name,
 				2048,
 			)
 			.with_max_retries(0)
 			.with_tools(vec![FunctionDefinition {
-				name: "get_weather".to_owned(),
-				description: "Current weather for a city".to_owned(),
-				parameters: serde_json::json!({
-					"type": "object",
-					"properties": { "city": { "type": "string" } },
-					"required": ["city"]
-				}),
+				name: "take_screenshot".to_owned(),
+				description: "Capture the screen".to_owned(),
+				parameters: serde_json::json!({ "type": "object", "properties": {} }),
 				cache_control: None,
 				freeform: None,
 			}]);
@@ -250,29 +393,17 @@ async fn main() {
 		effort,
 		std::env::var(format!("{}_API_MODE", provider.name().to_uppercase())).ok()
 	);
+	if scenario == "tool-loop" {
+		if run_tool_loop(provider.as_ref(), &model_name, effort, &label).await {
+			std::process::exit(1);
+		}
+		return;
+	}
 	let mut failed = false;
 	match provider.chat_completion(params).await {
 		Ok(response) => {
-			let usage = response.exchange.usage;
-			let tools = response.tool_calls.clone().map(|calls| {
-				calls
-					.iter()
-					.map(|call| format!("{}{}", call.name, call.arguments))
-					.collect::<Vec<_>>()
-					.join(",")
-			});
-			println!(
-				"CANARY ok {label} | content={:?} | thinking={} chars | tools={:?} | in={} cache_read={} out={} reasoning={} cost={:?}",
-				response.content.chars().take(160).collect::<String>(),
-				response.thinking.as_ref().map_or(0, |thinking| thinking.content.chars().count()),
-				tools,
-				usage.as_ref().map_or(0, |usage| usage.input_tokens),
-				usage.as_ref().map_or(0, |usage| usage.cache_read_tokens),
-				usage.as_ref().map_or(0, |usage| usage.output_tokens),
-				usage.as_ref().map_or(0, |usage| usage.reasoning_tokens),
-				usage.as_ref().and_then(|usage| usage.cost),
-			);
-			if scenario == "image" {
+			print_ok(&label, &response);
+			if scenario == "image" || scenario == "tool-image" {
 				match verify_stripes(&response.content) {
 					Ok(()) => println!("CANARY assert ok {label} | red < green < blue"),
 					Err(why) => {

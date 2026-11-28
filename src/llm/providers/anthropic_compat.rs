@@ -23,7 +23,7 @@
 //! native Claude provider keeps its own implementation of threads, betas and
 //! thinking binding.
 
-use super::shared;
+use super::shared::{self, CacheMarker};
 use crate::errors::config_error;
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
@@ -37,6 +37,12 @@ use serde_json::{json, Value};
 /// The version every endpoint here documents for its Messages API. The betas
 /// the native provider sends are Anthropic's own and are left out.
 const ANTHROPIC_VERSION: &str = "2023-06-01";
+
+/// A pre-warm asks for the cheapest completion: no endpoint here takes a
+/// zero-output one. `max_tokens: 1` was accepted live on 2026-11-28 by
+/// Moonshot, Isoquant, Alibaba, DeepSeek, Z.ai, MiniMax and Tinker, with and
+/// without thinking.
+const CACHE_PREWARM_MAX_TOKENS: u32 = 1;
 
 /// Image input an endpoint takes for a model.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -84,6 +90,15 @@ pub(crate) struct AnthropicCompatConfig {
 	pub cost: fn(model: &str, usage: &MessagesUsage) -> Option<f64>,
 	/// The top-level prompt sent for a conversation with no system turn.
 	pub default_system: &'static str,
+	/// The endpoint refuses a request without `max_tokens`. Probed live on
+	/// 2026-11-28: Moonshot, Isoquant and Alibaba answered 400, Tinker 422,
+	/// Ollama 400 ("max_tokens is required"); DeepSeek, MiniMax and Z.ai answered
+	/// without it, and Xiaomi's contract lists it as optional.
+	pub requires_max_tokens: bool,
+	/// The marker each cached block carries. `None` strips the caller's cache
+	/// breakpoints: the contract has no `cache_control` field, or the provider
+	/// keeps the endpoint on its implicit cache.
+	pub cache_marker: Option<CacheMarker>,
 }
 
 /// The wire protocol an endpoint speaks.
@@ -145,8 +160,18 @@ async fn chat_completion_as(
 	auth: Auth,
 	api_key: String,
 	api_url: String,
-	params: ChatCompletionParams,
+	mut params: ChatCompletionParams,
 ) -> Result<ProviderResponse> {
+	if params.cache_prewarm {
+		params.max_tokens = CACHE_PREWARM_MAX_TOKENS;
+		// A one-token reply cannot pass schema validation. The format only
+		// constrains decoding, so the cached prompt prefix stays the same.
+		params.response_format = None;
+	}
+	match config.cache_marker {
+		Some(marker) => mark_cache_breakpoints(&mut params, marker),
+		None => drop_cache_breakpoints(&mut params),
+	}
 	crate::llm::schema_enforcement::chat_completion_enforced(
 		&MessagesTransport {
 			config,
@@ -157,6 +182,28 @@ async fn chat_completion_as(
 		json_object_as_object_schema(params),
 	)
 	.await
+}
+
+/// Every breakpoint the caller set gets the endpoint's marker, so no caller TTL
+/// reaches an endpoint that was never shown to take it.
+fn mark_cache_breakpoints(params: &mut ChatCompletionParams, marker: CacheMarker) {
+	for message in &mut params.messages {
+		message.cache_ttl = marker.ttl().map(str::to_owned);
+	}
+	for tool in params.tools.iter_mut().flatten() {
+		if tool.cache_control.is_some() {
+			tool.cache_control = Some(marker.value());
+		}
+	}
+}
+
+fn drop_cache_breakpoints(params: &mut ChatCompletionParams) {
+	for message in &mut params.messages {
+		message.cached = false;
+	}
+	for tool in params.tools.iter_mut().flatten() {
+		tool.cache_control = None;
+	}
 }
 
 /// Messages has no `json_object` response mode, and this layer sends no prompt
@@ -238,9 +285,15 @@ async fn chat_completion_raw(
 		"messages": messages,
 		"stream": true,
 	});
-	// 0 is the provider default, which these endpoints take as an omitted field.
+	// 0 is the provider default, which some endpoints take as an omitted field.
 	if params.max_tokens > 0 {
 		request_body["max_tokens"] = json!(params.max_tokens);
+	} else if config.requires_max_tokens {
+		return Err(config_error(&format!(
+			"{}'s Messages endpoint requires max_tokens above 0",
+			config.provider_name
+		))
+		.into());
 	}
 
 	// Every system turn makes up the one top-level prompt, so a system message
@@ -257,7 +310,9 @@ async fn chat_completion_raw(
 		.filter(|message| !message.content.trim().is_empty())
 		.map(|message| {
 			let mut block = json!({ "type": "text", "text": message.content });
-			if let Some(cache_control) = shared::maybe_ephemeral_cache_control(message.cached) {
+			if let Some(cache_control) =
+				shared::maybe_cache_control_with_ttl(message.cached, message.cache_ttl.as_deref())
+			{
 				block["cache_control"] = cache_control;
 			}
 			block
@@ -638,7 +693,7 @@ fn append_text(message: &Message, content: &mut Vec<Value>) {
 		return;
 	}
 	let mut block = json!({ "type": "text", "text": message.content });
-	if let Some(cache_control) = shared::maybe_ephemeral_cache_control(message.cached) {
+	if let Some(cache_control) = shared::maybe_cache_control_with_ttl(message.cached, message.cache_ttl.as_deref()) {
 		block["cache_control"] = cache_control;
 	}
 	content.push(block);
@@ -683,7 +738,7 @@ fn tool_result_block(message: &Message, config: AnthropicCompatConfig, model: &s
 		"tool_use_id": message.tool_call_id.as_deref().unwrap_or_default(),
 		"content": content,
 	});
-	if let Some(cache_control) = shared::maybe_ephemeral_cache_control(message.cached) {
+	if let Some(cache_control) = shared::maybe_cache_control_with_ttl(message.cached, message.cache_ttl.as_deref()) {
 		block["cache_control"] = cache_control;
 	}
 	Ok(block)
@@ -750,7 +805,7 @@ fn replayed_assistant_content(message: &Message, provider_name: &str) -> Option<
 	}
 
 	let mut items = items.clone();
-	if let Some(cache_control) = shared::maybe_ephemeral_cache_control(message.cached) {
+	if let Some(cache_control) = shared::maybe_cache_control_with_ttl(message.cached, message.cache_ttl.as_deref()) {
 		// The breakpoint goes on the last text block, where a rebuilt turn has it.
 		if let Some(text) = items.iter_mut().rev().find(|item| item["type"] == "text") {
 			text["cache_control"] = cache_control;

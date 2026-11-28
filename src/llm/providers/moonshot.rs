@@ -66,7 +66,7 @@
 //! requests the shared layer already sends to five other Messages endpoints.
 //! What differs per protocol is stated on [`ANTHROPIC_COMPAT`].
 use super::anthropic_compat::{self, AnthropicCompatConfig, ApiMode, Images, MessagesUsage};
-use super::shared;
+use super::shared::{self, CacheMarker};
 use crate::llm::retry;
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{
@@ -248,6 +248,8 @@ const ANTHROPIC_COMPAT: AnthropicCompatConfig = AnthropicCompatConfig {
 	},
 	cost: messages_cost,
 	default_system: "",
+	requires_max_tokens: true,
+	cache_marker: Some(CacheMarker::Ephemeral),
 };
 /// See `cache_lifetime` for the measurement.
 const MEASURED_CACHE_LIFETIME: std::time::Duration = std::time::Duration::from_secs(4 * 60);

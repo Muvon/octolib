@@ -53,6 +53,8 @@
 //!   needs `ALIBABA_WORKSPACE_ID`
 
 use super::anthropic_compat::{self, AnthropicCompatConfig, ApiMode, Images, MessagesUsage};
+use super::shared::CacheMarker;
+use crate::llm::config::CacheTTL;
 use crate::llm::providers::openai_compat::{chat_completion as openai_compat_chat_completion, OpenAiCompatConfig};
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ProviderResponse, ReasoningEffort};
@@ -176,13 +178,39 @@ fn configured_mode() -> ApiMode {
 /// Cost of one Messages response, in USD: the same table and long-context tier
 /// as the Chat route, with `output_tokens` covering thinking.
 fn messages_cost(model: &str, usage: &MessagesUsage) -> Option<f64> {
+	let cache_write_tokens = usage.cache_write_tokens();
 	calculate_local_usage_cost(
 		model,
 		usage.input_tokens,
-		usage.cache_write_tokens(),
+		cache_write_tokens,
 		usage.cache_read_tokens,
 		usage.output_tokens,
+		None,
 	)
+	.or_else(|| {
+		model_pricing(model).map(|pricing| {
+			pricing.calculate_cost(
+				usage.input_tokens,
+				cache_write_tokens,
+				usage.cache_read_tokens,
+				usage.output_tokens,
+			)
+		})
+	})
+}
+
+/// The provider's own table first, then the shared reference table for models
+/// it does not list.
+fn model_pricing(model: &str) -> Option<crate::llm::types::ModelPricing> {
+	if let Some((input, output, cache_write, cache_read)) = crate::llm::utils::get_model_pricing(model, PRICING) {
+		return Some(crate::llm::types::ModelPricing::new(
+			input,
+			output,
+			cache_write,
+			cache_read,
+		));
+	}
+	crate::llm::reference_models::get_reference_pricing(model)
 }
 
 /// Alibaba on the shared Messages layer, used for a configured Messages URL or
@@ -217,7 +245,89 @@ const ANTHROPIC_COMPAT: AnthropicCompatConfig = AnthropicCompatConfig {
 	},
 	cost: messages_cost,
 	default_system: "",
+	requires_max_tokens: true,
+	// Set per request; see `cache_marker`.
+	cache_marker: None,
 };
+
+/// The marker every cached block carries, on both routes. A marker switches a
+/// request from the implicit to the explicit cache ("Explicit cache and implicit
+/// cache are mutually exclusive",
+/// <https://www.alibabacloud.com/help/en/model-studio/context-cache>): hits bill
+/// about half the implicit rate, and the cache lives 5 minutes from its last hit.
+/// Live on the Token Plan on 2026-11-28, qwen4-max, qwen3.8-max, qwen3.8-flash
+/// and qwen3.7-plus wrote an explicit cache on Messages, and qwen4-max and
+/// qwen3.8-flash on Chat Completions; glm-5.3 and deepseek-v4.1-flash ignored
+/// the marker on both and kept the implicit cache. The one-hour TTL goes only
+/// where the caller asks for the long cache and the model takes it.
+fn cache_marker(model: &str, use_long_cache: bool) -> CacheMarker {
+	if use_long_cache && takes_hour_cache(model) {
+		CacheMarker::EphemeralHour
+	} else {
+		CacheMarker::Ephemeral
+	}
+}
+
+/// Model families with the explicit cache in the international deployment, as
+/// the context-cache page lists them (read 2026-11-28); a dated snapshot such as
+/// `qwen3.7-plus-2026-05-26` belongs to its family. GLM, DeepSeek and Kimi are
+/// not listed. Macaron is listed but left out: its one published cache rate
+/// covers both caches, so the table already prices it.
+const EXPLICIT_CACHE_MODELS: &[&str] = &[
+	"qwen4-max",
+	"qwen3.8-max",
+	"qwen3.7-max",
+	"qwen3.8-2.4t-a95b",
+	"qwen3.8-27b",
+	"qwen3.8-flash",
+	"qwen3.7-plus",
+	"qwen3.7-flash",
+	"qwen3.6-plus",
+	"qwen3.6-flash",
+	"qwen3.5-plus",
+	"qwen3.5-flash",
+	"qwen3-coder-flash",
+	"qwen3-vl-plus",
+	"qwen-plus",
+	"qwen-flash",
+];
+
+fn uses_explicit_cache(model: &str) -> bool {
+	let model = normalize_model_name(model);
+	EXPLICIT_CACHE_MODELS.iter().any(|family| {
+		model.strip_prefix(family).is_some_and(|rest| {
+			rest.is_empty()
+				|| rest
+					.strip_prefix('-')
+					.is_some_and(|snapshot| snapshot.starts_with(|c: char| c.is_ascii_digit()))
+		})
+	})
+}
+
+/// "Only Qwen4 series models are supported" for the one-hour TTL
+/// (<https://www.alibabacloud.com/help/en/model-studio/explicit-cache-qwen4>).
+/// Live on 2026-11-28, qwen4-max filled `ephemeral_1h_input_tokens` on both
+/// routes; qwen3.8-flash took the same marker as a 5-minute write.
+fn takes_hour_cache(model: &str) -> bool {
+	normalize_model_name(model).starts_with("qwen4")
+}
+
+/// The marker whose explicit cache prices this request: the model has the
+/// explicit cache, and a message is a breakpoint for it.
+fn explicit_cache(params: &ChatCompletionParams) -> Option<CacheMarker> {
+	(uses_explicit_cache(&params.model) && params.messages.iter().any(|message| message.cached))
+		.then(|| cache_marker(&params.model, params.use_long_cache))
+}
+
+// Explicit-cache rates as a share of the input rate: writes "Typically 125%" and
+// hits "Typically 10%" (<https://www.alibabacloud.com/help/en/model-studio/context-cache>),
+// a one-hour write "Approximately 200%"
+// (<https://www.alibabacloud.com/help/en/model-studio/explicit-cache-qwen4>). The page
+// says qwen4-max, qwen3.8-max and qwen3.8-flash differ and shows their prices only in
+// the console, so the typical shares stand in for them.
+const EXPLICIT_CACHE_WRITE_SHARE: f64 = 1.25;
+const EXPLICIT_CACHE_HOUR_WRITE_SHARE: f64 = 2.0;
+const EXPLICIT_CACHE_HIT_SHARE: f64 = 0.10;
 
 /// `output_config.effort` values the Model Studio Messages contract lists for
 /// each model family
@@ -366,38 +476,29 @@ pub(crate) const PRICING: &[PricingTuple] = &[
 
 const QWEN_PLUS_LONG_CONTEXT_THRESHOLD: u64 = 256_000;
 
-// Implicit context cache lifetimes. Model Studio gives the implicit cache "no fixed
-// validity period" (<https://www.alibabacloud.com/help/en/model-studio/context-cache>);
-// its documented 5-minute validity covers only the explicit `cache_control` cache, which
-// octolib does not send. Measured 2026-11-07 on the Token Plan endpoint
-// (token-plan.ap-southeast-1): unique 3.5k-12k-token prompts re-sent once after an idle
-// delay, two samples per delay.
+// Implicit cache lifetimes, for models without the explicit cache. Model Studio gives
+// the implicit cache "no fixed validity period"
+// (<https://www.alibabacloud.com/help/en/model-studio/context-cache>). Measured
+// 2026-11-07 on the Token Plan endpoint (token-plan.ap-southeast-1): unique
+// 3.5k-12k-token prompts re-sent once after an idle delay, two samples per delay.
 // - deepseek-v4.1-flash: every sample hit up to 30m, both missed at 45m and 60m.
-// - qwen3.8-max: every sample hit up to 30m, the longest delay tried.
-// - glm-5.3, qwen3.8-flash: every sample hit up to 10m. At 15m qwen3.8-flash missed both
-//   and glm-5.3 one of two; later hits on qwen3.8-flash (30m, one at 60m) came after
-//   misses, so they are routing, not a longer lifetime.
-// - qwen3.7-plus: hits at 30s and 45s, 3 of 4 at 60s, none from 65s to 60m.
-// - qwen4-max (measured 2026-11-17, same endpoint and method, ~8k-token prompts): every
-//   sample hit at each delay from 1m to 60m, the longest tried.
+// - glm-5.3: every sample hit up to 10m, one of two missed at 15m.
 const MEASURED_CACHE_LIFETIMES: &[(&str, std::time::Duration)] = &[
 	("deepseek-v4.1-flash", std::time::Duration::from_secs(30 * 60)),
 	("glm-5.3", std::time::Duration::from_secs(10 * 60)),
-	("qwen3.8-flash", std::time::Duration::from_secs(10 * 60)),
-	("qwen3.8-max", std::time::Duration::from_secs(30 * 60)),
-	("qwen4-max", std::time::Duration::from_secs(60 * 60)),
 ];
-// About a minute is too short for a keepalive or an idle compaction to pay off.
-const SHORT_CACHE_MODELS: &[&str] = &["qwen3.7-plus"];
 // Assumed for models not measured yet.
 const UNMEASURED_CACHE_LIFETIME: std::time::Duration = std::time::Duration::from_secs(15 * 60);
 
+/// `explicit` is the marker of an explicit-cache request; it replaces the
+/// table's implicit cache rates.
 fn calculate_local_usage_cost(
 	model: &str,
 	input_tokens: u64,
 	cache_write_tokens: u64,
 	cache_read_tokens: u64,
 	output_tokens: u64,
+	explicit: Option<CacheMarker>,
 ) -> Option<f64> {
 	let (mut input, mut output, mut cache_write, mut cache_read) =
 		crate::llm::utils::get_model_pricing(model, PRICING)?;
@@ -411,6 +512,14 @@ fn calculate_local_usage_cost(
 		output = 4.80;
 		cache_write = 1.20;
 		cache_read = 0.24;
+	}
+	if let Some(marker) = explicit {
+		cache_write = input
+			* match marker {
+				CacheMarker::Ephemeral => EXPLICIT_CACHE_WRITE_SHARE,
+				CacheMarker::EphemeralHour => EXPLICIT_CACHE_HOUR_WRITE_SHARE,
+			};
+		cache_read = input * EXPLICIT_CACHE_HIT_SHARE;
 	}
 
 	Some(
@@ -436,22 +545,21 @@ impl AiProvider for AlibabaProvider {
 	}
 
 	fn supports_caching(&self, _model: &str) -> bool {
-		// Implicit context caching is documented on both routes: the Messages
-		// endpoint reports the same `cache_creation_input_tokens` /
-		// `cache_read_input_tokens` counters.
+		// Both routes report cache writes and hits: Messages as
+		// `cache_creation_input_tokens` / `cache_read_input_tokens`, Chat
+		// Completions under `prompt_tokens_details`.
 		true
 	}
 
-	/// See `MEASURED_CACHE_LIFETIMES` for the evidence. The measurements were
-	/// taken on a Token Plan host; the implicit cache they describe is a
-	/// property of the account's host and applies to the Messages route there
-	/// too, which needs no cache markers of its own.
-	fn cache_lifetime(&self, model: &str, _use_long_cache: bool) -> Option<std::time::Duration> {
-		if SHORT_CACHE_MODELS
-			.iter()
-			.any(|pattern| contains_ignore_ascii_case(model, pattern))
-		{
-			return None;
+	/// A model with the explicit cache keeps it 5 minutes from its last hit, an
+	/// hour with the one-hour TTL. Live on the Token Plan on 2026-11-28: qwen4-max
+	/// and qwen3.8-flash hit 2 of 2 after 4 idle minutes and missed 2 of 2 after 6;
+	/// qwen4-max with the one-hour TTL hit 4 of 4 after 30, on both routes. Other
+	/// models keep the implicit cache; see `MEASURED_CACHE_LIFETIMES`.
+	fn cache_lifetime(&self, model: &str, use_long_cache: bool) -> Option<std::time::Duration> {
+		if uses_explicit_cache(model) {
+			let hour = cache_marker(model, use_long_cache) == CacheMarker::EphemeralHour;
+			return Some(CacheTTL::from_long_cache_flag(hour).to_duration());
 		}
 		let measured = MEASURED_CACHE_LIFETIMES
 			.iter()
@@ -460,11 +568,15 @@ impl AiProvider for AlibabaProvider {
 		Some(measured.unwrap_or(UNMEASURED_CACHE_LIFETIME))
 	}
 
-	/// GLM and qwen4-max read every prior turn's reasoning back (see
+	/// On Chat, GLM and qwen4-max read every prior turn's reasoning back (see
 	/// `preserves_historical_thinking`), so it occupies context the model
-	/// reads and bills. Both routes send the same history back.
+	/// reads and bills. The shared Messages layer replays every captured
+	/// thinking block, and live on the Token Plan Messages endpoint on
+	/// 2026-11-28 that raised `input_tokens` for every model tried
+	/// (qwen3.8-flash 428 with the block vs 241 without, glm-5.3 311 vs 292),
+	/// so there every model replays.
 	fn replays_thinking(&self, model: &str) -> bool {
-		preserves_historical_thinking(model)
+		configured_mode() == ApiMode::Anthropic || preserves_historical_thinking(model)
 	}
 
 	// supports_vision and get_max_input_tokens come from the reference table:
@@ -495,15 +607,7 @@ impl AiProvider for AlibabaProvider {
 	}
 
 	fn get_model_pricing(&self, model: &str) -> Option<crate::llm::types::ModelPricing> {
-		if let Some((input, output, cache_write, cache_read)) = crate::llm::utils::get_model_pricing(model, PRICING) {
-			return Some(crate::llm::types::ModelPricing::new(
-				input,
-				output,
-				cache_write,
-				cache_read,
-			));
-		}
-		crate::llm::reference_models::get_reference_pricing(model)
+		model_pricing(model)
 	}
 
 	async fn chat_completion(&self, params: ChatCompletionParams) -> Result<ProviderResponse> {
@@ -513,10 +617,28 @@ impl AiProvider for AlibabaProvider {
 			env::var(ALIBABA_API_URL_ENV).ok().as_deref(),
 			env::var(ALIBABA_WORKSPACE_ID_ENV).ok().as_deref(),
 		)?;
-		if mode == ApiMode::Anthropic {
-			return anthropic_compat::chat_completion(ANTHROPIC_COMPAT, api_key, api_url, params).await;
-		}
+		let marker = cache_marker(&params.model, params.use_long_cache);
+		let explicit = explicit_cache(&params);
 		let model = params.model.clone();
+		if mode == ApiMode::Anthropic {
+			let config = AnthropicCompatConfig {
+				cache_marker: Some(marker),
+				..ANTHROPIC_COMPAT
+			};
+			let mut response = anthropic_compat::chat_completion(config, api_key, api_url, params).await?;
+			// The config's cost hook prices the implicit cache.
+			if let (Some(explicit), Some(usage)) = (explicit, response.exchange.usage.as_mut()) {
+				usage.cost = calculate_local_usage_cost(
+					&model,
+					usage.input_tokens,
+					usage.cache_write_tokens,
+					usage.cache_read_tokens,
+					usage.billable_output_tokens(),
+					Some(explicit),
+				);
+			}
+			return Ok(response);
+		}
 		let mut response = openai_compat_chat_completion(
 			OpenAiCompatConfig {
 				provider_name: "alibaba",
@@ -528,6 +650,7 @@ impl AiProvider for AlibabaProvider {
 				// validation instead of an unsupported required policy.
 				supports_required_tool_choice: false,
 				supports_parallel_tool_calls: true,
+				cache_marker: Some(marker),
 			},
 			api_key,
 			api_url,
@@ -547,6 +670,7 @@ impl AiProvider for AlibabaProvider {
 					cache_write_tokens,
 					cache_read_tokens,
 					output_tokens,
+					explicit,
 				)
 				.or_else(|| {
 					self.get_model_pricing(&model).map(|pricing| {

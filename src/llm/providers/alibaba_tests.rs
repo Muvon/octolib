@@ -25,20 +25,60 @@ fn test_supports_model() {
 }
 
 #[test]
-fn cache_lifetime_follows_the_measured_implicit_cache() {
+fn cache_lifetime_is_the_explicit_ttl_or_the_measured_implicit_cache() {
 	let provider = AlibabaProvider::new();
 	let minutes = |m: u64| Some(std::time::Duration::from_secs(m * 60));
-	assert_eq!(provider.cache_lifetime("glm-5.3", false), minutes(10));
-	assert_eq!(provider.cache_lifetime("qwen3.8-flash", true), minutes(10));
+	// Explicit cache: 5 minutes, or an hour when the long cache meets Qwen4.
+	assert_eq!(provider.cache_lifetime("qwen3.8-flash", false), minutes(5));
+	assert_eq!(provider.cache_lifetime("qwen3.8-flash", true), minutes(5));
+	assert_eq!(provider.cache_lifetime("qwen3.7-plus-2026-05-26", false), minutes(5));
+	assert_eq!(provider.cache_lifetime("qwen4-max", false), minutes(5));
+	assert_eq!(provider.cache_lifetime("qwen4-max", true), minutes(60));
+	// Implicit cache.
+	assert_eq!(provider.cache_lifetime("glm-5.3", true), minutes(10));
 	assert_eq!(provider.cache_lifetime("deepseek-v4.1-flash", false), minutes(30));
-	assert_eq!(provider.cache_lifetime("qwen3.8-max", false), minutes(30));
-	assert_eq!(provider.cache_lifetime("qwen4-max", false), minutes(60));
-	assert_eq!(provider.cache_lifetime("qwen3.7-plus", false), None);
 	assert_eq!(provider.cache_lifetime("kimi-k3", false), minutes(15));
+	assert_eq!(provider.cache_lifetime("qwen-plus-character", false), minutes(15));
 }
 
 #[test]
+fn explicit_cache_covers_listed_families_and_their_snapshots() {
+	assert!(uses_explicit_cache("qwen3.8-max"));
+	assert!(uses_explicit_cache("qwen3.8-max-0902"));
+	assert!(uses_explicit_cache("Qwen4-Max"));
+	assert!(!uses_explicit_cache("qwen-plus-character"));
+	assert!(!uses_explicit_cache("qwen3.8-omni-flash"));
+	assert!(!uses_explicit_cache("glm-5.3"));
+}
+
+#[test]
+fn explicit_cache_bills_its_own_write_and_hit_shares() {
+	// qwen3.8-flash input is $0.15 per 1M: a write bills 125%, a hit 10%.
+	let five_minutes = calculate_local_usage_cost(
+		"qwen3.8-flash",
+		0,
+		1_000_000,
+		1_000_000,
+		0,
+		Some(CacheMarker::Ephemeral),
+	)
+	.unwrap();
+	assert!((five_minutes - (0.1875 + 0.015)).abs() < 1e-9);
+	// qwen4-max input is $1.50 per 1M: a one-hour write bills 200%.
+	let hour = calculate_local_usage_cost("qwen4-max", 0, 1_000_000, 0, 0, Some(CacheMarker::EphemeralHour)).unwrap();
+	assert!((hour - 3.0).abs() < 1e-9);
+	// Without a marker the table's implicit rates stand.
+	let implicit = calculate_local_usage_cost("qwen3.8-flash", 0, 1_000_000, 1_000_000, 0, None).unwrap();
+	assert!((implicit - (0.15 + 0.016)).abs() < 1e-9);
+}
+
+#[test]
+#[serial_test::serial]
 fn test_default_capabilities() {
+	let _env = EnvGuard::new()
+		.remove("ALIBABA_API_MODE")
+		.remove("ALIBABA_API_URL")
+		.remove("ALIBABA_WORKSPACE_ID");
 	let provider = AlibabaProvider::new();
 	assert_eq!(provider.name(), "alibaba");
 	assert!(provider.supports_caching("qwen3.8-max"));
@@ -59,17 +99,34 @@ fn test_default_capabilities() {
 }
 
 #[test]
+#[serial_test::serial]
 fn test_glm_replayed_thinking_counts_toward_context() {
-	// GLM reads every prior turn's reasoning back on this host, so callers
-	// sizing a prompt must count it; DeepSeek reasoning is not sent.
+	// On Chat, GLM reads every prior turn's reasoning back on this host, so
+	// callers sizing a prompt must count it; DeepSeek reasoning is not sent.
+	// The shared Messages layer replays every model's thinking blocks.
 	let provider = AlibabaProvider::new();
+	let _env = EnvGuard::new()
+		.remove("ALIBABA_API_MODE")
+		.remove("ALIBABA_API_URL")
+		.remove("ALIBABA_WORKSPACE_ID");
 	assert!(provider.replays_thinking("glm-5.3"));
 	assert!(provider.replays_thinking("glm-5.2-fast-preview"));
 	assert!(!provider.replays_thinking("deepseek-v4-flash-0731"));
+	assert!(!provider.replays_thinking("qwen3.8-flash"));
+
+	let _env = _env.set("ALIBABA_WORKSPACE_ID", "ws-1234abcd");
+	assert!(provider.replays_thinking("deepseek-v4-flash-0731"));
+	assert!(provider.replays_thinking("qwen3.8-flash"));
+	assert!(provider.replays_thinking("glm-5.3"));
 }
 
 #[test]
+#[serial_test::serial]
 fn test_qwen4_max_uses_its_list_price_and_capabilities() {
+	let _env = EnvGuard::new()
+		.remove("ALIBABA_API_MODE")
+		.remove("ALIBABA_API_URL")
+		.remove("ALIBABA_WORKSPACE_ID");
 	let provider = AlibabaProvider::new();
 	let p = provider.get_model_pricing("qwen4-max").unwrap();
 	assert_eq!(p.input_price_per_1m, 1.50);
@@ -423,16 +480,16 @@ fn test_cost_calculation() {
 	let cost_cached = pricing.calculate_cost(500_000, 0, 500_000, 500_000);
 	assert!(cost_cached < cost);
 
-	let long = calculate_local_usage_cost("qwen3.7-plus", 256_001, 0, 0, 100_000).unwrap();
+	let long = calculate_local_usage_cost("qwen3.7-plus", 256_001, 0, 0, 100_000, None).unwrap();
 	let expected_long = 256_001.0 / 1_000_000.0 * 1.20 + 0.1 * 4.80;
 	assert!((long - expected_long).abs() < 0.001);
 
-	let boundary = calculate_local_usage_cost("qwen3.7-plus", 256_000, 0, 0, 100_000).unwrap();
+	let boundary = calculate_local_usage_cost("qwen3.7-plus", 256_000, 0, 0, 100_000, None).unwrap();
 	let expected_boundary = 0.256 * 0.40 + 0.1 * 1.60;
 	assert!((boundary - expected_boundary).abs() < 0.001);
 
 	// Dated snapshots follow the same list-price tiers as the moving alias.
-	let snapshot_long = calculate_local_usage_cost("qwen3.7-plus-2026-05-26", 256_001, 0, 0, 100_000).unwrap();
+	let snapshot_long = calculate_local_usage_cost("qwen3.7-plus-2026-05-26", 256_001, 0, 0, 100_000, None).unwrap();
 	assert!((snapshot_long - expected_long).abs() < 0.001);
 }
 
@@ -717,6 +774,51 @@ async fn messages_mode_speaks_messages_on_the_configured_url() {
 	assert_eq!(usage.cost, Some(QWEN4_MAX_MILLION_COST));
 }
 
+/// Every model gets the cache marker; one without the explicit cache, priced
+/// by the reference table only, keeps the implicit rates.
+#[tokio::test]
+#[serial_test::serial]
+async fn messages_mark_every_model_and_price_reference_only_models() {
+	use crate::llm::types::{FunctionDefinition, Message};
+
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, MESSAGES_BODY.to_string())]);
+	let _env = EnvGuard::new()
+		.set(
+			"ALIBABA_API_URL",
+			format!("{}/apps/anthropic/v1/messages", mock.base_url()),
+		)
+		.set("ALIBABA_API_MODE", "");
+
+	// Priced by the reference table only.
+	let model = "kimi-k2.5";
+	assert!(!is_model_in_pricing_table(model, PRICING));
+
+	let mut message = Message::user("hi");
+	message.cached = true;
+	let tool = FunctionDefinition {
+		name: "lookup".to_owned(),
+		description: "Look something up".to_owned(),
+		parameters: serde_json::json!({ "type": "object", "properties": {} }),
+		cache_control: Some(serde_json::json!({ "type": "ephemeral" })),
+		freeform: None,
+	};
+	let params = ChatCompletionParams::new(&[message], model, 100)
+		.with_api_key("k".to_owned())
+		.with_tools(vec![tool]);
+	let response = AlibabaProvider::new()
+		.chat_completion(params)
+		.await
+		.expect("messages completion");
+
+	let sent: serde_json::Value = serde_json::from_str(&mock.requests()[0].body).expect("request json");
+	let marker = serde_json::json!({ "type": "ephemeral" });
+	assert_eq!(sent["messages"][0]["content"][0]["cache_control"], marker);
+	assert_eq!(sent["tools"][0]["cache_control"], marker);
+
+	let usage = response.exchange.usage.expect("usage");
+	assert!(usage.cost.is_some_and(|cost| cost > 0.0), "reference-priced cost");
+}
+
 #[tokio::test]
 #[serial_test::serial]
 async fn openai_mode_keeps_chat_completions_and_its_pricing() {
@@ -738,6 +840,83 @@ async fn openai_mode_keeps_chat_completions_and_its_pricing() {
 	assert_eq!(mock.requests()[0].path, path, "the URL is unchanged");
 	let usage = response.exchange.usage.expect("usage");
 	assert_eq!(usage.cost, Some(QWEN4_MAX_MILLION_COST));
+}
+
+/// A Messages write and hit on a model with the explicit cache, as the Token
+/// Plan reported them on 2026-11-28.
+const MESSAGES_EXPLICIT_BODY: &str = r#"{"id":"msg_2","type":"message","role":"assistant","content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn","usage":{"input_tokens":0,"cache_creation_input_tokens":1000000,"cache_read_input_tokens":1000000,"output_tokens":0}}"#;
+/// The same on Chat Completions, where `prompt_tokens` includes both.
+const CHAT_EXPLICIT_BODY: &str = r#"{"id":"chatcmpl-2","object":"chat.completion","created":1,"model":"qwen4-max","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":2000000,"completion_tokens":0,"total_tokens":2000000,"prompt_tokens_details":{"cached_tokens":1000000,"cache_creation_input_tokens":1000000,"cache_type":"ephemeral"}}}"#;
+
+fn cached_user(text: &str) -> crate::llm::types::Message {
+	let mut message = crate::llm::types::Message::user(text);
+	message.cached = true;
+	message
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn messages_bill_an_explicit_cache_at_its_own_shares() {
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, MESSAGES_EXPLICIT_BODY.to_string())]);
+	let _env = EnvGuard::new()
+		.set(
+			"ALIBABA_API_URL",
+			format!("{}/apps/anthropic/v1/messages", mock.base_url()),
+		)
+		.set("ALIBABA_API_MODE", "");
+
+	let params = ChatCompletionParams::new(&[cached_user("hi")], "qwen3.8-flash", 100).with_api_key("k".to_owned());
+	let response = AlibabaProvider::new()
+		.chat_completion(params)
+		.await
+		.expect("completion");
+
+	let sent: serde_json::Value = serde_json::from_str(&mock.requests()[0].body).expect("request json");
+	assert_eq!(
+		sent["messages"][0]["content"][0]["cache_control"],
+		serde_json::json!({ "type": "ephemeral" })
+	);
+	let usage = response.exchange.usage.expect("usage");
+	assert_eq!(
+		(usage.cache_write_tokens, usage.cache_read_tokens),
+		(1_000_000, 1_000_000)
+	);
+	let cost = usage.cost.expect("cost");
+	assert!((cost - (0.1875 + 0.015)).abs() < 1e-9, "cost {cost}");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn chat_sends_the_hour_marker_for_the_qwen4_long_cache() {
+	let mock = crate::test_support::mock_http::MockHttp::start(vec![(200, CHAT_EXPLICIT_BODY.to_string())]);
+	let _env = EnvGuard::new()
+		.set(
+			"ALIBABA_API_URL",
+			format!("{}/compatible-mode/v1/chat/completions", mock.base_url()),
+		)
+		.set("ALIBABA_API_MODE", "");
+
+	let params = ChatCompletionParams::new(&[cached_user("hi")], "qwen4-max", 100)
+		.with_api_key("k".to_owned())
+		.with_long_cache(true);
+	let response = AlibabaProvider::new()
+		.chat_completion(params)
+		.await
+		.expect("completion");
+
+	let sent: serde_json::Value = serde_json::from_str(&mock.requests()[0].body).expect("request json");
+	assert_eq!(
+		sent["messages"][0]["content"],
+		serde_json::json!([{ "type": "text", "text": "hi", "cache_control": { "type": "ephemeral", "ttl": "1h" } }])
+	);
+	let usage = response.exchange.usage.expect("usage");
+	assert_eq!(
+		(usage.input_tokens, usage.cache_write_tokens, usage.cache_read_tokens),
+		(0, 1_000_000, 1_000_000)
+	);
+	// qwen4-max input is $1.50 per 1M: a one-hour write at 200%, a hit at 10%.
+	let cost = usage.cost.expect("cost");
+	assert!((cost - (3.0 + 0.15)).abs() < 1e-9, "cost {cost}");
 }
 
 #[tokio::test]

@@ -51,6 +51,7 @@
 //!   speaks; without it the URL's path decides
 
 use super::anthropic_compat::{self, AnthropicCompatConfig, ApiMode, Images, MessagesUsage};
+use super::shared::CacheMarker;
 use crate::llm::providers::openai_compat::{chat_completion as openai_compat_chat_completion, OpenAiCompatConfig};
 use crate::llm::traits::AiProvider;
 use crate::llm::types::{ChatCompletionParams, ModelPricing, ProviderResponse, ReasoningEffort};
@@ -202,6 +203,8 @@ const ANTHROPIC_COMPAT: AnthropicCompatConfig = AnthropicCompatConfig {
 	thinking: messages_thinking,
 	cost: messages_cost,
 	default_system: "",
+	requires_max_tokens: true,
+	cache_marker: Some(CacheMarker::Ephemeral),
 };
 
 /// (model, input, output, cache_write, cache_read) per 1M tokens, from
@@ -443,12 +446,21 @@ impl AiProvider for TinkerProvider {
 		true
 	}
 
-	/// Measured 2026-11-07 on Chat Completions: unique 3.5k-8k-token prompts re-sent
-	/// once after an idle delay, two samples per delay, hit on every sample from 1m to
-	/// 60m on gpt-oss-120b, gpt-oss-20b, `inkling` (the serverless id) and
-	/// Inkling-2-Small. The upper bound is not measured. Messages is not measured.
+	/// Measured on both routes: unique 3.5k-8k-token prompts re-sent once after an
+	/// idle delay, two samples per delay, hit on every sample from 1m to 60m. Chat
+	/// Completions on 2026-11-07 (gpt-oss-120b, gpt-oss-20b, `inkling`, the serverless
+	/// id, and Inkling-2-Small); Messages on 2026-11-28 (gpt-oss-120b and `inkling`).
+	/// The upper bound is not measured.
 	fn cache_lifetime(&self, _model: &str, _use_long_cache: bool) -> Option<std::time::Duration> {
-		(configured_mode() == ApiMode::OpenAi).then(|| crate::llm::config::CacheTTL::long().to_duration())
+		Some(crate::llm::config::CacheTTL::long().to_duration())
+	}
+
+	/// Measured on Messages on 2026-11-28: sending a turn back with its thinking
+	/// block raised the prompt on Inkling (472 tokens against 189 without it),
+	/// while gpt-oss-120b counted 359 either way. Chat Completions was not
+	/// measured.
+	fn replays_thinking(&self, model: &str) -> bool {
+		configured_mode() == ApiMode::Anthropic && is_inkling(model)
 	}
 
 	/// Images reach Inkling models on Messages only: the OpenAI-compatible
@@ -491,6 +503,7 @@ impl AiProvider for TinkerProvider {
 				enforces_response_schema: false,
 				supports_required_tool_choice: false,
 				supports_parallel_tool_calls: true,
+				cache_marker: None,
 			},
 			api_key,
 			api_url,

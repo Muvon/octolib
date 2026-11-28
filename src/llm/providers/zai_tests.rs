@@ -513,8 +513,21 @@ async fn chat_completion_via_mock_http_surfaces_http_error() {
 }
 
 #[test]
-fn cache_lifetime_is_the_measured_hour() {
+#[serial_test::serial]
+fn cache_lifetime_is_measured_per_protocol() {
 	let provider = ZaiProvider::new();
+	let _env = EnvGuard::new().remove("ZAI_API_MODE").remove("ZAI_API_URL");
+	// Text models default to Messages, vision models to Chat Completions.
+	assert_eq!(
+		provider.cache_lifetime("glm-5.3", false),
+		Some(std::time::Duration::from_secs(600))
+	);
+	assert_eq!(
+		provider.cache_lifetime("glm-5.4", false),
+		Some(std::time::Duration::from_secs(3600))
+	);
+
+	let _env = EnvGuard::new().set("ZAI_API_MODE", "openai");
 	assert_eq!(
 		provider.cache_lifetime("glm-5.3", false),
 		Some(std::time::Duration::from_secs(3600))

@@ -476,7 +476,7 @@ fn known_models_report_their_facts_per_route() {
 	for model in [DEEPSEEK, GLM] {
 		assert!(provider.supports_vision(model), "{model}");
 		assert!(!provider.supports_video(model), "{model}");
-		assert!(!provider.supports_caching(model), "{model}");
+		assert!(provider.supports_caching(model), "{model}");
 		assert!(provider.supports_structured_output(model), "{model}");
 		// Proven on Chat Completions only, and Messages lists no required choice.
 		assert!(!provider.enforces_response_schema(model), "{model}");
@@ -516,7 +516,7 @@ fn unprobed_models_do_not_claim_schema_enforcement() {
 
 #[test]
 #[serial_test::serial]
-fn cache_lifetime_is_the_measured_hour_only_on_deepseek_on_chat_completions() {
+fn cache_lifetime_is_measured_per_protocol_and_model() {
 	let _env = EnvGuard::new().set("ISOQUANT_API_MODE", "openai");
 	let provider = IsoquantProvider::new();
 	assert_eq!(
@@ -527,7 +527,15 @@ fn cache_lifetime_is_the_measured_hour_only_on_deepseek_on_chat_completions() {
 	assert_eq!(provider.cache_lifetime("model-released-tomorrow", false), None);
 
 	let _env = EnvGuard::new().set("ISOQUANT_API_MODE", "anthropic");
-	assert_eq!(provider.cache_lifetime(DEEPSEEK, false), None);
+	assert_eq!(
+		provider.cache_lifetime(DEEPSEEK, false),
+		Some(std::time::Duration::from_secs(1200))
+	);
+	assert_eq!(
+		provider.cache_lifetime(GLM, false),
+		Some(std::time::Duration::from_secs(180))
+	);
+	assert_eq!(provider.cache_lifetime("model-released-tomorrow", false), None);
 }
 
 #[test]

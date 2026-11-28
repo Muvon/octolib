@@ -119,10 +119,12 @@ pub(crate) const KNOWN_MODELS: &[(&str, f64, f64, f64, &[&str])] = &[
 /// way on 2026-11-27 with the same result, but that route has no per-model
 /// flag (`ANTHROPIC_COMPAT`), so it claims nothing.
 const SCHEMA_ENFORCING_MODELS: &[&str] = &["deepseek-v4.1-flash-1017-fast", "glm-5.3-flash"];
-/// The only model with a measured cache lifetime, on Chat Completions; see
-/// `cache_lifetime`.
-const MEASURED_CACHE_MODEL: &str = "deepseek-v4.1-flash-1017-fast";
-const MEASURED_CACHE_LIFETIME: Duration = Duration::from_secs(60 * 60);
+/// Cache lifetimes measured per protocol; see `cache_lifetime`.
+const CHAT_CACHE_LIFETIMES: &[(&str, Duration)] = &[("deepseek-v4.1-flash-1017-fast", Duration::from_secs(60 * 60))];
+const MESSAGES_CACHE_LIFETIMES: &[(&str, Duration)] = &[
+	("deepseek-v4.1-flash-1017-fast", Duration::from_secs(20 * 60)),
+	("glm-5.3-flash", Duration::from_secs(3 * 60)),
+];
 
 /// What one protocol takes for a model, as the catalog's `apis` block lists it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -568,22 +570,30 @@ impl AiProvider for IsoquantProvider {
 	}
 
 	fn supports_caching(&self, model: &str) -> bool {
-		// Automatic prefix caching on Chat Completions; hits bill at the cached
-		// input rate. Messages has not been measured, so it claims nothing.
-		configured_mode(model) == ApiMode::OpenAi
-			&& known_model(model)
-				.and_then(|entry| entry.pricing)
-				.is_some_and(|pricing| pricing.cache_read_price_per_1m < pricing.input_price_per_1m)
+		// Automatic prefix caching on both protocols; hits bill at the cached
+		// input rate. See `cache_lifetime`.
+		known_model(model)
+			.and_then(|entry| entry.pricing)
+			.is_some_and(|pricing| pricing.cache_read_price_per_1m < pricing.input_price_per_1m)
 	}
 
-	/// The docs give no lifetime. Measured 2026-11-07 on `/v1/chat/completions`: unique
-	/// ~3.5k-token prompts re-sent once after an idle delay, two samples per delay.
+	/// The docs give no lifetime. Measured with unique prompts re-sent once after an idle
+	/// delay, two samples per delay. Chat Completions, 2026-11-07, ~3.5k tokens:
 	/// deepseek-v4.1-flash-1017-fast hit on every sample from 1m to 60m. glm-5.3-flash
 	/// missed one sample at 1m and every sample from 15m, so it has no lifetime it is
-	/// known to survive. Not measured on Messages.
+	/// known to survive. Messages, 2026-11-28, ~8k tokens: deepseek hit on every sample
+	/// up to 20m, missed one at 30m and both at 60m; glm-5.3-flash hit up to 3m and
+	/// missed both at 5m.
 	fn cache_lifetime(&self, model: &str, _use_long_cache: bool) -> Option<Duration> {
-		(configured_mode(model) == ApiMode::OpenAi && normalize_model_name(model) == MEASURED_CACHE_MODEL)
-			.then_some(MEASURED_CACHE_LIFETIME)
+		let lifetimes = match configured_mode(model) {
+			ApiMode::OpenAi => CHAT_CACHE_LIFETIMES,
+			ApiMode::Anthropic => MESSAGES_CACHE_LIFETIMES,
+		};
+		let normalized = normalize_model_name(model);
+		lifetimes
+			.iter()
+			.find(|(id, _)| normalized == *id)
+			.map(|(_, lifetime)| *lifetime)
 	}
 
 	fn supports_structured_output(&self, model: &str) -> bool {

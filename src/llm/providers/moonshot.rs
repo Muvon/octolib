@@ -252,7 +252,7 @@ const ANTHROPIC_COMPAT: AnthropicCompatConfig = AnthropicCompatConfig {
 	cache_marker: Some(CacheMarker::Ephemeral),
 };
 /// See `cache_lifetime` for the measurement.
-const MEASURED_CACHE_LIFETIME: std::time::Duration = std::time::Duration::from_secs(4 * 60);
+const MEASURED_CACHE_LIFETIME: std::time::Duration = std::time::Duration::from_secs(3 * 60);
 
 // Moonshot API request/response structures (OpenAI-compatible)
 #[derive(Serialize, Debug, Clone)]
@@ -695,8 +695,10 @@ impl AiProvider for MoonshotProvider {
 	/// earlier. Measured 2026-11-07 on api.moonshot.ai: unique ~3.5k-token prompts re-sent
 	/// once after an idle delay, two samples per delay. kimi-k3.1-pro, kimi-k3, kimi-k2.7-code
 	/// and kimi-k2.6 hit on every sample at 1m, 3m and 4m. At 5m only kimi-k2.7-code still
-	/// hit, and from 6m every sample missed. The 1h option needs
-	/// `prompt_cache_options.ttl`, which octolib does not send.
+	/// hit, and from 6m every sample missed. Messages, measured 2026-11-28 with ~8k-token
+	/// prompts: kimi-k3.1-pro and kimi-k3 hit on every sample at 1m and 3m and missed both
+	/// at 5m; 4m was not sampled. The 1h option needs `prompt_cache_options.ttl`, which
+	/// octolib does not send.
 	fn cache_lifetime(&self, model: &str, _use_long_cache: bool) -> Option<std::time::Duration> {
 		self.supports_caching(model).then_some(MEASURED_CACHE_LIFETIME)
 	}

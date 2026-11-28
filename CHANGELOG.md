@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.57.0] - 2026-11-28
+
+Added provider-specific prompt-cache controls and broader Anthropic Messages support, plus MiniMax media support; fixed cache lifetime reporting; line hashes now use two ASCII letters.
+
+### 🚨 Breaking Changes
+
+- **line-hash**: encode line hashes as two ASCII letters `beff835b`
+
+### ✨ New Features & Enhancements
+
+- **llm-providers**: support provider-specific prompt cache controls `893a0c03`
+- **tinker**: support Anthropic Messages for Tinker `39ae87fc`
+- **xiaomi**: support Xiaomi Anthropic Messages mode `b3cd73fb`
+- **isoquant**: prefer Anthropic Messages, keep OpenAI Chat Completions `88c36669`
+- **llm/providers**: support Anthropic Messages across providers `9a284180`
+- **minimax**: support MiniMax image, video, and transcription `78663f5e`
+- **llm**: cover Gemini variant metadata `cbfebc77`
+- **llm**: support Inkling 2 Mini model `7357c0db`
+
+### 🔧 Improvements & Optimizations
+
+- **alibaba**: reflow cache lifetime measurement comment `17700a26`
+
+### 🐛 Bug Fixes & Stability
+
+- **providers**: align provider cache lifetimes with measurements `cfb6f0f9`
+- **providers**: report protocol-specific cache lifetimes `f2b37a0d`
+- **zai**: preserve Z.ai thinking across tool-call turns `25b3cb99`
+- **isoquant**: validate mode before catalog I/O, derive /models from URL path, keep required tool choice off Messages `cab5f97f`
+
 ## [0.56.0] - 2026-11-24
 
 ### 📋 Release Summary

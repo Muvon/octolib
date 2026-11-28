@@ -552,9 +552,9 @@ impl AiProvider for AlibabaProvider {
 	}
 
 	/// A model with the explicit cache keeps it 5 minutes from its last hit, an
-	/// hour with the one-hour TTL. Live on the Token Plan on 2026-11-28: qwen4-max
-	/// and qwen3.8-flash hit 2 of 2 after 4 idle minutes and missed 2 of 2 after 6;
-	/// qwen4-max with the one-hour TTL hit 4 of 4 after 30, on both routes. Other
+	/// hour with the one-hour TTL. Live on the Token Plan on 2026-11-28, on both
+	/// routes: qwen4-max and qwen3.8-flash hit 2 of 2 after 4 idle minutes and
+	/// missed 2 of 2 after 6; qwen4-max with the one-hour TTL hit 4 of 4 after 30. Other
 	/// models keep the implicit cache; see `MEASURED_CACHE_LIFETIMES`.
 	fn cache_lifetime(&self, model: &str, use_long_cache: bool) -> Option<std::time::Duration> {
 		if uses_explicit_cache(model) {
